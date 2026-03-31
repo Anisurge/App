@@ -7,13 +7,19 @@ package to.kuudere.anisuge.utils
  */
 object SubtitleUtils {
 
-    fun prepareSubtitle(url: String): String? {
+    /**
+     * Downloads and converts a subtitle URL to a local temp File.
+     * The CALLER is responsible for deleting the file when done.
+     * Do NOT use deleteOnExit() here — files must outlive short temp scopes on episode changes.
+     */
+    fun prepareSubtitleFile(url: String): java.io.File? {
         return try {
-            // PGS/SUP is a binary image-based format — download raw bytes and pass directly to mpv
             val cleanUrl = url.lowercase().substringBefore('?')
-            if (cleanUrl.endsWith(".sup") || url.lowercase().contains("format=sup")) {
-                val tmp = java.io.File.createTempFile("anisuge_sub_", ".sup")
-                tmp.deleteOnExit()
+            val ext = if (cleanUrl.endsWith(".sup") || url.lowercase().contains("format=sup")) ".sup" else ".ass"
+            val tmp = java.io.File.createTempFile("anisuge_sub_", ext)
+            // DO NOT call tmp.deleteOnExit() — caller manages the lifetime
+
+            if (ext == ".sup") {
                 if (url.startsWith("file://")) {
                     java.io.File(java.net.URI(url)).copyTo(tmp, overwrite = true)
                 } else {
@@ -22,7 +28,7 @@ object SubtitleUtils {
                     conn.getInputStream().use { it.copyTo(tmp.outputStream()) }
                 }
                 println("[SubtitleUtils] Prepared PGS subtitle → ${tmp.absolutePath}")
-                return tmp.absolutePath
+                return tmp
             }
 
             val content = if (url.startsWith("file://")) {
@@ -38,26 +44,21 @@ object SubtitleUtils {
                 SubtitleFormat.ASS -> content
                 SubtitleFormat.SRT -> srtToAss(content)
                 SubtitleFormat.VTT -> vttToAss(content)
-                SubtitleFormat.PGS -> {
-                    println("[SubtitleUtils] PGS format should be handled earlier")
-                    return null
-                }
-                SubtitleFormat.UNKNOWN -> {
-                    println("[SubtitleUtils] Unknown format, skipping")
-                    return null
-                }
+                SubtitleFormat.PGS -> { tmp.delete(); return null }
+                SubtitleFormat.UNKNOWN -> { tmp.delete(); return null }
             }
 
-            val tmp = java.io.File.createTempFile("anisuge_sub_", ".ass")
-            tmp.deleteOnExit()
             tmp.writeText(assContent)
             println("[SubtitleUtils] Prepared subtitle ($format) → ${tmp.absolutePath}")
-            tmp.absolutePath
+            tmp
         } catch (e: Exception) {
             println("[SubtitleUtils] Error: ${e.message}")
             null
         }
     }
+
+    /** Convenience wrapper returning the absolute path (legacy callers). */
+    fun prepareSubtitle(url: String): String? = prepareSubtitleFile(url)?.absolutePath
 
     private fun assHeader() = """[Script Info]
 ScriptType: v4.00+

@@ -45,6 +45,12 @@ import androidx.compose.runtime.collectAsState
 import to.kuudere.anisuge.screens.update.UpdateScreen
 import to.kuudere.anisuge.screens.update.UpdateViewModel
 import to.kuudere.anisuge.platform.LockScreenOrientation
+import androidx.savedstate.SavedState
+import androidx.savedstate.read
+
+/** Compat helper: reads a String from the new KMP SavedState arguments type. */
+private fun SavedState?.str(key: String): String? =
+    try { this?.read { if (contains(key)) getString(key) else null } } catch (_: Exception) { null }
 
 @Composable
 fun App(onAppExit: () -> Unit = {}) {
@@ -132,8 +138,8 @@ fun App(onAppExit: () -> Unit = {}) {
                         navArgument("tab") { type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null }
                     )
                 ) { backStackEntry ->
-                    val downloadsArg = backStackEntry.arguments?.getString("downloads") == "true"
-                    val requestedTab = backStackEntry.arguments?.getString("tab")
+                    val downloadsArg = backStackEntry.arguments.str("downloads") == "true"
+                    val requestedTab = backStackEntry.arguments.str("tab")
                     HomeScreen(
                         homeViewModel = homeVm,
                         searchViewModel = searchVm,
@@ -166,7 +172,7 @@ fun App(onAppExit: () -> Unit = {}) {
                 }
 
                 composable(Screen.Info.route) { backStackEntry ->
-                    val animeId = backStackEntry.arguments?.getString("animeId") ?: ""
+                    val animeId = backStackEntry.arguments.str("animeId") ?: ""
                     AnimeInfoScreen(
                         animeId = animeId,
                         viewModel = infoVm,
@@ -204,13 +210,13 @@ fun App(onAppExit: () -> Unit = {}) {
                         navArgument("offlineTitle") { type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null }
                     )
                 ) { backStackEntry ->
-                    val animeId = backStackEntry.arguments?.getString("animeId") ?: ""
-                    val episodeNumStr = backStackEntry.arguments?.getString("episodeNumber") ?: "1"
+                    val animeId = backStackEntry.arguments.str("animeId") ?: ""
+                    val episodeNumStr = backStackEntry.arguments.str("episodeNumber") ?: "1"
                     val episodeNum = episodeNumStr.toIntOrNull() ?: 1
-                    val server = backStackEntry.arguments?.getString("server")
-                    val lang = backStackEntry.arguments?.getString("lang")
-                    val offlinePath = backStackEntry.arguments?.getString("offlinePath")
-                    val offlineTitle = backStackEntry.arguments?.getString("offlineTitle")
+                    val server = backStackEntry.arguments.str("server")
+                    val lang = backStackEntry.arguments.str("lang")
+                    val offlinePath = backStackEntry.arguments.str("offlinePath")
+                    val offlineTitle = backStackEntry.arguments.str("offlineTitle")
 
                     WatchScreen(
                         animeId = animeId,
@@ -239,7 +245,7 @@ fun App(onAppExit: () -> Unit = {}) {
                         navArgument("next") { type = androidx.navigation.NavType.StringType }
                     )
                 ) { backStackEntry ->
-                    val next = backStackEntry.arguments?.getString("next")?.replace("_", "/") ?: Screen.Home().route
+                    val next = backStackEntry.arguments.str("next")?.replace("_", "/") ?: Screen.Home().route
                     val state by updateVm.state.collectAsState()
                     UpdateScreen(
                         state = state,

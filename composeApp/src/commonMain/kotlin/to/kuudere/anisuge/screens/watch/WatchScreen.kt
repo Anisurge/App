@@ -101,12 +101,12 @@ fun WatchScreen(
         to.kuudere.anisuge.AppComponent.realtimeService.joinRoom(animeId)
     }
 
-    // Check if the current state in the shared ViewModel corresponds to the requested parameters.
-    // This prevents a "ghost" frame of the previous video from showing while transitioning.
-    val isStateStale = uiState.animeId != animeId || 
-            uiState.currentEpisodeNumber != episodeNumber || 
-            uiState.offlinePath != offlinePath
-            
+    // Check if the ViewModel hasn't been initialized for this animeId yet.
+    // Only animeId is used — episodeNumber and offlinePath can change via onEpisodeSelected()
+    // from within the screen (ep list, auto-next, next button). Comparing them against the
+    // fixed nav params would keep isStateStale=true forever after any in-screen navigation.
+    val isStateStale = uiState.animeId != animeId
+
     val isLoading = uiState.isLoading || isStateStale
     val loadingMessage = if (isStateStale) {
         if (offlinePath != null) "Loading offline video..." else "Fetching episode $episodeNumber..."

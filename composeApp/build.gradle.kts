@@ -25,6 +25,19 @@ val windowsVersion = numericVersion.split(".").let {
 // Linux RPM version (no dashes, dots only)
 val linuxVersion = appVersionName.replace("-", ".")
 
+// nav 2.9.0 → savedstate 1.3.6 → compose.ui:1.10.1 → skiko-awt:0.9.37.4 (JVM JAR)
+// compose.desktop.currentOs:1.8.0 pins skiko-awt-runtime-linux-x64:0.8.18 (native .so)
+// The 0.8.18 .so lacks glFlush() → UnsatisfiedLinkError at runtime.
+// Force ALL skiko artifacts to the version the JVM JAR already resolved to.
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jetbrains.skiko") {
+            useVersion("0.9.37.4")
+            because("Align Skiko native runtime with JVM JAR version resolved by compose.ui:1.10.1")
+        }
+    }
+}
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.composeMultiplatform)

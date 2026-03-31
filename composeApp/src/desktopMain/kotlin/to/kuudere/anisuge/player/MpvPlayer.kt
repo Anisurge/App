@@ -27,6 +27,11 @@ internal class MpvPlayer(
     private var currentUrl: String? = null
     @Volatile private var isSeeking = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Track the in-flight sub-add job so we can cancel it before starting another.
+    // This prevents SIGSEGV when rapid episode changes fire concurrent sub-add commands on a dying handle.
+    @Volatile private var subAddJob: kotlinx.coroutines.Job? = null
+    // The temp file currently loaded into MPV — delete it only after the next one is ready.
+    @Volatile private var activeTempFile: java.io.File? = null
 
     val isAvailable: Boolean get() = lib != null
 
@@ -102,14 +107,22 @@ internal class MpvPlayer(
         mpv.mpv_set_option_string(handle, "stream-buffer-size", "512k") // Smaller segments
         mpv.mpv_set_option_string(handle, "prefetch-playlist", "yes")
         
-        // Fast-start: Tell FFmpeg to stop over-analyzing the stream
-        // probesize=32k, analyzeduration=0, skip_loop_filter=all skips some decoding/metadata overhead
-        mpv.mpv_set_option_string(handle, "demuxer-lavf-o", "probesize=32768,analyzeduration=0,tcp_nodelay=1,reconnect=1")
-        mpv.mpv_set_option_string(handle, "demuxer-lavf-format", "hls") // Explicitly skip format detection
+        // demuxer-lavf-format is intentionally NEVER SET — even for HLS.
+        // Setting it globally forces ALL files MPV opens in this session (including .ass subtitle
+        // temp files via sub-add) to be demuxed as HLS → avformat_open_input() fails on text files.
+        // libavformat auto-detects HLS fine from the .m3u8 URL — no hint needed.
+        //
+        // demuxer-lavf-o is safe to set globally: for local files (subtitles), probesize and
+        // analyzeduration are no-ops on text files, tcp_nodelay and reconnect only apply to HTTP.
+        val isRemoteStream = url.startsWith("http://") || url.startsWith("https://")
+        if (isRemoteStream) {
+            mpv.mpv_set_option_string(handle, "demuxer-lavf-o",
+                "probesize=32768,analyzeduration=0,tcp_nodelay=1,reconnect=1")
+        }
         mpv.mpv_set_option_string(handle, "cache-pause", "no") // Don't pause on small cache gaps
         mpv.mpv_set_option_string(handle, "vd-lavc-fast", "yes") // Fast decoding bits
         mpv.mpv_set_option_string(handle, "vd-lavc-skipframedrop", "nonref")
-        
+
         // Disable ytdl probing for raw m3u8 URLs to save a process fork/network call
         mpv.mpv_set_option_string(handle, "ytdl", "no")
 
@@ -117,7 +130,7 @@ internal class MpvPlayer(
         val headers = config.headers ?: emptyMap()
         val ua = headers["User-Agent"] ?: headers["user-agent"] ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         mpv.mpv_set_option_string(handle, "user-agent", ua)
-        
+
         val referer = headers["Referer"] ?: headers["referer"]
         if (referer != null) {
             mpv.mpv_set_option_string(handle, "referrer", referer)
@@ -130,9 +143,8 @@ internal class MpvPlayer(
         if (headerStrings.isNotEmpty()) {
             mpv.mpv_set_option_string(handle, "http-header-fields", headerStrings)
         }
-        
+
         mpv.mpv_set_option_string(handle, "ytdl-raw-options", "extractor-args=generic:impersonate")
-        
 
         // Use safe decoding threads
         mpv.mpv_set_option_string(handle, "vd-lavc-threads", "0")
@@ -158,7 +170,7 @@ internal class MpvPlayer(
         val ctxRef = com.sun.jna.ptr.PointerByReference()
         val rCtx = mpv.mpv_render_context_create(ctxRef, handle, params[0])
         println("[MpvPlayer] render_context_create -> $rCtx")
-        renderCtx = ctxRef 
+        renderCtx = ctxRef
 
         if (config.startPosition > 0.0) {
             mpv.mpv_set_property_string(handle, "start", config.startPosition.toString())
@@ -166,7 +178,7 @@ internal class MpvPlayer(
 
         // Apply auto-play parameter
         mpv.mpv_set_property_string(handle, "pause", if (config.autoPlay) "no" else "yes")
-        
+
         // Initial speed
         if (config.speed != 1.0) {
             mpv.mpv_set_property_string(handle, "speed", config.speed.toString())
@@ -215,12 +227,33 @@ internal class MpvPlayer(
         }
     }
     fun setSubFile(url: String) {
-        val handle = ctx ?: return
-        val localPath = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(url)
-            ?: return println("[MpvPlayer] setSubFile: prepareSubtitle returned null for $url")
-        println("[MpvPlayer] sub-add -> $localPath")
-        val r = lib?.mpv_command(handle, arrayOf("sub-add", localPath, "select", null))
-        println("[MpvPlayer] sub-add result: $r")
+        // Cancel any in-flight sub-add before starting a new one.
+        // This prevents concurrent sub-add calls on the same (or a dying) MPV handle.
+        subAddJob?.cancel()
+        subAddJob = scope.launch(Dispatchers.IO) {
+            val handle = ctx ?: return@launch  // handle may have been destroyed by now
+            val newFile = try {
+                to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitleFile(url)
+            } catch (e: Exception) {
+                println("[MpvPlayer] setSubFile: prepareSubtitle failed: ${e.message}")
+                return@launch
+            } ?: return@launch
+
+            // Double-check handle is still valid before issuing command
+            if (ctx == null) {
+                newFile.delete()
+                return@launch
+            }
+
+            println("[MpvPlayer] sub-add -> ${newFile.absolutePath}")
+            val r = lib?.mpv_command(handle, arrayOf("sub-add", newFile.absolutePath, "select", null))
+            println("[MpvPlayer] sub-add result: $r")
+
+            // Clean up previous temp file now that the new one is loaded
+            val old = activeTempFile
+            activeTempFile = newFile
+            old?.delete()
+        }
     }
 
     // ── Internal event loop ─────────────────────────────────────────────────
@@ -352,17 +385,27 @@ internal class MpvPlayer(
                                 println("[MpvPlayer] Error extracting tracks: ${e.message}")
                             }
 
-                            // Load all subtitles — default selected, rest available via OSC
+                            // Load all subtitles — default selected, rest available via OSC.
+                            // Cancel any previous in-flight sub load before starting fresh.
                             val subsToLoad = pendingAllSubs ?: state.allSubUrls
                             if (!subsToLoad.isNullOrEmpty()) {
                                 println("[MpvPlayer] FILE_LOADED: loading ${subsToLoad.size} subtitle(s)")
-                                launch(Dispatchers.IO) {
+                                subAddJob?.cancel()
+                                activeTempFile?.delete()
+                                activeTempFile = null
+                                subAddJob = launch(Dispatchers.IO) {
                                     subsToLoad.forEach { (url, name, isDefault) ->
-                                        val localPath = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(url)
-                                        if (localPath != null) {
+                                        if (ctx == null) return@forEach  // handle destroyed mid-load
+                                        val newFile = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitleFile(url)
+                                        if (newFile != null) {
                                             val flag = if (isDefault) "select" else "auto"
-                                            lib?.mpv_command(handle, arrayOf("sub-add", localPath, flag, null))
-                                            println("[MpvPlayer] sub-add [$flag] -> $localPath")
+                                            lib?.mpv_command(handle, arrayOf("sub-add", newFile.absolutePath, flag, null))
+                                            println("[MpvPlayer] sub-add [$flag] -> ${newFile.absolutePath}")
+                                            if (isDefault) {
+                                                val old = activeTempFile
+                                                activeTempFile = newFile
+                                                old?.delete()
+                                            }
                                         }
                                     }
                                 }
@@ -417,11 +460,11 @@ internal class MpvPlayer(
                     if (state.isPlaying) {
                         println("[MpvPlayer] Runtime sub change -> $sub")
                         if (sub == "NONE") {
+                            subAddJob?.cancel()
                             mpv.mpv_set_option_string(handle, "sid", "no")
                         } else {
-                            launch(Dispatchers.IO) { 
-                                setSubFile(sub) 
-                            }
+                            // setSubFile already cancels the previous job internally
+                            setSubFile(sub)
                         }
                         withContext(Dispatchers.Main) { state.subFileUrl = null }
                     } else {
@@ -492,12 +535,21 @@ internal class MpvPlayer(
                 state.allSubUrls?.let { subs ->
                     if (state.isPlaying) {
                         println("[MpvPlayer] Runtime: loading ${subs.size} subtitle(s)")
-                        launch(Dispatchers.IO) {
+                        subAddJob?.cancel()
+                        activeTempFile?.delete()
+                        activeTempFile = null
+                        subAddJob = launch(Dispatchers.IO) {
                             subs.forEach { (url, name, isDefault) ->
-                                val localPath = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(url)
-                                if (localPath != null) {
+                                if (ctx == null) return@forEach
+                                val newFile = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitleFile(url)
+                                if (newFile != null) {
                                     val flag = if (isDefault) "select" else "auto"
-                                    lib?.mpv_command(handle, arrayOf("sub-add", localPath, flag, null))
+                                    lib?.mpv_command(handle, arrayOf("sub-add", newFile.absolutePath, flag, null))
+                                    if (isDefault) {
+                                        val old = activeTempFile
+                                        activeTempFile = newFile
+                                        old?.delete()
+                                    }
                                 }
                             }
                         }
@@ -512,15 +564,23 @@ internal class MpvPlayer(
     }
 
     fun destroy() {
+        // Cancel in-flight sub-add job BEFORE destroying context.
+        // If the job is mid-download it will null-check ctx and abort cleanly.
+        subAddJob?.cancel()
+        subAddJob = null
         scope.cancel()
         val c = ctx
         val rc = renderCtx
+        // Null ctx first so any still-running IO job sees null and stops
+        ctx = null
+        renderCtx = null
         lib?.let { mpv ->
             if (rc != null) mpv.mpv_render_context_free(rc.value)
             if (c != null) mpv.mpv_terminate_destroy(c)
         }
-        ctx = null
-        renderCtx = null
+        // Clean up the last subtitle temp file
+        activeTempFile?.delete()
+        activeTempFile = null
     }
 
     fun renderFrame(width: Int, height: Int): ByteArray? {
