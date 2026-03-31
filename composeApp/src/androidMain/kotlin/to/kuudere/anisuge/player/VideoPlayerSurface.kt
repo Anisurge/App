@@ -79,11 +79,12 @@ actual fun VideoPlayerSurface(
                             val currentPath = try { MPVLib.getPropertyString("path") } catch (e: Exception) { null }
 
                             if (currentPath != resolvedUrl) {
-                                // Resume from the last known position if we are returning to the same URL context
-                                // but for some reason mpv lost its state (or it's the first load).
-                                val resumePos = if (state.position > 0.1) state.position else state.config.startPosition
-                                if (resumePos > 0.0) {
-                                    MPVLib.setOptionString("start", resumePos.toString())
+                                // New file — only use the API-provided start position.
+                                // Never use state.position here: it belongs to the PREVIOUS
+                                // file and would seek the new episode to the wrong timestamp.
+                                val startPos = state.config.startPosition
+                                if (startPos > 0.0) {
+                                    MPVLib.setOptionString("start", startPos.toString())
                                 }
                                 MPVLib.command(arrayOf<String>("loadfile", resolvedUrl))
                             } else {

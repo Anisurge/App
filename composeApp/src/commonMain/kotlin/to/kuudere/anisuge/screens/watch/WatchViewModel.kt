@@ -545,7 +545,8 @@ class WatchViewModel(
                 availableQualities = emptyList(),
                 availableSubtitles = emptyList(),
                 currentSubtitleUrl = null,
-                currentFontsDir = null
+                currentFontsDir = null,
+                savedWatchPosition = 0.0  // always start new episode from beginning
             ) 
         }
         loadJob = viewModelScope.launch {
