@@ -92,19 +92,19 @@ internal class MpvPlayer(
         // Always keep last frame visible to prevent white flash during navigation
         mpv.mpv_set_option_string(handle, "keep-open", "yes")
 
-        // Cache settings for faster streaming (Aggressive but stable)
+        // Cache: start fast, buffer in background
         mpv.mpv_set_option_string(handle, "cache", "yes")
-        mpv.mpv_set_option_string(handle, "cache-secs", "300") // Buffer more once started
-        mpv.mpv_set_option_string(handle, "demuxer-readahead-secs", "6") // Reduce initial wait
-        mpv.mpv_set_option_string(handle, "demuxer-max-bytes", "150M")
+        mpv.mpv_set_option_string(handle, "cache-secs", "120")           // 2min buffer is plenty
+        mpv.mpv_set_option_string(handle, "demuxer-readahead-secs", "3") // Start in ~1-2s, pipeline does the rest
+        mpv.mpv_set_option_string(handle, "demuxer-max-bytes", "100M")   // Sweet spot
         mpv.mpv_set_option_string(handle, "demuxer-max-back-bytes", "50M")
 
         // Network optimizations for HTTP/HLS streaming
-        mpv.mpv_set_option_string(handle, "network-timeout", "15")
+        mpv.mpv_set_option_string(handle, "network-timeout", "10")       // Fail fast → retry faster
         mpv.mpv_set_option_string(handle, "http-persistent", "yes")
         mpv.mpv_set_option_string(handle, "http-keepalive", "yes")
-        mpv.mpv_set_option_string(handle, "hls-bitrate", "max") // Skip quality probing
-        mpv.mpv_set_option_string(handle, "stream-buffer-size", "512k") // Smaller segments
+        mpv.mpv_set_option_string(handle, "hls-bitrate", "max")          // Skip quality probing
+        mpv.mpv_set_option_string(handle, "stream-buffer-size", "256k")  // HLS chunks are small
         mpv.mpv_set_option_string(handle, "prefetch-playlist", "yes")
         
         // demuxer-lavf-format is intentionally NEVER SET — even for HLS.

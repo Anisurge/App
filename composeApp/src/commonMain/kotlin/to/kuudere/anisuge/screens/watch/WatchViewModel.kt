@@ -408,6 +408,13 @@ class WatchViewModel(
                     return
                 }
 
+                // Pre-warm DNS/TCP for the stream URL in parallel with handing it to the player.
+                // OkHttp shares the netd DNS cache with MPV's libcurl on Android, so this
+                // pre-resolve means MPV skips DNS lookup (~50-200ms saved on first connection).
+                qualities.firstOrNull()?.second?.let { streamUrl ->
+                    viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
+                }
+
                 _uiState.update { state ->
                     state.copy(
                         isLoadingVideo = false,

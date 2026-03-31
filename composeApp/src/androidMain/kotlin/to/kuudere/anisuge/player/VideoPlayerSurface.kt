@@ -172,20 +172,32 @@ actual fun VideoPlayerSurface(
         MPVLib.setOptionString("input-default-bindings", showOsc)
         MPVLib.setOptionString("input-vo-keyboard", showOsc)
 
-        // Cache settings for faster streaming (Aggressive but stable)
+        // Cache: start fast, buffer in background
         MPVLib.setOptionString("cache", "yes")
-        MPVLib.setOptionString("cache-secs", "120")
-        MPVLib.setOptionString("demuxer-readahead-secs", "20")
-        MPVLib.setOptionString("demuxer-max-bytes", "100M")
+        MPVLib.setOptionString("cache-secs", "120")           // 2min buffer is plenty on mobile
+        MPVLib.setOptionString("demuxer-readahead-secs", "3") // Start in ~1-2s, pipeline does the rest
+        MPVLib.setOptionString("demuxer-max-bytes", "100M")   // Sweet spot for mobile RAM
         MPVLib.setOptionString("demuxer-max-back-bytes", "50M")
 
         // Network optimizations for HTTP/HLS streaming
-        MPVLib.setOptionString("network-timeout", "30")
+        MPVLib.setOptionString("network-timeout", "10")       // Fail fast → retry faster
         MPVLib.setOptionString("http-persistent", "yes")
         MPVLib.setOptionString("http-keepalive", "yes")
-        MPVLib.setOptionString("hls-bitrate", "max")
-        MPVLib.setOptionString("stream-buffer-size", "1M")
+        MPVLib.setOptionString("hls-bitrate", "max")          // Skip quality probing
+        MPVLib.setOptionString("stream-buffer-size", "256k")  // HLS chunks are small
         MPVLib.setOptionString("prefetch-playlist", "yes")
+
+        // Fast-start: tell FFmpeg to stop over-analyzing the stream
+        // Only apply to remote streams — demuxer-lavf-format is intentionally NOT set
+        // (it would force HLS mode on subtitle files loaded via sub-add → breaks them)
+        val isRemoteStream = resolvedUrl.startsWith("http://") || resolvedUrl.startsWith("https://")
+        if (isRemoteStream) {
+            MPVLib.setOptionString("demuxer-lavf-o", "probesize=32768,analyzeduration=0,tcp_nodelay=1,reconnect=1")
+        }
+        MPVLib.setOptionString("cache-pause", "no")           // Never stall on micro-gaps
+        MPVLib.setOptionString("vd-lavc-fast", "yes")         // Skip unnecessary decode precision
+        MPVLib.setOptionString("vd-lavc-skipframedrop", "nonref")
+
 
         // Fix for Cloudflare/Anti-bot
         val headers = state.config.headers ?: emptyMap()

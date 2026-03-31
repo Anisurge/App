@@ -3,6 +3,7 @@ package to.kuudere.anisuge.data.services
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.head
 import io.ktor.client.request.post
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -99,6 +100,17 @@ class InfoService(
         } catch (e: Exception) {
             println("[InfoService] getVideoStream error: ${e.message}")
             null
+        }
+    }
+
+    /** Fire-and-forget HEAD request to warm the DNS + TCP/TLS path for a CDN stream URL.
+     *  OkHttp on Android shares the system netd DNS cache with MPV's libcurl, so this
+     *  pre-resolve saves ~50-200ms off the first MPV connection to the CDN. */
+    suspend fun prewarmStreamUrl(url: String) {
+        try {
+            httpClient.head(url)
+        } catch (_: Exception) {
+            // Ignore - this is best-effort only
         }
     }
 
