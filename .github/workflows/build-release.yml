@@ -94,15 +94,19 @@ jobs:
           chmod +x gradlew
           ./gradlew :composeApp:packageDeb :composeApp:packageRpm :composeApp:packageAppImage :composeApp:createPortableZip --no-daemon -PappVersion="${{ steps.version.outputs.version_name }}" -PappBuildNumber="${{ steps.version.outputs.build_num }}"
 
+      - name: Collect Linux Artifacts
+        run: |
+          mkdir -p dist
+          find composeApp/build/compose/binaries/main/deb/     -name '*.deb'      -exec cp {} dist/ \;
+          find composeApp/build/compose/binaries/main/rpm/     -name '*.rpm'      -exec cp {} dist/ \;
+          find composeApp/build/compose/binaries/main/appimage/ -name '*.AppImage' -exec cp {} dist/ \;
+          find composeApp/build/distributions/                  -name '*.zip'      -exec cp {} dist/ \;
+
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-distributions
-          path: |
-            composeApp/build/compose/binaries/main/deb/*.deb
-            composeApp/build/compose/binaries/main/rpm/*.rpm
-            composeApp/build/compose/binaries/main/appimage/*.AppImage
-            composeApp/build/distributions/*.zip
+          path: dist/
           if-no-files-found: error
 
   build-windows:
@@ -150,13 +154,18 @@ jobs:
         run: |
           ./gradlew :composeApp:packageMsi :composeApp:packageExe :composeApp:createPortableZip --no-daemon "-PappVersion=${{ steps.version.outputs.version_name }}" "-PappBuildNumber=${{ steps.version.outputs.build_num }}" "-Pcompose.desktop.signing.sign=true" "-Pcompose.desktop.signing.certificateFile=../signing/windows.pfx" "-Pcompose.desktop.signing.keyPassword=${{ secrets.KEYSTORE_PASSWORD }}"
 
+      - name: Collect Windows Artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find composeApp/build/compose/binaries/main/msi/  -name '*.msi' -exec cp {} dist/ \;
+          find composeApp/build/distributions/               -name '*.zip' -exec cp {} dist/ \;
+
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-distributions
-          path: |
-            composeApp/build/compose/binaries/main/msi/*.msi
-            composeApp/build/distributions/*.zip
+          path: dist/
           if-no-files-found: error
 
   create-release:
