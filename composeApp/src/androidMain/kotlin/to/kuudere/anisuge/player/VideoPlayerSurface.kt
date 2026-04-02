@@ -85,6 +85,8 @@ actual fun VideoPlayerSurface(
                                 val startPos = state.config.startPosition
                                 if (startPos > 0.0) {
                                     MPVLib.setOptionString("start", startPos.toString())
+                                } else {
+                                    MPVLib.setOptionString("start", "0")
                                 }
                                 MPVLib.command(arrayOf<String>("loadfile", resolvedUrl))
                             } else {
@@ -480,6 +482,11 @@ actual fun VideoPlayerSurface(
             }
             delay(500)
         }
+    }
+
+    // Reset seek target when URL changes to prevent seeking to previous video's position
+    LaunchedEffect(state.config.url) {
+        state.seekTarget = null
     }
 
     // Reactively update sub-fonts-dir when the API fonts dir becomes available (may arrive

@@ -93,6 +93,7 @@ fun rememberVideoPlayerState(
         )
     ).apply {
         pauseRequested = !autoPlay
+        seekTarget = null // Reset seek target when creating new state for new video
     }
 }
 
