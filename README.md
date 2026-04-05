@@ -10,16 +10,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/Kisaramax/Anisuge?include_prereleases&style=flat-square" alt="latest release">
-  <img src="https://img.shields.io/github/downloads/Kisaramax/Anisuge/total?style=flat-square" alt="downloads">
-  <img src="https://img.shields.io/github/actions/workflow/status/Kisaramax/Anisuge/build-release.yml?style=flat-square" alt="build status">
-  <img src="https://img.shields.io/github/license/Kisaramax/Anisuge?style=flat-square" alt="license">
+  <img src="https://img.shields.io/github/v/release/Anisurge/App?include_prereleases&style=flat-square" alt="latest release">
+  <img src="https://img.shields.io/github/downloads/Anisurge/App/total?style=flat-square" alt="downloads">
+  <img src="https://img.shields.io/github/actions/workflow/status/Anisurge/App/build-release.yml?style=flat-square" alt="build status">
+  <img src="https://img.shields.io/github/license/Anisurge/App?style=flat-square" alt="license">
 </p>
 
 <h2 align="center">Download</h2>
 
 <p align="center">
-  Get the latest version of Anisurge for your platform from the <b><a href="https://github.com/Kisaramax/Anisuge/releases">Releases</a></b> page.
+  Get the latest version of Anisurge for your platform from the <b><a href="https://github.com/Anisurge/App/releases">Releases</a></b> page.
 </p>
 
 ---
