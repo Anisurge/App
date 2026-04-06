@@ -51,6 +51,8 @@ plugins {
 kotlin {
     androidTarget()
     jvm("desktop")
+    
+    jvmToolchain(21)
 
     sourceSets {
         val desktopMain by getting
@@ -209,6 +211,12 @@ compose {
 compose.desktop {
     application {
         mainClass = "to.kuudere.anisuge.MainKt"
+        
+        // Use Java 21 toolchain for running the application
+        javaHome = javaToolchains.launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        }.get().metadata.installationPath.asFile.absolutePath
+        
         jvmArgs += listOf(
             "--add-opens=jdk.security.auth/com.sun.security.auth.module=ALL-UNNAMED",
             "--add-exports=jdk.security.auth/com.sun.security.auth.module=ALL-UNNAMED",
