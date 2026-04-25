@@ -30,6 +30,8 @@ data class VideoPlayerConfig(
     val autoPlay: Boolean = true,
     /** Default playback speed */
     val speed: Double = 1.0,
+    /** Subtitle scale percentage. 100 keeps mpv defaults. */
+    val subtitleSize: Int = 100,
     /** Custom HTTP headers (Referer, User-Agent, etc) */
     val headers: Map<String, String>? = null
 )

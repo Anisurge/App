@@ -19,6 +19,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val AUTO_SKIP_OUTRO_KEY = booleanPreferencesKey("auto_skip_outro")
         val DEFAULT_LANG_KEY = booleanPreferencesKey("default_lang")
         val SYNC_PERCENTAGE_KEY = androidx.datastore.preferences.core.intPreferencesKey("sync_percentage")
+        val SUBTITLE_SIZE_KEY = androidx.datastore.preferences.core.intPreferencesKey("subtitle_size")
         val SERVER_PRIORITY_KEY = stringPreferencesKey("server_priority")
         val DOWNLOAD_PATH_KEY = stringPreferencesKey("download_path")
 
@@ -31,6 +32,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val autoSkipOutroFlow: Flow<Boolean> = dataStore.data.map { it[AUTO_SKIP_OUTRO_KEY] ?: false }
     val defaultLangFlow: Flow<Boolean> = dataStore.data.map { it[DEFAULT_LANG_KEY] ?: false }
     val syncPercentageFlow: Flow<Int> = dataStore.data.map { it[SYNC_PERCENTAGE_KEY] ?: 80 }
+    val subtitleSizeFlow: Flow<Int> = dataStore.data.map { it[SUBTITLE_SIZE_KEY] ?: 100 }
     val downloadPathFlow: Flow<String> = dataStore.data.map { it[DOWNLOAD_PATH_KEY] ?: "" }
 
     /**
@@ -97,6 +99,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setSyncPercentage(percentage: Int) {
         dataStore.edit { it[SYNC_PERCENTAGE_KEY] = percentage }
+    }
+
+    suspend fun setSubtitleSize(sizePercent: Int) {
+        dataStore.edit { it[SUBTITLE_SIZE_KEY] = sizePercent.coerceIn(60, 200) }
     }
 
     suspend fun setDownloadPath(path: String) {

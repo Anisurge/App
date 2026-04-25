@@ -51,6 +51,7 @@ data class WatchUiState(
     val autoSkipOutro: Boolean = false,
     val defaultLang: Boolean = false,
     val syncPercentage: Int = 80,
+    val subtitleSize: Int = 100,
     val didMarkWatched: Boolean = false,
     val offlinePath: String? = null,
     // Offline metadata
@@ -76,6 +77,7 @@ class WatchViewModel(
         viewModelScope.launch { settingsStore.autoSkipOutroFlow.collect { v -> _uiState.update { it.copy(autoSkipOutro = v) } } }
         viewModelScope.launch { settingsStore.defaultLangFlow.collect { v -> _uiState.update { it.copy(defaultLang = v) } } }
         viewModelScope.launch { settingsStore.syncPercentageFlow.collect { v -> _uiState.update { it.copy(syncPercentage = v) } } }
+        viewModelScope.launch { settingsStore.subtitleSizeFlow.collect { v -> _uiState.update { it.copy(subtitleSize = v) } } }
     }
 
     fun initialize(animeId: String, episodeNumber: Int, server: String? = null, lang: String? = null, offlinePath: String? = null, offlineTitle: String? = null) {
@@ -657,6 +659,12 @@ class WatchViewModel(
         viewModelScope.launch { 
             settingsStore.setAutoSkipOutro(enabled)
             syncPreferencesToServer()
+        }
+    }
+
+    fun setSubtitleSize(sizePercent: Int) {
+        viewModelScope.launch {
+            settingsStore.setSubtitleSize(sizePercent)
         }
     }
 

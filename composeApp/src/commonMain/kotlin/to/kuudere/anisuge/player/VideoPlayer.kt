@@ -59,6 +59,7 @@ class VideoPlayerState(config: VideoPlayerConfig) {
     
     // Commands from UI → player
     var playbackSpeed   by mutableStateOf(config.speed)
+    var subtitleSize    by mutableStateOf(config.subtitleSize)
 }
 
 @Composable
@@ -74,6 +75,7 @@ fun rememberVideoPlayerState(
     fontsDir:     String? = null,
     autoPlay:     Boolean = true,
     speed:        Double  = 1.0,
+    subtitleSize: Int     = 100,
     headers:      Map<String, String>? = null
 ): VideoPlayerState = remember(url) {
     VideoPlayerState(
@@ -89,6 +91,7 @@ fun rememberVideoPlayerState(
             fontsDir      = fontsDir,
             autoPlay      = autoPlay,
             speed         = speed,
+            subtitleSize  = subtitleSize,
             headers       = headers
         )
     ).apply {

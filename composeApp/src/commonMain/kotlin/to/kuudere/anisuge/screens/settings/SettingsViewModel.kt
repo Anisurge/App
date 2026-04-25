@@ -94,6 +94,7 @@ data class SettingsUiState(
     val showClearCacheConfirm: Boolean = false,
     val isOffline: Boolean = false,
     val downloadPath: String = "",
+    val subtitleSize: Int = 100,
 )
 
 sealed class SettingsTab {
@@ -203,6 +204,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsStore.downloadPathFlow.collect { v ->
                 _uiState.update { it.copy(downloadPath = v) }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.subtitleSizeFlow.collect { v ->
+                _uiState.update { it.copy(subtitleSize = v) }
             }
         }
     }
@@ -450,6 +456,12 @@ class SettingsViewModel(
     fun setDownloadPath(path: String) {
         viewModelScope.launch {
             settingsStore.setDownloadPath(path)
+        }
+    }
+
+    fun setSubtitleSize(sizePercent: Int) {
+        viewModelScope.launch {
+            settingsStore.setSubtitleSize(sizePercent)
         }
     }
 

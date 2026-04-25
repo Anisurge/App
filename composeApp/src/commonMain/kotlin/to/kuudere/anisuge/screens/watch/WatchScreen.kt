@@ -1018,6 +1018,7 @@ fun WatchVideoPlayer(
                 showControls = useOsc,
                 autoPlay = uiState.autoPlay,
                 speed = uiState.playbackSpeed,
+                subtitleSize = uiState.subtitleSize,
                 headers = uiState.streamingData?.headers
             )
 
@@ -1118,6 +1119,10 @@ fun WatchVideoPlayer(
             
             LaunchedEffect(uiState.playbackSpeed) {
                 playerState.playbackSpeed = uiState.playbackSpeed
+            }
+
+            LaunchedEffect(uiState.subtitleSize) {
+                playerState.subtitleSize = uiState.subtitleSize
             }
 
             LaunchedEffect(playerState.isPlaying, playerState.isPaused) {
@@ -1580,6 +1585,7 @@ fun WatchVideoPlayer(
                     subtitleTracks = playerState.subtitleTracks,
                     selectedSubtitleTrack = playerState.selectedSubtitleTrack,
                     onSubtitleTrackSelected = { playerState.selectedSubtitleTrack = it },
+                    onSubtitleSizeSelected = { viewModel.setSubtitleSize(it) },
                     onWatchlistStatusSelected = { folder -> viewModel.updateWatchlistStatus(folder) },
                     onAutoPlayToggle = { viewModel.setAutoPlay(it) },
                     onAutoNextToggle = { viewModel.setAutoNext(it) },
@@ -1664,6 +1670,7 @@ fun WatchVideoPlayer(
                     subtitleTracks = emptyList(),
                     selectedSubtitleTrack = -1,
                     onSubtitleTrackSelected = { },
+                    onSubtitleSizeSelected = { viewModel.setSubtitleSize(it) },
                     onWatchlistStatusSelected = { folder -> viewModel.updateWatchlistStatus(folder) },
                     onAutoPlayToggle = { viewModel.setAutoPlay(it) },
                     onAutoNextToggle = { viewModel.setAutoNext(it) },
