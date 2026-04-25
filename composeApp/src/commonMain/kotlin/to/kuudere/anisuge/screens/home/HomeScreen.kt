@@ -207,7 +207,36 @@ fun HomeScreen(
     var prevTabIndex by remember { mutableStateOf(0) }
     var showWatchlistFor by remember { mutableStateOf<AnimeItem?>(null) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    var showExitConfirm by remember { mutableStateOf(false) }
     val hazeState = remember { HazeState() }
+    
+    // Tab history stack for proper back navigation
+    val tabHistory = remember { mutableListOf<AnisugTab>() }
+    
+    // Handle back navigation within tabs
+    to.kuudere.anisuge.platform.PlatformBackHandler(enabled = true) {
+        if (tabHistory.isNotEmpty()) {
+            // Pop from tab history
+            currentTab = tabHistory.removeLast()
+        } else if (currentTab != AnisugTab.Home) {
+            // No history, go to Home
+            currentTab = AnisugTab.Home
+        } else {
+            // At Home with no history, show exit confirmation
+            showExitConfirm = true
+        }
+    }
+    
+    // Function to switch tabs with history tracking
+    val switchTab: (AnisugTab, SettingsTab?) -> Unit = { newTab, initialNested ->
+        // Only add to history if switching to a different tab
+        if (newTab != currentTab) {
+            tabHistory.add(currentTab)
+        }
+        prevTabIndex = AnisugTab.entries.indexOf(currentTab)
+        initialSettingsTab = initialNested
+        currentTab = newTab
+    }
 
     LaunchedEffect(Unit) {
         // Loging states are now reactive — ViewModels handle their own initial check
@@ -236,11 +265,7 @@ fun HomeScreen(
                     avatarUrl = homeState.userProfile?.avatar,
                     selectedTab = currentTab,
                     isLoggingOut = homeState.isLoggingOut,
-                    onTabSelect = { newTab, initialNested ->
-                        prevTabIndex = AnisugTab.entries.indexOf(currentTab)
-                        initialSettingsTab = initialNested
-                        currentTab = newTab
-                    },
+                    onTabSelect = switchTab,
                     onLogout = {
                         showLogoutConfirm = true
                     },
@@ -358,10 +383,7 @@ fun HomeScreen(
                     // Bottom Bar — measured so content knows how tall it is
                     AnisugBottomBar(
                         selectedTab = currentTab,
-                        onTabSelect = { newTab ->
-                            prevTabIndex = AnisugTab.entries.indexOf(currentTab)
-                            currentTab = newTab
-                        },
+                        onTabSelect = { newTab -> switchTab(newTab, null) },
                         hazeState = hazeState,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -393,6 +415,19 @@ fun HomeScreen(
                     homeViewModel.logout(onComplete = onLogout)
                 },
                 onDismiss = { showLogoutConfirm = false }
+            )
+        }
+
+        if (showExitConfirm) {
+            ConfirmDialog(
+                title = "Exit App",
+                message = "Are you sure you want to exit Anisurge?",
+                confirmLabel = "Exit",
+                onConfirm = {
+                    showExitConfirm = false
+                    onExit()
+                },
+                onDismiss = { showExitConfirm = false }
             )
         }
     }

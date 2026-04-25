@@ -42,13 +42,9 @@ import androidx.navigation.NamedNavArgument
 import androidx.navigation.navArgument
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import to.kuudere.anisuge.screens.update.UpdateScreen
 import to.kuudere.anisuge.screens.update.UpdateViewModel
 import to.kuudere.anisuge.platform.LockScreenOrientation
-import to.kuudere.anisuge.platform.PlatformBackHandler
-import to.kuudere.anisuge.ui.ConfirmDialog
 import androidx.savedstate.SavedState
 import androidx.savedstate.read
 
@@ -74,35 +70,12 @@ fun App(onAppExit: () -> Unit = {}) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
         val updateState by updateVm.state.collectAsState()
-        
-        var showExitConfirm by remember { mutableStateOf(false) }
-        
-        val currentRoute = navBackStackEntry?.destination?.route
-        val isAtHome = currentRoute != null && currentRoute.startsWith("home")
-        
-        PlatformBackHandler(enabled = isAtHome) {
-            showExitConfirm = true
-        }
 
 
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             if (!isWatchScreen) {
                 LockScreenOrientation(landscape = false)
             }
-            
-            if (showExitConfirm) {
-                ConfirmDialog(
-                    title = "Exit App",
-                    message = "Are you sure you want to exit Anisurge?",
-                    confirmLabel = "Exit",
-                    onConfirm = {
-                        showExitConfirm = false
-                        onAppExit()
-                    },
-                    onDismiss = { showExitConfirm = false }
-                )
-            }
-            
             NavHost(
                 navController    = navController,
                 startDestination = Screen.Splash.route,
