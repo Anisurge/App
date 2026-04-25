@@ -104,6 +104,7 @@ import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.WatchLater
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -149,6 +150,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import kotlin.math.absoluteValue
 import androidx.compose.ui.platform.LocalWindowInfo
 import coil3.compose.AsyncImage
@@ -1434,6 +1436,8 @@ private fun AnisugSidebar(
             }
             
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val uriHandler = LocalUriHandler.current
+                DonateButton(onClick = { uriHandler.openUri("https://anisurge.lol/donate") })
                 LogoutButton(isLoggingOut = isLoggingOut, onLogout = onLogout)
                 Spacer(Modifier.height(32.dp))
             }
@@ -1524,6 +1528,37 @@ private fun LogoutButton(isLoggingOut: Boolean, onLogout: () -> Unit) {
     }
 }
 
+@Composable
+private fun DonateButton(onClick: () -> Unit) {
+    val inter = remember { MutableInteractionSource() }
+    val hovered by inter.collectIsHoveredAsState()
+
+    val bgColor by animateColorAsState(
+        if (hovered) Color.White.copy(alpha = 0.07f) else Color.Transparent,
+        tween(200)
+    )
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(bgColor)
+                .hoverable(inter)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Favorite,
+                contentDescription = "Donate",
+                tint = Color(0xFFE91E63),
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Box(Modifier.size(4.dp).clip(CircleShape).background(Color.Transparent))
+        Spacer(Modifier.height(8.dp))
+    }
+}
 
 
 @Composable
