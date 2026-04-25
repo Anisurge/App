@@ -209,14 +209,6 @@ fun HomeScreen(
     var showLogoutConfirm by remember { mutableStateOf(false) }
     val hazeState = remember { HazeState() }
 
-    to.kuudere.anisuge.platform.PlatformBackHandler(enabled = true) {
-        if (currentTab != AnisugTab.Home) {
-            currentTab = AnisugTab.Home
-        } else {
-            onExit()
-        }
-    }
-
     LaunchedEffect(Unit) {
         // Loging states are now reactive — ViewModels handle their own initial check
         // but we can still trigger a global sync here if needed.
