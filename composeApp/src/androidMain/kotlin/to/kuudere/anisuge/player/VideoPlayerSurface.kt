@@ -165,7 +165,16 @@ actual fun VideoPlayerSurface(
 
         // Shared native engine, so we set non-global options per-instance here
         MPVLib.setOptionString("vo", "gpu")
-        MPVLib.setOptionString("hwdec", state.config.hwdec)
+        
+        // Hardware decoding with fallback - mediacodec is Android's native HW decoder
+        // "auto" can fail silently on some devices, causing audio-only playback
+        // mediacodec-copy is safer as it copies to CPU memory, avoiding some GPU issues
+        MPVLib.setOptionString("hwdec", "mediacodec-copy")
+        MPVLib.setOptionString("hwdec-codecs", "h264,hevc,vp8,vp9,av1,mpeg4,mpeg2video")
+        
+        // Fallback to software if hardware fails (crucial for problematic devices)
+        MPVLib.setOptionString("vd-lavc-software-fallback", "yes")
+        
         val showOsc = if (state.config.showControls) "yes" else "no"
         MPVLib.setOptionString("osc", showOsc)
         MPVLib.setOptionString("osd-bar", showOsc)
@@ -181,6 +190,12 @@ actual fun VideoPlayerSurface(
         MPVLib.setOptionString("demuxer-readahead-secs", "3") // Start in ~1-2s, pipeline does the rest
         MPVLib.setOptionString("demuxer-max-bytes", "100M")   // Sweet spot for mobile RAM
         MPVLib.setOptionString("demuxer-max-back-bytes", "50M")
+        
+        // Fix video freeze/desync - prevent frame dropping that causes video to fall behind audio
+        MPVLib.setOptionString("framedrop", "no")             // Never drop frames
+        MPVLib.setOptionString("video-latency-hacks", "no")   // Don't sacrifice sync for latency
+        MPVLib.setOptionString("interpolation", "no")         // Disable interpolation that can cause stutter
+        MPVLib.setOptionString("video-sync", "audio")         // Sync video to audio (default but explicit)
 
         // Network optimizations for HTTP/HLS streaming
         MPVLib.setOptionString("network-timeout", "10")       // Fail fast → retry faster
@@ -199,7 +214,6 @@ actual fun VideoPlayerSurface(
         }
         MPVLib.setOptionString("cache-pause", "no")           // Never stall on micro-gaps
         MPVLib.setOptionString("vd-lavc-fast", "yes")         // Skip unnecessary decode precision
-        MPVLib.setOptionString("vd-lavc-skipframedrop", "nonref")
 
 
         // Fix for Cloudflare/Anti-bot
