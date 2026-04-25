@@ -6,6 +6,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,6 +56,7 @@ fun SettingsOverlay(
     subtitleTracks: List<Pair<Int, String>> = emptyList(),
     selectedSubtitleTrack: Int? = null,
     onSubtitleTrackSelected: (Int?) -> Unit = {},
+    onSubtitleSizeSelected: (Int) -> Unit = {},
     onWatchlistStatusSelected: (String) -> Unit = {},
     onAutoPlayToggle: (Boolean) -> Unit = {},
     onAutoNextToggle: (Boolean) -> Unit = {},
@@ -61,11 +64,20 @@ fun SettingsOverlay(
     onAutoSkipOutroToggle: (Boolean) -> Unit = {}
 ) {
     var currentPage by remember { mutableStateOf(uiState.initialSettingsPage ?: SettingsMenuPage.MAIN) }
+    var isSubtitleSizeDragging by remember { mutableStateOf(false) }
+    val scrimAlpha by animateFloatAsState(
+        targetValue = if (isSubtitleSizeDragging && currentPage == SettingsMenuPage.SUBTITLES) 0.12f else 0.7f,
+        animationSpec = tween(durationMillis = 150)
+    )
+    val panelAlpha by animateFloatAsState(
+        targetValue = if (isSubtitleSizeDragging && currentPage == SettingsMenuPage.SUBTITLES) 0.18f else 1f,
+        animationSpec = tween(durationMillis = 150)
+    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f))
+            .background(Color.Black.copy(alpha = scrimAlpha))
             .clickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = null,
@@ -79,7 +91,7 @@ fun SettingsOverlay(
                 .widthIn(max = 400.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(Color.Black)
+                .background(Color.Black.copy(alpha = panelAlpha))
                 .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(24.dp))
                 .clickable(enabled = false, onClick = {}) // block touch propagation
                 .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -167,7 +179,7 @@ fun SettingsOverlay(
                                     SettingsMenuItem(
                                         icon = { Icon(getClosedCaptionIcon(), contentDescription = null, tint = Color.White) },
                                         title = "Captions",
-                                        subtitle = currentLabel,
+                                        subtitle = "$currentLabel • ${uiState.subtitleSize}%",
                                         onClick = { currentPage = SettingsMenuPage.SUBTITLES }
                                     )
                                 }
@@ -285,7 +297,42 @@ fun SettingsOverlay(
                     SettingsMenuPage.SUBTITLES -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             SubMenuHeader("Captions") { currentPage = SettingsMenuPage.MAIN }
-                            LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
+                            LazyColumn(modifier = Modifier.heightIn(max = 340.dp).fillMaxWidth()) {
+                                item {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 20.dp, vertical = 10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("Size", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                            Text("${uiState.subtitleSize}%", color = Color.Gray, fontSize = 14.sp)
+                                        }
+                                        val subtitleSizeInteractionSource = remember { MutableInteractionSource() }
+                                        val isDraggingSubtitleSize by subtitleSizeInteractionSource.collectIsDraggedAsState()
+                                        LaunchedEffect(isDraggingSubtitleSize) {
+                                            isSubtitleSizeDragging = isDraggingSubtitleSize
+                                        }
+
+                                        Slider(
+                                            value = uiState.subtitleSize.toFloat(),
+                                            onValueChange = { onSubtitleSizeSelected(it.toInt()) },
+                                            valueRange = 60f..200f,
+                                            steps = 13,
+                                            interactionSource = subtitleSizeInteractionSource,
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = Color.White,
+                                                activeTrackColor = Color.White,
+                                                inactiveTrackColor = Color.White.copy(alpha = 0.18f)
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
                                 item {
                                     SubMenuItem(
                                         title = "Off",

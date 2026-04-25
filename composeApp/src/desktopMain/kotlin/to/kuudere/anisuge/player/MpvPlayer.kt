@@ -79,6 +79,7 @@ internal class MpvPlayer(
         mpv.mpv_set_option_string(handle, "sub-font-provider", "auto")
         mpv.mpv_set_option_string(handle, "sub-ass", "yes")
         mpv.mpv_set_option_string(handle, "sub-ass-override", "scale")
+        mpv.mpv_set_option_string(handle, "sub-scale", (config.subtitleSize / 100.0).toString())
 
         // UI: We disabled mpv's built-in OSC because we now render the 
         // Compose PlayerControls UI overlay directly
@@ -323,6 +324,7 @@ internal class MpvPlayer(
             var lastSentMute: Boolean? = null
             var lastSentAspectRatio: String? = null
             var lastSentSpeed: Double? = null
+            var lastSentSubtitleSize: Int? = null
             while (isActive && ctx != null) {
                 val event = mpv.mpv_wait_event(handle, 0.05)
                 if (event != null) {
@@ -529,6 +531,11 @@ internal class MpvPlayer(
                 if (state.playbackSpeed != lastSentSpeed) {
                     mpv.mpv_set_property_string(handle, "speed", state.playbackSpeed.toString())
                     lastSentSpeed = state.playbackSpeed
+                }
+
+                if (state.subtitleSize != lastSentSubtitleSize) {
+                    mpv.mpv_set_property_string(handle, "sub-scale", (state.subtitleSize / 100.0).toString())
+                    lastSentSubtitleSize = state.subtitleSize
                 }
 
                 // Handle all-subs load (on new episode/server change before file ready)

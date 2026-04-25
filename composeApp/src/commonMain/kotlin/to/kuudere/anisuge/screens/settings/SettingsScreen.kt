@@ -833,6 +833,7 @@ private fun MobileSettingsDetail(
                     onSkipOutroChange = viewModel::setSkipOutro,
                     onDefaultLangChange = viewModel::setDefaultLang,
                     onSyncPercentageChange = viewModel::setSyncPercentage,
+                    onSubtitleSizeChange = viewModel::setSubtitleSize,
                     onDownloadPathChange = viewModel::setDownloadPath,
                     onSave = viewModel::savePreferences
                 )
@@ -912,6 +913,7 @@ private fun SettingsContent(
                 onSkipOutroChange = viewModel::setSkipOutro,
                 onDefaultLangChange = viewModel::setDefaultLang,
                 onSyncPercentageChange = viewModel::setSyncPercentage,
+                onSubtitleSizeChange = viewModel::setSubtitleSize,
                 onDownloadPathChange = viewModel::setDownloadPath,
                 onSave = viewModel::savePreferences
             )
@@ -974,6 +976,7 @@ private fun PreferencesTab(
     onSkipOutroChange: (Boolean) -> Unit,
     onDefaultLangChange: (Boolean) -> Unit,
     onSyncPercentageChange: (Int) -> Unit,
+    onSubtitleSizeChange: (Int) -> Unit,
     onDownloadPathChange: (String) -> Unit,
     onSave: () -> Unit,
 ) {
@@ -1090,6 +1093,31 @@ private fun PreferencesTab(
                     onValueChange = { onSyncPercentageChange(it.toInt()) },
                     valueRange = 50f..100f,
                     steps = 49,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color.White,
+                        activeTrackColor = Color.White,
+                        inactiveTrackColor = BORDER
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        SettingCard(
+            title = "Subtitle Size",
+            description = "Adjust caption text size for this device",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Text("${uiState.subtitleSize}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Slider(
+                    value = uiState.subtitleSize.toFloat(),
+                    onValueChange = { onSubtitleSizeChange(it.toInt()) },
+                    valueRange = 60f..200f,
+                    steps = 13,
                     colors = SliderDefaults.colors(
                         thumbColor = Color.White,
                         activeTrackColor = Color.White,
@@ -2400,6 +2428,7 @@ private fun MobilePreferencesContent(
     onSkipOutroChange: (Boolean) -> Unit,
     onDefaultLangChange: (Boolean) -> Unit,
     onSyncPercentageChange: (Int) -> Unit,
+    onSubtitleSizeChange: (Int) -> Unit,
     onDownloadPathChange: (String) -> Unit,
     onSave: () -> Unit,
 ) {
@@ -2476,6 +2505,41 @@ private fun MobilePreferencesContent(
             )
             Spacer(modifier = Modifier.width(16.dp))
             Text("${uiState.preferences.syncPercentage}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        }
+
+        HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
+
+        Text(
+            "Subtitle Size",
+            color = TEXT,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            "Adjust caption text size for this device",
+            color = MUTED,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Slider(
+                value = uiState.subtitleSize.toFloat(),
+                onValueChange = { onSubtitleSizeChange(it.toInt()) },
+                valueRange = 60f..200f,
+                steps = 13,
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Color.White,
+                    inactiveTrackColor = BORDER
+                ),
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Text("${uiState.subtitleSize}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
 
         HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
