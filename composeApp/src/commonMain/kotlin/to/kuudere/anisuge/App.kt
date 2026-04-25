@@ -42,9 +42,13 @@ import androidx.navigation.NamedNavArgument
 import androidx.navigation.navArgument
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import to.kuudere.anisuge.screens.update.UpdateScreen
 import to.kuudere.anisuge.screens.update.UpdateViewModel
 import to.kuudere.anisuge.platform.LockScreenOrientation
+import to.kuudere.anisuge.platform.PlatformBackHandler
+import to.kuudere.anisuge.ui.ConfirmDialog
 import androidx.savedstate.SavedState
 import androidx.savedstate.read
 
@@ -70,12 +74,37 @@ fun App(onAppExit: () -> Unit = {}) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
         val updateState by updateVm.state.collectAsState()
+        
+        var showExitConfirm by remember { mutableStateOf(false) }
+        
+        // Handle back button - show exit confirmation only when at the root (home)
+        val currentRoute = navBackStackEntry?.destination?.route
+        val isAtRoot = currentRoute != null && 
+            (currentRoute.startsWith("home") || currentRoute == Screen.Auth.route)
+        
+        PlatformBackHandler(enabled = isAtRoot && !showExitConfirm) {
+            showExitConfirm = true
+        }
 
 
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             if (!isWatchScreen) {
                 LockScreenOrientation(landscape = false)
             }
+            
+            if (showExitConfirm) {
+                ConfirmDialog(
+                    title = "Exit App",
+                    message = "Are you sure you want to exit Anisurge?",
+                    confirmLabel = "Exit",
+                    onConfirm = {
+                        showExitConfirm = false
+                        onAppExit()
+                    },
+                    onDismiss = { showExitConfirm = false }
+                )
+            }
+            
             NavHost(
                 navController    = navController,
                 startDestination = Screen.Splash.route,
@@ -179,17 +208,13 @@ fun App(onAppExit: () -> Unit = {}) {
                         onBack = { navController.popBackStack() },
                         onWatchEpisode = { id, lang, ep -> navController.navigate(Screen.Watch(id, ep, null, lang).route) },
                         onDownloadsClick = {
-                            navController.navigate(Screen.Home(startOnDownloads = true).route) {
-                                popUpTo(Screen.Home().route) { inclusive = true }
-                            }
+                            navController.navigate(Screen.Home(startOnDownloads = true).route)
                         },
                         onGenreClick = { genre ->
                             searchVm.clearFilters()
                             searchVm.onGenreToggle(genre)
                             searchVm.search()
-                            navController.navigate(Screen.Home(startTab = "Search").route) {
-                                popUpTo(Screen.Home().route) { inclusive = true }
-                            }
+                            navController.navigate(Screen.Home(startTab = "Search").route)
                         },
                         onExit = onAppExit
                     )
