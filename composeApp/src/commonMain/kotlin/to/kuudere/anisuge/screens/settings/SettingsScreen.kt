@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
@@ -465,6 +466,34 @@ private fun Sidebar(
             )
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        val uriHandler = LocalUriHandler.current
+        
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { uriHandler.openUri("https://anisurge.lol/donate") }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Favorite,
+                contentDescription = null,
+                tint = Color(0xFFE91E63),
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                "Donate",
+                color = Color(0xFFE91E63),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Normal
+            )
+        }
+
         Spacer(modifier = Modifier.weight(1f))
 
         // App Stats
@@ -661,6 +690,15 @@ private fun MobileSettingsList(
             tint = Color(0xFFE50914),
             onClick = onLogout,
             isLoading = isLoggingOut
+        )
+
+        val uriHandler = LocalUriHandler.current
+        
+        MobileSettingsItem(
+            icon = Icons.Default.Favorite,
+            label = "Donate",
+            tint = Color(0xFFE91E63),
+            onClick = { uriHandler.openUri("https://anisurge.lol/donate") }
         )
 
         Spacer(modifier = Modifier.height(24.dp))
