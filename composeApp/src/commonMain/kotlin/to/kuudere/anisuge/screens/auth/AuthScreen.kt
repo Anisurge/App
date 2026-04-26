@@ -459,6 +459,7 @@ private fun MobileAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
 private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boolean) {
     val passwordFocus = remember { FocusRequester() }
     val resetCodeFocus = remember { FocusRequester() }
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
     Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
         AnimatedContent(
@@ -597,6 +598,31 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                         fontWeight = FontWeight.W500,
                     )
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+
+    // Register helper - show website link for account creation
+    if (state.mode == AuthMode.REGISTER) {
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "Having trouble registering?",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Normal,
+            )
+            Spacer(Modifier.height(4.dp))
+            TextButton(
+                onClick = { uriHandler.openUri("https://kuudere.to") },
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = "Create account at kuudere.to",
+                    color = Color(0xFF64B5F6),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                )
             }
             Spacer(Modifier.height(8.dp))
         }
