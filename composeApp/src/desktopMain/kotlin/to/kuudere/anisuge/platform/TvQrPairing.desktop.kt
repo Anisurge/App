@@ -10,6 +10,7 @@ actual class TvQrPairingReceiver actual constructor() {
     actual suspend fun start(
         nonce: String,
         expiresAtMillis: Long,
+        onClientConnected: () -> Unit,
         onSessionReceived: suspend (SessionInfo) -> Unit,
     ): TvQrPairingEndpoint {
         throw UnsupportedOperationException("TV QR pairing is Android-only")

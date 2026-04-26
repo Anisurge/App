@@ -28,6 +28,7 @@ data class AuthUiState(
     val tvPairingPayload: String? = null,
     val tvPairingStatus: String = "Preparing QR login...",
     val tvPairingExpiresAtMillis: Long = 0L,
+    val tvPairingConnected: Boolean = false,
 )
 
 class AuthViewModel(private val authService: AuthService) : ViewModel() {
@@ -65,19 +66,30 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
             tvPairingPayload = null,
             tvPairingStatus = "Starting secure local pairing...",
             tvPairingExpiresAtMillis = expiresAtMillis,
+            tvPairingConnected = false,
             errorMessage = null,
         )
 
         viewModelScope.launch {
             try {
-                val endpoint = tvPairingReceiver.start(nonce, expiresAtMillis) { session ->
-                    authService.savePairedSession(session)
-                    _uiState.value = _uiState.value.copy(
-                        isSuccess = true,
-                        tvPairingStatus = "Paired successfully",
-                        errorMessage = null,
-                    )
-                }
+                val endpoint = tvPairingReceiver.start(
+                    nonce = nonce,
+                    expiresAtMillis = expiresAtMillis,
+                    onClientConnected = {
+                        _uiState.value = _uiState.value.copy(
+                            tvPairingConnected = true,
+                            tvPairingStatus = "Phone connected, authenticating...",
+                        )
+                    },
+                    onSessionReceived = { session ->
+                        authService.savePairedSession(session)
+                        _uiState.value = _uiState.value.copy(
+                            isSuccess = true,
+                            tvPairingStatus = "Paired successfully",
+                            errorMessage = null,
+                        )
+                    }
+                )
                 val payload = "anisurge://tv-login?host=${endpoint.host}&port=${endpoint.port}&nonce=$nonce"
                 _uiState.value = _uiState.value.copy(
                     tvPairingPayload = payload,
@@ -90,6 +102,7 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
                         tvPairingReceiver.stop()
                         _uiState.value = _uiState.value.copy(
                             tvPairingStatus = "QR expired. Generate a new code.",
+                            tvPairingConnected = false,
                         )
                     }
                 }
@@ -97,6 +110,7 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
                 _uiState.value = _uiState.value.copy(
                     tvPairingStatus = "Could not start QR login",
                     errorMessage = e.message ?: "TV pairing failed",
+                    tvPairingConnected = false,
                 )
             }
         }

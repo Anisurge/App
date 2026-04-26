@@ -30,7 +30,20 @@ actual val isAndroidTvPlatform: Boolean
     get() {
         val uiModeManager = androidAppContext.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
         val packageManager = androidAppContext.packageManager
+        val forcedTvUi = runCatching {
+            val appInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getApplicationInfo(
+                    androidAppContext.packageName,
+                    PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getApplicationInfo(androidAppContext.packageName, PackageManager.GET_META_DATA)
+            }
+            appInfo.metaData?.getBoolean("to.kuudere.anisuge.FORCE_TV_UI") == true
+        }.getOrDefault(false)
         return uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
+            forcedTvUi ||
             (androidAppContext.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION ||
             packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
             packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION)

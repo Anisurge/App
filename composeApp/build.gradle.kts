@@ -163,6 +163,24 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = appBuildNum
         versionName = appVersionName
+        manifestPlaceholders["appLabel"] = "Anisurge"
+        manifestPlaceholders["forceTvUi"] = "false"
+        manifestPlaceholders["activityOrientation"] = "unspecified"
+    }
+
+    flavorDimensions += "device"
+    productFlavors {
+        create("phone") {
+            dimension = "device"
+        }
+        create("tv") {
+            dimension = "device"
+            applicationIdSuffix = ".tv"
+            versionNameSuffix = "-tv"
+            manifestPlaceholders["appLabel"] = "Anisurge TV"
+            manifestPlaceholders["forceTvUi"] = "true"
+            manifestPlaceholders["activityOrientation"] = "landscape"
+        }
     }
 
     buildFeatures {
@@ -282,4 +300,3 @@ tasks.register<Zip>("createPortableZip") {
     // Ensure this runs after other packaging tasks if they are in the graph to avoid implicit dependency warnings
     mustRunAfter(tasks.matching { it.name.startsWith("package") })
 }
-

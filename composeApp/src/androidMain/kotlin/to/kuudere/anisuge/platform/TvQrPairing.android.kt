@@ -10,10 +10,15 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -28,6 +34,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -43,6 +50,7 @@ import java.security.SecureRandom
 import java.util.EnumMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
@@ -76,6 +84,7 @@ actual class TvQrPairingReceiver actual constructor() {
     actual suspend fun start(
         nonce: String,
         expiresAtMillis: Long,
+        onClientConnected: () -> Unit,
         onSessionReceived: suspend (SessionInfo) -> Unit,
     ): TvQrPairingEndpoint = withContext(Dispatchers.IO) {
         stop()
@@ -94,7 +103,7 @@ actual class TvQrPairingReceiver actual constructor() {
                     break
                 }
                 launch {
-                    handleClient(client, nonce, expiresAtMillis, onSessionReceived)
+                    handleClient(client, nonce, expiresAtMillis, onClientConnected, onSessionReceived)
                 }
             }
         }
@@ -114,9 +123,14 @@ actual class TvQrPairingReceiver actual constructor() {
         socket: Socket,
         nonce: String,
         expiresAtMillis: Long,
+        onClientConnected: () -> Unit,
         onSessionReceived: suspend (SessionInfo) -> Unit,
     ) {
         socket.use { client ->
+            // Notify that a client has connected (on main thread)
+            withContext(Dispatchers.Main) {
+                onClientConnected()
+            }
             val reader = BufferedReader(InputStreamReader(client.getInputStream()))
             val requestLine = reader.readLine().orEmpty()
             val headers = mutableMapOf<String, String>()
@@ -140,7 +154,10 @@ actual class TvQrPairingReceiver actual constructor() {
                     if (request.nonce != nonce) {
                         TvPairingResponse(false, "Invalid QR nonce")
                     } else {
-                        onSessionReceived(request.session)
+                        // Save session on main thread
+                        withContext(Dispatchers.Main) {
+                            onSessionReceived(request.session)
+                        }
                         completed = true
                         TvPairingResponse(true, "TV paired")
                     }
@@ -157,8 +174,6 @@ actual class TvQrPairingReceiver actual constructor() {
             )
             client.getOutputStream().write(bytes)
             client.getOutputStream().flush()
-
-            if (response.success) stop()
         }
     }
 }
@@ -191,6 +206,8 @@ actual fun TvQrPairingAction(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
+    var isPairing by remember { mutableStateOf(false) }
+    var pairResult by remember { mutableStateOf<PairingResult?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -199,44 +216,99 @@ actual fun TvQrPairingAction(
         val contents = scan?.contents
         if (result.resultCode != Activity.RESULT_OK || contents.isNullOrBlank()) {
             message = "No QR scanned"
+            isPairing = false
             return@rememberLauncherForActivityResult
         }
 
         coroutineScope.launch {
-            message = pairWithTv(contents)
+            isPairing = true
+            pairResult = null
+            message = null
+            val result = pairWithTv(contents)
+            isPairing = false
+            if (result.success) {
+                pairResult = result
+                message = result.message
+            } else {
+                message = result.message
+            }
         }
     }
 
-    androidx.compose.foundation.layout.Column(modifier = modifier) {
-        Button(
-            onClick = {
-                val activity = context.findActivity()
-                if (activity == null) {
-                    message = "Scanner unavailable"
-                } else {
-                    val intent = IntentIntegrator(activity)
-                        .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
-                        .setPrompt("Scan Anisurge TV QR")
-                        .setBeepEnabled(false)
-                        .setOrientationLocked(false)
-                        .setCaptureActivity(CaptureActivity::class.java)
-                        .createScanIntent()
-                    launcher.launch(intent)
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        when {
+            isPairing -> {
+                // Show loading state during pairing
+                CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Connecting to TV...",
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 14.sp,
+                )
+            }
+            pairResult?.success == true -> {
+                // Show success state
+                Text(
+                    "✓ ${pairResult?.message}",
+                    color = Color(0xFF4CAF50),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        pairResult = null
+                        message = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                ) {
+                    Text("Pair Another TV", fontWeight = FontWeight.SemiBold)
                 }
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-        ) {
-            Text("Scan TV QR", fontWeight = FontWeight.SemiBold)
-        }
-        message?.let {
-            Text(
-                text = it,
-                color = Color.White.copy(alpha = 0.72f),
-                modifier = Modifier.padding(top = 8.dp),
-            )
+            }
+            else -> {
+                // Default state - show scan button
+                Button(
+                    onClick = {
+                        val activity = context.findActivity()
+                        if (activity == null) {
+                            message = "Scanner unavailable"
+                        } else {
+                            val intent = IntentIntegrator(activity)
+                                .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+                                .setPrompt("Scan Anisurge TV QR")
+                                .setBeepEnabled(false)
+                                .setOrientationLocked(false)
+                                .setCaptureActivity(CaptureActivity::class.java)
+                                .createScanIntent()
+                            launcher.launch(intent)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                ) {
+                    Text("Scan TV QR", fontWeight = FontWeight.SemiBold)
+                }
+                message?.let {
+                    Text(
+                        text = it,
+                        color = Color.White.copy(alpha = 0.72f),
+                        modifier = Modifier.padding(top = 8.dp),
+                        fontSize = 14.sp,
+                    )
+                }
+            }
         }
     }
 }
+
+private data class PairingResult(val success: Boolean, val message: String)
 
 private fun createQrBitmap(payload: String, size: Int): Bitmap {
     val hints = EnumMap<EncodeHintType, Any>(EncodeHintType::class.java).apply {
@@ -255,22 +327,22 @@ private fun createQrBitmap(payload: String, size: Int): Bitmap {
     }
 }
 
-private suspend fun pairWithTv(rawQr: String): String = withContext(Dispatchers.IO) {
+private suspend fun pairWithTv(rawQr: String): PairingResult = withContext(Dispatchers.IO) {
     val uri = runCatching { Uri.parse(rawQr) }.getOrNull()
-        ?: return@withContext "Invalid QR"
+        ?: return@withContext PairingResult(false, "Invalid QR")
     if (uri.scheme != "anisurge" || uri.host != "tv-login") {
-        return@withContext "This is not an Anisurge TV QR"
+        return@withContext PairingResult(false, "This is not an Anisurge TV QR")
     }
 
     val host = uri.getQueryParameter("host").orEmpty()
     val port = uri.getQueryParameter("port")?.toIntOrNull()
     val nonce = uri.getQueryParameter("nonce").orEmpty()
     if (host.isBlank() || port == null || nonce.isBlank()) {
-        return@withContext "Invalid TV QR"
+        return@withContext PairingResult(false, "Invalid TV QR")
     }
 
     val session = AppComponent.sessionStore.get()
-        ?: return@withContext "Log in on this phone first"
+        ?: return@withContext PairingResult(false, "Log in on this phone first")
     val requestBody = pairingJson.encodeToString(TvPairingRequest(nonce, session)).encodeToByteArray()
 
     runCatching {
@@ -286,10 +358,14 @@ private suspend fun pairWithTv(rawQr: String): String = withContext(Dispatchers.
             val responseText = socket.getInputStream().readBytes().decodeToString()
             val body = responseText.substringAfter("\r\n\r\n", "")
             val response = pairingJson.decodeFromString<TvPairingResponse>(body)
-            if (response.success) "TV paired successfully" else (response.message ?: "TV pairing failed")
+            if (response.success) {
+                PairingResult(true, "TV paired successfully")
+            } else {
+                PairingResult(false, response.message ?: "TV pairing failed")
+            }
         }
     }.getOrElse {
-        "Could not reach TV. Make sure both devices are on the same Wi-Fi."
+        PairingResult(false, "Could not reach TV. Make sure both devices are on the same Wi-Fi.")
     }
 }
 

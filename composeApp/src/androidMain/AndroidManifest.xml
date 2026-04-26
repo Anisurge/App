@@ -14,13 +14,17 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <application
-        android:label="Anisurge"
+        android:label="${appLabel}"
         android:icon="@mipmap/ic_launcher"
         android:banner="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <meta-data
+            android:name="to.kuudere.anisuge.FORCE_TV_UI"
+            android:value="${forceTvUi}" />
 
         <service
             android:name=".services.DownloadService"
@@ -32,6 +36,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
+            android:screenOrientation="${activityOrientation}"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
