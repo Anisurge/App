@@ -2,7 +2,9 @@ package to.kuudere.anisuge.screens.home
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -38,6 +40,7 @@ class HomeViewModel(
     private val realtimeService: to.kuudere.anisuge.data.services.RealtimeService
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var homeDataJob: Job? = null
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState
@@ -58,6 +61,9 @@ class HomeViewModel(
                             )
                         )
                     }
+                    if (!itHasHomeContent()) {
+                        loadHomeData(showLoading = true)
+                    }
                     fetchPersonalizedData()
                 } else {
                     realtimeService.disconnect()
@@ -65,6 +71,40 @@ class HomeViewModel(
             }
         }
         refresh()
+    }
+
+    private fun itHasHomeContent(): Boolean {
+        val state = _uiState.value
+        return state.topAiring.isNotEmpty() ||
+            state.latestEpisodes.isNotEmpty() ||
+            state.newOnSite.isNotEmpty() ||
+            state.topUpcoming.isNotEmpty()
+    }
+
+    private fun loadHomeData(force: Boolean = false, showLoading: Boolean = false) {
+        homeDataJob?.cancel()
+        homeDataJob = scope.launch {
+            if (showLoading) {
+                _uiState.update { it.copy(isLoading = true, isOffline = false, error = null) }
+            }
+
+            try {
+                val homeData = homeService.fetchHomeData(forceRefresh = force)
+                _uiState.update {
+                    it.copy(
+                        isLoading        = false,
+                        isOffline        = false,
+                        error            = null,
+                        topAiring        = homeData?.topAired    ?: emptyList(),
+                        latestEpisodes   = homeData?.latestEps   ?: emptyList(),
+                        newOnSite        = homeData?.lastUpdated ?: emptyList(),
+                        topUpcoming      = homeData?.topUpcoming ?: emptyList(),
+                    )
+                }
+            } catch (e: Exception) {
+                handleHomeLoadError(e)
+            }
+        }
     }
 
     private fun fetchPersonalizedData() {
@@ -82,33 +122,43 @@ class HomeViewModel(
         scope.launch {
             _uiState.update { it.copy(isLoading = true, isOffline = false, error = null) }
             try {
-                // Trigger auth check — results will flow into our collector in init
-                authService.checkSession()
+                val authCheck = async { authService.checkSession() }
+                val homeData = async { homeService.fetchHomeData(forceRefresh = force) }
 
-                val homeData = homeService.fetchHomeData(forceRefresh = force)
-                _uiState.update {
-                    it.copy(
-                        isLoading        = false,
-                        topAiring        = homeData?.topAired    ?: emptyList(),
-                        latestEpisodes   = homeData?.latestEps   ?: emptyList(),
-                        newOnSite        = homeData?.lastUpdated ?: emptyList(),
-                        topUpcoming      = homeData?.topUpcoming ?: emptyList(),
-                    )
-                }
+                homeData.await()?.let { data ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading        = false,
+                            isOffline        = false,
+                            error            = null,
+                            topAiring        = data.topAired,
+                            latestEpisodes   = data.latestEps,
+                            newOnSite        = data.lastUpdated,
+                            topUpcoming      = data.topUpcoming,
+                        )
+                    }
+                } ?: _uiState.update { it.copy(isLoading = false) }
+
+                // Results flow into the auth collector, but home lists no longer wait on it.
+                authCheck.await()
             } catch (e: Exception) {
-                val isNetworkError = generateSequence(e as Throwable) { it.cause }.any { cause ->
-                    cause is java.net.UnknownHostException
-                        || cause is java.net.ConnectException
-                        || cause is java.net.SocketTimeoutException
-                        || cause is java.net.NoRouteToHostException
-                        || cause.message?.contains("Unable to resolve host", ignoreCase = true) == true
-                        || cause.message?.contains("Failed to connect", ignoreCase = true) == true
-                        || cause.message?.contains("timeout", ignoreCase = true) == true
-                        || cause.message?.contains("Network is unreachable", ignoreCase = true) == true
-                }
-                _uiState.update { it.copy(isLoading = false, isOffline = isNetworkError, error = if (isNetworkError) null else e.message) }
+                handleHomeLoadError(e)
             }
         }
+    }
+
+    private fun handleHomeLoadError(e: Exception) {
+        val isNetworkError = generateSequence(e as Throwable) { it.cause }.any { cause ->
+            cause is java.net.UnknownHostException
+                || cause is java.net.ConnectException
+                || cause is java.net.SocketTimeoutException
+                || cause is java.net.NoRouteToHostException
+                || cause.message?.contains("Unable to resolve host", ignoreCase = true) == true
+                || cause.message?.contains("Failed to connect", ignoreCase = true) == true
+                || cause.message?.contains("timeout", ignoreCase = true) == true
+                || cause.message?.contains("Network is unreachable", ignoreCase = true) == true
+        }
+        _uiState.update { it.copy(isLoading = false, isOffline = isNetworkError, error = if (isNetworkError) null else e.message) }
     }
 
     fun updateWatchlist(animeId: String, folder: String) {
