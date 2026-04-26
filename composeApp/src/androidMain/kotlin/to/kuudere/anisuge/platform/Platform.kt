@@ -8,6 +8,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.app.UiModeManager
+import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import android.content.Intent
@@ -23,6 +25,12 @@ import to.kuudere.anisuge.services.DownloadService
 import android.provider.DocumentsContract
 
 actual val isDesktopPlatform: Boolean = false
+actual val isAndroidTvPlatform: Boolean
+    get() {
+        val uiModeManager = androidAppContext.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+        return uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
+            (androidAppContext.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
+    }
 actual val PlatformName: String = "Android"
 
 actual val AppVersion: String by lazy {

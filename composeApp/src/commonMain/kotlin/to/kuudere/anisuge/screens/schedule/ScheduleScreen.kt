@@ -66,6 +66,7 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import to.kuudere.anisuge.data.models.ScheduleAnime
 import to.kuudere.anisuge.ui.OfflineState
+import to.kuudere.anisuge.ui.tvFocusableClick
 
 // ── Colours ── Black & white only ─────────────────────────────────────────────
 
@@ -420,7 +421,7 @@ private fun AnimeScheduleCard(
             .background(bgColor)
             .border(1.dp, borderColor, RoundedCornerShape(10.dp))
             .hoverable(inter)
-            .clickable(onClick = onClick)
+            .tvFocusableClick(shape = RoundedCornerShape(10.dp), onClick = onClick)
             .padding(10.dp),
         verticalAlignment = Alignment.Top,
     ) {

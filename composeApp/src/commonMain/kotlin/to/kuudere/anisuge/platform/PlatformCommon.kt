@@ -4,6 +4,7 @@ import okio.Sink
 import okio.Source
 
 expect val isDesktopPlatform: Boolean
+expect val isAndroidTvPlatform: Boolean
 expect val PlatformName: String
 expect val AppVersion: String
 expect val AppBuildNumber: Int
