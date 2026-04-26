@@ -42,6 +42,7 @@ import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.ui.WatchlistBottomSheet
 import to.kuudere.anisuge.data.models.EpisodeItem
+import to.kuudere.anisuge.ui.tvFocusableClick
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -992,7 +993,7 @@ private fun DesktopEpisodeCard(episode: EpisodeItem, thumbnail: String?, modifie
             .width(300.dp)
             .aspectRatio(16f / 9.5f)
             .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() }
+            .tvFocusableClick(shape = RoundedCornerShape(12.dp), onClick = onClick)
     ) {
         // Thumbnail
         AsyncImage(
@@ -1319,7 +1320,7 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
             .clip(RoundedCornerShape(12.dp))
             .background(Color.White.copy(alpha = 0.05f))
             .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .tvFocusableClick(shape = RoundedCornerShape(12.dp), onClick = onClick)
             .padding(8.dp)
     ) {
         Row(

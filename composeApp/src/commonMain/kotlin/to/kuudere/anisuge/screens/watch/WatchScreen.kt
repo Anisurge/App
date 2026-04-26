@@ -45,6 +45,7 @@ import androidx.compose.ui.input.key.*
 import kotlinx.datetime.Clock
 import to.kuudere.anisuge.platform.LockScreenOrientation
 import to.kuudere.anisuge.platform.isDesktopPlatform
+import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.player.PlayerControls
 import to.kuudere.anisuge.player.VideoPlayerState
 import to.kuudere.anisuge.player.VideoPlayerSurface
@@ -1221,7 +1222,7 @@ fun WatchVideoPlayer(
                         if (event.type == KeyEventType.KeyDown) {
                             val now = Clock.System.now().toEpochMilliseconds()
                             when (event.key) {
-                                Key.Spacebar, Key.K -> {
+                                Key.Spacebar, Key.Enter, Key.NumPadEnter, Key.K -> {
                                     playerState.pauseRequested = !playerState.isPaused
                                     playerState.canvasPointerMoved = now
                                     true
@@ -1290,9 +1291,12 @@ fun WatchVideoPlayer(
                                         true
                                     } else false
                                 }
-                                Key.Escape -> {
+                                Key.Escape, Key.Back -> {
                                     if (uiState.isFullscreen) {
                                         onFullscreenToggle()
+                                        true
+                                    } else if (isAndroidTvPlatform) {
+                                        onBack()
                                         true
                                     } else false
                                 }

@@ -16,6 +16,7 @@ val LocalWindowState = staticCompositionLocalOf<WindowState> {
 }
 
 actual val isDesktopPlatform: Boolean = true
+actual val isAndroidTvPlatform: Boolean = false
 actual val PlatformName: String = System.getProperty("os.name").let { os ->
     val lower = os.lowercase()
     when {
