@@ -616,12 +616,19 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                 contentPadding = PaddingValues(0.dp)
             ) {
                 Text(
-                    text = "Create account at kuudere.to",
+                    text = "Create account at kuudere",
                     color = Color(0xFF64B5F6),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                 )
             }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Then use the same credentials here",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Normal,
+            )
             Spacer(Modifier.height(8.dp))
         }
     }
