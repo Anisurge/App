@@ -53,7 +53,7 @@ jobs:
       - name: Build Android APK
         run: |
           chmod +x gradlew
-          ./gradlew :composeApp:assembleRelease --no-daemon \
+          ./gradlew :composeApp:assemblePhoneRelease --no-daemon \
             -PappVersion=${{ steps.version.outputs.version_name }} \
             -PappBuildNumber=${{ steps.version.outputs.build_num }}
 
@@ -61,7 +61,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-apks
-          path: composeApp/build/outputs/apk/release/*.apk
+          path: composeApp/build/outputs/apk/phone/release/*.apk
           if-no-files-found: error
 
   build-linux:
