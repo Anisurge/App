@@ -1587,7 +1587,7 @@ private fun MobileTopBar(
             androidx.compose.foundation.Image(
                 painter = painterResource(Res.drawable.logo_txt),
                 contentDescription = "Anisuge",
-                modifier = Modifier.height(28.dp),
+                modifier = Modifier.height(44.dp),
             )
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

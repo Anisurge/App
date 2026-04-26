@@ -443,7 +443,7 @@ private fun MobileAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
             Image(
                 painter = painterResource(Res.drawable.logo_txt),
                 contentDescription = "AnisugeLogo",
-                modifier = Modifier.height(48.dp),
+                modifier = Modifier.height(76.dp),
                 contentScale = ContentScale.Fit,
             )
             Spacer(Modifier.height(32.dp))
