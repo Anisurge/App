@@ -82,6 +82,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.CalendarToday
@@ -1406,7 +1407,7 @@ private fun AnisugSidebar(
                     onClick = { onTabSelect(AnisugTab.Home, null) }
                 )
                 SidebarIcon(
-                    Icons.Outlined.Explore, 
+                    Icons.Default.Search, 
                     isSelected = selectedTab == AnisugTab.Search, 
                     onClick = { onTabSelect(AnisugTab.Search, null) }
                 )
@@ -1678,7 +1679,7 @@ private fun AnisugBottomBar(
             onClick = { onTabSelect(AnisugTab.Home) }
         )
         BottomBarIcon(
-            Icons.Outlined.Explore,
+            Icons.Default.Search,
             isSelected = selectedTab == AnisugTab.Search,
             onClick = { onTabSelect(AnisugTab.Search) }
         )
@@ -2277,5 +2278,3 @@ private fun CardActionCell(
         }
     }
 }
-
-
