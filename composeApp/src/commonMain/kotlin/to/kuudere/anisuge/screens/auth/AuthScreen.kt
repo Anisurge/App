@@ -245,50 +245,100 @@ private fun TvQrAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
                 contentScale = ContentScale.Fit,
             )
             Spacer(Modifier.height(28.dp))
+
+            // Title changes based on state
             Text(
-                "Scan to sign in",
+                when {
+                    state.isSuccess -> "Welcome!"
+                    state.tvPairingConnected -> "Connecting..."
+                    else -> "Scan to sign in"
+                },
                 color = Color.White,
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Open Anisurge on your phone, go to Profile, and scan this TV QR.",
+                when {
+                    state.isSuccess -> "Login successful. Redirecting..."
+                    state.tvPairingConnected -> "Authenticating your account..."
+                    else -> "Open Anisurge on your phone, go to Profile, and scan this TV QR."
+                },
                 color = Color.White.copy(alpha = 0.68f),
                 fontSize = 16.sp,
             )
             Spacer(Modifier.height(28.dp))
 
-            val payload = state.tvPairingPayload
-            if (payload == null) {
-                Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.White)
+            // QR Code or Loading State
+            when {
+                state.isSuccess -> {
+                    // Success state - show checkmark or loading
+                    Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            color = Color(0xFF4CAF50),
+                            strokeWidth = 4.dp,
+                            modifier = Modifier.size(80.dp)
+                        )
+                    }
                 }
-            } else {
-                TvPairingQrCode(
-                    payload = payload,
-                    modifier = Modifier.size(280.dp),
-                )
+                state.tvPairingConnected -> {
+                    // Connected state - show loading animation
+                    Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(
+                            color = Color(0xFFBF80FF),
+                            strokeWidth = 4.dp,
+                            modifier = Modifier.size(80.dp)
+                        )
+                    }
+                }
+                else -> {
+                    // Waiting for scan
+                    val payload = state.tvPairingPayload
+                    if (payload == null) {
+                        Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Color.White)
+                        }
+                    } else {
+                        TvPairingQrCode(
+                            payload = payload,
+                            modifier = Modifier.size(280.dp),
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(22.dp))
             Text(
                 state.errorMessage ?: state.tvPairingStatus,
-                color = if (state.errorMessage != null) Color(0xFFFF6B6B) else Color.White.copy(alpha = 0.78f),
+                color = when {
+                    state.errorMessage != null -> Color(0xFFFF6B6B)
+                    state.isSuccess -> Color(0xFF4CAF50)
+                    state.tvPairingConnected -> Color(0xFFBF80FF)
+                    else -> Color.White.copy(alpha = 0.78f)
+                },
                 fontSize = 15.sp,
+                fontWeight = if (state.tvPairingConnected || state.isSuccess) FontWeight.Medium else FontWeight.Normal,
             )
             Spacer(Modifier.height(8.dp))
-            Text(
-                if (remainingSeconds > 0) "Expires in ${remainingSeconds}s" else "QR expired. Generate a new code.",
-                color = Color.White.copy(alpha = 0.52f),
-                fontSize = 13.sp,
-            )
-            Spacer(Modifier.height(24.dp))
-            Button(
-                onClick = { viewModel.startTvPairing() },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-            ) {
-                Text("Regenerate QR", fontWeight = FontWeight.SemiBold)
+
+            // Only show expiry when waiting for scan
+            if (!state.tvPairingConnected && !state.isSuccess) {
+                Text(
+                    if (remainingSeconds > 0) "Expires in ${remainingSeconds}s" else "QR expired. Generate a new code.",
+                    color = Color.White.copy(alpha = 0.52f),
+                    fontSize = 13.sp,
+                )
+            }
+
+            // Only show regenerate button when not connected
+            if (!state.tvPairingConnected && !state.isSuccess) {
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = { viewModel.startTvPairing() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                ) {
+                    Text("Regenerate QR", fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }

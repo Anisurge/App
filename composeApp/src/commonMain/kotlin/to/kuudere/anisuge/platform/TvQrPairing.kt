@@ -15,6 +15,7 @@ expect class TvQrPairingReceiver() {
     suspend fun start(
         nonce: String,
         expiresAtMillis: Long,
+        onClientConnected: () -> Unit,
         onSessionReceived: suspend (SessionInfo) -> Unit,
     ): TvQrPairingEndpoint
 
