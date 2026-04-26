@@ -7,6 +7,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.AniListMediaListCollection
@@ -95,6 +96,10 @@ data class SettingsUiState(
     val isOffline: Boolean = false,
     val downloadPath: String = "",
     val subtitleSize: Int = 100,
+
+    // Notifications
+    val notificationsEnabled: Boolean = true,
+    val hasNotificationPrefsChanges: Boolean = false,
 )
 
 sealed class SettingsTab {
@@ -105,6 +110,7 @@ sealed class SettingsTab {
     data object Sessions : SettingsTab()
     data object Security : SettingsTab()
     data object Servers : SettingsTab()
+    data object Notifications : SettingsTab()
 }
 
 class SettingsViewModel(
@@ -258,6 +264,7 @@ class SettingsViewModel(
             is SettingsTab.Security -> loadMfaStatus()
             is SettingsTab.Sync -> loadAniListStatus()
             is SettingsTab.Servers -> loadServerPriority()
+            is SettingsTab.Notifications -> loadNotificationPreferences()
             else -> {}
         }
     }
@@ -1271,4 +1278,48 @@ class SettingsViewModel(
 
     fun formatBytes(bytes: Long): String = storageService.formatBytes(bytes)
     fun formatBytesCompact(bytes: Long): String = storageService.formatBytesCompact(bytes)
+
+    // ==================== Notifications ====================
+
+    fun loadNotificationPreferences() {
+        viewModelScope.launch {
+            val enabled = settingsStore.notificationsEnabledFlow.first()
+            _uiState.update {
+                it.copy(
+                    notificationsEnabled = enabled,
+                    hasNotificationPrefsChanges = false
+                )
+            }
+        }
+    }
+
+    fun setNotificationsEnabled(enabled: Boolean) {
+        _uiState.update {
+            it.copy(
+                notificationsEnabled = enabled,
+                hasNotificationPrefsChanges = true
+            )
+        }
+    }
+
+    fun saveNotificationPreferences() {
+        viewModelScope.launch {
+            val enabled = _uiState.value.notificationsEnabled
+            settingsStore.setNotificationsEnabled(enabled)
+
+            // Sync FCM topic subscriptions on Android
+            if (enabled) {
+                to.kuudere.anisuge.platform.startNotificationListenerService()
+            } else {
+                to.kuudere.anisuge.platform.stopNotificationListenerService()
+            }
+
+            _uiState.update {
+                it.copy(
+                    hasNotificationPrefsChanges = false,
+                    successMessage = "Notification preferences saved"
+                )
+            }
+        }
+    }
 }

@@ -26,6 +26,8 @@ haze = "1.6.0"
 filekit = "0.13.0"
 zxing = "3.5.3"
 zxing-android-embedded = "4.3.0"
+firebase-bom = "33.12.0"
+google-services = "4.4.2"
 
 [libraries]
 # Jave2 for Desktop FFmpeg bundling
@@ -78,6 +80,9 @@ haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 filekit-dialogs-compose = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekit" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxing-android-embedded" }
+# Firebase
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
@@ -88,3 +93,4 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kmpAppIconGenerator = { id = "io.github.qamarelsafadi.kmp.app.icon.generator", version = "1.2.6" }
 buildConfig = { id = "com.github.gmazzo.buildconfig", version = "5.5.1" }
+googleServices = { id = "com.google.gms.google-services", version.ref = "google-services" }

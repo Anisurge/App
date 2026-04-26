@@ -46,6 +46,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kmpAppIconGenerator)
     alias(libs.plugins.buildConfig)
+    alias(libs.plugins.googleServices)
 }
 
 kotlin {
@@ -110,6 +111,9 @@ kotlin {
             // QR generation and scanning for Android TV pairing
             implementation(libs.zxing.core)
             implementation(libs.zxing.android.embedded)
+
+            // Firebase Cloud Messaging
+            implementation("com.google.firebase:firebase-messaging:24.1.0")
         }
 
         desktopMain.dependencies {

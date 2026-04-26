@@ -354,3 +354,11 @@ actual fun clearDownloadNotification() {
         e.printStackTrace()
     }
 }
+
+actual fun startNotificationListenerService() {
+    to.kuudere.anisuge.notifications.NotificationTopicManager.subscribeToDefaultTopics()
+}
+
+actual fun stopNotificationListenerService() {
+    to.kuudere.anisuge.notifications.NotificationTopicManager.unsubscribeFromAllTopics()
+}

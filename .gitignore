@@ -3,7 +3,7 @@
 /build
 /composeApp/build/
 /iosApp/build/
-
+/Anisurge-V2-site/
 # Kotlin / KMP
 .kotlin
 **/build/
@@ -21,6 +21,9 @@ signing/*.jks
 signing/*.pfx
 **/*.jks
 **/*.pfx
+
+# Firebase
+google-services.json
 
 # Desktop Distributions
 /composeApp/build/compose/binaries/

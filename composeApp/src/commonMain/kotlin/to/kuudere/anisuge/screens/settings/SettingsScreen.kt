@@ -198,15 +198,18 @@ fun SettingsScreen(
     }
 
 
-    val navItems = listOf(
-        SettingsNavItem(SettingsTab.Profile, "Profile", Icons.Default.Person),
-        SettingsNavItem(SettingsTab.Preferences, "Preferences", Icons.Default.Settings),
-        SettingsNavItem(SettingsTab.Servers, "Servers", Icons.Default.Dns),
-        SettingsNavItem(SettingsTab.Sync, "Sync", Icons.Default.Sync),
-        SettingsNavItem(SettingsTab.Storage, "Storage", Icons.Default.Storage),
-        SettingsNavItem(SettingsTab.Sessions, "Sessions", Icons.Default.Devices),
-        SettingsNavItem(SettingsTab.Security, "Security", Icons.Default.Lock)
-    )
+    val navItems = buildList {
+        add(SettingsNavItem(SettingsTab.Profile, "Profile", Icons.Default.Person))
+        add(SettingsNavItem(SettingsTab.Preferences, "Preferences", Icons.Default.Settings))
+        add(SettingsNavItem(SettingsTab.Servers, "Servers", Icons.Default.Dns))
+        add(SettingsNavItem(SettingsTab.Sync, "Sync", Icons.Default.Sync))
+        add(SettingsNavItem(SettingsTab.Storage, "Storage", Icons.Default.Storage))
+        add(SettingsNavItem(SettingsTab.Sessions, "Sessions", Icons.Default.Devices))
+        add(SettingsNavItem(SettingsTab.Security, "Security", Icons.Default.Lock))
+        if (!isDesktopPlatform) {
+            add(SettingsNavItem(SettingsTab.Notifications, "Notifications", Icons.Default.Notifications))
+        }
+    }
 
     Scaffold(
         snackbarHost = {
@@ -913,6 +916,12 @@ private fun MobileSettingsDetail(
                     onSave = viewModel::saveServerPriority,
                     onReset = viewModel::resetServerPriority
                 )
+                is SettingsTab.Notifications -> NotificationsTab(
+                    enabled = uiState.notificationsEnabled,
+                    hasChanges = uiState.hasNotificationPrefsChanges,
+                    onEnabledChange = viewModel::setNotificationsEnabled,
+                    onSave = viewModel::saveNotificationPreferences
+                )
             }
         }
     }
@@ -992,6 +1001,12 @@ private fun SettingsContent(
                 onReorder = viewModel::updateServerPriority,
                 onSave = viewModel::saveServerPriority,
                 onReset = viewModel::resetServerPriority
+            )
+            is SettingsTab.Notifications -> NotificationsTab(
+                enabled = uiState.notificationsEnabled,
+                hasChanges = uiState.hasNotificationPrefsChanges,
+                onEnabledChange = viewModel::setNotificationsEnabled,
+                onSave = viewModel::saveNotificationPreferences
             )
         }
     }
