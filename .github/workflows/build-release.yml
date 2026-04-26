@@ -41,14 +41,36 @@ jobs:
           echo "storeFile=../signing/android.jks" >> key.properties
 
       - name: Decode google-services.json
+        env:
+          GOOGLE_SERVICES_SECRET: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
-          GOOGLE_SERVICES_SECRET="${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}"
-          if printf '%s' "$GOOGLE_SERVICES_SECRET" | tr -d '\r\n ' | base64 --decode > composeApp/google-services.json.tmp 2>/dev/null; then
-            mv composeApp/google-services.json.tmp composeApp/google-services.json
-          else
-            printf '%s' "$GOOGLE_SERVICES_SECRET" > composeApp/google-services.json
-            rm -f composeApp/google-services.json.tmp
-          fi
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+
+          secret = os.environ["GOOGLE_SERVICES_SECRET"].strip()
+          candidates = []
+
+          try:
+              decoded = base64.b64decode("".join(secret.split()), validate=True).decode("utf-8")
+              candidates.append(decoded)
+          except Exception:
+              pass
+
+          candidates.append(secret)
+
+          for candidate in candidates:
+              try:
+                  json.loads(candidate)
+              except Exception:
+                  continue
+              Path("composeApp/google-services.json").write_text(candidate)
+              break
+          else:
+              raise SystemExit("GOOGLE_SERVICES_JSON_BASE64 is neither valid base64 JSON nor raw JSON")
+          PY
 
       - name: Build Android APK
         run: |
