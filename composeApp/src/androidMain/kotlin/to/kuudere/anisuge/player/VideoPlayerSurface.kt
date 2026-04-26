@@ -136,6 +136,7 @@ actual fun VideoPlayerSurface(
     }
 
     val isSeeking = remember { mutableStateOf(false) }
+    val retriedWithSoftwareDecode = remember(resolvedUrl) { mutableStateOf(false) }
 
     DisposableEffect(resolvedUrl) {
         val configDir = context.filesDir.absolutePath
@@ -166,11 +167,13 @@ actual fun VideoPlayerSurface(
         // Shared native engine, so we set non-global options per-instance here
         MPVLib.setOptionString("vo", "gpu")
         
-        // Hardware decoding with fallback - mediacodec is Android's native HW decoder
-        // "auto" can fail silently on some devices, causing audio-only playback
-        // mediacodec-copy is safer as it copies to CPU memory, avoiding some GPU issues
-        MPVLib.setOptionString("hwdec", "mediacodec-copy")
-        MPVLib.setOptionString("hwdec-codecs", "h264,hevc,vp8,vp9,av1,mpeg4,mpeg2video")
+        // Keep Android decoder setup close to Aniyomi/mpv-android defaults.
+        // Forcing mediacodec-copy can produce audio-only black video on some
+        // MediaTek/Helio devices; mpv's auto path plus a software retry is safer.
+        MPVLib.setOptionString("profile", "fast")
+        MPVLib.setOptionString("hwdec", state.config.hwdec)
+        MPVLib.setOptionString("vf", "format=yuv420p")
+        MPVLib.setOptionString("vd-lavc-film-grain", "cpu")
         
         // Fallback to software if hardware fails (crucial for problematic devices)
         MPVLib.setOptionString("vd-lavc-software-fallback", "yes")
@@ -188,8 +191,8 @@ actual fun VideoPlayerSurface(
         MPVLib.setOptionString("cache", "yes")
         MPVLib.setOptionString("cache-secs", "120")           // 2min buffer is plenty on mobile
         MPVLib.setOptionString("demuxer-readahead-secs", "3") // Start in ~1-2s, pipeline does the rest
-        MPVLib.setOptionString("demuxer-max-bytes", "100M")   // Sweet spot for mobile RAM
-        MPVLib.setOptionString("demuxer-max-back-bytes", "50M")
+        MPVLib.setOptionString("demuxer-max-bytes", "64M")    // Match Aniyomi's mobile cap
+        MPVLib.setOptionString("demuxer-max-back-bytes", "64M")
         
         // Fix video freeze/desync - prevent frame dropping that causes video to fall behind audio
         MPVLib.setOptionString("framedrop", "no")             // Never drop frames
@@ -210,7 +213,7 @@ actual fun VideoPlayerSurface(
         // (it would force HLS mode on subtitle files loaded via sub-add → breaks them)
         val isRemoteStream = resolvedUrl.startsWith("http://") || resolvedUrl.startsWith("https://")
         if (isRemoteStream) {
-            MPVLib.setOptionString("demuxer-lavf-o", "probesize=32768,analyzeduration=0,tcp_nodelay=1,reconnect=1")
+            MPVLib.setOptionString("demuxer-lavf-o", "probesize=1048576,analyzeduration=1000000,tcp_nodelay=1,reconnect=1")
         }
         MPVLib.setOptionString("cache-pause", "no")           // Never stall on micro-gaps
         MPVLib.setOptionString("vd-lavc-fast", "yes")         // Skip unnecessary decode precision
@@ -305,6 +308,7 @@ actual fun VideoPlayerSurface(
                 when (eventId) {
                     MPVLib.MPV_EVENT_FILE_LOADED -> {
                         state.isPlaying = true
+                        state.error = null
                         
                         try {
                             val count = MPVLib.getPropertyInt("track-list/count") ?: 0
@@ -365,6 +369,36 @@ actual fun VideoPlayerSurface(
                                 }.awaitAll()
                             }
                             state.allSubUrls = null
+                        }
+
+                        if (state.config.hwdec != "no" && !retriedWithSoftwareDecode.value) {
+                            coroutineScope.launch(Dispatchers.IO) {
+                                delay(3500)
+                                if (!isActive || retriedWithSoftwareDecode.value) return@launch
+
+                                val currentPath = runCatching { MPVLib.getPropertyString("path") }.getOrNull()
+                                if (currentPath != resolvedUrl) return@launch
+
+                                val before = runCatching { MPVLib.getPropertyDouble("time-pos") }.getOrNull() ?: 0.0
+                                delay(1200)
+                                val after = runCatching { MPVLib.getPropertyDouble("time-pos") }.getOrNull() ?: before
+                                val videoHeight = runCatching { MPVLib.getPropertyInt("video-params/h") }.getOrNull() ?: 0
+                                val videoAspect = runCatching { MPVLib.getPropertyDouble("video-params/aspect") }.getOrNull() ?: 0.0
+                                val voConfigured = runCatching { MPVLib.getPropertyString("vo-configured") }.getOrNull()
+                                val playbackAdvanced = after > before + 0.5
+                                val noVideoOutput = videoHeight <= 0 && videoAspect <= 0.0 && voConfigured != "yes"
+
+                                if (playbackAdvanced && noVideoOutput) {
+                                    retriedWithSoftwareDecode.value = true
+                                    val resumeAt = after.coerceAtLeast(state.position).coerceAtLeast(0.0)
+                                    println("[VideoPlayerSurface] Video output missing while audio advances; retrying with hwdec=no")
+                                    MPVLib.command(arrayOf<String>("stop"))
+                                    MPVLib.setOptionString("hwdec", "no")
+                                    MPVLib.setOptionString("vf", "format=yuv420p")
+                                    MPVLib.setOptionString("start", resumeAt.toString())
+                                    MPVLib.command(arrayOf<String>("loadfile", resolvedUrl))
+                                }
+                            }
                         }
                     }
                     MPVLib.MPV_EVENT_END_FILE -> {
