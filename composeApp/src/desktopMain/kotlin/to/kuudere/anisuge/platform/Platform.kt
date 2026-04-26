@@ -120,3 +120,11 @@ actual object KmpFileSystem {
         File(path).writeBytes(data)
     }
 }
+
+actual fun startNotificationListenerService() {
+    // No-op on desktop
+}
+
+actual fun stopNotificationListenerService() {
+    // No-op on desktop
+}

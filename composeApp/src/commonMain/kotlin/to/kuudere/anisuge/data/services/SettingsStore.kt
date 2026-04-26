@@ -22,6 +22,11 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val SUBTITLE_SIZE_KEY = androidx.datastore.preferences.core.intPreferencesKey("subtitle_size")
         val SERVER_PRIORITY_KEY = stringPreferencesKey("server_priority")
         val DOWNLOAD_PATH_KEY = stringPreferencesKey("download_path")
+        val NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("notifications_enabled")
+        val NOTIFICATIONS_NEW_EPISODE_KEY = booleanPreferencesKey("notifications_new_episode")
+        val NOTIFICATIONS_DONATION_KEY = booleanPreferencesKey("notifications_donation")
+        val NOTIFICATIONS_ANNOUNCEMENT_KEY = booleanPreferencesKey("notifications_announcement")
+        val NOTIFICATIONS_MAINTENANCE_KEY = booleanPreferencesKey("notifications_maintenance")
 
         private val json = Json { ignoreUnknownKeys = true }
     }
@@ -34,6 +39,13 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val syncPercentageFlow: Flow<Int> = dataStore.data.map { it[SYNC_PERCENTAGE_KEY] ?: 80 }
     val subtitleSizeFlow: Flow<Int> = dataStore.data.map { it[SUBTITLE_SIZE_KEY] ?: 100 }
     val downloadPathFlow: Flow<String> = dataStore.data.map { it[DOWNLOAD_PATH_KEY] ?: "" }
+
+    // Notification preferences
+    val notificationsEnabledFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_ENABLED_KEY] ?: true }
+    val notificationsNewEpisodeFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_NEW_EPISODE_KEY] ?: true }
+    val notificationsDonationFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_DONATION_KEY] ?: true }
+    val notificationsAnnouncementFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] ?: true }
+    val notificationsMaintenanceFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_MAINTENANCE_KEY] ?: true }
 
     /**
      * Flow of user-defined server priority list.
@@ -107,5 +119,31 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setDownloadPath(path: String) {
         dataStore.edit { it[DOWNLOAD_PATH_KEY] = path }
+    }
+
+    // Notification setters
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[NOTIFICATIONS_ENABLED_KEY] = enabled }
+    }
+
+    suspend fun setNotificationsNewEpisode(enabled: Boolean) {
+        dataStore.edit { it[NOTIFICATIONS_NEW_EPISODE_KEY] = enabled }
+    }
+
+    suspend fun setNotificationsDonation(enabled: Boolean) {
+        dataStore.edit { it[NOTIFICATIONS_DONATION_KEY] = enabled }
+    }
+
+    suspend fun setNotificationsAnnouncement(enabled: Boolean) {
+        dataStore.edit { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] = enabled }
+    }
+
+    suspend fun setNotificationsMaintenance(enabled: Boolean) {
+        dataStore.edit { it[NOTIFICATIONS_MAINTENANCE_KEY] = enabled }
+    }
+
+    // Blocking reads for FCM service (runs on worker thread, safe to block)
+    fun notificationsEnabledBlocking(): Boolean {
+        return kotlinx.coroutines.runBlocking { notificationsEnabledFlow.first() }
     }
 }

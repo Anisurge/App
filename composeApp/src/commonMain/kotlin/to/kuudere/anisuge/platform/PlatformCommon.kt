@@ -96,3 +96,9 @@ fun formatDisplayPath(path: String): String {
 }
 
 internal expect fun internalOpenUrl(url: String)
+
+/** Subscribes to FCM notification topics (Android only, no-op on desktop). */
+expect fun startNotificationListenerService()
+
+/** Unsubscribes from FCM notification topics (Android only, no-op on desktop). */
+expect fun stopNotificationListenerService()
