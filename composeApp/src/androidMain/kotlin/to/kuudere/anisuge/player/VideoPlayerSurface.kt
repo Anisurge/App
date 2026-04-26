@@ -263,6 +263,7 @@ actual fun VideoPlayerSurface(
         }
         MPVLib.setOptionString("sub-ass", "yes")
         MPVLib.setOptionString("sub-ass-override", "scale")
+        MPVLib.setOptionString("sub-scale", (state.config.subtitleSize / 100.0).toString())
         
         // Only init once
         synchronized(MPVLibLock) {
@@ -618,6 +619,12 @@ actual fun VideoPlayerSurface(
     LaunchedEffect(state.playbackSpeed) {
         withContext(Dispatchers.IO) {
             MPVLib.setPropertyDouble("speed", state.playbackSpeed)
+        }
+    }
+
+    LaunchedEffect(state.subtitleSize) {
+        withContext(Dispatchers.IO) {
+            MPVLib.setPropertyString("sub-scale", (state.subtitleSize / 100.0).toString())
         }
     }
 
