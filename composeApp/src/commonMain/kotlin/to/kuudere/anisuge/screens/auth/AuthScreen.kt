@@ -161,27 +161,25 @@ fun AuthScreen(
                 )
                 DesktopAuthLayout(state, viewModel)
             } else {
-                // Linux Mobile background exactly like Flutter (Gradient + Dripping)
-                Box(
-                    modifier = Modifier.fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFF0F0F0F),
-                                    Color(0xFF0C0C0C),
-                                    Color(0xFF080808),
-                                    Color(0xFF050505),
-                                    Color(0xFF000000),
-                                ),
-                                startY = 0f,
-                                endY = Float.POSITIVE_INFINITY
+                // Mobile background - Video with dark overlay
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Video background (Android only)
+                    VideoBackground(
+                        videoUrl = "https://cdn.anisurge.lol/auth-bg.mp4",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    // Dark overlay for readability
+                    Box(
+                        modifier = Modifier.fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.Black.copy(alpha = 0.5f),
+                                        Color.Black.copy(alpha = 0.7f),
+                                    )
+                                )
                             )
-                        )
-                ) {
-                    Box(modifier = Modifier.fillMaxSize().blur(10.dp)) {
-                        DrippingBackground()
-                    }
-                    Box(modifier = Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.02f)))
+                    )
                 }
                 MobileAuthLayout(state, viewModel)
             }
