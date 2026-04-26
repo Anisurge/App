@@ -8,6 +8,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.app.UiModeManager
 import android.content.res.Configuration
 import androidx.compose.runtime.Composable
@@ -28,8 +29,11 @@ actual val isDesktopPlatform: Boolean = false
 actual val isAndroidTvPlatform: Boolean
     get() {
         val uiModeManager = androidAppContext.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+        val packageManager = androidAppContext.packageManager
         return uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
-            (androidAppContext.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
+            (androidAppContext.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION ||
+            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+            packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
     }
 actual val PlatformName: String = "Android"
 
@@ -66,8 +70,7 @@ actual fun LockScreenOrientation(landscape: Boolean) {
             ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
         }
         onDispose {
-            // Force return to portrait when composable is destroyed (like pressing back)
-            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+            activity.requestedOrientation = originalOrientation
             insetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
         }
     }

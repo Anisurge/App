@@ -48,6 +48,7 @@ import to.kuudere.anisuge.screens.update.UpdateScreen
 import to.kuudere.anisuge.screens.update.UpdateViewModel
 import to.kuudere.anisuge.platform.LockScreenOrientation
 import to.kuudere.anisuge.platform.PlatformBackHandler
+import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.ui.ConfirmDialog
 import androidx.savedstate.SavedState
 import androidx.savedstate.read
@@ -89,7 +90,7 @@ fun App(onAppExit: () -> Unit = {}) {
 
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             if (!isWatchScreen) {
-                LockScreenOrientation(landscape = false)
+                LockScreenOrientation(landscape = isAndroidTvPlatform)
             }
             
             if (showExitConfirm) {

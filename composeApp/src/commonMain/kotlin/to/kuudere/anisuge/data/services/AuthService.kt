@@ -77,6 +77,14 @@ class AuthService(
         return session
     }
 
+    suspend fun savePairedSession(session: SessionInfo) {
+        if (session.userId.isBlank() || session.session.isBlank() || session.sessionId.isBlank() || session.expire.isBlank()) {
+            throw Exception("Invalid paired session")
+        }
+        sessionStore.save(session)
+        _authState.value = SessionCheckResult.Valid(session)
+    }
+
     suspend fun forgotPassword(email: String): String {
         val response = httpClient.post("$BASE_URL/api/auth/forgot-password") {
             contentType(ContentType.Application.Json)
@@ -236,5 +244,4 @@ class AuthService(
         }
     }
 }
-
 

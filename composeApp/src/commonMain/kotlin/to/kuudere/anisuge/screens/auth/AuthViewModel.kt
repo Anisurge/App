@@ -5,8 +5,12 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import to.kuudere.anisuge.data.services.AuthService
+import to.kuudere.anisuge.platform.TvQrPairingReceiver
+import to.kuudere.anisuge.platform.generatePairingNonce
 
 enum class AuthMode { LOGIN, REGISTER, FORGOT_PASSWORD, VERIFY_CODE, RESET_PASSWORD }
 
@@ -21,11 +25,15 @@ data class AuthUiState(
     val errorMessage: String?  = null,
     val infoMessage: String?   = null,
     val isSuccess: Boolean     = false,
+    val tvPairingPayload: String? = null,
+    val tvPairingStatus: String = "Preparing QR login...",
+    val tvPairingExpiresAtMillis: Long = 0L,
 )
 
 class AuthViewModel(private val authService: AuthService) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+    private val tvPairingReceiver = TvQrPairingReceiver()
 
     fun setMode(mode: AuthMode) {
         _uiState.value = _uiState.value.copy(
@@ -48,6 +56,60 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
     fun onResetCodeChange(v: String)       { _uiState.value = _uiState.value.copy(resetCode = v) }
     fun clearError()                       { _uiState.value = _uiState.value.copy(errorMessage = null) }
     fun clearInfo()                        { _uiState.value = _uiState.value.copy(infoMessage = null) }
+
+    fun startTvPairing() {
+        tvPairingReceiver.stop()
+        val nonce = generatePairingNonce()
+        val expiresAtMillis = Clock.System.now().toEpochMilliseconds() + 120_000L
+        _uiState.value = _uiState.value.copy(
+            tvPairingPayload = null,
+            tvPairingStatus = "Starting secure local pairing...",
+            tvPairingExpiresAtMillis = expiresAtMillis,
+            errorMessage = null,
+        )
+
+        viewModelScope.launch {
+            try {
+                val endpoint = tvPairingReceiver.start(nonce, expiresAtMillis) { session ->
+                    authService.savePairedSession(session)
+                    _uiState.value = _uiState.value.copy(
+                        isSuccess = true,
+                        tvPairingStatus = "Paired successfully",
+                        errorMessage = null,
+                    )
+                }
+                val payload = "anisurge://tv-login?host=${endpoint.host}&port=${endpoint.port}&nonce=$nonce"
+                _uiState.value = _uiState.value.copy(
+                    tvPairingPayload = payload,
+                    tvPairingStatus = "Scan with Anisurge on your phone",
+                    tvPairingExpiresAtMillis = expiresAtMillis,
+                )
+                launch {
+                    delay((expiresAtMillis - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L))
+                    if (!_uiState.value.isSuccess && _uiState.value.tvPairingExpiresAtMillis == expiresAtMillis) {
+                        tvPairingReceiver.stop()
+                        _uiState.value = _uiState.value.copy(
+                            tvPairingStatus = "QR expired. Generate a new code.",
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    tvPairingStatus = "Could not start QR login",
+                    errorMessage = e.message ?: "TV pairing failed",
+                )
+            }
+        }
+    }
+
+    fun stopTvPairing() {
+        tvPairingReceiver.stop()
+    }
+
+    override fun onCleared() {
+        tvPairingReceiver.stop()
+        super.onCleared()
+    }
 
     fun submit() {
         val state = _uiState.value
@@ -112,4 +174,3 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
         }
     }
 }
-

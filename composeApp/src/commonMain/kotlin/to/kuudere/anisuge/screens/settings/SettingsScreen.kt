@@ -132,7 +132,9 @@ import to.kuudere.anisuge.data.models.AnimeFolderInfo
 import to.kuudere.anisuge.platform.AppVersion
 import to.kuudere.anisuge.platform.AppBuildNumber
 import to.kuudere.anisuge.platform.PlatformName
+import to.kuudere.anisuge.platform.TvQrPairingAction
 import to.kuudere.anisuge.platform.isDesktopPlatform
+import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.ui.ConfirmDialog
 import to.kuudere.anisuge.screens.settings.SettingsTab
 import androidx.compose.ui.text.style.TextAlign
@@ -681,6 +683,36 @@ private fun MobileSettingsList(
                 label = item.label,
                 onClick = { onItemClick(item.tab) }
             )
+        }
+
+        if (!isAndroidTvPlatform) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BG_CARD)
+                    .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+                    .padding(16.dp)
+            ) {
+                Column {
+                    Text(
+                        "Connect to Android TV",
+                        color = TEXT,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Scan the QR shown on your TV to sign in there.",
+                        color = MUTED,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    TvQrPairingAction()
+                }
+            }
         }
 
         // Logout
@@ -4131,12 +4163,13 @@ private fun ProfileTab(
                         ProfileDetailItem("Email", user.email ?: "Not provided")
                         ProfileDetailItem("Joined", user.joinDate?.let { it.split("T").first() } ?: user.ago ?: "Unknown")
                         ProfileDetailItem("Timezone", "UTC") // Hardcoded from example but could be dynamic
+                            }
+                        }
                     }
+
                 }
             }
         }
-    }
-}
 
 @Composable
 private fun ProfileDetailItem(label: String, value: String) {
