@@ -106,6 +106,10 @@ kotlin {
 
             // SAF Document access
             implementation("androidx.documentfile:documentfile:1.0.1")
+
+            // QR generation and scanning for Android TV pairing
+            implementation(libs.zxing.core)
+            implementation(libs.zxing.android.embedded)
         }
 
         desktopMain.dependencies {
@@ -278,5 +282,4 @@ tasks.register<Zip>("createPortableZip") {
     // Ensure this runs after other packaging tasks if they are in the graph to avoid implicit dependency warnings
     mustRunAfter(tasks.matching { it.name.startsWith("package") })
 }
-
 

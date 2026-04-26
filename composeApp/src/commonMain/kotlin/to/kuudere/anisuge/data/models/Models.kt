@@ -49,6 +49,18 @@ data class BasicApiResponse(
 )
 
 @Serializable
+data class TvPairingRequest(
+    val nonce: String,
+    val session: SessionInfo,
+)
+
+@Serializable
+data class TvPairingResponse(
+    val success: Boolean,
+    val message: String? = null,
+)
+
+@Serializable
 data class AuthResponse(
     val success: Boolean,
     val message: String? = null,

@@ -24,6 +24,8 @@ ffmpeg-kit = "6.0"
 jave = "3.5.0"
 haze = "1.6.0"
 filekit = "0.13.0"
+zxing = "3.5.3"
+zxing-android-embedded = "4.3.0"
 
 [libraries]
 # Jave2 for Desktop FFmpeg bundling
@@ -74,6 +76,8 @@ jnativehook = { module = "com.github.kwhat:jnativehook", version = "2.2.2" }
 dbus_java = { module = "com.github.hypfvieh:dbus-java-transport-native-unixsocket", version = "4.3.1" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 filekit-dialogs-compose = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekit" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxing-android-embedded" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
