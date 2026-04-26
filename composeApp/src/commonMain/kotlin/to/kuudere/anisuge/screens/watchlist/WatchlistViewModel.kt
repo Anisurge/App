@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.utils.isNetworkError
 
 data class WatchlistState(
@@ -35,8 +36,28 @@ class WatchlistViewModel : ViewModel() {
     val uiState: StateFlow<WatchlistState> = _uiState.asStateFlow()
 
     private var searchJob: kotlinx.coroutines.Job? = null
+    private var loadedSessionId: String? = null
 
     init {
+        viewModelScope.launch {
+            AppComponent.authService.authState.collect { result ->
+                when (result) {
+                    is SessionCheckResult.Valid -> {
+                        if (loadedSessionId != result.session.sessionId) {
+                            loadedSessionId = result.session.sessionId
+                            refresh()
+                        }
+                    }
+                    SessionCheckResult.NoSession,
+                    SessionCheckResult.Expired -> {
+                        loadedSessionId = null
+                        _uiState.update { WatchlistState() }
+                    }
+                    SessionCheckResult.NetworkError -> Unit
+                }
+            }
+        }
+
         fetchWatchlist()
     }
 

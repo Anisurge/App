@@ -154,6 +154,9 @@ fun App(onAppExit: () -> Unit = {}) {
                     AuthScreen(
                         viewModel      = authVm,
                         onLoginSuccess = {
+                            homeVm.refresh(force = true)
+                            watchlistVm.refresh()
+                            settingsVm.refresh()
                             navController.navigate(Screen.Home().route) {
                                 popUpTo(Screen.Auth.route) { inclusive = true }
                             }
