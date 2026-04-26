@@ -52,8 +52,11 @@ class AuthService(
             contentType(ContentType.Application.Json)
             setBody(LoginRequest(email, password))
         }
-        if (response.status != HttpStatusCode.OK)
-            throw Exception("Login failed (${response.status})")
+        if (response.status != HttpStatusCode.OK) {
+            // Try to parse error message from response body
+            val errorBody = try { response.body<AuthResponse>() } catch (e: Exception) { null }
+            throw Exception(errorBody?.message ?: "Login failed (${response.status})")
+        }
         val body: AuthResponse = response.body()
         if (!body.success || body.session == null)
             throw Exception(body.message ?: "Login failed")
@@ -67,8 +70,11 @@ class AuthService(
             contentType(ContentType.Application.Json)
             setBody(RegisterRequest(email, password, username))
         }
-        if (response.status != HttpStatusCode.OK)
-            throw Exception("Registration failed (${response.status})")
+        if (response.status != HttpStatusCode.OK) {
+            // Try to parse error message from response body
+            val errorBody = try { response.body<AuthResponse>() } catch (e: Exception) { null }
+            throw Exception(errorBody?.message ?: "Registration failed (${response.status})")
+        }
         val body: AuthResponse = response.body()
         if (!body.success || body.session == null)
             throw Exception(body.message ?: "Registration failed")
