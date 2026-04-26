@@ -42,7 +42,13 @@ jobs:
 
       - name: Decode google-services.json
         run: |
-          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > composeApp/google-services.json
+          GOOGLE_SERVICES_SECRET="${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}"
+          if printf '%s' "$GOOGLE_SERVICES_SECRET" | tr -d '\r\n ' | base64 --decode > composeApp/google-services.json.tmp 2>/dev/null; then
+            mv composeApp/google-services.json.tmp composeApp/google-services.json
+          else
+            printf '%s' "$GOOGLE_SERVICES_SECRET" > composeApp/google-services.json
+            rm -f composeApp/google-services.json.tmp
+          fi
 
       - name: Build Android APK
         run: |
@@ -143,10 +149,15 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "composeApp\src\desktopMain\resources\native"
           Invoke-WebRequest -Uri "https://www.7-zip.org/a/7zr.exe" -OutFile "7zr.exe"
-          # Using the latest release from March 2026
-          Invoke-WebRequest -Uri "https://github.com/zhongfly/mpv-winbuild/releases/download/2026-03-22-c798884/mpv-dev-x86_64-20260322-git-c798884.7z" -OutFile "mpv-dev.7z" -UserAgent "Mozilla/5.0"
+          $headers = @{ "User-Agent" = "Mozilla/5.0" }
+          $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" -Headers $headers
+          $asset = $releases | ForEach-Object { $_.assets } | Where-Object { $_.name -like "mpv-dev-x86_64-v3-*.7z" -or $_.name -like "mpv-dev-x86_64-*.7z" } | Select-Object -First 1
+          if (-not $asset) { throw "Could not find an mpv-dev x86_64 release asset" }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "mpv-dev.7z" -Headers $headers
           .\7zr.exe x mpv-dev.7z -ompv-extracted
-          Copy-Item "mpv-extracted\libmpv-2.dll" "composeApp\src\desktopMain\resources\native\mpv-2.dll"
+          $dll = Get-ChildItem -Path "mpv-extracted" -Recurse -Filter "libmpv-2.dll" | Select-Object -First 1
+          if (-not $dll) { throw "libmpv-2.dll was not found in the extracted MPV archive" }
+          Copy-Item $dll.FullName "composeApp\src\desktopMain\resources\native\mpv-2.dll"
 
       - name: Decode Signing Certificate
         shell: pwsh
