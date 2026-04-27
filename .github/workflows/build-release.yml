@@ -73,11 +73,18 @@ jobs:
           PY
 
       - name: Build Android APK
+        env:
+          CRASH_REPORTER_URL: ${{ secrets.CRASH_REPORTER_URL }}
+          CRASH_REPORTER_APP_NAME: ${{ secrets.CRASH_REPORTER_APP_NAME }}
+          CRASH_REPORTER_API_KEY: ${{ secrets.CRASH_REPORTER_API_KEY }}
         run: |
           chmod +x gradlew
           ./gradlew :composeApp:assemblePhoneRelease --no-daemon \
             -PappVersion=${{ steps.version.outputs.version_name }} \
-            -PappBuildNumber=${{ steps.version.outputs.build_num }}
+            -PappBuildNumber=${{ steps.version.outputs.build_num }} \
+            -PcrashReporterUrl="$CRASH_REPORTER_URL" \
+            -PcrashReporterAppName="$CRASH_REPORTER_APP_NAME" \
+            -PcrashReporterApiKey="$CRASH_REPORTER_API_KEY"
 
       - name: Upload Android APKs
         uses: actions/upload-artifact@v4

@@ -15,6 +15,11 @@ import org.jetbrains.compose.resources.painterResource
 
 fun main() = application {
     System.setProperty("compose.interop.blending", "true")
+    CrashReporter.init(
+        backendUrl = BuildConfig.CRASH_REPORTER_URL,
+        appName = BuildConfig.CRASH_REPORTER_APP_NAME,
+        apiKey = BuildConfig.CRASH_REPORTER_API_KEY.ifBlank { null }
+    )
     val windowState = rememberWindowState(size = DpSize(1280.dp, 800.dp))
     Window(
         onCloseRequest = ::exitApplication,

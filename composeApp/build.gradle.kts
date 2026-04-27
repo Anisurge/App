@@ -8,8 +8,27 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(keystorePropertiesFile.inputStream())
 }
 
+val localEnvFile = rootProject.file(".env.local")
+val localEnvProperties = Properties()
+if (localEnvFile.exists()) {
+    localEnvProperties.load(localEnvFile.inputStream())
+}
+
+fun envOrProperty(name: String, defaultValue: String = ""): String {
+    val gradleKey = name.lowercase().split('_').let { parts ->
+        parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
+    }
+    return project.findProperty(gradleKey)?.toString()
+        ?: System.getenv(name)
+        ?: localEnvProperties.getProperty(name)
+        ?: defaultValue
+}
+
 val appVersionName = project.findProperty("appVersion")?.toString() ?: libs.versions.app.version.get()
 val appBuildNum = project.findProperty("appBuildNumber")?.toString()?.toIntOrNull() ?: libs.versions.app.buildNumber.get().toInt()
+val crashReporterUrl = envOrProperty("CRASH_REPORTER_URL")
+val crashReporterAppName = envOrProperty("CRASH_REPORTER_APP_NAME", "AniSurge")
+val crashReporterApiKey = envOrProperty("CRASH_REPORTER_API_KEY")
 
 // Sanitize version for installers (e.g., "0.9.9-20260316" -> "0.9.9")
 val numericVersion = appVersionName.split("-")[0].split("+")[0]
@@ -94,6 +113,7 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            implementation("androidx.fragment:fragment:1.8.9")
             implementation(libs.ktor.client.okhttp)
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.rxffmpeg)
@@ -145,6 +165,9 @@ buildConfig {
     packageName("to.kuudere.anisuge")
     buildConfigField("APP_VERSION", appVersionName)
     buildConfigField("APP_BUILD_NUMBER", appBuildNum)
+    buildConfigField("CRASH_REPORTER_URL", crashReporterUrl)
+    buildConfigField("CRASH_REPORTER_APP_NAME", crashReporterAppName)
+    buildConfigField("CRASH_REPORTER_API_KEY", crashReporterApiKey)
 }
 
 android {

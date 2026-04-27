@@ -7,6 +7,7 @@ import android.media.AudioManager
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -18,6 +19,7 @@ import com.google.common.util.concurrent.ListenableFuture
  * Also handles AudioFocus so that playback pauses when another app takes focus
  * (e.g. incoming call, another music app).
  */
+@UnstableApi
 class MediaSessionManager(private val context: Context) {
 
     private var mediaSession: MediaSession? = null
@@ -104,6 +106,7 @@ class MediaSessionManager(private val context: Context) {
  * to the MediaSession API. MediaSession requires a Player, but we only need to handle
  * play/pause commands — the actual video is rendered by libmpv, not ExoPlayer.
  */
+@UnstableApi
 private class PlayerAdapter(
     private val state: VideoPlayerState,
     private val onPlayPause: (Boolean) -> Unit,

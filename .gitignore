@@ -13,10 +13,12 @@
 .idea/
 /bin/
 **/bin/
+.claude/
 
 # Signing & Secrets
 key.properties
 local.properties
+.env.local
 signing/*.jks
 signing/*.pfx
 **/*.jks
