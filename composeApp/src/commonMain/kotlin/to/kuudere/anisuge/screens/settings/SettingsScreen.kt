@@ -565,7 +565,7 @@ private fun MobileSettingsList(
             .background(BG)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
-            .padding(top = 16.dp, bottom = 16.dp)
+            .padding(top = 16.dp, bottom = 156.dp)
     ) {
         // Profile Card at the Top
         if (uiState.isOffline && uiState.userProfile == null) {
@@ -854,7 +854,7 @@ private fun MobileSettingsDetail(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .padding(top = 8.dp, bottom = 16.dp)
+                .padding(top = 8.dp, bottom = 156.dp)
         ) {
             when (tab) {
                 is SettingsTab.Profile -> MobileProfileContent(

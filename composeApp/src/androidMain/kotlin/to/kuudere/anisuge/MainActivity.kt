@@ -13,17 +13,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.notifications.NotificationChannels
+import to.kuudere.anisuge.notifications.NotificationIntentParser
 import to.kuudere.anisuge.notifications.NotificationTopicManager
+import to.kuudere.anisuge.navigation.NotificationLaunch
 import to.kuudere.anisuge.platform.androidAppContext
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 
 class MainActivity : ComponentActivity() {
+    private var notificationLaunch by mutableStateOf<NotificationLaunch?>(null)
+
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -42,14 +49,25 @@ class MainActivity : ComponentActivity() {
 
         NotificationChannels.createAll(this)
         initNotificationTopics()
+        notificationLaunch = NotificationIntentParser.parse(intent)
 
         setContent {
-            App(onAppExit = { finishAffinity() })
+            App(
+                notificationLaunch = notificationLaunch,
+                onNotificationLaunchConsumed = { notificationLaunch = null },
+                onAppExit = { finishAffinity() }
+            )
         }
 
         window.decorView.post {
             showNotificationPromptIfNeeded()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        notificationLaunch = NotificationIntentParser.parse(intent)
     }
 
     private fun initNotificationTopics() {

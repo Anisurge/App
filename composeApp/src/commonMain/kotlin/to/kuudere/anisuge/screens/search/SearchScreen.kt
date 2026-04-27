@@ -84,7 +84,7 @@ fun SearchScreen(
                 columns = columns,
                 state = scrollState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = hPadding, end = hPadding, top = 8.dp, bottom = 100.dp),
+                contentPadding = PaddingValues(start = hPadding, end = hPadding, top = 8.dp, bottom = if (isSmall) 156.dp else 100.dp),
                 horizontalArrangement = Arrangement.spacedBy(itemSpacing),
                 verticalArrangement = Arrangement.spacedBy(itemSpacing)
             ) {
