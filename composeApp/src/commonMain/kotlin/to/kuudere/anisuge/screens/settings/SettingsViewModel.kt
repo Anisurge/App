@@ -96,6 +96,8 @@ data class SettingsUiState(
     val isOffline: Boolean = false,
     val downloadPath: String = "",
     val subtitleSize: Int = 100,
+    val floatingBottomNav: Boolean = true,
+    val liquidGlassBottomNav: Boolean = false,
 
     // Notifications
     val notificationsEnabled: Boolean = true,
@@ -110,6 +112,7 @@ sealed class SettingsTab {
     data object Sessions : SettingsTab()
     data object Security : SettingsTab()
     data object Servers : SettingsTab()
+    data object Appearance : SettingsTab()
     data object Notifications : SettingsTab()
 }
 
@@ -217,6 +220,16 @@ class SettingsViewModel(
                 _uiState.update { it.copy(subtitleSize = v) }
             }
         }
+        viewModelScope.launch {
+            settingsStore.floatingBottomNavFlow.collect { v ->
+                _uiState.update { it.copy(floatingBottomNav = v) }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.liquidGlassBottomNavFlow.collect { v ->
+                _uiState.update { it.copy(liquidGlassBottomNav = v) }
+            }
+        }
     }
 
     fun refresh() {
@@ -265,7 +278,20 @@ class SettingsViewModel(
             is SettingsTab.Sync -> loadAniListStatus()
             is SettingsTab.Servers -> loadServerPriority()
             is SettingsTab.Notifications -> loadNotificationPreferences()
+            is SettingsTab.Appearance -> Unit
             else -> {}
+        }
+    }
+
+    fun setFloatingBottomNav(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setFloatingBottomNav(enabled)
+        }
+    }
+
+    fun setLiquidGlassBottomNav(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setLiquidGlassBottomNav(enabled)
         }
     }
 

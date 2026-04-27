@@ -140,8 +140,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -199,6 +201,7 @@ fun HomeScreen(
     startTab: String? = null,
 ) {
     val homeState by homeViewModel.uiState.collectAsState()
+    val settingsState by settingsViewModel.uiState.collectAsState()
     var initialSettingsTab by remember { mutableStateOf<SettingsTab?>(null) }
     var currentTab by remember(startOnDownloads, startTab) { 
         val initial = if (startOnDownloads) AnisugTab.Downloads else {
@@ -302,6 +305,7 @@ fun HomeScreen(
                 var bottomBarHeightPx by remember { mutableStateOf(with(density) { 80.dp.roundToPx() }) }
                 val topBarHeight = with(density) { topBarHeightPx.toDp() }
                 val bottomBarHeight = with(density) { bottomBarHeightPx.toDp() }
+                val useFloatingBottomBar = settingsState.floatingBottomNav
 
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     // Content — padded so both bars never overlap it
@@ -309,7 +313,10 @@ fun HomeScreen(
                         Modifier
                             .fillMaxSize()
                             .haze(state = hazeState)
-                            .padding(top = topBarHeight, bottom = bottomBarHeight)
+                            .padding(
+                                top = topBarHeight,
+                                bottom = if (useFloatingBottomBar) 0.dp else bottomBarHeight
+                            )
                     ) {
                         AnimatedContent(
                             targetState = currentTab,
@@ -363,14 +370,26 @@ fun HomeScreen(
                     )
 
                     // Bottom Bar — measured so content knows how tall it is
-                    AnisugBottomBar(
-                        selectedTab = currentTab,
-                        onTabSelect = { newTab -> switchTab(newTab, null) },
-                        hazeState = hazeState,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .onGloballyPositioned { bottomBarHeightPx = it.size.height }
-                    )
+                    if (useFloatingBottomBar) {
+                        AnisugBottomBar(
+                            selectedTab = currentTab,
+                            onTabSelect = { newTab -> switchTab(newTab, null) },
+                            hazeState = hazeState,
+                            liquidGlass = settingsState.liquidGlassBottomNav,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .onGloballyPositioned { bottomBarHeightPx = it.size.height }
+                        )
+                    } else {
+                        NormalAnisugBottomBar(
+                            selectedTab = currentTab,
+                            onTabSelect = { newTab -> switchTab(newTab, null) },
+                            hazeState = hazeState,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .onGloballyPositioned { bottomBarHeightPx = it.size.height }
+                        )
+                    }
                 }
             }
         }
@@ -1646,6 +1665,96 @@ private fun AnisugBottomBar(
     selectedTab: AnisugTab,
     onTabSelect: (AnisugTab) -> Unit,
     hazeState: HazeState,
+    liquidGlass: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val navShape = RoundedCornerShape(if (liquidGlass) 30.dp else 28.dp)
+    val navMaterial = if (liquidGlass) {
+        Modifier
+            .hazeChild(
+                state = hazeState,
+                style = HazeStyle(
+                    tints = listOf(
+                        HazeTint(Color.Transparent)
+                    ),
+                    blurRadius = 5.dp,
+                    noiseFactor = 0f
+                )
+            )
+    } else {
+        Modifier
+            .background(Color(0xFF0D0D0D).copy(alpha = 0.86f))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), navShape)
+            .hazeChild(
+                state = hazeState,
+                style = HazeStyle(
+                    tints = listOf(HazeTint(Color.Black.copy(alpha = 0.55f))),
+                    blurRadius = 40.dp,
+                    noiseFactor = 0.08f
+                )
+            )
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) { /* Consume clicks to prevent pass-through */ }
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 420.dp)
+                .height(if (liquidGlass) 64.dp else 62.dp)
+                .clip(navShape)
+                .then(navMaterial)
+                .padding(horizontal = if (liquidGlass) 12.dp else 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Calendar | Home | Search | Bookmarks | Settings
+            BottomBarIcon(
+                Icons.Outlined.CalendarToday,
+                isSelected = selectedTab == AnisugTab.Calendar,
+                liquidGlass = liquidGlass,
+                onClick = { onTabSelect(AnisugTab.Calendar) }
+            )
+            BottomBarIcon(
+                Icons.Outlined.Home,
+                isSelected = selectedTab == AnisugTab.Home,
+                selectedTint = Color.White,
+                liquidGlass = liquidGlass,
+                onClick = { onTabSelect(AnisugTab.Home) }
+            )
+            BottomBarIcon(
+                Icons.Default.Search,
+                isSelected = selectedTab == AnisugTab.Search,
+                liquidGlass = liquidGlass,
+                onClick = { onTabSelect(AnisugTab.Search) }
+            )
+            BottomBarIcon(
+                Icons.Outlined.Bookmarks,
+                isSelected = selectedTab == AnisugTab.Bookmarks,
+                liquidGlass = liquidGlass,
+                onClick = { onTabSelect(AnisugTab.Bookmarks) }
+            )
+            BottomBarIcon(
+                Icons.Outlined.Settings,
+                isSelected = selectedTab == AnisugTab.Settings,
+                liquidGlass = liquidGlass,
+                onClick = { onTabSelect(AnisugTab.Settings) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun NormalAnisugBottomBar(
+    selectedTab: AnisugTab,
+    onTabSelect: (AnisugTab) -> Unit,
+    hazeState: HazeState,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -1663,7 +1772,6 @@ private fun AnisugBottomBar(
             .pointerInput(Unit) { /* Consume clicks to prevent pass-through */ }
             .windowInsetsPadding(WindowInsets.navigationBars)
     ) {
-        // Subtle top separator
         Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))
         Row(
             modifier = Modifier
@@ -1672,35 +1780,34 @@ private fun AnisugBottomBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-        // Calendar | Home | Search | Bookmarks | Settings
-        BottomBarIcon(
-            Icons.Outlined.CalendarToday,
-            isSelected = selectedTab == AnisugTab.Calendar,
-            onClick = { onTabSelect(AnisugTab.Calendar) }
-        )
-        BottomBarIcon(
-            Icons.Outlined.Home,
-            isSelected = selectedTab == AnisugTab.Home,
-            selectedTint = Color.White,
-            onClick = { onTabSelect(AnisugTab.Home) }
-        )
-        BottomBarIcon(
-            Icons.Default.Search,
-            isSelected = selectedTab == AnisugTab.Search,
-            onClick = { onTabSelect(AnisugTab.Search) }
-        )
-        BottomBarIcon(
-            Icons.Outlined.Bookmarks,
-            isSelected = selectedTab == AnisugTab.Bookmarks,
-            onClick = { onTabSelect(AnisugTab.Bookmarks) }
-        )
-        BottomBarIcon(
-            Icons.Outlined.Settings,
-            isSelected = selectedTab == AnisugTab.Settings,
-            onClick = { onTabSelect(AnisugTab.Settings) }
-        )
+            BottomBarIcon(
+                Icons.Outlined.CalendarToday,
+                isSelected = selectedTab == AnisugTab.Calendar,
+                onClick = { onTabSelect(AnisugTab.Calendar) }
+            )
+            BottomBarIcon(
+                Icons.Outlined.Home,
+                isSelected = selectedTab == AnisugTab.Home,
+                selectedTint = Color.White,
+                onClick = { onTabSelect(AnisugTab.Home) }
+            )
+            BottomBarIcon(
+                Icons.Default.Search,
+                isSelected = selectedTab == AnisugTab.Search,
+                onClick = { onTabSelect(AnisugTab.Search) }
+            )
+            BottomBarIcon(
+                Icons.Outlined.Bookmarks,
+                isSelected = selectedTab == AnisugTab.Bookmarks,
+                onClick = { onTabSelect(AnisugTab.Bookmarks) }
+            )
+            BottomBarIcon(
+                Icons.Outlined.Settings,
+                isSelected = selectedTab == AnisugTab.Settings,
+                onClick = { onTabSelect(AnisugTab.Settings) }
+            )
+        }
     }
-}
 }
 
 @Composable
@@ -1709,22 +1816,48 @@ private fun BottomBarIcon(
     isSelected: Boolean,
     selectedTint: Color = Color.White,
     defaultTint: Color = Color.Gray.copy(alpha = 0.4f),
+    liquidGlass: Boolean = false,
     onClick: () -> Unit = {}
 ) {
     val animatedTint by animateColorAsState(
-        targetValue = if (isSelected) selectedTint else defaultTint,
+        targetValue = when {
+            isSelected -> selectedTint
+            liquidGlass -> Color.White.copy(alpha = 0.72f)
+            else -> defaultTint
+        },
         animationSpec = tween(durationMillis = 200)
     )
     val animatedBg by animateColorAsState(
-        targetValue = if (isSelected) Color.White.copy(alpha = 0.07f) else Color.Transparent,
+        targetValue = when {
+            isSelected && liquidGlass -> Color.Black.copy(alpha = 0.08f)
+            isSelected -> Color.White.copy(alpha = 0.07f)
+            else -> Color.Transparent
+        },
         animationSpec = tween(durationMillis = 200)
     )
     
     Box(
         modifier = Modifier
             .size(48.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(if (liquidGlass) 18.dp else 12.dp))
             .background(animatedBg)
+            .then(
+                if (isSelected && liquidGlass) {
+                    Modifier
+                        .drawWithCache {
+                            val corner = CornerRadius(18.dp.toPx(), 18.dp.toPx())
+                            onDrawWithContent {
+                                drawRoundRect(
+                                    color = Color.Black.copy(alpha = 0.10f),
+                                    cornerRadius = corner
+                                )
+                                drawContent()
+                            }
+                        }
+                } else {
+                    Modifier
+                }
+            )
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {

@@ -201,6 +201,7 @@ fun SettingsScreen(
     val navItems = buildList {
         add(SettingsNavItem(SettingsTab.Profile, "Profile", Icons.Default.Person))
         add(SettingsNavItem(SettingsTab.Preferences, "Preferences", Icons.Default.Settings))
+        add(SettingsNavItem(SettingsTab.Appearance, "Appearance", Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Servers, "Servers", Icons.Default.Dns))
         add(SettingsNavItem(SettingsTab.Sync, "Sync", Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Storage, "Storage", Icons.Default.Storage))
@@ -878,6 +879,11 @@ private fun MobileSettingsDetail(
                     onDeleteAllSessions = { viewModel.setShowDeleteAllSessionsConfirm(true) },
                     onLogout = onLogout
                 )
+                is SettingsTab.Appearance -> AppearanceTab(
+                    uiState = uiState,
+                    onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
+                    onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav
+                )
                 is SettingsTab.Security -> MobileSecurityContent(
                     uiState = uiState,
                     onToggleMfa = viewModel::toggleMfa,
@@ -964,6 +970,11 @@ private fun SettingsContent(
                 onDeleteAllSessions = { viewModel.setShowDeleteAllSessionsConfirm(true) },
                 onLogout = onLogout
             )
+            is SettingsTab.Appearance -> AppearanceTab(
+                uiState = uiState,
+                onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
+                onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav
+            )
             is SettingsTab.Security -> SecurityTab(
                 uiState = uiState,
                 onToggleMfa = viewModel::toggleMfa,
@@ -1013,6 +1024,53 @@ private fun SettingsContent(
 }
 
 // ── Preferences Tab ─────────────────────────────────────────────────────────────
+@Composable
+private fun AppearanceTab(
+    uiState: SettingsUiState,
+    onFloatingBottomNavChange: (Boolean) -> Unit,
+    onLiquidGlassBottomNavChange: (Boolean) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Appearance",
+            color = TEXT,
+            fontSize = 42.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 32.dp)
+        )
+
+        SettingCard(
+            title = "Mobile Navigation",
+            description = "Choose how the bottom navigation bar appears on phones",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SettingToggle(
+                    checked = uiState.floatingBottomNav,
+                    onCheckedChange = onFloatingBottomNavChange,
+                    label = "Floating bottom navigation"
+                )
+                SettingToggle(
+                    checked = uiState.floatingBottomNav && uiState.liquidGlassBottomNav,
+                    onCheckedChange = onLiquidGlassBottomNavChange,
+                    label = "Blur floating style",
+                    enabled = uiState.floatingBottomNav
+                )
+                Text(
+                    text = when {
+                        !uiState.floatingBottomNav -> "Current style: normal full-width bar"
+                        uiState.liquidGlassBottomNav -> "Current style: Blur floating pill"
+                        else -> "Current style: floating pill"
+                    },
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PreferencesTab(
@@ -1283,17 +1341,19 @@ private fun SettingCard(
 private fun SettingToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    label: String
+    label: String,
+    enabled: Boolean = true,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, color = TEXT, fontSize = 14.sp)
+        Text(label, color = if (enabled) TEXT else MUTED.copy(alpha = 0.55f), fontSize = 14.sp)
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
                 checkedTrackColor = Color.White.copy(alpha = 0.5f),
