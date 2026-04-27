@@ -49,6 +49,11 @@ actual val isAndroidTvPlatform: Boolean
             packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
     }
 actual val PlatformName: String = "Android"
+actual val UpdatePlatform: String = "android"
+actual val UpdateVariant: String
+    get() = if (isAndroidTvPlatform) "tv" else "phone"
+actual val UpdateFileKey: String
+    get() = Build.SUPPORTED_ABIS.firstOrNull { it in setOf("arm64-v8a", "armeabi-v7a", "x86_64") } ?: "universal"
 
 actual val AppVersion: String by lazy {
     val packageInfo = androidAppContext.packageManager.getPackageInfo(androidAppContext.packageName, 0)

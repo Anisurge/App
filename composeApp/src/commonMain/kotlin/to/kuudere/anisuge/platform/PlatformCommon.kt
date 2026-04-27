@@ -8,6 +8,9 @@ expect val isAndroidTvPlatform: Boolean
 expect val PlatformName: String
 expect val AppVersion: String
 expect val AppBuildNumber: Int
+expect val UpdatePlatform: String
+expect val UpdateVariant: String
+expect val UpdateFileKey: String
 
 /** Requests landscape on Android, ignored/different on desktop */
 @Composable

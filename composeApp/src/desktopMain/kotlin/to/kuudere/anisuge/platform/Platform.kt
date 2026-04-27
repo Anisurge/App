@@ -17,14 +17,28 @@ val LocalWindowState = staticCompositionLocalOf<WindowState> {
 
 actual val isDesktopPlatform: Boolean = true
 actual val isAndroidTvPlatform: Boolean = false
-actual val PlatformName: String = System.getProperty("os.name").let { os ->
-    val lower = os.lowercase()
-    when {
-        "windows" in lower -> "Windows"
-        "linux" in lower   -> "Linux"
-        "mac" in lower     -> "macOS"
-        else               -> "Desktop"
-    }
+private val desktopOsName: String = System.getProperty("os.name").lowercase()
+private val desktopArchName: String = System.getProperty("os.arch").lowercase()
+
+actual val PlatformName: String = when {
+    "windows" in desktopOsName -> "Windows"
+    "linux" in desktopOsName   -> "Linux"
+    "mac" in desktopOsName     -> "macOS"
+    else                        -> "Desktop"
+}
+actual val UpdatePlatform: String = when {
+    "windows" in desktopOsName -> "windows"
+    "linux" in desktopOsName   -> "linux"
+    "mac" in desktopOsName     -> "macos"
+    else                        -> "desktop"
+}
+actual val UpdateVariant: String = "desktop"
+actual val UpdateFileKey: String = when {
+    "windows" in desktopOsName && ("64" in desktopArchName || "amd64" in desktopArchName) -> "x64-installer"
+    "linux" in desktopOsName && ("64" in desktopArchName || "amd64" in desktopArchName) -> "x64-appimage"
+    "mac" in desktopOsName && ("aarch64" in desktopArchName || "arm64" in desktopArchName) -> "arm64-dmg"
+    "mac" in desktopOsName -> "x64-dmg"
+    else -> "default"
 }
 
 actual val AppVersion: String by lazy {
