@@ -16,7 +16,8 @@ data class UpdateState(
     val changelog: List<String> = emptyList(),
     val isUpdateAvailable: Boolean? = null, // null = checking, true = yes, false = no
     val downloadUrl: String? = null,
-    val isCritical: Boolean = false
+    val isCritical: Boolean = false,
+    val isRequired: Boolean = false,
 )
 
 class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
@@ -35,15 +36,24 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
             return@launch
         }
 
-        val remoteBuild = response.build ?: 0
-        val isAvailable = remoteBuild > AppBuildNumber
+        val remoteBuild = response.buildNumber ?: response.build ?: 0
+        val remoteVersion = response.latestVersion ?: response.version ?: ""
+        val isAvailable = response.updateAvailable ?: (remoteBuild > AppBuildNumber)
+        val releaseNotes = response.changelog
+            ?: response.message
+            ?: response.releaseNotes
+                ?.lines()
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+            ?: emptyList()
 
         _state.value = _state.value.copy(
-            newVersion = "${response.version ?: ""} (${response.build ?: ""})",
-            changelog = response.changelog ?: response.message ?: emptyList(),
+            newVersion = "$remoteVersion ($remoteBuild)",
+            changelog = releaseNotes,
             isUpdateAvailable = isAvailable,
             downloadUrl = response.downloadUrl,
-            isCritical = response.critical == true
+            isCritical = response.critical == true || response.required == true,
+            isRequired = response.required == true,
         )
     }
 }

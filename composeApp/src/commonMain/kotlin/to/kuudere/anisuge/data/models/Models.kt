@@ -111,15 +111,34 @@ data class CurrentUserResponse(
 )
 
 @Serializable
+data class UpdateFileInfo(
+    val key: String? = null,
+    val label: String? = null,
+    val url: String? = null,
+    val size: Long? = null,
+    val sha256: String? = null,
+    val arch: String? = null,
+    val installerType: String? = null,
+)
+
+@Serializable
 data class UpdateResponse(
     val success: Boolean? = true,
+    val updateAvailable: Boolean? = null,
+    val required: Boolean? = null,
     val critical: Boolean? = false,
     val message: List<String>? = null,
     val version: String? = null,
+    val latestVersion: String? = null,
     val build: Int? = null,
+    val buildNumber: Int? = null,
+    val minimumBuildNumber: Int? = null,
     val title: String? = null,
+    val releaseNotes: String? = null,
     val changelog: List<String>? = null,
     val downloadUrl: String? = null,
+    val files: Map<String, UpdateFileInfo>? = null,
+    val fileList: List<UpdateFileInfo>? = null,
     val social: SocialLinks? = null,
 )
 
