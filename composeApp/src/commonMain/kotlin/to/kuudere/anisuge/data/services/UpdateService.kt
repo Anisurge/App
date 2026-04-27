@@ -7,6 +7,7 @@ import io.ktor.client.request.parameter
 import to.kuudere.anisuge.data.models.UpdateFileInfo
 import to.kuudere.anisuge.data.models.UpdateResponse
 import to.kuudere.anisuge.platform.AppBuildNumber
+import to.kuudere.anisuge.platform.AppVersion
 import to.kuudere.anisuge.platform.UpdateFileKey
 import to.kuudere.anisuge.platform.UpdatePlatform
 import to.kuudere.anisuge.platform.UpdateVariant
@@ -27,6 +28,7 @@ class UpdateService(
                 parameter("variant", UpdateVariant)
                 parameter("channel", CHANNEL)
                 parameter("currentBuild", AppBuildNumber)
+                parameter("currentVersion", AppVersion)
             }.body<UpdateResponse>()
 
             response.copy(downloadUrl = response.pickDownloadUrl() ?: response.downloadUrl)

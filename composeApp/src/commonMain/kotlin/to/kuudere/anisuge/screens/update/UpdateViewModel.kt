@@ -38,7 +38,7 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
 
         val remoteBuild = response.buildNumber ?: response.build ?: 0
         val remoteVersion = response.latestVersion ?: response.version ?: ""
-        val isAvailable = response.updateAvailable ?: (remoteBuild > AppBuildNumber)
+        val isAvailable = response.updateAvailable ?: (remoteBuild > AppBuildNumber || compareVersions(remoteVersion, AppVersion) > 0)
         val releaseNotes = response.changelog
             ?: response.message
             ?: response.releaseNotes
@@ -57,3 +57,19 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
         )
     }
 }
+
+private fun compareVersions(left: String, right: String): Int {
+    val leftParts = left.versionParts()
+    val rightParts = right.versionParts()
+    val size = maxOf(leftParts.size, rightParts.size)
+
+    for (index in 0 until size) {
+        val difference = (leftParts.getOrNull(index) ?: 0) - (rightParts.getOrNull(index) ?: 0)
+        if (difference != 0) return difference
+    }
+
+    return 0
+}
+
+private fun String.versionParts(): List<Int> = split('.', '+', '-')
+    .mapNotNull { part -> part.filter { it.isDigit() }.toIntOrNull() }
