@@ -578,7 +578,7 @@ private fun HomeContent(
             )
         }
 
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(if (isDesktopPlatform) 48.dp else 156.dp))
         }
     }
 
@@ -1979,7 +1979,7 @@ fun DownloadsTab(
                     .fillMaxSize()
                     .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = 32.dp, top = 20.dp)
+                contentPadding = PaddingValues(bottom = if (maxWidth < 800.dp) 140.dp else 32.dp, top = 20.dp)
             ) {
                 item {
                     Box(Modifier.fillMaxWidth()) {
@@ -2062,7 +2062,7 @@ fun DownloadsTab(
                 }
 
                 item(key = "downloads-bottom-spacer") {
-                    Spacer(Modifier.height(48.dp))
+                    Spacer(Modifier.height(72.dp))
                 }
             }
         }

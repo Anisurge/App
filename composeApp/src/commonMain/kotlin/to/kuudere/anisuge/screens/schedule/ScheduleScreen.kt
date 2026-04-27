@@ -186,7 +186,7 @@ fun ScheduleScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 20.dp),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = if (maxWidth < 800.dp) 156.dp else 20.dp),
                     ) {
                         item {
                            Box(Modifier.fillMaxWidth()) {

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -17,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import to.kuudere.anisuge.navigation.Screen
+import to.kuudere.anisuge.navigation.NotificationLaunch
 import to.kuudere.anisuge.screens.auth.AuthScreen
 import to.kuudere.anisuge.screens.auth.AuthViewModel
 import to.kuudere.anisuge.screens.splash.SplashScreen
@@ -53,13 +55,18 @@ import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.ui.ConfirmDialog
 import androidx.savedstate.SavedState
 import androidx.savedstate.read
+import androidx.compose.ui.platform.LocalUriHandler
 
 /** Compat helper: reads a String from the new KMP SavedState arguments type. */
 private fun SavedState?.str(key: String): String? =
     try { this?.read { if (contains(key)) getString(key) else null } } catch (_: Exception) { null }
 
 @Composable
-fun App(onAppExit: () -> Unit = {}) {
+fun App(
+    notificationLaunch: NotificationLaunch? = null,
+    onNotificationLaunchConsumed: () -> Unit = {},
+    onAppExit: () -> Unit = {},
+) {
     AnisugTheme {
         val navController = rememberNavController()
         val splashVm = remember { SplashViewModel(AppComponent.authService, AppComponent.updateService, AppComponent.homeService) }
@@ -76,8 +83,11 @@ fun App(onAppExit: () -> Unit = {}) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
         val updateState by updateVm.state.collectAsState()
+        val uriHandler = LocalUriHandler.current
         
         var showExitConfirm by remember { mutableStateOf(false) }
+        var pendingNotificationLaunch by remember { mutableStateOf<NotificationLaunch?>(null) }
+        var notificationDialog by remember { mutableStateOf<NotificationLaunch?>(null) }
         
         // Handle back button - show exit confirmation only when at the root (home)
         val currentRoute = navBackStackEntry?.destination?.route
@@ -86,6 +96,33 @@ fun App(onAppExit: () -> Unit = {}) {
         
         PlatformBackHandler(enabled = isAtRoot && !showExitConfirm) {
             showExitConfirm = true
+        }
+
+        LaunchedEffect(notificationLaunch?.id) {
+            if (notificationLaunch != null) {
+                pendingNotificationLaunch = notificationLaunch
+            }
+        }
+
+        LaunchedEffect(currentRoute, pendingNotificationLaunch?.id) {
+            val launch = pendingNotificationLaunch ?: return@LaunchedEffect
+            val route = currentRoute ?: return@LaunchedEffect
+            if (route == Screen.Splash.route || route == Screen.Auth.route || route.startsWith("update")) return@LaunchedEffect
+
+            pendingNotificationLaunch = null
+            onNotificationLaunchConsumed()
+
+            when {
+                launch.animeId != null && launch.episodeNumber != null -> {
+                    navController.navigate(Screen.Watch(launch.animeId, launch.episodeNumber).route)
+                }
+                launch.animeId != null -> {
+                    navController.navigate(Screen.Info(launch.animeId).route)
+                }
+                else -> {
+                    notificationDialog = launch
+                }
+            }
         }
 
 
@@ -104,6 +141,30 @@ fun App(onAppExit: () -> Unit = {}) {
                         onAppExit()
                     },
                     onDismiss = { showExitConfirm = false }
+                )
+            }
+
+            notificationDialog?.let { launch ->
+                val openUrl = launch.actionUrl?.takeIf { it.startsWith("http", ignoreCase = true) }
+                    ?: launch.mediaUrl?.takeIf { it.startsWith("http", ignoreCase = true) }
+                val mediaLabel = when (launch.mediaType?.lowercase()) {
+                    "video" -> "Open video"
+                    "audio" -> "Open audio"
+                    "image" -> "Open image"
+                    "link" -> "Open link"
+                    else -> "Open"
+                }
+                ConfirmDialog(
+                    title = launch.title,
+                    message = launch.body.ifBlank { "Open this notification from Anisurge." },
+                    confirmLabel = if (openUrl != null) launch.actionLabel ?: mediaLabel else "OK",
+                    dismissLabel = "Close",
+                    isDanger = false,
+                    onConfirm = {
+                        openUrl?.let { uriHandler.openUri(it) }
+                        notificationDialog = null
+                    },
+                    onDismiss = { notificationDialog = null }
                 )
             }
             

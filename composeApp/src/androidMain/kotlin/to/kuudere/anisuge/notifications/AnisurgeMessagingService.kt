@@ -46,7 +46,14 @@ class AnisurgeMessagingService : FirebaseMessagingService() {
             title = title,
             body = body,
             animeId = data["animeId"],
-            episodeNumber = data["episodeNumber"]?.toIntOrNull()
+            episodeNumber = data["episodeNumber"]?.toIntOrNull(),
+            actionUrl = data["actionUrl"],
+            actionLabel = data["actionLabel"],
+            mediaType = data["mediaType"],
+            mediaUrl = data["mediaUrl"],
+            imageUrl = data["imageUrl"],
+            referenceId = data["referenceId"],
+            campaign = data["campaign"]
         )
     }
 }
