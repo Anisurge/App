@@ -27,6 +27,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val NOTIFICATIONS_DONATION_KEY = booleanPreferencesKey("notifications_donation")
         val NOTIFICATIONS_ANNOUNCEMENT_KEY = booleanPreferencesKey("notifications_announcement")
         val NOTIFICATIONS_MAINTENANCE_KEY = booleanPreferencesKey("notifications_maintenance")
+        val FLOATING_BOTTOM_NAV_KEY = booleanPreferencesKey("floating_bottom_nav")
+        val LIQUID_GLASS_BOTTOM_NAV_KEY = booleanPreferencesKey("liquid_glass_bottom_nav")
 
         private val json = Json { ignoreUnknownKeys = true }
     }
@@ -46,6 +48,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val notificationsDonationFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_DONATION_KEY] ?: true }
     val notificationsAnnouncementFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] ?: true }
     val notificationsMaintenanceFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_MAINTENANCE_KEY] ?: true }
+    val floatingBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[FLOATING_BOTTOM_NAV_KEY] ?: true }
+    val liquidGlassBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[LIQUID_GLASS_BOTTOM_NAV_KEY] ?: false }
 
     /**
      * Flow of user-defined server priority list.
@@ -140,6 +144,14 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setNotificationsMaintenance(enabled: Boolean) {
         dataStore.edit { it[NOTIFICATIONS_MAINTENANCE_KEY] = enabled }
+    }
+
+    suspend fun setFloatingBottomNav(enabled: Boolean) {
+        dataStore.edit { it[FLOATING_BOTTOM_NAV_KEY] = enabled }
+    }
+
+    suspend fun setLiquidGlassBottomNav(enabled: Boolean) {
+        dataStore.edit { it[LIQUID_GLASS_BOTTOM_NAV_KEY] = enabled }
     }
 
     // Blocking reads for FCM service (runs on worker thread, safe to block)
