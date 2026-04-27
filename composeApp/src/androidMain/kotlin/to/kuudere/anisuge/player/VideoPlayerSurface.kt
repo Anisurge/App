@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.util.UnstableApi
 import dev.jdtech.mpv.MPVLib
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,6 +25,7 @@ import kotlinx.coroutines.isActive
 import java.io.File
 
 @Composable
+@UnstableApi
 actual fun VideoPlayerSurface(
     state: VideoPlayerState,
     modifier: Modifier,
@@ -61,8 +63,8 @@ actual fun VideoPlayerSurface(
         return
     }
 
-    val surfaceView = remember(resolvedUrl) { 
-        SurfaceView(context).apply {
+    val surfaceView = remember(resolvedUrl) {
+        val view = SurfaceView(context).apply {
             // SurfaceView is more stable than TextureView for hardware-accelerated video
             // specifically avoiding the "destroyed mutex" crashes in libhwui.
             holder.addCallback(object : SurfaceHolder.Callback {
@@ -126,6 +128,7 @@ actual fun VideoPlayerSurface(
                 true
             }
         }
+        view
     }
 
     LaunchedEffect(state.isPlaying, state.isPaused, state.isBuffering) {
