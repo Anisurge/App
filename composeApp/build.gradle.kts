@@ -228,6 +228,73 @@ android {
     }
 }
 
+val androidPermissionNamespace = "http://schemas.android.com/apk/res/android"
+
+tasks.register("checkAndroidForegroundServicePermissions") {
+    group = "verification"
+    description = "Verifies Android foreground service declarations have matching manifest permissions."
+
+    val manifestFile = layout.projectDirectory.file("src/androidMain/AndroidManifest.xml")
+    inputs.file(manifestFile)
+
+    doLast {
+        val manifest = manifestFile.asFile
+        val document = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+        }.newDocumentBuilder().parse(manifest)
+
+        val declaredPermissions = mutableSetOf<String>()
+        val permissionNodes = document.getElementsByTagName("uses-permission")
+        for (i in 0 until permissionNodes.length) {
+            val node = permissionNodes.item(i) as org.w3c.dom.Element
+            val name = node.getAttributeNS(androidPermissionNamespace, "name")
+            if (name.isNotBlank()) declaredPermissions += name
+        }
+
+        val typePermissions = mapOf(
+            "camera" to "android.permission.FOREGROUND_SERVICE_CAMERA",
+            "connectedDevice" to "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE",
+            "dataSync" to "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+            "health" to "android.permission.FOREGROUND_SERVICE_HEALTH",
+            "location" to "android.permission.FOREGROUND_SERVICE_LOCATION",
+            "mediaPlayback" to "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+            "mediaProjection" to "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
+            "microphone" to "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+            "phoneCall" to "android.permission.FOREGROUND_SERVICE_PHONE_CALL",
+            "remoteMessaging" to "android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING",
+            "specialUse" to "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+            "systemExempted" to "android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED",
+        )
+
+        val requiredPermissions = mutableSetOf<String>()
+        val serviceNodes = document.getElementsByTagName("service")
+        for (i in 0 until serviceNodes.length) {
+            val service = serviceNodes.item(i) as org.w3c.dom.Element
+            val typeValue = service.getAttributeNS(androidPermissionNamespace, "foregroundServiceType")
+            if (typeValue.isBlank() || typeValue == "none") continue
+
+            requiredPermissions += "android.permission.FOREGROUND_SERVICE"
+            typeValue.split('|')
+                .map { it.trim() }
+                .filter { it.isNotBlank() && it != "none" && it != "shortService" }
+                .forEach { type ->
+                    val permission = typePermissions[type]
+                        ?: error("Unknown foregroundServiceType '$type' in ${manifest.relativeTo(projectDir)}. Update checkAndroidForegroundServicePermissions if this is a valid new Android type.")
+                    requiredPermissions += permission
+                }
+        }
+
+        val missingPermissions = requiredPermissions - declaredPermissions
+        check(missingPermissions.isEmpty()) {
+            "AndroidManifest.xml is missing foreground service permission(s): ${missingPermissions.sorted().joinToString(", ")}"
+        }
+    }
+}
+
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn("checkAndroidForegroundServicePermissions")
+}
+
 compose {
     resources {
         packageOfResClass = "anisurge.composeapp.generated.resources"
