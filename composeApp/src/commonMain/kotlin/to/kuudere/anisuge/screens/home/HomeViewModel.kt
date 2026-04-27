@@ -118,6 +118,10 @@ class HomeViewModel(
         }
     }
 
+    fun refreshContinueWatching() {
+        fetchPersonalizedData()
+    }
+
     fun refresh(force: Boolean = false) {
         scope.launch {
             _uiState.update { it.copy(isLoading = true, isOffline = false, error = null) }

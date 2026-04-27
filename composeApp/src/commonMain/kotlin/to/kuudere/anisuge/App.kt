@@ -24,6 +24,7 @@ import to.kuudere.anisuge.screens.splash.SplashViewModel
 import to.kuudere.anisuge.screens.splash.SplashDestination
 import to.kuudere.anisuge.screens.home.HomeScreen
 import to.kuudere.anisuge.screens.home.HomeViewModel
+import to.kuudere.anisuge.screens.home.ContinueWatchingScreen
 import to.kuudere.anisuge.screens.search.SearchScreen
 import to.kuudere.anisuge.screens.search.SearchViewModel
 import to.kuudere.anisuge.screens.search.KUUDERE_GENRES
@@ -191,6 +192,7 @@ fun App(onAppExit: () -> Unit = {}) {
                         },
                         onExit = onAppExit,
                         onViewLatestMore = { navController.navigate(Screen.Latest.route) },
+                        onViewContinueWatchingMore = { navController.navigate(Screen.ContinueWatching.route) },
                         startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
                         startTab = requestedTab
                     )
@@ -264,6 +266,14 @@ fun App(onAppExit: () -> Unit = {}) {
                     LatestEpisodesScreen(
                         viewModel = latestVm,
                         onAnimeClick = { animeId -> navController.navigate(Screen.Info(animeId).route) },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.ContinueWatching.route) {
+                    ContinueWatchingScreen(
+                        viewModel = homeVm,
+                        onWatchClick = { id, lang, ep, server -> navController.navigate(Screen.Watch(id, ep, server, lang).route) },
                         onBack = { navController.popBackStack() }
                     )
                 }

@@ -194,6 +194,7 @@ fun HomeScreen(
     onLogout: () -> Unit = {},
     onExit: () -> Unit = {},
     onViewLatestMore: () -> Unit = {},
+    onViewContinueWatchingMore: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
 ) {
@@ -280,6 +281,7 @@ fun HomeScreen(
                                 onWatchOffline = onWatchOffline,
                                 onLogout = { showLogoutConfirm = true },
                                 onViewLatestMore = onViewLatestMore,
+                                onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onWatchlistClick = { showWatchlistFor = it },
                                 onSearchLatest = {
                                     searchViewModel.onSortChange("Latest")
@@ -333,6 +335,7 @@ fun HomeScreen(
                                 onWatchOffline = onWatchOffline,
                                 onLogout = { showLogoutConfirm = true },
                                 onViewLatestMore = onViewLatestMore,
+                                onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onWatchlistClick = { showWatchlistFor = it },
                                 onSearchLatest = {
                                     searchViewModel.onSortChange("Latest")
@@ -413,6 +416,7 @@ private fun TabContent(
     onWatchOffline: (String, Int, String, String) -> Unit,
     onLogout: () -> Unit,
     onViewLatestMore: () -> Unit,
+    onViewContinueWatchingMore: () -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
     onSearchLatest: () -> Unit,
     onExit: () -> Unit,
@@ -455,6 +459,7 @@ private fun TabContent(
                                 onWatchlistClick = onWatchlistClick,
                                 onRefresh = { homeViewModel.refresh(force = true) },
                                 onViewLatestMore = onViewLatestMore,
+                                onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onViewNewOnAppMore = onSearchLatest,
                                 onExit = onExit
                             )
@@ -487,6 +492,7 @@ private fun HomeContent(
     onWatchlistClick: (AnimeItem) -> Unit,
     onRefresh: () -> Unit = {},
     onViewLatestMore: () -> Unit = {},
+    onViewContinueWatchingMore: () -> Unit = {},
     onViewNewOnAppMore: () -> Unit = {},
     onExit: () -> Unit = {},
 ) {
@@ -515,7 +521,7 @@ private fun HomeContent(
 
         // ── Continue Watching ──────────────────────────────────────────
         if (state.continueWatching.isNotEmpty()) {
-            SectionHeader(title = "Continue Watching", onViewMore = null)
+            SectionHeader(title = "Continue Watching", onViewMore = onViewContinueWatchingMore)
             ContinueWatchingRow(
                 items = state.continueWatching,
                 onWatchClick = { id, lang, ep, server -> onWatchClick(id, lang, ep, server) },
