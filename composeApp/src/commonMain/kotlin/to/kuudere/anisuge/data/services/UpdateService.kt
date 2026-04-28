@@ -6,7 +6,6 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import to.kuudere.anisuge.data.models.UpdateFileInfo
 import to.kuudere.anisuge.data.models.UpdateResponse
-import to.kuudere.anisuge.platform.AppBuildNumber
 import to.kuudere.anisuge.platform.AppVersion
 import to.kuudere.anisuge.platform.UpdateFileKey
 import to.kuudere.anisuge.platform.UpdatePlatform
@@ -27,7 +26,6 @@ class UpdateService(
                 parameter("platform", UpdatePlatform)
                 parameter("variant", UpdateVariant)
                 parameter("channel", CHANNEL)
-                parameter("currentBuild", AppBuildNumber)
                 parameter("currentVersion", AppVersion)
             }.body<UpdateResponse>()
 
