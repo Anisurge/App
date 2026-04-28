@@ -37,6 +37,7 @@ import to.kuudere.anisuge.data.services.InfoService
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import to.kuudere.anisuge.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +52,7 @@ fun DownloadEpisodeDialog(
     onDismiss: () -> Unit,
     onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var selectedServer by remember { mutableStateOf("zen2") }
     var selectedSubLang by remember { mutableStateOf<String?>("English") }
     var selectedAudioLang by remember { mutableStateOf<String?>("sub") } // 'sub' or 'dub'
@@ -212,7 +214,7 @@ fun DownloadEpisodeDialog(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Text(
-                text = "Download Episode $episodeNumber",
+                text = strings.downloadEpisode(episodeNumber),
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
@@ -220,7 +222,7 @@ fun DownloadEpisodeDialog(
 
             // Server Selection
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Select Server", color = Color.Gray, fontSize = 14.sp)
+                Text(strings.selectServer, color = Color.Gray, fontSize = 14.sp)
                 androidx.compose.foundation.lazy.LazyRow(
                     state = serverListState,
                     modifier = Modifier
@@ -262,7 +264,7 @@ fun DownloadEpisodeDialog(
             // Audio Selection (Only relevant for Zen servers which embed multiple tracks)
             if (availableAudioTracks.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Audio Track", color = Color.Gray, fontSize = 14.sp)
+                    Text(strings.audioTrack, color = Color.Gray, fontSize = 14.sp)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -292,13 +294,13 @@ fun DownloadEpisodeDialog(
 
             // Subtitle Selection
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Subtitle Language", color = Color.Gray, fontSize = 14.sp)
+                Text(strings.subtitleLanguage, color = Color.Gray, fontSize = 14.sp)
                 if (isLoadingSubs) {
                     Box(modifier = Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                     }
                 } else if (availableSubtitles.size <= 1) {
-                    Text("No subtitles available", color = Color.Gray, fontSize = 13.sp)
+                    Text(strings.noSubtitlesAvailable, color = Color.Gray, fontSize = 13.sp)
                 } else {
                     androidx.compose.foundation.lazy.LazyRow(
                         state = subListState,
@@ -337,7 +339,7 @@ fun DownloadEpisodeDialog(
 
             // Download Path Selection
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(text = "Download Location", color = Color.Gray, fontSize = 14.sp)
+                Text(text = strings.downloadLocation, color = Color.Gray, fontSize = 14.sp)
                 
                 Row(
                     modifier = Modifier
@@ -350,7 +352,7 @@ fun DownloadEpisodeDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isPathValid) to.kuudere.anisuge.platform.formatDisplayPath(downloadPath) else "Location Unavailable",
+                            text = if (isPathValid) to.kuudere.anisuge.platform.formatDisplayPath(downloadPath) else strings.locationUnavailable,
                             color = if (downloadPath.isBlank() || !isPathValid) Color.Gray else Color.White,
                             fontSize = 13.sp,
                             maxLines = 1,
@@ -358,7 +360,7 @@ fun DownloadEpisodeDialog(
                         )
                         if (!isPathValid) {
                             Text(
-                                "Choose a folder with write access.",
+                                strings.chooseWritableFolder,
                                 color = Color.Red.copy(alpha = 0.8f),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
@@ -370,7 +372,7 @@ fun DownloadEpisodeDialog(
                     Spacer(modifier = Modifier.width(12.dp))
                     
                     Text(
-                        text = "Change",
+                        text = strings.change,
                         color = Color.Black,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -449,7 +451,7 @@ fun DownloadEpisodeDialog(
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF000000)),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("Delete", color = Color(0xFFBF80FF), fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                            Text(strings.delete, color = Color(0xFFBF80FF), fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
                         }
                     }
                 }
@@ -490,7 +492,7 @@ fun DownloadEpisodeDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Preparing...",
+                            strings.preparing,
                             color = Color.Black,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
@@ -500,10 +502,10 @@ fun DownloadEpisodeDialog(
                         val sizeText = if (estimatedSizeBytes > 0) " (~${formatFileSize(estimatedSizeBytes)})" else ""
                         Text(
                             text = when {
-                                currentTask == null -> if (isPathValid) "Start Download$sizeText" else "Choose Valid Folder"
-                                isFinished -> "Downloaded"
-                                currentTask?.status?.startsWith("Failed") == true -> if (isPathValid) "Retry Download" else "Choose Valid Folder"
-                                else -> "Keep Downloading in Background"
+                                currentTask == null -> if (isPathValid) strings.startDownload(sizeText) else strings.chooseValidFolder
+                                isFinished -> strings.downloaded
+                                currentTask?.status?.startsWith("Failed") == true -> if (isPathValid) strings.retryDownload else strings.chooseValidFolder
+                                else -> strings.keepDownloadingInBackground
                             },
                             color = if (isFinished) Color.Black.copy(alpha = 0.5f) else Color.Black,
                             fontWeight = FontWeight.Bold,

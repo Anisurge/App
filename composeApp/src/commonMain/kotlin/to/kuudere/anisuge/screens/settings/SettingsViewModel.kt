@@ -25,6 +25,7 @@ import to.kuudere.anisuge.data.services.SettingsStore
 import to.kuudere.anisuge.data.services.StorageService
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.models.SessionCheckResult
+import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.utils.isNetworkError
 
 data class SettingsUiState(
@@ -100,6 +101,7 @@ data class SettingsUiState(
     val liquidGlassBottomNav: Boolean = false,
     val mobileDiscordRichPresenceEnabled: Boolean = false,
     val mobileDiscordRichPresenceToken: String = "",
+    val appLocale: AppLocale = AppLocale.default,
 
     // Notifications
     val notificationsEnabled: Boolean = true,
@@ -242,6 +244,11 @@ class SettingsViewModel(
                 _uiState.update { it.copy(mobileDiscordRichPresenceToken = v) }
             }
         }
+        viewModelScope.launch {
+            settingsStore.appLocaleFlow.collect { code ->
+                _uiState.update { it.copy(appLocale = AppLocale.fromCode(code)) }
+            }
+        }
     }
 
     fun refresh() {
@@ -316,6 +323,12 @@ class SettingsViewModel(
     fun setMobileDiscordRichPresenceToken(token: String) {
         viewModelScope.launch {
             settingsStore.setMobileDiscordRichPresenceToken(token)
+        }
+    }
+
+    fun setAppLocale(locale: AppLocale) {
+        viewModelScope.launch {
+            settingsStore.setAppLocale(locale.code)
         }
     }
 

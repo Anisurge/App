@@ -35,6 +35,7 @@ import to.kuudere.anisuge.theme.KuudereRed
 import to.kuudere.anisuge.theme.Muted
 import to.kuudere.anisuge.theme.Surface
 import to.kuudere.anisuge.platform.openUrl
+import to.kuudere.anisuge.i18n.LocalAppStrings
 
 @Composable
 fun UpdateScreen(
@@ -42,6 +43,7 @@ fun UpdateScreen(
     onUpdateLater: () -> Unit,
     onUpdateNow: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var startAnimation by remember { mutableStateOf(false) }
     var isFinishing by remember { mutableStateOf(false) }
     var isDownloading by remember { mutableStateOf(false) }
@@ -100,7 +102,7 @@ fun UpdateScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Color.White)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Checking for updates...", color = Muted)
+                    Text(strings.checkingForUpdates, color = Muted)
                 }
             } else if (isWide) {
                 // Wide screen: Two-column layout
@@ -140,7 +142,7 @@ fun UpdateScreen(
                                 onClick = onUpdateLater,
                                 modifier = Modifier.padding(top = 8.dp)
                             ) {
-                                Text("Back to App", color = Muted, style = MaterialTheme.typography.bodySmall)
+                                Text(strings.backToApp, color = Muted, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -188,7 +190,7 @@ fun UpdateScreen(
                             onClick = onUpdateLater,
                             modifier = Modifier.padding(top = 12.dp)
                         ) {
-                            Text("Back to App", color = Muted, style = MaterialTheme.typography.bodySmall)
+                            Text(strings.backToApp, color = Muted, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -203,6 +205,7 @@ private fun UpdateHeader(
     isWide: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
@@ -227,7 +230,7 @@ private fun UpdateHeader(
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "New Update Available",
+            text = strings.newUpdateAvailable,
             style = MaterialTheme.typography.titleLarge,
             color = Color.White,
             fontWeight = FontWeight.Bold,
@@ -270,6 +273,7 @@ private fun UpdateHeader(
 
 @Composable
 private fun ChangelogCard(state: UpdateState) {
+    val strings = LocalAppStrings.current
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -280,7 +284,7 @@ private fun ChangelogCard(state: UpdateState) {
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
             Text(
-                text = "What's New",
+                text = strings.whatsNew,
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White,
                 fontWeight = FontWeight.Bold
@@ -322,6 +326,7 @@ private fun UpdateActions(
     isCritical: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     Column(modifier = modifier) {
         Button(
             onClick = onUpdateNow,
@@ -336,7 +341,7 @@ private fun UpdateActions(
             shape = RoundedCornerShape(16.dp)
         ) {
             Text(
-                text = if (isDownloading) "Opening Browser..." else "Update Now",
+                text = if (isDownloading) strings.openingBrowser else strings.updateNow,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -358,7 +363,7 @@ private fun UpdateActions(
                     )
                 } else {
                     Text(
-                        text = "Maybe Later",
+                        text = strings.maybeLater,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Muted
                     )

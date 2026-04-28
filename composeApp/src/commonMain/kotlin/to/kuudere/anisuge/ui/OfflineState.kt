@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.kuudere.anisuge.i18n.LocalAppStrings
 
 @Composable
 fun OfflineState(
@@ -36,6 +37,7 @@ fun OfflineState(
     isLoading: Boolean = false,
     modifier: Modifier = Modifier.fillMaxSize()
 ) {
+    val strings = LocalAppStrings.current
     Box(
         modifier = modifier
             .background(Color(0xFF000000)),
@@ -65,7 +67,7 @@ fun OfflineState(
             Spacer(Modifier.height(4.dp))
 
             Text(
-                text = "No Internet Connection",
+                text = strings.noInternetConnection,
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -73,7 +75,7 @@ fun OfflineState(
             )
 
             Text(
-                text = "Check your connection and tap Retry.\nYou can still browse your Downloads while offline.",
+                text = strings.offlineDescription,
                 color = Color.White.copy(alpha = 0.5f),
                 fontSize = 14.sp,
                 lineHeight = 22.sp,
@@ -101,9 +103,9 @@ fun OfflineState(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("Retrying…", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(strings.retrying, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 } else {
-                    Text("Retry", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(strings.retry, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 }
             }
         }

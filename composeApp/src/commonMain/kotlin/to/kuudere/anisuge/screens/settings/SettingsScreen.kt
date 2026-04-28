@@ -76,6 +76,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -136,6 +138,9 @@ import to.kuudere.anisuge.platform.TvQrPairingAction
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.ui.ConfirmDialog
+import to.kuudere.anisuge.i18n.AppStrings
+import to.kuudere.anisuge.i18n.AppLocale
+import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.screens.settings.SettingsTab
 import androidx.compose.ui.text.style.TextAlign
 
@@ -165,6 +170,7 @@ fun SettingsScreen(
     onExit: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val strings = LocalAppStrings.current
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTab by remember { mutableStateOf<SettingsTab>(initialTab ?: SettingsTab.Preferences) }
 
@@ -178,11 +184,11 @@ fun SettingsScreen(
 
     LaunchedEffect(uiState.errorMessage, uiState.successMessage) {
         uiState.errorMessage?.let {
-            snackbarHostState.showSnackbar(it)
+            snackbarHostState.showSnackbar(localizedSettingsMessage(it, strings))
             viewModel.clearMessages()
         }
         uiState.successMessage?.let {
-            snackbarHostState.showSnackbar(it)
+            snackbarHostState.showSnackbar(localizedSettingsMessage(it, strings))
             viewModel.clearMessages()
             // Refresh global session on success for security/profile stuff
             if (it.contains("Password", ignoreCase = true) || 
@@ -199,16 +205,16 @@ fun SettingsScreen(
 
 
     val navItems = buildList {
-        add(SettingsNavItem(SettingsTab.Profile, "Profile", Icons.Default.Person))
-        add(SettingsNavItem(SettingsTab.Preferences, "Preferences", Icons.Default.Settings))
-        add(SettingsNavItem(SettingsTab.Appearance, "Appearance", Icons.Default.Visibility))
-        add(SettingsNavItem(SettingsTab.Servers, "Servers", Icons.Default.Dns))
-        add(SettingsNavItem(SettingsTab.Sync, "Sync", Icons.Default.Sync))
-        add(SettingsNavItem(SettingsTab.Storage, "Storage", Icons.Default.Storage))
-        add(SettingsNavItem(SettingsTab.Sessions, "Sessions", Icons.Default.Devices))
-        add(SettingsNavItem(SettingsTab.Security, "Security", Icons.Default.Lock))
+        add(SettingsNavItem(SettingsTab.Profile, strings.profile, Icons.Default.Person))
+        add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
+        add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
+        add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
+        add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
+        add(SettingsNavItem(SettingsTab.Storage, strings.storage, Icons.Default.Storage))
+        add(SettingsNavItem(SettingsTab.Sessions, strings.sessions, Icons.Default.Devices))
+        add(SettingsNavItem(SettingsTab.Security, strings.security, Icons.Default.Lock))
         if (!isDesktopPlatform) {
-            add(SettingsNavItem(SettingsTab.Notifications, "Notifications", Icons.Default.Notifications))
+            add(SettingsNavItem(SettingsTab.Notifications, strings.notifications, Icons.Default.Notifications))
         }
     }
 
@@ -321,9 +327,9 @@ fun SettingsScreen(
         // Confirmation Dialogs
         if (uiState.showDisconnectConfirm) {
             ConfirmDialog(
-                title = "Disconnect AniList",
-                message = "Are you sure you want to disconnect your AniList account? Your progress will no longer be synced.",
-                confirmLabel = "Disconnect",
+                title = strings.disconnectAniList,
+                message = strings.disconnectAniListMessage,
+                confirmLabel = strings.disconnect,
                 onConfirm = {
                     viewModel.setShowDisconnectConfirm(false)
                     viewModel.disconnectAniList()
@@ -334,9 +340,9 @@ fun SettingsScreen(
 
         if (uiState.showDeleteAllSessionsConfirm) {
             ConfirmDialog(
-                title = "End All Sessions",
-                message = "Are you sure you want to end all other active sessions? You will be logged out on all other devices.",
-                confirmLabel = "End All",
+                title = strings.endAllSessions,
+                message = strings.endAllSessionsMessage,
+                confirmLabel = strings.endAll,
                 onConfirm = {
                     viewModel.setShowDeleteAllSessionsConfirm(false)
                     viewModel.deleteAllSessions()
@@ -347,9 +353,9 @@ fun SettingsScreen(
 
         uiState.deleteSessionId?.let { sessionId ->
             ConfirmDialog(
-                title = "End Session",
-                message = "Are you sure you want to end this session?",
-                confirmLabel = "End Session",
+                title = strings.endSessionTitle,
+                message = strings.endSessionMessage,
+                confirmLabel = strings.endSession,
                 onConfirm = {
                     viewModel.setDeleteSessionId(null)
                     viewModel.deleteSession(sessionId)
@@ -360,9 +366,9 @@ fun SettingsScreen(
 
         if (uiState.showClearCacheConfirm) {
             ConfirmDialog(
-                title = "Clear Font Cache",
-                message = "This will delete all cached subtitle fonts. Proceed?",
-                confirmLabel = "Clear",
+                title = strings.clearFontCache,
+                message = strings.clearFontCacheMessage,
+                confirmLabel = strings.clear,
                 onConfirm = {
                     viewModel.setShowClearCacheConfirm(false)
                     viewModel.clearFontCache()
@@ -373,9 +379,9 @@ fun SettingsScreen(
 
         uiState.deleteAnimeId?.let { animeId ->
             ConfirmDialog(
-                title = "Delete Downloads",
-                message = "Delete all downloaded episodes for \"${uiState.deleteAnimeTitle ?: "this anime"}\"?",
-                confirmLabel = "Delete",
+                title = strings.deleteDownloads,
+                message = strings.deleteDownloadsMessage(uiState.deleteAnimeTitle ?: strings.thisAnime),
+                confirmLabel = strings.delete,
                 onConfirm = {
                     viewModel.setDeleteAnime(null, null)
                     viewModel.deleteAnimeDownloads(animeId)
@@ -384,6 +390,16 @@ fun SettingsScreen(
             )
         }
     }
+}
+
+private fun localizedSettingsMessage(message: String, strings: AppStrings): String = when (message) {
+    "Preferences saved successfully" -> strings.preferencesSavedSuccessfully
+    "Failed to save preferences" -> strings.failedToSavePreferences
+    "Failed to load preferences" -> strings.failedToLoadPreferences
+    "Failed to load user profile" -> strings.failedToLoadUserProfile
+    "Server priority saved" -> strings.serverPrioritySaved
+    "Reset to default priority" -> strings.resetToDefaultPriority
+    else -> message
 }
 
 // ── Sidebar ─────────────────────────────────────────────────────────────────────
@@ -397,6 +413,7 @@ private fun Sidebar(
     isLoggingOut: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -465,7 +482,7 @@ private fun Sidebar(
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-                "Logout",
+                strings.logout,
                 color = Color(0xFFE50914),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal
@@ -873,6 +890,7 @@ private fun MobileSettingsDetail(
                     onDownloadPathChange = viewModel::setDownloadPath,
                     onMobileDiscordRichPresenceEnabledChange = viewModel::setMobileDiscordRichPresenceEnabled,
                     onMobileDiscordRichPresenceTokenChange = viewModel::setMobileDiscordRichPresenceToken,
+                    onAppLocaleChange = viewModel::setAppLocale,
                     onSave = viewModel::savePreferences
                 )
                 is SettingsTab.Sessions -> MobileSessionsContent(
@@ -966,6 +984,7 @@ private fun SettingsContent(
                 onDownloadPathChange = viewModel::setDownloadPath,
                 onMobileDiscordRichPresenceEnabledChange = viewModel::setMobileDiscordRichPresenceEnabled,
                 onMobileDiscordRichPresenceTokenChange = viewModel::setMobileDiscordRichPresenceToken,
+                onAppLocaleChange = viewModel::setAppLocale,
                 onSave = viewModel::savePreferences
             )
             is SettingsTab.Sessions -> SessionsTab(
@@ -1034,9 +1053,10 @@ private fun AppearanceTab(
     onFloatingBottomNavChange: (Boolean) -> Unit,
     onLiquidGlassBottomNavChange: (Boolean) -> Unit,
 ) {
+    val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            "Appearance",
+            strings.appearance,
             color = TEXT,
             fontSize = 42.sp,
             fontWeight = FontWeight.Bold,
@@ -1044,27 +1064,27 @@ private fun AppearanceTab(
         )
 
         SettingCard(
-            title = "Mobile Navigation",
-            description = "Choose how the bottom navigation bar appears on phones",
+            title = strings.mobileNavigation,
+            description = strings.mobileNavigationDescription,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SettingToggle(
                     checked = uiState.floatingBottomNav,
                     onCheckedChange = onFloatingBottomNavChange,
-                    label = "Floating bottom navigation"
+                    label = strings.floatingBottomNavigation
                 )
                 SettingToggle(
                     checked = uiState.floatingBottomNav && uiState.liquidGlassBottomNav,
                     onCheckedChange = onLiquidGlassBottomNavChange,
-                    label = "Liquid glass floating style",
+                    label = strings.liquidGlassFloatingStyle,
                     enabled = uiState.floatingBottomNav
                 )
                 Text(
                     text = when {
-                        !uiState.floatingBottomNav -> "Current style: normal full-width bar"
-                        uiState.liquidGlassBottomNav -> "Current style: liquid glass floating pill"
-                        else -> "Current style: floating pill"
+                        !uiState.floatingBottomNav -> strings.currentStyleNormalBar
+                        uiState.liquidGlassBottomNav -> strings.currentStyleLiquidGlass
+                        else -> strings.currentStyleFloatingPill
                     },
                     color = MUTED,
                     fontSize = 12.sp,
@@ -1089,8 +1109,10 @@ private fun PreferencesTab(
     onDownloadPathChange: (String) -> Unit,
     onMobileDiscordRichPresenceEnabledChange: (Boolean) -> Unit,
     onMobileDiscordRichPresenceTokenChange: (String) -> Unit,
+    onAppLocaleChange: (AppLocale) -> Unit,
     onSave: () -> Unit,
 ) {
+    val strings = LocalAppStrings.current
     val directoryPickerLauncher = rememberDirectoryPickerLauncher {
         it?.let { dir -> 
             val path = dir.absolutePath()
@@ -1102,12 +1124,25 @@ private fun PreferencesTab(
     Column(modifier = Modifier.fillMaxWidth()) {
         // Large Title
         Text(
-            "Preferences",
+            strings.preferences,
             color = TEXT,
             fontSize = 42.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 32.dp)
         )
+
+        SettingCard(
+            title = strings.appLanguage,
+            description = strings.appLanguageDescription,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            AppLanguageSelector(
+                selectedLocale = uiState.appLocale,
+                onLocaleSelected = onAppLocaleChange
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         // Two Column Layout
         FlowRow(
@@ -1118,66 +1153,66 @@ private fun PreferencesTab(
         ) {
             // Auto Play
             SettingCard(
-                title = "Auto Play",
-                description = "Automatically start playing videos when page loads",
+                title = strings.autoPlay,
+                description = strings.autoPlayDescription,
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
                     checked = uiState.preferences.autoPlay,
                     onCheckedChange = onAutoPlayChange,
-                    label = "Enable Auto Play"
+                    label = strings.enableAutoPlay
                 )
             }
 
             // Auto Next
             SettingCard(
-                title = "Auto Next",
-                description = "Automatically play next episode when current ends",
+                title = strings.autoNext,
+                description = strings.autoNextDescription,
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
                     checked = uiState.preferences.autoNext,
                     onCheckedChange = onAutoNextChange,
-                    label = "Enable Auto Next"
+                    label = strings.enableAutoNext
                 )
             }
 
             // Skip Intro
             SettingCard(
-                title = "Skip Intro",
-                description = "Automatically skip anime intro sequences",
+                title = strings.skipIntro,
+                description = strings.skipIntroDescription,
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
                     checked = uiState.preferences.skipIntro,
                     onCheckedChange = onSkipIntroChange,
-                    label = "Skip intro automatically"
+                    label = strings.skipIntroAutomatically
                 )
             }
 
             // Skip Outro
             SettingCard(
-                title = "Skip Outro",
-                description = "Automatically skip anime outro/ending sequences",
+                title = strings.skipOutro,
+                description = strings.skipOutroDescription,
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
                     checked = uiState.preferences.skipOutro,
                     onCheckedChange = onSkipOutroChange,
-                    label = "Skip outro automatically"
+                    label = strings.skipOutroAutomatically
                 )
             }
 
             // Default Language
             SettingCard(
-                title = "Default Language",
-                description = "Use English dubbed audio when available",
+                title = strings.defaultAudioLanguage,
+                description = strings.defaultAudioLanguageDescription,
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
                     checked = uiState.preferences.defaultLang,
                     onCheckedChange = onDefaultLangChange,
-                    label = "Default to English Dub"
+                    label = strings.defaultToEnglishDub
                 )
             }
         }
@@ -1186,8 +1221,8 @@ private fun PreferencesTab(
 
         // Sync Section - Full Width
         SettingCard(
-            title = "Watch Progress Sync",
-            description = "The watch percentage required to mark an episode as watched",
+            title = strings.watchProgressSync,
+            description = strings.watchProgressSyncDescription,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column {
@@ -1217,8 +1252,8 @@ private fun PreferencesTab(
         Spacer(modifier = Modifier.height(32.dp))
 
         SettingCard(
-            title = "Subtitle Size",
-            description = "Adjust caption text size for this device",
+            title = strings.subtitleSize,
+            description = strings.subtitleSizeDescription,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column {
@@ -1243,21 +1278,21 @@ private fun PreferencesTab(
 
         if (!isDesktopPlatform) {
             SettingCard(
-                title = "Discord Rich Presence",
-                description = "Publish the current episode to Discord from Android using a Discord Gateway token",
+                title = strings.discordRichPresence,
+                description = strings.discordRichPresenceDescription,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SettingToggle(
                         checked = uiState.mobileDiscordRichPresenceEnabled,
                         onCheckedChange = onMobileDiscordRichPresenceEnabledChange,
-                        label = "Enable mobile Discord presence"
+                        label = strings.enableMobileDiscordPresence
                     )
                     OutlinedTextField(
                         value = uiState.mobileDiscordRichPresenceToken,
                         onValueChange = onMobileDiscordRichPresenceTokenChange,
                         enabled = uiState.mobileDiscordRichPresenceEnabled,
-                        label = { Text("Discord token") },
+                        label = { Text(strings.discordToken) },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -1275,7 +1310,7 @@ private fun PreferencesTab(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        "Use at your own risk. Android uses Discord Gateway because mobile Discord does not expose local Rich Presence IPC.",
+                        strings.discordTokenWarning,
                         color = MUTED,
                         fontSize = 12.sp,
                         lineHeight = 16.sp
@@ -1288,8 +1323,8 @@ private fun PreferencesTab(
 
         // Download Path Section - Full Width
         SettingCard(
-            title = "Download Path",
-            description = "Custom directory for your downloaded anime files",
+            title = strings.downloadPath,
+            description = strings.downloadPathDescription,
             modifier = Modifier.fillMaxWidth()
         ) {
         Row(
@@ -1307,7 +1342,7 @@ private fun PreferencesTab(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (isPathValid) to.kuudere.anisuge.platform.formatDisplayPath(uiState.downloadPath) else "Location Unavailable",
+                    text = if (isPathValid) to.kuudere.anisuge.platform.formatDisplayPath(uiState.downloadPath) else strings.locationUnavailable,
                     color = if (uiState.downloadPath.isBlank() || !isPathValid) MUTED else TEXT,
                     fontSize = 14.sp,
                     maxLines = 1,
@@ -1315,7 +1350,7 @@ private fun PreferencesTab(
                 )
                 if (!isPathValid) {
                     Text(
-                        "Choose a folder with write access.",
+                        strings.chooseWritableFolder,
                         color = Color.Red.copy(alpha = 0.8f),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
@@ -1327,7 +1362,7 @@ private fun PreferencesTab(
             Spacer(modifier = Modifier.width(16.dp))
             
             Text(
-                text = "Change",
+                text = strings.change,
                 color = Color.Black,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
@@ -1357,7 +1392,7 @@ private fun PreferencesTab(
             if (uiState.isSaving) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
             } else {
-                Text("Save Changes", fontWeight = FontWeight.Medium)
+                Text(strings.saveChanges, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -1414,6 +1449,82 @@ private fun SettingToggle(
         )
     }
 }
+
+@Composable
+private fun AppLanguageSelector(
+    selectedLocale: AppLocale,
+    onLocaleSelected: (AppLocale) -> Unit,
+) {
+    val strings = LocalAppStrings.current
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
+                border = ButtonDefaults.outlinedButtonBorder.copy(brush = SolidColor(BORDER)),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = "${selectedLocale.nativeName} (${selectedLocale.displayName})",
+                    color = TEXT,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Start
+                )
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MUTED,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.background(BG_CARD)
+            ) {
+                AppLocale.entries.forEach { locale ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(locale.nativeName, color = TEXT, fontSize = 14.sp)
+                                if (locale.nativeName != locale.displayName) {
+                                    Text(locale.displayName, color = MUTED, fontSize = 12.sp)
+                                }
+                            }
+                        },
+                        leadingIcon = if (locale == selectedLocale) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        } else null,
+                        onClick = {
+                            expanded = false
+                            onLocaleSelected(locale)
+                        }
+                    )
+                }
+            }
+        }
+        Text(
+            strings.systemDefaultEnglishFallback,
+            color = MUTED,
+            fontSize = 12.sp,
+            lineHeight = 16.sp
+        )
+    }
+}
+
 
 // ── Sessions Tab ─────────────────────────────────────────────────────────────────
 @Composable
@@ -2590,8 +2701,10 @@ private fun MobilePreferencesContent(
     onDownloadPathChange: (String) -> Unit,
     onMobileDiscordRichPresenceEnabledChange: (Boolean) -> Unit,
     onMobileDiscordRichPresenceTokenChange: (String) -> Unit,
+    onAppLocaleChange: (AppLocale) -> Unit,
     onSave: () -> Unit,
 ) {
+    val strings = LocalAppStrings.current
     val directoryPickerLauncher = rememberDirectoryPickerLauncher {
         it?.let { dir -> 
             val path = dir.absolutePath()
@@ -2601,33 +2714,52 @@ private fun MobilePreferencesContent(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            strings.appLanguage,
+            color = TEXT,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            strings.appLanguageDescription,
+            color = MUTED,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+        )
+        AppLanguageSelector(
+            selectedLocale = uiState.appLocale,
+            onLocaleSelected = onAppLocaleChange
+        )
+
+        HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
+
         MobileSettingRow(
-            title = "Auto Play",
-            description = "Automatically start playing videos",
+            title = strings.autoPlay,
+            description = strings.autoPlayDescription,
             checked = uiState.preferences.autoPlay,
             onCheckedChange = onAutoPlayChange
         )
         MobileSettingRow(
-            title = "Auto Next",
-            description = "Automatically play next episode",
+            title = strings.autoNext,
+            description = strings.autoNextDescription,
             checked = uiState.preferences.autoNext,
             onCheckedChange = onAutoNextChange
         )
         MobileSettingRow(
-            title = "Skip Intro",
-            description = "Automatically skip anime intros",
+            title = strings.skipIntro,
+            description = strings.skipIntroDescription,
             checked = uiState.preferences.skipIntro,
             onCheckedChange = onSkipIntroChange
         )
         MobileSettingRow(
-            title = "Skip Outro",
-            description = "Automatically skip anime outros",
+            title = strings.skipOutro,
+            description = strings.skipOutroDescription,
             checked = uiState.preferences.skipOutro,
             onCheckedChange = onSkipOutroChange
         )
         MobileSettingRow(
-            title = "Default to English Dub",
-            description = "Use English dubbed audio when available",
+            title = strings.defaultToEnglishDub,
+            description = strings.defaultAudioLanguageDescription,
             checked = uiState.preferences.defaultLang,
             onCheckedChange = onDefaultLangChange
         )
@@ -2635,13 +2767,13 @@ private fun MobilePreferencesContent(
         HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
 
         Text(
-            "Watch Progress Sync",
+            strings.watchProgressSync,
             color = TEXT,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium
         )
         Text(
-            "The watch percentage required to mark an episode as watched",
+            strings.watchProgressSyncDescription,
             color = MUTED,
             fontSize = 13.sp,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
@@ -2670,13 +2802,13 @@ private fun MobilePreferencesContent(
         HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
 
         Text(
-            "Subtitle Size",
+            strings.subtitleSize,
             color = TEXT,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium
         )
         Text(
-            "Adjust caption text size for this device",
+            strings.subtitleSizeDescription,
             color = MUTED,
             fontSize = 13.sp,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)

@@ -31,6 +31,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val LIQUID_GLASS_BOTTOM_NAV_KEY = booleanPreferencesKey("liquid_glass_bottom_nav")
         val MOBILE_DISCORD_RICH_PRESENCE_ENABLED_KEY = booleanPreferencesKey("mobile_discord_rich_presence_enabled")
         val MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY = stringPreferencesKey("mobile_discord_rich_presence_token")
+        val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
 
         private val json = Json { ignoreUnknownKeys = true }
     }
@@ -54,6 +55,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val liquidGlassBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[LIQUID_GLASS_BOTTOM_NAV_KEY] ?: false }
     val mobileDiscordRichPresenceEnabledFlow: Flow<Boolean> = dataStore.data.map { it[MOBILE_DISCORD_RICH_PRESENCE_ENABLED_KEY] ?: false }
     val mobileDiscordRichPresenceTokenFlow: Flow<String> = dataStore.data.map { it[MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY] ?: "" }
+    val appLocaleFlow: Flow<String> = dataStore.data.map { it[APP_LOCALE_KEY] ?: "en" }
 
     /**
      * Flow of user-defined server priority list.
@@ -168,6 +170,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             if (value.isBlank()) preferences.remove(MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY)
             else preferences[MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY] = value
         }
+    }
+
+    suspend fun setAppLocale(localeCode: String) {
+        dataStore.edit { it[APP_LOCALE_KEY] = localeCode }
     }
 
     // Blocking reads for FCM service (runs on worker thread, safe to block)

@@ -67,6 +67,7 @@ import kotlinx.coroutines.delay
 import to.kuudere.anisuge.data.models.ScheduleAnime
 import to.kuudere.anisuge.ui.OfflineState
 import to.kuudere.anisuge.ui.tvFocusableClick
+import to.kuudere.anisuge.i18n.LocalAppStrings
 
 // ── Colours ── Black & white only ─────────────────────────────────────────────
 
@@ -133,6 +134,7 @@ fun ScheduleScreen(
     onExit: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
+    val strings = LocalAppStrings.current
 
     Box(Modifier.fillMaxSize().background(BG)) {
         when {
@@ -149,11 +151,11 @@ fun ScheduleScreen(
             ) {
                 Icon(Icons.Outlined.CalendarToday, null, tint = MUTED, modifier = Modifier.size(48.dp))
                 Spacer(Modifier.height(12.dp))
-                Text("Failed to load schedule", color = MUTED, fontSize = 16.sp)
+                Text(strings.failedToLoadSchedule, color = MUTED, fontSize = 16.sp)
                 Spacer(Modifier.height(16.dp))
                 Button(onClick = { viewModel.refresh() },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                ) { Text("Retry", color = Color.Black) }
+                ) { Text(strings.retry, color = Color.Black) }
             }
 
             else -> {
@@ -218,7 +220,7 @@ fun ScheduleScreen(
                                                         .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
                                                         .padding(horizontal = 8.dp, vertical = 3.dp)
                                                 ) {
-                                                    Text("TODAY", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                    Text(strings.today, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                                 }
                                                 Spacer(Modifier.width(10.dp))
                                             }
@@ -320,6 +322,7 @@ fun ScheduleScreen(
 
 @Composable
 private fun ScrollToTopButton(onClick: () -> Unit) {
+    val strings = LocalAppStrings.current
     val inter = remember { MutableInteractionSource() }
     val hovered by inter.collectIsHoveredAsState()
 
@@ -344,7 +347,7 @@ private fun ScrollToTopButton(onClick: () -> Unit) {
     ) {
         Icon(
             Icons.Outlined.KeyboardArrowUp,
-            contentDescription = "Scroll to top",
+            contentDescription = strings.scrollToTop,
             tint = iconColor,
             modifier = Modifier.size(22.dp),
         )
@@ -405,6 +408,7 @@ private fun AnimeScheduleCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalAppStrings.current
     val inter = remember { MutableInteractionSource() }
     val hovered by inter.collectIsHoveredAsState()
 
@@ -450,7 +454,7 @@ private fun AnimeScheduleCard(
                     .background(Color.White)
                     .padding(horizontal = 5.dp, vertical = 2.dp)
             ) {
-                Text("Ep ${anime.episode}", color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(strings.episodeShort(anime.episode), color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
         }
 

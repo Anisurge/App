@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
 import to.kuudere.anisuge.screens.update.UpdateScreen
 import to.kuudere.anisuge.screens.update.UpdateViewModel
 import to.kuudere.anisuge.platform.LockScreenOrientation
@@ -57,6 +58,9 @@ import androidx.savedstate.SavedState
 import androidx.savedstate.read
 import androidx.compose.ui.platform.LocalUriHandler
 import kotlinx.coroutines.flow.combine
+import to.kuudere.anisuge.i18n.AppLocale
+import to.kuudere.anisuge.i18n.LocalAppStrings
+import to.kuudere.anisuge.i18n.appStringsFor
 import to.kuudere.anisuge.platform.DiscordRichPresenceManager
 
 /** Compat helper: reads a String from the new KMP SavedState arguments type. */
@@ -85,6 +89,8 @@ fun App(
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
         val updateState by updateVm.state.collectAsState()
+        val appLocaleCode by AppComponent.settingsStore.appLocaleFlow.collectAsState(initial = AppLocale.default.code)
+        val appStrings = appStringsFor(AppLocale.fromCode(appLocaleCode))
         val uriHandler = LocalUriHandler.current
         
         var showExitConfirm by remember { mutableStateOf(false) }
@@ -138,6 +144,7 @@ fun App(
         }
 
 
+        CompositionLocalProvider(LocalAppStrings provides appStrings) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             if (!isWatchScreen) {
                 LockScreenOrientation(landscape = isAndroidTvPlatform)
@@ -145,9 +152,9 @@ fun App(
             
             if (showExitConfirm) {
                 ConfirmDialog(
-                    title = "Exit App",
-                    message = "Are you sure you want to exit Anisurge?",
-                    confirmLabel = "Exit",
+                    title = appStrings.exitApp,
+                    message = appStrings.exitAppMessage,
+                    confirmLabel = appStrings.exit,
                     onConfirm = {
                         showExitConfirm = false
                         onAppExit()
@@ -170,7 +177,7 @@ fun App(
                     title = launch.title,
                     message = launch.body.ifBlank { "Open this notification from Anisurge." },
                     confirmLabel = if (openUrl != null) launch.actionLabel ?: mediaLabel else "OK",
-                    dismissLabel = "Close",
+                    dismissLabel = appStrings.close,
                     isDanger = false,
                     onConfirm = {
                         openUrl?.let { uriHandler.openUri(it) }
@@ -373,6 +380,7 @@ fun App(
                     )
                 }
             }
+        }
         }
     }
 }

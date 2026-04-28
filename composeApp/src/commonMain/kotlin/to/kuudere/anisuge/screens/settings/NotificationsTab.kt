@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import to.kuudere.anisuge.utils.RequestNotificationPermission
 import to.kuudere.anisuge.utils.hasNotificationPermission
+import to.kuudere.anisuge.i18n.LocalAppStrings
 
 @Composable
 fun NotificationsTab(
@@ -38,6 +39,7 @@ fun NotificationsTab(
     onEnabledChange: (Boolean) -> Unit,
     onSave: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var requestingPermission by remember { mutableStateOf(false) }
 
     if (requestingPermission) {
@@ -69,19 +71,19 @@ fun NotificationsTab(
             ) {
                 Icon(
                     imageVector = Icons.Default.NotificationsActive,
-                    contentDescription = "Notifications",
+                    contentDescription = strings.notifications,
                     tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Push Notifications",
+                        text = strings.pushNotifications,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = if (enabled) "You'll receive all notifications" else "Disabled",
+                        text = if (enabled) strings.notificationsEnabledSummary else strings.disabled,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -109,7 +111,7 @@ fun NotificationsTab(
                 onClick = onSave,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Save Changes")
+                Text(strings.saveChanges)
             }
         }
     }

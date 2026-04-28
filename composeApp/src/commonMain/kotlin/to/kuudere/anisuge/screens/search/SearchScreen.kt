@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextAlign
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.ui.OfflineState
+import to.kuudere.anisuge.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -55,6 +56,7 @@ fun SearchScreen(
     onExit: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
+    val strings = LocalAppStrings.current
     val scrollState = rememberLazyGridState()
 
     // Infinite scroll listener
@@ -103,7 +105,7 @@ fun SearchScreen(
 
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        text = "Results: ${state.results.size}",
+                        text = strings.resultsCount(state.results.size),
                         color = Color.White,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -135,13 +137,13 @@ fun SearchScreen(
                                     modifier = Modifier.size(56.dp),
                                 )
                                 Text(
-                                    text = "No results found",
+                                    text = strings.noResultsFound,
                                     color = Color.White,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = "Try adjusting your filters or search for something else.",
+                                    text = strings.tryAdjustingFilters,
                                     color = Color.White.copy(alpha = 0.45f),
                                     fontSize = 13.sp,
                                     textAlign = TextAlign.Center,
@@ -202,8 +204,9 @@ private val KUUDERE_ORIGINS  = listOf("Japan", "South Korea", "China", "Taiwan")
 // ─── Large screen layout ─────────────────────────────────────────────────────
 @Composable
 private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchViewModel) {
+    val strings = LocalAppStrings.current
     Column(Modifier.fillMaxWidth()) {
-        Text("Search", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text(strings.search, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(20.dp))
 
         // Row 1: Search | Genres | Sort by | Reset
@@ -220,8 +223,8 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
             )
 
             KAdvancedFilterDropdown(
-                label = "Genres",
-                hint = "Any genre",
+                label = strings.genres,
+                hint = strings.anyGenre,
                 selected = state.selectedGenres.joinToString(", ").ifBlank { null },
                 items = KUUDERE_GENRES,
                 icon = Icons.Default.Style,
@@ -232,8 +235,8 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
             }
 
             KAdvancedFilterDropdown(
-                label = "Sort by",
-                hint = "Popularity",
+                label = strings.sortBy,
+                hint = strings.popularity,
                 selected = state.selectedSort,
                 items = KUUDERE_SORTS,
                 icon = Icons.Default.Sort,
@@ -251,7 +254,7 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
                     .clickable { viewModel.clearFilters() },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Delete, contentDescription = "Clear", tint = Color.Gray)
+                Icon(Icons.Default.Delete, contentDescription = strings.clearLabel, tint = Color.Gray)
             }
         }
 
@@ -260,27 +263,27 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
         // Row 2: Year | Status | Format | Season | Origin
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             KAdvancedFilterDropdown(
-                "Year", "Any year", state.selectedYear, KUUDERE_YEARS, 
+                strings.year, strings.anyYear, state.selectedYear, KUUDERE_YEARS, 
                 Icons.Default.Event, Modifier.weight(1f)
             ) { viewModel.onYearChange(it) }
             
             KAdvancedFilterDropdown(
-                "Status", "Any status", state.selectedStatus, KUUDERE_STATUSES, 
+                strings.status, strings.anyStatus, state.selectedStatus, KUUDERE_STATUSES, 
                 Icons.Default.SignalCellularAlt, Modifier.weight(1f)
             ) { viewModel.onStatusChange(it) }
             
             KAdvancedFilterDropdown(
-                "Format", "Any format", state.selectedType, KUUDERE_FORMATS, 
+                strings.format, strings.anyFormat, state.selectedType, KUUDERE_FORMATS, 
                 Icons.Default.Tv, Modifier.weight(1f)
             ) { viewModel.onTypeChange(it) }
             
             KAdvancedFilterDropdown(
-                "Season", "Any season", state.selectedSeason, KUUDERE_SEASONS, 
+                strings.season, strings.anySeason, state.selectedSeason, KUUDERE_SEASONS, 
                 Icons.Default.WbSunny, Modifier.weight(1f)
             ) { viewModel.onSeasonChange(it) }
             
             KAdvancedFilterDropdown(
-                "Origin", "Any origin", state.selectedLanguage, KUUDERE_ORIGINS, 
+                strings.origin, strings.anyOrigin, state.selectedLanguage, KUUDERE_ORIGINS, 
                 Icons.Default.Public, Modifier.weight(1f)
             ) { viewModel.onLanguageChange(it) }
         }
@@ -290,6 +293,7 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
 // ─── Small screen layout ─────────────────────────────────────────────────────
 @Composable
 private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchViewModel) {
+    val strings = LocalAppStrings.current
     var isExpanded by remember { mutableStateOf(false) }
 
     to.kuudere.anisuge.platform.PlatformBackHandler(enabled = isExpanded || state.keyword.isNotEmpty()) {
@@ -302,7 +306,7 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
     }
 
     Column(Modifier.fillMaxWidth()) {
-        Text("Search", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(strings.search, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             KSearchInput(state.keyword, viewModel::onKeywordChange, onSearch = { viewModel.search() }, modifier = Modifier.weight(1f))
@@ -317,7 +321,7 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
             ) {
                 Icon(
                     Icons.Default.Tune,
-                    contentDescription = "Filters",
+                    contentDescription = strings.filters,
                     tint = if (isExpanded) Color.White else Color.Gray,
                     modifier = Modifier.size(20.dp)
                 )
@@ -327,21 +331,21 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
         AnimatedVisibility(visible = isExpanded) {
             Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KAdvancedFilterDropdown("Genres", "Any genre", state.selectedGenres.joinToString(", ").ifBlank { null }, KUUDERE_GENRES, Icons.Default.Style, Modifier.weight(1f), multiSelect = true) {
+                    KAdvancedFilterDropdown(strings.genres, strings.anyGenre, state.selectedGenres.joinToString(", ").ifBlank { null }, KUUDERE_GENRES, Icons.Default.Style, Modifier.weight(1f), multiSelect = true) {
                         if (it != null) viewModel.onGenreToggle(it) else viewModel.clearGenres()
                     }
-                    KAdvancedFilterDropdown("Sort by", "Popularity", state.selectedSort, KUUDERE_SORTS, Icons.Default.Sort, Modifier.weight(1f)) { viewModel.onSortChange(it) }
+                    KAdvancedFilterDropdown(strings.sortBy, strings.popularity, state.selectedSort, KUUDERE_SORTS, Icons.Default.Sort, Modifier.weight(1f)) { viewModel.onSortChange(it) }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KAdvancedFilterDropdown("Season", "Any season", state.selectedSeason, KUUDERE_SEASONS, Icons.Default.WbSunny, Modifier.weight(1f)) { viewModel.onSeasonChange(it) }
-                    KAdvancedFilterDropdown("Year", "Any year", state.selectedYear, KUUDERE_YEARS, Icons.Default.Event, Modifier.weight(1f)) { viewModel.onYearChange(it) }
+                    KAdvancedFilterDropdown(strings.season, strings.anySeason, state.selectedSeason, KUUDERE_SEASONS, Icons.Default.WbSunny, Modifier.weight(1f)) { viewModel.onSeasonChange(it) }
+                    KAdvancedFilterDropdown(strings.year, strings.anyYear, state.selectedYear, KUUDERE_YEARS, Icons.Default.Event, Modifier.weight(1f)) { viewModel.onYearChange(it) }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KAdvancedFilterDropdown("Status", "Any status", state.selectedStatus, KUUDERE_STATUSES, Icons.Default.SignalCellularAlt, Modifier.weight(1f)) { viewModel.onStatusChange(it) }
-                    KAdvancedFilterDropdown("Format", "Any format", state.selectedType, KUUDERE_FORMATS, Icons.Default.Tv, Modifier.weight(1f)) { viewModel.onTypeChange(it) }
+                    KAdvancedFilterDropdown(strings.status, strings.anyStatus, state.selectedStatus, KUUDERE_STATUSES, Icons.Default.SignalCellularAlt, Modifier.weight(1f)) { viewModel.onStatusChange(it) }
+                    KAdvancedFilterDropdown(strings.format, strings.anyFormat, state.selectedType, KUUDERE_FORMATS, Icons.Default.Tv, Modifier.weight(1f)) { viewModel.onTypeChange(it) }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KAdvancedFilterDropdown("Origin", "Any origin", state.selectedLanguage, KUUDERE_ORIGINS, Icons.Default.Public, Modifier.weight(1f)) { viewModel.onLanguageChange(it) }
+                    KAdvancedFilterDropdown(strings.origin, strings.anyOrigin, state.selectedLanguage, KUUDERE_ORIGINS, Icons.Default.Public, Modifier.weight(1f)) { viewModel.onLanguageChange(it) }
                     
                     Button(
                         onClick = { viewModel.clearFilters() },
@@ -360,7 +364,7 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("Reset Filters", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(strings.resetFilters, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -378,6 +382,7 @@ private fun KSearchInput(
     onSearch: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     Box(
         modifier
             .height(44.dp)
@@ -392,7 +397,7 @@ private fun KSearchInput(
             Icon(Icons.Default.Search, null, tint = Color(0xFF71717A), modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) Text("Search", color = Color(0xFF71717A), fontSize = 14.sp)
+                if (value.isEmpty()) Text(strings.searchPlaceholder, color = Color(0xFF71717A), fontSize = 14.sp)
                 androidx.compose.foundation.text.BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
@@ -420,6 +425,7 @@ private fun KAdvancedFilterDropdown(
     multiSelect: Boolean = false,
     onItemSelected: (String?) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var expanded by remember { mutableStateOf(false) }
     var triggerWidthPx by remember { mutableStateOf(0) }
     val density = LocalDensity.current
@@ -460,7 +466,7 @@ private fun KAdvancedFilterDropdown(
                         modifier = Modifier.size(24.dp)
                     ) {
                         Icon(
-                            Icons.Default.Close, "Clear",
+                            Icons.Default.Close, strings.clearLabel,
                             tint = Color(0xFF71717A),
                             modifier = Modifier.size(14.dp)
                         )
