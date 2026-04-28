@@ -871,6 +871,8 @@ private fun MobileSettingsDetail(
                     onSyncPercentageChange = viewModel::setSyncPercentage,
                     onSubtitleSizeChange = viewModel::setSubtitleSize,
                     onDownloadPathChange = viewModel::setDownloadPath,
+                    onMobileDiscordRichPresenceEnabledChange = viewModel::setMobileDiscordRichPresenceEnabled,
+                    onMobileDiscordRichPresenceTokenChange = viewModel::setMobileDiscordRichPresenceToken,
                     onSave = viewModel::savePreferences
                 )
                 is SettingsTab.Sessions -> MobileSessionsContent(
@@ -962,6 +964,8 @@ private fun SettingsContent(
                 onSyncPercentageChange = viewModel::setSyncPercentage,
                 onSubtitleSizeChange = viewModel::setSubtitleSize,
                 onDownloadPathChange = viewModel::setDownloadPath,
+                onMobileDiscordRichPresenceEnabledChange = viewModel::setMobileDiscordRichPresenceEnabled,
+                onMobileDiscordRichPresenceTokenChange = viewModel::setMobileDiscordRichPresenceToken,
                 onSave = viewModel::savePreferences
             )
             is SettingsTab.Sessions -> SessionsTab(
@@ -1083,6 +1087,8 @@ private fun PreferencesTab(
     onSyncPercentageChange: (Int) -> Unit,
     onSubtitleSizeChange: (Int) -> Unit,
     onDownloadPathChange: (String) -> Unit,
+    onMobileDiscordRichPresenceEnabledChange: (Boolean) -> Unit,
+    onMobileDiscordRichPresenceTokenChange: (String) -> Unit,
     onSave: () -> Unit,
 ) {
     val directoryPickerLauncher = rememberDirectoryPickerLauncher {
@@ -1234,6 +1240,51 @@ private fun PreferencesTab(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
+
+        if (!isDesktopPlatform) {
+            SettingCard(
+                title = "Discord Rich Presence",
+                description = "Publish the current episode to Discord from Android using a Discord Gateway token",
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SettingToggle(
+                        checked = uiState.mobileDiscordRichPresenceEnabled,
+                        onCheckedChange = onMobileDiscordRichPresenceEnabledChange,
+                        label = "Enable mobile Discord presence"
+                    )
+                    OutlinedTextField(
+                        value = uiState.mobileDiscordRichPresenceToken,
+                        onValueChange = onMobileDiscordRichPresenceTokenChange,
+                        enabled = uiState.mobileDiscordRichPresenceEnabled,
+                        label = { Text("Discord token") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TEXT,
+                            unfocusedTextColor = TEXT,
+                            disabledTextColor = MUTED,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = BORDER,
+                            disabledBorderColor = BORDER.copy(alpha = 0.45f),
+                            cursorColor = Color.White,
+                            focusedLabelColor = Color.White,
+                            unfocusedLabelColor = MUTED,
+                            disabledLabelColor = MUTED.copy(alpha = 0.55f),
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Use at your own risk. Android uses Discord Gateway because mobile Discord does not expose local Rich Presence IPC.",
+                        color = MUTED,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
 
         // Download Path Section - Full Width
         SettingCard(
@@ -2537,6 +2588,8 @@ private fun MobilePreferencesContent(
     onSyncPercentageChange: (Int) -> Unit,
     onSubtitleSizeChange: (Int) -> Unit,
     onDownloadPathChange: (String) -> Unit,
+    onMobileDiscordRichPresenceEnabledChange: (Boolean) -> Unit,
+    onMobileDiscordRichPresenceTokenChange: (String) -> Unit,
     onSave: () -> Unit,
 ) {
     val directoryPickerLauncher = rememberDirectoryPickerLauncher {
@@ -2648,6 +2701,43 @@ private fun MobilePreferencesContent(
             Spacer(modifier = Modifier.width(16.dp))
             Text("${uiState.subtitleSize}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
+
+        HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
+
+        MobileSettingRow(
+            title = "Discord Rich Presence",
+            description = "Publish the current episode through Discord Gateway",
+            checked = uiState.mobileDiscordRichPresenceEnabled,
+            onCheckedChange = onMobileDiscordRichPresenceEnabledChange
+        )
+        OutlinedTextField(
+            value = uiState.mobileDiscordRichPresenceToken,
+            onValueChange = onMobileDiscordRichPresenceTokenChange,
+            enabled = uiState.mobileDiscordRichPresenceEnabled,
+            label = { Text("Discord token") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = TEXT,
+                unfocusedTextColor = TEXT,
+                disabledTextColor = MUTED,
+                focusedBorderColor = Color.White,
+                unfocusedBorderColor = BORDER,
+                disabledBorderColor = BORDER.copy(alpha = 0.45f),
+                cursorColor = Color.White,
+                focusedLabelColor = Color.White,
+                unfocusedLabelColor = MUTED,
+                disabledLabelColor = MUTED.copy(alpha = 0.55f),
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            "Use at your own risk. Android uses Discord Gateway because mobile Discord does not expose local Rich Presence IPC.",
+            color = MUTED,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            modifier = Modifier.padding(top = 8.dp)
+        )
 
         HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
 
