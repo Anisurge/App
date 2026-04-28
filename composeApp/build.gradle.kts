@@ -29,6 +29,9 @@ val appBuildNum = project.findProperty("appBuildNumber")?.toString()?.toIntOrNul
 val crashReporterUrl = envOrProperty("CRASH_REPORTER_URL")
 val crashReporterAppName = envOrProperty("CRASH_REPORTER_APP_NAME", "AniSurge")
 val crashReporterApiKey = envOrProperty("CRASH_REPORTER_API_KEY")
+val discordClientId = envOrProperty("DISCORD_CLIENT_ID")
+val discordLargeImageKey = envOrProperty("DISCORD_LARGE_IMAGE_KEY", "logo")
+val discordSmallImageKey = envOrProperty("DISCORD_SMALL_IMAGE_KEY", "play")
 
 // Sanitize version for installers (e.g., "0.9.9-20260316" -> "0.9.9")
 val numericVersion = appVersionName.split("-")[0].split("+")[0]
@@ -168,6 +171,9 @@ buildConfig {
     buildConfigField("CRASH_REPORTER_URL", crashReporterUrl)
     buildConfigField("CRASH_REPORTER_APP_NAME", crashReporterAppName)
     buildConfigField("CRASH_REPORTER_API_KEY", crashReporterApiKey)
+    buildConfigField("DISCORD_CLIENT_ID", discordClientId)
+    buildConfigField("DISCORD_LARGE_IMAGE_KEY", discordLargeImageKey)
+    buildConfigField("DISCORD_SMALL_IMAGE_KEY", discordSmallImageKey)
 }
 
 android {

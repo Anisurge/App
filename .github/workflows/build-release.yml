@@ -77,6 +77,9 @@ jobs:
           CRASH_REPORTER_URL: ${{ secrets.CRASH_REPORTER_URL }}
           CRASH_REPORTER_APP_NAME: ${{ secrets.CRASH_REPORTER_APP_NAME }}
           CRASH_REPORTER_API_KEY: ${{ secrets.CRASH_REPORTER_API_KEY }}
+          DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
+          DISCORD_LARGE_IMAGE_KEY: ${{ vars.DISCORD_LARGE_IMAGE_KEY }}
+          DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
           chmod +x gradlew
           ./gradlew :composeApp:assemblePhoneRelease --no-daemon \
@@ -129,6 +132,10 @@ jobs:
           echo "Linux will use system libmpv library"
 
       - name: Build Linux Distributions
+        env:
+          DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
+          DISCORD_LARGE_IMAGE_KEY: ${{ vars.DISCORD_LARGE_IMAGE_KEY }}
+          DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
           chmod +x gradlew
           ./gradlew :composeApp:packageDeb :composeApp:packageRpm :composeApp:packageAppImage :composeApp:createPortableZip --no-daemon -PappVersion="${{ steps.version.outputs.version_name }}" -PappBuildNumber="${{ steps.version.outputs.build_num }}"
@@ -196,6 +203,10 @@ jobs:
 
       - name: Build Windows Distributions
         shell: pwsh
+        env:
+          DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
+          DISCORD_LARGE_IMAGE_KEY: ${{ vars.DISCORD_LARGE_IMAGE_KEY }}
+          DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
           ./gradlew :composeApp:packageMsi :composeApp:packageExe :composeApp:createPortableZip --no-daemon "-PappVersion=${{ steps.version.outputs.version_name }}" "-PappBuildNumber=${{ steps.version.outputs.build_num }}" "-Pcompose.desktop.signing.sign=true" "-Pcompose.desktop.signing.certificateFile=../signing/windows.pfx" "-Pcompose.desktop.signing.keyPassword=${{ secrets.KEYSTORE_PASSWORD }}"
 

@@ -11,6 +11,7 @@ import to.kuudere.anisuge.platform.LocalWindowState
 import anisurge.composeapp.generated.resources.Res
 import anisurge.composeapp.generated.resources.logo
 import org.jetbrains.compose.resources.painterResource
+import to.kuudere.anisuge.platform.DiscordRichPresenceManager
 
 
 fun main() = application {
@@ -20,9 +21,14 @@ fun main() = application {
         appName = BuildConfig.CRASH_REPORTER_APP_NAME,
         apiKey = BuildConfig.CRASH_REPORTER_API_KEY.ifBlank { null }
     )
+    fun exitWithCleanup() {
+        DiscordRichPresenceManager.shutdown()
+        exitApplication()
+    }
+
     val windowState = rememberWindowState(size = DpSize(1280.dp, 800.dp))
     Window(
-        onCloseRequest = ::exitApplication,
+        onCloseRequest = ::exitWithCleanup,
         title = "Anisurge",
         state = windowState,
         undecorated = true,
@@ -32,7 +38,7 @@ fun main() = application {
             LocalWindowScope provides this,
             LocalWindowState provides windowState
         ) {
-            App(onAppExit = ::exitApplication)
+            App(onAppExit = ::exitWithCleanup)
         }
     }
 }
