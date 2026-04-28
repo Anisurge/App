@@ -290,6 +290,11 @@ class WatchViewModel(
         }
     }
 
+
+    private fun isSuzuServer(serverName: String): Boolean {
+        return serverName.equals("suzu", ignoreCase = true)
+    }
+
     private suspend fun loadVideoStream(serverName: String, explicitAnilistId: Int? = null) {
         // Guard: if we're in offline mode, don't load online stream
         if (_uiState.value.offlinePath != null) {
@@ -311,15 +316,28 @@ class WatchViewModel(
 
             val streamData = response?.directLink?.data ?: response?.data
             if (streamData != null) {
+                val isSuzuServer = isSuzuServer(serverName)
                 val qualities = mutableListOf<Pair<String, String>>()
-                if (!streamData.sources.isNullOrEmpty()) {
-                    streamData.sources.forEach {
+                val streamSources = if (isSuzuServer) {
+                    infoService.getSenshiSources(streamData.file_id ?: streamData.file_code.orEmpty())
+                        .ifEmpty { streamData.sources ?: emptyList() }
+                } else {
+                    streamData.sources ?: emptyList()
+                }
+
+                if (streamSources.isNotEmpty()) {
+                    streamSources.forEach {
                         if (it.quality != null && it.url != null) {
                             qualities.add(it.quality to it.url)
                         }
                     }
                 } else if (streamData.m3u8_url != null) {
                     qualities.add("Auto" to streamData.m3u8_url)
+                }
+                val orderedQualities = if (isSuzuServer) {
+                    qualities.sortedBy { if (it.first.equals("HardSub", ignoreCase = true)) 0 else 1 }
+                } else {
+                    qualities
                 }
 
                 val subtitles = streamData.subtitles ?: emptyList()
@@ -413,7 +431,13 @@ class WatchViewModel(
                 // Pre-warm DNS/TCP for the stream URL in parallel with handing it to the player.
                 // OkHttp shares the netd DNS cache with MPV's libcurl on Android, so this
                 // pre-resolve means MPV skips DNS lookup (~50-200ms saved on first connection).
-                qualities.firstOrNull()?.second?.let { streamUrl ->
+                val defaultQuality = if (isSuzuServer) {
+                    orderedQualities.firstOrNull { it.first.equals("HardSub", ignoreCase = true) }?.first
+                } else {
+                    null
+                } ?: orderedQualities.firstOrNull()?.first ?: "Auto"
+
+                orderedQualities.firstOrNull { it.first == defaultQuality }?.second?.let { streamUrl ->
                     viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
                 }
 
@@ -422,8 +446,8 @@ class WatchViewModel(
                         isLoadingVideo = false,
                         loadingMessage = null,
                         streamingData = finalStreamData,
-                        availableQualities = qualities,
-                        currentQuality = qualities.firstOrNull()?.first ?: "Auto",
+                        availableQualities = orderedQualities,
+                        currentQuality = defaultQuality,
                         availableSubtitles = subtitles,
                         currentSubtitleUrl = selectedSubUrl,
                         offlinePath = null

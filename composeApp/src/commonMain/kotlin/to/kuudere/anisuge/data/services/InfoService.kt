@@ -15,6 +15,8 @@ import kotlinx.serialization.json.buildJsonObject
 import to.kuudere.anisuge.data.models.AnimeDetailsResponse
 import to.kuudere.anisuge.data.models.EpisodeDataResponse
 import to.kuudere.anisuge.data.models.SessionInfo
+import to.kuudere.anisuge.data.models.SenshiSourceData
+import to.kuudere.anisuge.data.models.SourceData
 import to.kuudere.anisuge.data.models.ThumbnailsResponse
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -100,6 +102,22 @@ class InfoService(
         } catch (e: Exception) {
             println("[InfoService] getVideoStream error: ${e.message}")
             null
+        }
+    }
+
+    suspend fun getSenshiSources(embedUrl: String): List<SourceData> {
+        return try {
+            if (!embedUrl.startsWith("https://senshi.live/episode-embeds/")) return emptyList()
+            val response = httpClient.get(embedUrl) {
+                header("Referer", "https://senshi.live")
+            }
+            response.body<List<SenshiSourceData>>().mapNotNull { source ->
+                val url = source.url ?: return@mapNotNull null
+                SourceData(quality = source.status ?: "Auto", url = url)
+            }
+        } catch (e: Exception) {
+            println("[InfoService] getSenshiSources error: ${e.message}")
+            emptyList()
         }
     }
 
