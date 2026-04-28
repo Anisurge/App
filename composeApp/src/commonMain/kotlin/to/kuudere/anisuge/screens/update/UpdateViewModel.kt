@@ -5,13 +5,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import to.kuudere.anisuge.platform.AppVersion
-import to.kuudere.anisuge.platform.AppBuildNumber
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.services.UpdateService
 
 data class UpdateState(
-    val currentVersion: String = "$AppVersion ($AppBuildNumber)",
+    val currentVersion: String = AppVersion,
     val newVersion: String = "",
     val changelog: List<String> = emptyList(),
     val isUpdateAvailable: Boolean? = null, // null = checking, true = yes, false = no
@@ -36,9 +35,8 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
             return@launch
         }
 
-        val remoteBuild = response.buildNumber ?: response.build ?: 0
         val remoteVersion = response.latestVersion ?: response.version ?: ""
-        val isAvailable = response.updateAvailable ?: (remoteBuild > AppBuildNumber || compareVersions(remoteVersion, AppVersion) > 0)
+        val isAvailable = compareVersions(remoteVersion, AppVersion) > 0
         val releaseNotes = response.changelog
             ?: response.message
             ?: response.releaseNotes
@@ -48,7 +46,7 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
             ?: emptyList()
 
         _state.value = _state.value.copy(
-            newVersion = "$remoteVersion ($remoteBuild)",
+            newVersion = remoteVersion,
             changelog = releaseNotes,
             isUpdateAvailable = isAvailable,
             downloadUrl = response.downloadUrl,
