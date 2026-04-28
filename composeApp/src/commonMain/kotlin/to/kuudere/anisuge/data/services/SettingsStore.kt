@@ -29,6 +29,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val NOTIFICATIONS_MAINTENANCE_KEY = booleanPreferencesKey("notifications_maintenance")
         val FLOATING_BOTTOM_NAV_KEY = booleanPreferencesKey("floating_bottom_nav")
         val LIQUID_GLASS_BOTTOM_NAV_KEY = booleanPreferencesKey("liquid_glass_bottom_nav")
+        val MOBILE_DISCORD_RICH_PRESENCE_ENABLED_KEY = booleanPreferencesKey("mobile_discord_rich_presence_enabled")
+        val MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY = stringPreferencesKey("mobile_discord_rich_presence_token")
 
         private val json = Json { ignoreUnknownKeys = true }
     }
@@ -50,6 +52,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val notificationsMaintenanceFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_MAINTENANCE_KEY] ?: true }
     val floatingBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[FLOATING_BOTTOM_NAV_KEY] ?: true }
     val liquidGlassBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[LIQUID_GLASS_BOTTOM_NAV_KEY] ?: false }
+    val mobileDiscordRichPresenceEnabledFlow: Flow<Boolean> = dataStore.data.map { it[MOBILE_DISCORD_RICH_PRESENCE_ENABLED_KEY] ?: false }
+    val mobileDiscordRichPresenceTokenFlow: Flow<String> = dataStore.data.map { it[MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY] ?: "" }
 
     /**
      * Flow of user-defined server priority list.
@@ -152,6 +156,18 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setLiquidGlassBottomNav(enabled: Boolean) {
         dataStore.edit { it[LIQUID_GLASS_BOTTOM_NAV_KEY] = enabled }
+    }
+
+    suspend fun setMobileDiscordRichPresenceEnabled(enabled: Boolean) {
+        dataStore.edit { it[MOBILE_DISCORD_RICH_PRESENCE_ENABLED_KEY] = enabled }
+    }
+
+    suspend fun setMobileDiscordRichPresenceToken(token: String) {
+        dataStore.edit { preferences ->
+            val value = token.trim()
+            if (value.isBlank()) preferences.remove(MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY)
+            else preferences[MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY] = value
+        }
     }
 
     // Blocking reads for FCM service (runs on worker thread, safe to block)

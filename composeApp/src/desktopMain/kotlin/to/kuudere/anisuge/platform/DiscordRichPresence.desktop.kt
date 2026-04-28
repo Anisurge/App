@@ -32,6 +32,8 @@ actual object DiscordRichPresenceManager {
     private var lastPayload: String? = null
     private val connecting = AtomicBoolean(false)
 
+    actual fun configureMobile(enabled: Boolean, token: String) = Unit
+
     actual fun update(activity: DiscordPresenceActivity) {
         if (!enabled) return
         scope.launch {

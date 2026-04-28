@@ -98,6 +98,8 @@ data class SettingsUiState(
     val subtitleSize: Int = 100,
     val floatingBottomNav: Boolean = true,
     val liquidGlassBottomNav: Boolean = false,
+    val mobileDiscordRichPresenceEnabled: Boolean = false,
+    val mobileDiscordRichPresenceToken: String = "",
 
     // Notifications
     val notificationsEnabled: Boolean = true,
@@ -230,6 +232,16 @@ class SettingsViewModel(
                 _uiState.update { it.copy(liquidGlassBottomNav = v) }
             }
         }
+        viewModelScope.launch {
+            settingsStore.mobileDiscordRichPresenceEnabledFlow.collect { v ->
+                _uiState.update { it.copy(mobileDiscordRichPresenceEnabled = v) }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.mobileDiscordRichPresenceTokenFlow.collect { v ->
+                _uiState.update { it.copy(mobileDiscordRichPresenceToken = v) }
+            }
+        }
     }
 
     fun refresh() {
@@ -292,6 +304,18 @@ class SettingsViewModel(
     fun setLiquidGlassBottomNav(enabled: Boolean) {
         viewModelScope.launch {
             settingsStore.setLiquidGlassBottomNav(enabled)
+        }
+    }
+
+    fun setMobileDiscordRichPresenceEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsStore.setMobileDiscordRichPresenceEnabled(enabled)
+        }
+    }
+
+    fun setMobileDiscordRichPresenceToken(token: String) {
+        viewModelScope.launch {
+            settingsStore.setMobileDiscordRichPresenceToken(token)
         }
     }
 

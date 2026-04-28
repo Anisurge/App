@@ -56,6 +56,8 @@ import to.kuudere.anisuge.ui.ConfirmDialog
 import androidx.savedstate.SavedState
 import androidx.savedstate.read
 import androidx.compose.ui.platform.LocalUriHandler
+import kotlinx.coroutines.flow.combine
+import to.kuudere.anisuge.platform.DiscordRichPresenceManager
 
 /** Compat helper: reads a String from the new KMP SavedState arguments type. */
 private fun SavedState?.str(key: String): String? =
@@ -102,6 +104,16 @@ fun App(
             if (notificationLaunch != null) {
                 pendingNotificationLaunch = notificationLaunch
             }
+        }
+
+        LaunchedEffect(Unit) {
+            combine(
+                AppComponent.settingsStore.mobileDiscordRichPresenceEnabledFlow,
+                AppComponent.settingsStore.mobileDiscordRichPresenceTokenFlow,
+            ) { enabled, token -> enabled to token }
+                .collect { (enabled, token) ->
+                    DiscordRichPresenceManager.configureMobile(enabled, token)
+                }
         }
 
         LaunchedEffect(currentRoute, pendingNotificationLaunch?.id) {

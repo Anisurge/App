@@ -10,6 +10,7 @@ data class DiscordPresenceActivity(
 )
 
 expect object DiscordRichPresenceManager {
+    fun configureMobile(enabled: Boolean, token: String)
     fun update(activity: DiscordPresenceActivity)
     fun clear()
     fun shutdown()
