@@ -112,7 +112,9 @@ private fun LiquidTabsSurface(
     content: @Composable RowScope.() -> Unit
 ) {
     val accentColor = Color.White
-    val containerColor = Color(0xFFFAFAFA).copy(alpha = 0.18f)
+    val containerColor = Color(0xFFDDE6F3).copy(alpha = 0.26f)
+    val edgeLightColor = Color(0xFFF8FBFF).copy(alpha = 0.22f)
+    val highlightColor = Color(0xFFEAF2FF).copy(alpha = 0.22f)
     val tabsBackdrop = rememberLayerBackdrop()
 
     BoxWithConstraints(
@@ -143,14 +145,14 @@ private fun LiquidTabsSurface(
                     shape = { Capsule() },
                     effects = {
                         vibrancy()
-                        blur(10.dp.toPx())
-                        lens(26.dp.toPx(), 26.dp.toPx())
+                        blur(18.dp.toPx())
+                        lens(34.dp.toPx(), 30.dp.toPx())
                     },
-                    shadow = { Shadow(alpha = 0.18f, radius = 22.dp) },
-                    innerShadow = { InnerShadow(radius = 14.dp, alpha = 0.18f) },
+                    shadow = { Shadow(alpha = 0.20f, radius = 26.dp) },
+                    innerShadow = { InnerShadow(radius = 16.dp, alpha = 0.22f) },
                     onDrawSurface = {
                         drawRect(containerColor)
-                        drawRect(Color.White.copy(alpha = 0.07f))
+                        drawRect(edgeLightColor)
                     }
                 )
                 .height(64.dp)
@@ -184,14 +186,16 @@ private fun LiquidTabsSurface(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
                     shape = { Capsule() },
                     effects = {
-                        lens(14.dp.toPx(), 16.dp.toPx(), chromaticAberration = true)
+                        blur(10.dp.toPx())
+                        lens(18.dp.toPx(), 20.dp.toPx(), chromaticAberration = true)
                     },
-                    highlight = { Highlight.Default.copy(alpha = 0.55f) },
-                    shadow = { Shadow(alpha = 0.22f, radius = 18.dp) },
-                    innerShadow = { InnerShadow(radius = 10.dp, alpha = 0.16f) },
+                    highlight = { Highlight.Default.copy(alpha = 0.68f) },
+                    shadow = { Shadow(alpha = 0.24f, radius = 20.dp) },
+                    innerShadow = { InnerShadow(radius = 12.dp, alpha = 0.20f) },
                     onDrawSurface = {
-                        drawRect(Color.White.copy(alpha = 0.14f))
-                        drawRect(Color.Black.copy(alpha = 0.04f))
+                        drawRect(highlightColor)
+                        drawRect(Color.White.copy(alpha = 0.10f))
+                        drawRect(Color.Black.copy(alpha = 0.03f))
                     }
                 )
                 .height(56.dp)
