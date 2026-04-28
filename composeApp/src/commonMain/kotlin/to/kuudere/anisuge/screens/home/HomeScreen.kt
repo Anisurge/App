@@ -1668,6 +1668,15 @@ private fun AnisugBottomBar(
     liquidGlass: Boolean,
     modifier: Modifier = Modifier
 ) {
+    if (liquidGlass && !isDesktopPlatform) {
+        LiquidGlassBottomBar(
+            selectedTab = selectedTab,
+            onTabSelect = onTabSelect,
+            modifier = modifier
+        )
+        return
+    }
+
     val navShape = RoundedCornerShape(if (liquidGlass) 30.dp else 28.dp)
     val navMaterial = if (liquidGlass) {
         Modifier

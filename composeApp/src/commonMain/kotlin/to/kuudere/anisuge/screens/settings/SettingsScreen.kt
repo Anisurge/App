@@ -1057,13 +1057,13 @@ private fun AppearanceTab(
                 SettingToggle(
                     checked = uiState.floatingBottomNav && uiState.liquidGlassBottomNav,
                     onCheckedChange = onLiquidGlassBottomNavChange,
-                    label = "Blur floating style",
+                    label = "Liquid glass floating style",
                     enabled = uiState.floatingBottomNav
                 )
                 Text(
                     text = when {
                         !uiState.floatingBottomNav -> "Current style: normal full-width bar"
-                        uiState.liquidGlassBottomNav -> "Current style: Blur floating pill"
+                        uiState.liquidGlassBottomNav -> "Current style: liquid glass floating pill"
                         else -> "Current style: floating pill"
                     },
                     color = MUTED,
