@@ -28,6 +28,8 @@ zxing = "3.5.3"
 zxing-android-embedded = "4.3.0"
 firebase-bom = "33.12.0"
 google-services = "4.4.2"
+backdrop = "1.0.6"
+kyant-shapes = "1.2.0"
 
 [libraries]
 # Jave2 for Desktop FFmpeg bundling
@@ -77,6 +79,8 @@ okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 jnativehook = { module = "com.github.kwhat:jnativehook", version = "2.2.2" }
 dbus_java = { module = "com.github.hypfvieh:dbus-java-transport-native-unixsocket", version = "4.3.1" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+backdrop = { module = "io.github.kyant0:backdrop", version.ref = "backdrop" }
+kyant-shapes = { module = "io.github.kyant0:shapes", version.ref = "kyant-shapes" }
 filekit-dialogs-compose = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekit" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxing-android-embedded" }

@@ -117,6 +117,8 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
             implementation("androidx.fragment:fragment:1.8.9")
+            implementation(libs.backdrop)
+            implementation(libs.kyant.shapes)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.rxffmpeg)
