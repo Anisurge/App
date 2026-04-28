@@ -36,8 +36,12 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import to.kuudere.anisuge.BuildConfig
 
+private const val GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json"
+private const val DEFAULT_LARGE_IMAGE_URL = "https://raw.githubusercontent.com/Anisurge/App/main/composeApp/src/commonMain/composeResources/drawable/logo.png"
+private const val DOWNLOAD_URL = "https://www.anisurge.lol/#download"
+private const val GITHUB_URL = "https://github.com/Anisurge/App/releases"
+
 actual object DiscordRichPresenceManager {
-    private const val GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -223,10 +227,14 @@ actual object DiscordRichPresenceManager {
         put("state", activity.state.trimPresenceField("On Anisurge"))
         BuildConfig.DISCORD_CLIENT_ID.trim().takeIf { it.isNotBlank() }?.let { put("application_id", it) }
         putJsonObject("assets") {
-            BuildConfig.DISCORD_LARGE_IMAGE_KEY.trim().takeIf { it.isNotBlank() }?.let { put("large_image", it) }
+            resolveMobileImage(BuildConfig.DISCORD_LARGE_IMAGE_KEY).let { put("large_image", it) }
             put("large_text", activity.largeImageText.trimPresenceField("Anisurge"))
-            BuildConfig.DISCORD_SMALL_IMAGE_KEY.trim().takeIf { it.isNotBlank() }?.let { put("small_image", it) }
+            resolveMobileImage(BuildConfig.DISCORD_SMALL_IMAGE_KEY).let { put("small_image", it) }
             activity.smallImageText?.trimPresenceField()?.let { put("small_text", it) }
+        }
+        put("buttons", JsonArray(listOf(JsonPrimitive("Download App"), JsonPrimitive("GitHub"))))
+        putJsonObject("metadata") {
+            put("button_urls", JsonArray(listOf(JsonPrimitive(DOWNLOAD_URL), JsonPrimitive(GITHUB_URL))))
         }
         val timestamps = buildJsonObject {
             activity.startTimestampMillis?.let { put("start", it) }
@@ -253,6 +261,15 @@ actual object DiscordRichPresenceManager {
         runCatching { session?.close() }
         session = null
         sequence = null
+    }
+}
+
+private fun resolveMobileImage(value: String): String {
+    val image = value.trim()
+    return when {
+        image.startsWith("http://") || image.startsWith("https://") || image.startsWith("mp:") -> image
+        image.startsWith("app-assets/") -> "mp:$image"
+        else -> DEFAULT_LARGE_IMAGE_URL
     }
 }
 
