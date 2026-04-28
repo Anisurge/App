@@ -17,6 +17,8 @@ data class DirectLinkWrapper(
 
 @Serializable
 data class StreamingData(
+    val file_id: String? = null,
+    val file_code: String? = null,
     val download_url: String? = null,
     val m3u8_url: String? = null,
     val subtitles: List<SubtitleData>? = null,
@@ -53,6 +55,12 @@ data class FontData(
 data class SourceData(
     val quality: String? = null,
     val url: String? = null
+)
+
+@Serializable
+data class SenshiSourceData(
+    val url: String? = null,
+    val status: String? = null
 )
 
 @Serializable

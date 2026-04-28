@@ -49,6 +49,7 @@ import to.kuudere.anisuge.platform.LockScreenOrientation
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.player.PlayerControls
+import to.kuudere.anisuge.player.StreamProxy
 import to.kuudere.anisuge.player.VideoPlayerState
 import to.kuudere.anisuge.player.VideoPlayerSurface
 import to.kuudere.anisuge.player.rememberVideoPlayerState
@@ -1005,16 +1006,29 @@ fun WatchVideoPlayer(
         }
     } else {
         val currentUrl = uiState.availableQualities.find { it.first == uiState.currentQuality }?.second
+            ?: if (uiState.currentServer.equals("suzu", ignoreCase = true)) {
+                uiState.availableQualities.firstOrNull { it.first.equals("HardSub", ignoreCase = true) }?.second
+            } else {
+                null
+            }
             ?: uiState.availableQualities.firstOrNull()?.second
 
         if (currentUrl != null) {
+            val streamHeaders = uiState.streamingData?.headers
+            val playbackUrl = remember(currentUrl, streamHeaders) {
+                StreamProxy.proxyUrl(currentUrl, streamHeaders)
+            }
+            DisposableEffect(playbackUrl) {
+                onDispose { StreamProxy.release(currentUrl) }
+            }
+
             // Desktop: We now use our custom Compose PlayerControls instead of mpv's OSC
             val useOsc = false
             // Offline videos (MKV) may have fonts embedded in the container — allow them.
             // Online streams always use API-downloaded fonts, so embedded fonts must be off.
             val useEmbeddedFonts = uiState.offlinePath != null
             val playerState = rememberVideoPlayerState(
-                url = currentUrl,
+                url = playbackUrl,
                 startPosition = uiState.savedWatchPosition,
                 fontsDir = uiState.currentFontsDir,
                 embeddedFonts = useEmbeddedFonts,

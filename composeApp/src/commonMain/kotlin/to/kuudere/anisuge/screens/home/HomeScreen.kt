@@ -130,6 +130,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -172,6 +174,7 @@ import to.kuudere.anisuge.screens.schedule.ScheduleViewModel
 import to.kuudere.anisuge.screens.settings.SettingsScreen
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
 import to.kuudere.anisuge.ui.ConfirmDialog
+import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -200,14 +203,22 @@ fun HomeScreen(
     startOnDownloads: Boolean = false,
     startTab: String? = null,
 ) {
+    val strings = LocalAppStrings.current
     val homeState by homeViewModel.uiState.collectAsState()
     val settingsState by settingsViewModel.uiState.collectAsState()
     var initialSettingsTab by remember { mutableStateOf<SettingsTab?>(null) }
-    var currentTab by remember(startOnDownloads, startTab) { 
+    var currentTab by rememberSaveable(
+        startOnDownloads,
+        startTab,
+        stateSaver = Saver(
+            save = { it.name },
+            restore = { saved -> AnisugTab.entries.firstOrNull { it.name == saved } ?: AnisugTab.Home }
+        )
+    ) {
         val initial = if (startOnDownloads) AnisugTab.Downloads else {
             AnisugTab.entries.firstOrNull { it.name.equals(startTab, ignoreCase = true) } ?: AnisugTab.Home
         }
-        mutableStateOf(initial) 
+        mutableStateOf(initial)
     }
     var prevTabIndex by remember { mutableStateOf(0) }
     var showWatchlistFor by remember { mutableStateOf<AnimeItem?>(null) }
@@ -408,9 +419,9 @@ fun HomeScreen(
 
         if (showLogoutConfirm) {
             ConfirmDialog(
-                title = "Logout",
+                title = strings.logout,
                 message = "Are you sure you want to logout of your account? This will end your current session.",
-                confirmLabel = "Logout",
+                confirmLabel = strings.logout,
                 onConfirm = {
                     showLogoutConfirm = false
                     homeViewModel.logout(onComplete = onLogout)
@@ -1372,6 +1383,7 @@ private fun AnisugSidebar(
     onTabSelect: (AnisugTab, SettingsTab?) -> Unit,
     onLogout: () -> Unit,
 ) {
+    val strings = LocalAppStrings.current
     val fullAvatarUrl = when {
         avatarUrl == null -> null
         avatarUrl.startsWith("http") -> avatarUrl
@@ -1404,14 +1416,14 @@ private fun AnisugSidebar(
                     if (fullAvatarUrl != null) {
                         AsyncImage(
                             model = fullAvatarUrl,
-                            contentDescription = "User Avatar",
+                            contentDescription = strings.userAvatar,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
                         Icon(
                             Icons.Default.Movie,
-                            contentDescription = "Logo",
+                            contentDescription = strings.logo,
                             tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
@@ -1505,6 +1517,7 @@ private fun SidebarIcon(
 
 @Composable
 private fun LogoutButton(isLoggingOut: Boolean, onLogout: () -> Unit) {
+    val strings = LocalAppStrings.current
     val inter = remember { MutableInteractionSource() }
     val hovered by inter.collectIsHoveredAsState()
 
@@ -1528,7 +1541,7 @@ private fun LogoutButton(isLoggingOut: Boolean, onLogout: () -> Unit) {
             // Icon fades out when logging out
             Icon(
                 Icons.AutoMirrored.Filled.ExitToApp,
-                contentDescription = "Logout",
+                contentDescription = strings.logout,
                 tint = Color(0xFFE50914).copy(alpha = iconAlpha),
                 modifier = Modifier.size(22.dp),
             )
