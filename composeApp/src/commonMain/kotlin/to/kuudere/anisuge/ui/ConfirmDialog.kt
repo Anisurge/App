@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import to.kuudere.anisuge.i18n.LocalAppStrings
 
 @Composable
 fun ConfirmDialog(
@@ -40,6 +41,8 @@ fun ConfirmDialog(
     onDismiss: () -> Unit,
     isDanger: Boolean = true,
 ) {
+    val strings = LocalAppStrings.current
+    val resolvedDismissLabel = if (dismissLabel == "Cancel") strings.cancel else dismissLabel
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
 
@@ -112,7 +115,7 @@ fun ConfirmDialog(
                     // Action row
                     Row(modifier = Modifier.fillMaxWidth().height(52.dp)) {
                         DialogActionCell(
-                            label = dismissLabel,
+                            label = resolvedDismissLabel,
                             icon = Icons.Default.Close,
                             modifier = Modifier.weight(1f),
                             onClick = onDismiss,
@@ -160,4 +163,3 @@ private fun DialogActionCell(
         }
     }
 }
-
