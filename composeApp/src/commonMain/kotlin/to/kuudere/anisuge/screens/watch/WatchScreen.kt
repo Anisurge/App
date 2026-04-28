@@ -43,6 +43,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.input.key.*
 import kotlinx.datetime.Clock
+import to.kuudere.anisuge.platform.DiscordPresenceActivity
+import to.kuudere.anisuge.platform.DiscordRichPresenceManager
 import to.kuudere.anisuge.platform.LockScreenOrientation
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
@@ -1159,12 +1161,11 @@ fun WatchVideoPlayer(
 
             val animeInfo = uiState.episodeData?.animeInfo
             val currentEp = uiState.episodeData?.allEpisodes?.find { it.number == uiState.currentEpisodeNumber }
+            val animeTitle = animeInfo?.english?.takeIf { !it.isNullOrBlank() }
+                ?: animeInfo?.romaji?.takeIf { !it.isNullOrBlank() }
+                ?: animeInfo?.native?.takeIf { !it.isNullOrBlank() }
+                ?: uiState.offlineTitle
             val title = buildString {
-                // Use offline title if available, otherwise use anime info
-                val animeTitle = animeInfo?.english?.takeIf { !it.isNullOrBlank() }
-                    ?: animeInfo?.romaji?.takeIf { !it.isNullOrBlank() }
-                    ?: animeInfo?.native?.takeIf { !it.isNullOrBlank() }
-                    ?: uiState.offlineTitle  // Fallback to offline title
                 if (animeTitle != null) append(animeTitle)
                 if (currentEp != null || uiState.offlinePath != null) {
                     if (isNotEmpty()) append(" • ")
@@ -1173,6 +1174,44 @@ fun WatchVideoPlayer(
                         if (epTitle.isNotEmpty()) append(" - $epTitle")
                     }
                 }
+            }
+
+            DisposableEffect(Unit) {
+                onDispose { DiscordRichPresenceManager.clear() }
+            }
+
+            val presencePositionBucket = (playerState.position / 15).toInt()
+            LaunchedEffect(
+                animeTitle,
+                currentEp?.titles,
+                uiState.currentEpisodeNumber,
+                playerState.isPlaying,
+                playerState.isPaused,
+                playerState.duration,
+                presencePositionBucket,
+            ) {
+                val presenceTitle = animeTitle?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+                val episodeLabel = currentEp?.titles?.firstOrNull()?.takeIf { !it.isNullOrBlank() }
+                val state = buildString {
+                    append(if (playerState.isPaused || !playerState.isPlaying) "Paused" else "Episode")
+                    append(" ${uiState.currentEpisodeNumber}")
+                    episodeLabel?.let { append(" - $it") }
+                }
+
+                val now = Clock.System.now().toEpochMilliseconds()
+                val positionMillis = playerState.position.coerceAtLeast(0.0).toLong() * 1000L
+                val durationMillis = playerState.duration.coerceAtLeast(0.0).toLong() * 1000L
+                val isActivelyPlaying = playerState.isPlaying && !playerState.isPaused
+                DiscordRichPresenceManager.update(
+                    DiscordPresenceActivity(
+                        details = presenceTitle,
+                        state = state,
+                        startTimestampMillis = if (isActivelyPlaying && positionMillis > 0L) now - positionMillis else null,
+                        endTimestampMillis = if (isActivelyPlaying && durationMillis > positionMillis) now + (durationMillis - positionMillis) else null,
+                        largeImageText = "Watching on Anisurge",
+                        smallImageText = if (isActivelyPlaying) "Playing" else "Paused",
+                    )
+                )
             }
 
             LaunchedEffect(playerState.position) {
