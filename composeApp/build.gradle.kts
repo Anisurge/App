@@ -32,6 +32,9 @@ val crashReporterApiKey = envOrProperty("CRASH_REPORTER_API_KEY")
 val discordClientId = envOrProperty("DISCORD_CLIENT_ID")
 val discordLargeImageKey = envOrProperty("DISCORD_LARGE_IMAGE_KEY", "logo")
 val discordSmallImageKey = envOrProperty("DISCORD_SMALL_IMAGE_KEY", "play")
+val releaseStoreFile = keystoreProperties.getProperty("storeFile")?.takeIf { it.isNotBlank() }?.let { file(it) }
+val hasReleaseSigningConfig = listOf("keyAlias", "keyPassword", "storePassword")
+    .all { !keystoreProperties.getProperty(it).isNullOrBlank() } && releaseStoreFile?.exists() == true
 
 // Sanitize version for installers (e.g., "0.9.9-20260316" -> "0.9.9")
 val numericVersion = appVersionName.split("-")[0].split("+")[0]
@@ -233,17 +236,21 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String?
-            keyPassword = keystoreProperties["keyPassword"] as String?
-            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
-            storePassword = keystoreProperties["storePassword"] as String?
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
+            storeFile = releaseStoreFile
+            storePassword = keystoreProperties.getProperty("storePassword")
         }
     }
 
     buildTypes {
         getByName("release") {
             isMinifyEnabled = true
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseSigningConfig) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
