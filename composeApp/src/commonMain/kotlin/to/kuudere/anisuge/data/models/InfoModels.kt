@@ -115,8 +115,9 @@ data class TagInfo(
 
 @Serializable
 data class NextAiringEpisode(
-    @SerialName("airing_at") val airingAt: Long? = null,
+    @SerialName("airing_at") val airingAt: String? = null,
     @SerialName("episode") val episode: Int? = null,
+    @SerialName("time_until_airing") val timeUntilAiring: Int? = null,
 )
 
 @Serializable

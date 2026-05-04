@@ -263,9 +263,6 @@ fun App(
 
                 composable(Screen.Info.route) { backStackEntry ->
                     val animeId = backStackEntry.arguments.str("animeId") ?: ""
-                    // #region agent log
-                    println("[DEBUG-25ff72] Navigated to Info screen: animeId=$animeId")
-                    // #endregion agent log
                     AnimeInfoScreen(
                         animeId = animeId,
                         viewModel = infoVm,
