@@ -49,7 +49,7 @@ fun DownloadEpisodeDialog(
     onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?) -> Unit
 ) {
     val strings = LocalAppStrings.current
-    var selectedServer by remember { mutableStateOf("zen2") }
+    var selectedServer by remember { mutableStateOf("animepahe") }
     var selectedSubLang by remember { mutableStateOf<String?>("English") }
     var selectedAudioLang by remember { mutableStateOf<String?>("sub") } // 'sub' or 'dub'
     
@@ -87,7 +87,7 @@ fun DownloadEpisodeDialog(
     val currentTask = downloadTasks.find { it.animeId == animeId && it.episodeNumber == episodeNumber }
 
     val availableServers = serverRepository.servers.collectAsState()
-    val defaultServer = availableServers.value.firstOrNull()?.id ?: "zen2"
+    val defaultServer = availableServers.value.firstOrNull()?.id ?: "animepahe"
 
     // Update selected server when repository loads
     LaunchedEffect(availableServers.value) {
@@ -100,11 +100,55 @@ fun DownloadEpisodeDialog(
         isLoadingSubs = true
         estimatedSizeBytes = 0L
         try {
-            // TODO: Streaming is not yet available in the Project-R API.
-            //  Re-implement subtitle/audio/size estimation once the backend
-            //  adds /watch/* streaming routes.
-            availableSubtitles = listOf("All")
-            availableAudioTracks = emptyList()
+            val response = infoService.getVideoStream(anilistId, episodeNumber, selectedServer)
+            val streamData = response?.directLink?.data ?: response?.data
+
+            // 1. Subtitles
+            val subs = streamData?.subtitles?.mapNotNull {
+                it.title ?: it.resolvedLang
+            }?.distinct() ?: emptyList()
+            availableSubtitles = listOf("All") + subs
+            if (selectedSubLang !in availableSubtitles) {
+                selectedSubLang = if ("English" in availableSubtitles) "English" else availableSubtitles.getOrNull(1) ?: "All"
+            }
+
+            // 2. Audio Tracks and Size Estimation from M3U8
+            val m3u8Url = streamData?.m3u8_url
+            currentHeaders = streamData?.headers
+            if (m3u8Url != null) {
+                val masterContent = infoService.fetchM3u8Content(m3u8Url, currentHeaders) ?: ""
+                val tracks = mutableListOf<Pair<String, String>>()
+                var maxBandwidth = 0L
+
+                masterContent.lines().forEach { line ->
+                    if (line.startsWith("#EXT-X-MEDIA:TYPE=AUDIO")) {
+                        val lang = Regex("LANGUAGE=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: "unknown"
+                        val name = Regex("NAME=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: lang
+                        tracks.add(lang to name)
+                    }
+                    if (line.startsWith("#EXT-X-STREAM-INF:")) {
+                        val bwMatch = Regex("BANDWIDTH=(\\d+)").find(line)
+                        val bw = bwMatch?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+                        if (bw > maxBandwidth) maxBandwidth = bw
+                    }
+                }
+
+                val adjustedBps = if (maxBandwidth > 0 && maxBandwidth < 100000) maxBandwidth * 1000 else maxBandwidth
+                if (adjustedBps > 0) {
+                    estimatedSizeBytes = (adjustedBps / 8) * (durationMins * 60)
+                }
+
+                availableAudioTracks = tracks.distinctBy { it.first }
+
+                if (availableAudioTracks.isNotEmpty()) {
+                    if (selectedAudioLang == null || availableAudioTracks.none { it.first == selectedAudioLang }) {
+                        selectedAudioLang = availableAudioTracks.find { it.first == "jpn" || it.first == "ja" }?.first
+                            ?: availableAudioTracks.first().first
+                    }
+                }
+            } else {
+                availableAudioTracks = emptyList()
+            }
         } catch (e: Exception) {
             println("Failed to fetch subs/audio for $selectedServer: ${e.message}")
         } finally {

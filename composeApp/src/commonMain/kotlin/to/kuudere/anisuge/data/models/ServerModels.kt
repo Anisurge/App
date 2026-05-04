@@ -48,8 +48,8 @@ data class ServerInfo(
  * Default hardcoded servers as fallback when API fails
  */
 val FALLBACK_SERVERS = listOf(
-    ServerInfo(id = "zen2", label = "Zen-2", type = "dual"),
-    ServerInfo(id = "zen", label = "Zen", type = "dual"),
-    ServerInfo(id = "hiya", label = "Hiya", type = "sub"),
-    ServerInfo(id = "hiya-dub", label = "Hiya (Dub)", type = "dub")
+    ServerInfo(id = "animepahe", label = "AnimePahe", type = "dual"),
+    ServerInfo(id = "suzu", label = "Suzu", type = "dual"),
+    ServerInfo(id = "animekai", label = "AnimeKai", type = "dual"),
+    ServerInfo(id = "hianime", label = "HiAnime", type = "dual")
 )

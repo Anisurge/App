@@ -129,11 +129,12 @@ class ServerRepository(
             val newServers = currentServers.filter { it !in userPriorityList }
             filtered + newServers
         } else {
-            // Default priority order: zen2 > zen > others
+            // Default priority order: animepahe > suzu > animekai > others
             val priority = mutableListOf<String>()
-            if (currentServers.contains("zen2")) priority.add("zen2")
-            if (currentServers.contains("zen")) priority.add("zen")
-            priority.addAll(currentServers.filter { it != "zen2" && it != "zen" })
+            if (currentServers.contains("animepahe")) priority.add("animepahe")
+            if (currentServers.contains("suzu")) priority.add("suzu")
+            if (currentServers.contains("animekai")) priority.add("animekai")
+            priority.addAll(currentServers.filter { it != "animepahe" && it != "suzu" && it != "animekai" })
             priority
         }
     }

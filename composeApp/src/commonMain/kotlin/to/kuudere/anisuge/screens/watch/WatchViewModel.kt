@@ -29,7 +29,7 @@ data class WatchUiState(
     val episodeData: EpisodeDataResponse? = null,
     val thumbnails: Map<String, String> = emptyMap(),
     val currentEpisodeNumber: Int = 1,
-    val currentServer: String = "zen2",
+    val currentServer: String = "animepahe",
     val streamingData: StreamingData? = null,
     val availableQualities: List<Pair<String, String>> = emptyList(), // Pair(Quality, URL)
     val currentQuality: String = "Auto",
@@ -212,7 +212,7 @@ class WatchViewModel(
                 }
             }
             
-            val finalSpeculativeServer = speculativeServer ?: "zen2"
+            val finalSpeculativeServer = speculativeServer ?: "animepahe"
             streamLoadingJob = viewModelScope.launch {
                 loadVideoStream(finalSpeculativeServer, speculativeAnilistId)
             }
@@ -250,7 +250,7 @@ class WatchViewModel(
 
                 // Use requested server if specified
                 if (reqServer != null && reqLang != null) {
-                    targetServerName = reqServer.lowercase().let { if (it == "zen-2") "zen2" else it }
+                    targetServerName = reqServer.lowercase()
                     finalLang = reqLang
                 }
 
@@ -275,7 +275,7 @@ class WatchViewModel(
                     }
                 }
 
-                val serverName = targetServerName ?: fallbackPriority.firstOrNull() ?: "zen2"
+                val serverName = targetServerName ?: fallbackPriority.firstOrNull() ?: "animepahe"
                 _uiState.update { it.copy(targetLang = finalLang) }
                 loadVideoStream(serverName)
             }
@@ -300,24 +300,152 @@ class WatchViewModel(
             return
         }
 
+        val currState = _uiState.value
+        val anilistId = explicitAnilistId ?: currState.episodeData?.animeInfo?.anilist ?: currentAnimeId.toIntOrNull() ?: return
+        val episodeNum = currState.currentEpisodeNumber
+
         _uiState.update { it.copy(isLoadingVideo = true, currentServer = serverName, loadingMessage = "Fetching streaming URL...") }
 
-        // TODO: Streaming is not yet available in the Project-R API.
-        //  The video stream loading logic will be re-implemented once the
-        //  backend adds /watch/* streaming routes.
-        val response = infoService.getVideoStream(
-            explicitAnilistId ?: _uiState.value.episodeData?.animeInfo?.anilist ?: return,
-            _uiState.value.currentEpisodeNumber,
-            serverName
-        )
+        val response = infoService.getVideoStream(anilistId, episodeNum, serverName)
 
-        if (response == null) {
-            _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = "Streaming not yet available in new API") }
-            return
+        // Check if cancelled before updating state
+        if (!coroutineContext.isActive) return
+
+        val streamData = response?.directLink?.data ?: response?.data
+        if (streamData != null) {
+            val isSuzuServer = isSuzuServer(serverName)
+            val qualities = mutableListOf<Pair<String, String>>()
+            val streamSources = if (isSuzuServer) {
+                infoService.getSenshiSources(streamData.file_id ?: streamData.file_code.orEmpty())
+                    .ifEmpty { streamData.sources ?: emptyList() }
+            } else {
+                streamData.sources ?: emptyList()
+            }
+
+            if (streamSources.isNotEmpty()) {
+                streamSources.forEach {
+                    if (it.quality != null && it.url != null) {
+                        qualities.add(it.quality to it.url)
+                    }
+                }
+            } else if (streamData.m3u8_url != null) {
+                qualities.add("Auto" to streamData.m3u8_url)
+            }
+            val orderedQualities = if (isSuzuServer) {
+                qualities.sortedBy { if (it.first.equals("HardSub", ignoreCase = true)) 0 else 1 }
+            } else {
+                qualities
+            }
+
+            val subtitles = streamData.subtitles ?: emptyList()
+
+            // Refined Subtitle Selection Logic
+            var selectedSubUrl: String? = null
+            val isDub = currState.targetLang == "dub"
+            val englishSubs = subtitles.filter {
+                val lang = (it.language ?: it.lang ?: "").lowercase()
+                lang == "en" || lang == "eng" || it.languageName?.lowercase()?.contains("english") == true
+            }
+
+            if (englishSubs.isNotEmpty()) {
+                val candidates = englishSubs
+                if (isDub) {
+                    selectedSubUrl = candidates.find { it.title?.lowercase()?.contains("dubtitle") == true }?.url
+                        ?: candidates.find { it.title?.lowercase()?.contains("cc") == true }?.url
+                        ?: candidates.find { it.title?.lowercase()?.contains("forced") == true }?.url
+                        ?: candidates.find { !listOf("signs", "songs", "commentary").any { k -> it.title?.lowercase()?.contains(k) == true } }?.url
+                        ?: candidates.firstOrNull()?.url
+                } else {
+                    selectedSubUrl = candidates.find { !listOf("cc", "forced", "dubtitle", "signs", "songs", "commentary").any { k -> it.title?.lowercase()?.contains(k) == true } }?.url
+                        ?: candidates.find { it.title?.lowercase()?.contains("full") == true && !listOf("cc", "forced", "dubtitle").any { k -> it.title?.lowercase()?.contains(k) == true } }?.url
+                        ?: candidates.find { !listOf("cc", "forced", "dubtitle").any { k -> it.title?.lowercase()?.contains(k) == true } }?.url
+                        ?: candidates.firstOrNull()?.url
+                }
+            }
+
+            if (selectedSubUrl == null) {
+                selectedSubUrl = subtitles.find { it.is_default == true }?.url
+                    ?: subtitles.firstOrNull()?.url
+            }
+
+            // Handle missing chapters/intro/outro
+            var intro = streamData.intro
+            var outro = streamData.outro
+            val chapters = streamData.chapters ?: emptyList()
+
+            if (chapters.isNotEmpty()) {
+                if (intro == null) {
+                    var foundIntro = chapters.find { ch ->
+                        val t = ch.title?.lowercase()?.trim() ?: ""
+                        t == "opening" || t == "title sequence" || t == "op" ||
+                        t.contains("opening") || t.contains("theme") || t.contains(" op") || t.contains("op ")
+                    }
+                    if (foundIntro == null) {
+                        foundIntro = chapters.find { ch ->
+                            val t = ch.title?.lowercase()?.trim() ?: ""
+                            t == "intro" || t.contains("intro")
+                        }
+                    }
+                    foundIntro?.let { ch ->
+                        intro = to.kuudere.anisuge.data.models.SkipData(ch.resolvedStart, ch.resolvedEnd)
+                    }
+                }
+                if (outro == null) {
+                    chapters.find { ch ->
+                        val t = ch.title?.lowercase()?.trim() ?: ""
+                        t.contains("credit") || t.contains("end") || t.contains("ed") ||
+                        t.contains("outro") || t.contains("closing") || t.contains("credits") ||
+                        t.contains(" ed") || t.contains("ed ")
+                    }?.let { ch ->
+                        outro = to.kuudere.anisuge.data.models.SkipData(ch.resolvedStart, ch.resolvedEnd)
+                    }
+                }
+            }
+
+            val finalStreamData = streamData.copy(intro = intro, outro = outro)
+
+            // Download fonts in background
+            if (!streamData.fonts.isNullOrEmpty()) {
+                viewModelScope.launch {
+                    val localFontsDir = to.kuudere.anisuge.utils.downloadFontsAndGetDir(streamData.fonts)
+                    _uiState.update { it.copy(currentFontsDir = localFontsDir) }
+                    println("[WatchVM] Background font download complete: $localFontsDir")
+                }
+            }
+
+            // Final guard: if offlinePath was set while we were fetching, abort
+            if (_uiState.value.offlinePath != null) {
+                println("[WatchVM] loadVideoStream aborted at final step - offlinePath was set")
+                return
+            }
+
+            // Pre-warm DNS/TCP for the stream URL
+            val defaultQuality = if (isSuzuServer) {
+                orderedQualities.firstOrNull { it.first.equals("HardSub", ignoreCase = true) }?.first
+            } else {
+                null
+            } ?: orderedQualities.firstOrNull()?.first ?: "Auto"
+
+            orderedQualities.firstOrNull { it.first == defaultQuality }?.second?.let { streamUrl ->
+                viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
+            }
+
+            _uiState.update { state ->
+                state.copy(
+                    isLoadingVideo = false,
+                    loadingMessage = null,
+                    streamingData = finalStreamData,
+                    availableQualities = orderedQualities,
+                    currentQuality = defaultQuality,
+                    availableSubtitles = subtitles,
+                    currentSubtitleUrl = selectedSubUrl,
+                    offlinePath = null
+                )
+            }
+            println("[WatchVM] Selected sub=$selectedSubUrl, intro=${intro?.start}-${intro?.end}, outro=${outro?.start}-${outro?.end}")
+        } else {
+            _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
         }
-
-        // TODO: Re-implement stream parsing once API provides streaming data
-        _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null) }
     }
 
     fun setQuality(quality: String) {

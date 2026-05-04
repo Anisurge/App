@@ -3,13 +3,21 @@ package to.kuudere.anisuge.data.services
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.head
+import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.statement.bodyAsText
 import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.EpisodeDataResponse
 import to.kuudere.anisuge.data.models.EpisodesResponse
+import to.kuudere.anisuge.data.models.FetchStreamResponse
 import to.kuudere.anisuge.data.models.RecommendationItem
 import to.kuudere.anisuge.data.models.RecommendationsResponse
+import to.kuudere.anisuge.data.models.SenshiSourceData
+import to.kuudere.anisuge.data.models.SourceData
+import to.kuudere.anisuge.data.models.StreamingData
+import to.kuudere.anisuge.data.models.WatchServerResponse
 import to.kuudere.anisuge.data.network.ApiConfig
 import to.kuudere.anisuge.data.network.bearer
 import io.ktor.http.encodeURLPathPart
@@ -18,6 +26,10 @@ class InfoService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
+    companion object {
+        const val FETCH_BASE_URL = "https://fetch.anisurge.lol"
+    }
+
     suspend fun getAnimeDetails(slug: String, includeEpisodes: Boolean = false, tz: String? = null): AnimeDetails? {
         return try {
             val stored = sessionStore.get()
@@ -67,17 +79,81 @@ class InfoService(
         }
     }
 
-    suspend fun getVideoStream(anilistId: Int, episodeNum: Int, server: String): EpisodeDataResponse? {
-        println("[InfoService] TODO: getVideoStream not yet implemented in Project-R API")
-        return null
+    suspend fun getVideoStream(anilistId: Int, episodeNumber: Int, server: String): WatchServerResponse? {
+        return try {
+            val response = httpClient.get("$FETCH_BASE_URL/api") {
+                parameter("action", "batch_scrape")
+                parameter("anilistId", anilistId)
+                parameter("episode", episodeNumber)
+                parameter("source", server)
+            }
+
+            // Try parsing as new FetchStreamResponse format first
+            val fetchResponse = response.body<FetchStreamResponse>()
+            mapFetchToWatchResponse(fetchResponse)
+        } catch (e: Exception) {
+            println("[InfoService] getVideoStream error: ${e.message}")
+            null
+        }
     }
 
-    suspend fun getSenshiSources(fileId: String): List<to.kuudere.anisuge.data.models.EpisodeLink> {
-        println("[InfoService] TODO: getSenshiSources not yet implemented in Project-R API")
-        return emptyList()
+    private fun mapFetchToWatchResponse(fetch: FetchStreamResponse): WatchServerResponse? {
+        val section = fetch.sub?.takeIf { !it.notFound && it.streams.isNotEmpty() }
+            ?: fetch.dub?.takeIf { !it.notFound && it.streams.isNotEmpty() }
+            ?: return null
+
+        val sources = section.streams.mapNotNull { item ->
+            if (item.url != null && item.quality != null) {
+                SourceData(quality = item.quality, url = item.url)
+            } else null
+        }
+
+        // Use first stream's headers as the global headers for the streaming data
+        val globalHeaders = section.streams.firstOrNull()?.headers
+
+        val streamingData = StreamingData(
+            sources = sources,
+            headers = globalHeaders
+        )
+
+        return WatchServerResponse(
+            success = true,
+            data = streamingData
+        )
     }
 
-    suspend fun prewarmStreamUrl(streamUrl: String) {
-        // no-op placeholder until streaming is available
+    suspend fun getSenshiSources(embedUrl: String): List<SourceData> {
+        return try {
+            if (!embedUrl.startsWith("https://senshi.live/episode-embeds/")) return emptyList()
+            val response = httpClient.get(embedUrl) {
+                header("Referer", "https://senshi.live")
+            }
+            response.body<List<SenshiSourceData>>().mapNotNull { source ->
+                val url = source.url ?: return@mapNotNull null
+                SourceData(quality = source.status ?: "Auto", url = url)
+            }
+        } catch (e: Exception) {
+            println("[InfoService] getSenshiSources error: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun prewarmStreamUrl(url: String) {
+        try {
+            httpClient.head(url)
+        } catch (_: Exception) {
+            // Ignore - this is best-effort only
+        }
+    }
+
+    suspend fun fetchM3u8Content(m3u8Url: String, headers: Map<String, String>?): String? {
+        return try {
+            httpClient.get(m3u8Url) {
+                headers?.forEach { (k, v) -> this.headers.append(k, v) }
+            }.bodyAsText()
+        } catch (e: Exception) {
+            println("[InfoService] fetchM3u8Content error: ${e.message}")
+            null
+        }
     }
 }

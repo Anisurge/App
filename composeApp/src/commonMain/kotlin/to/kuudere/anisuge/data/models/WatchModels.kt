@@ -80,3 +80,27 @@ data class ChapterData(
     val resolvedStart: Double? get() = start ?: start_time
     val resolvedEnd: Double? get() = end ?: end_time
 }
+
+// ── Fetch API response models (fetch.anisurge.lol) ──────────────────────
+
+@Serializable
+data class FetchStreamResponse(
+    val sub: FetchStreamSection? = null,
+    val dub: FetchStreamSection? = null
+)
+
+@Serializable
+data class FetchStreamSection(
+    val providerId: String? = null,
+    val episodeId: String? = null,
+    val streams: List<FetchStreamItem> = emptyList(),
+    val subtitles: String = "",
+    val notFound: Boolean = false
+)
+
+@Serializable
+data class FetchStreamItem(
+    val url: String? = null,
+    val quality: String? = null,
+    val headers: Map<String, String>? = null
+)
