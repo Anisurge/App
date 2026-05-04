@@ -36,6 +36,9 @@ class AnimeInfoViewModel(
     private var currentAnimeId: String? = null
 
     fun loadAnimeInfo(id: String) {
+        // #region agent log
+        println("[DEBUG-25ff72] loadAnimeInfo called: id=$id currentAnimeId=$currentAnimeId isLoading=${_uiState.value.isLoading}")
+        // #endregion agent log
         if (currentAnimeId == id && !_uiState.value.isLoading) return
         currentAnimeId = id
         
@@ -50,6 +53,9 @@ class AnimeInfoViewModel(
                 )
             }
             val response = infoService.getAnimeDetails(id)
+            // #region agent log
+            println("[DEBUG-25ff72] getAnimeDetails result: id=$id responseNull=${response == null} animeId=${response?.animeId} title=${response?.displayTitle}")
+            // #endregion agent log
             if (response != null) {
                 _uiState.update {
                     it.copy(
@@ -72,6 +78,9 @@ class AnimeInfoViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingEpisodes = true) }
             val response = infoService.getEpisodes(animeId)
+            // #region agent log
+            println("[DEBUG-25ff72] loadEpisodes result: animeId=$animeId responseNull=${response == null} episodeCount=${response?.episodeList?.size ?: -1}")
+            // #endregion agent log
             
             if (response != null) {
                 _uiState.update { 

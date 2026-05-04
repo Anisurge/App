@@ -534,7 +534,12 @@ private fun HomeContent(
             if (state.topAiring.isNotEmpty()) {
                 HeroCarousel(
                     items = state.topAiring,
-                    onAnimeClick = { onAnimeClick(it.activeSlug) },
+                    onAnimeClick = { item ->
+                        // #region agent log
+                        println("[DEBUG-25ff72] HeroCarousel click: activeSlug=${item.activeSlug} animeId=${item.animeId}")
+                        // #endregion agent log
+                        onAnimeClick(item.activeSlug)
+                    },
                     onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null) },
                     onWatchlistClick = onWatchlistClick
                 )
@@ -563,7 +568,12 @@ private fun HomeContent(
             AnimeSection(
                 title = "Latest Episodes",
                 items = state.latestEpisodes,
-                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                onItemClick = { item ->
+                    // #region agent log
+                    println("[DEBUG-25ff72] LatestEpisodes click: activeSlug=${item.activeSlug} animeId=${item.animeId}")
+                    // #endregion agent log
+                    onAnimeClick(item.activeSlug)
+                },
                 onViewMoreClick = onViewLatestMore,
             )
         }
@@ -573,7 +583,12 @@ private fun HomeContent(
             AnimeSection(
                 title = "New On App",
                 items = state.newOnSite,
-                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                onItemClick = { item ->
+                    // #region agent log
+                    println("[DEBUG-25ff72] NewOnApp click: activeSlug=${item.activeSlug} animeId=${item.animeId}")
+                    // #endregion agent log
+                    onAnimeClick(item.activeSlug)
+                },
                 onViewMoreClick = onViewNewOnAppMore,
             )
         }

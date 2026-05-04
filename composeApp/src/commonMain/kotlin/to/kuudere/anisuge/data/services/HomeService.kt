@@ -27,9 +27,18 @@ class HomeService(
                 if (stored != null) bearer(stored.token)
             }
             val result: HomeData = response.body()
+            // #region agent log
+            println("[DEBUG-25ff72] HomeData parsed: trending=${result.trending.size} latestAired=${result.latestAired.size} newOnSite=${result.newOnSite.size}")
+            if (result.trending.isNotEmpty()) println("[DEBUG-25ff72] trending[0]: animeId='${result.trending[0].animeId}' activeSlug='${result.trending[0].activeSlug}'")
+            if (result.latestAired.isNotEmpty()) println("[DEBUG-25ff72] latestAired[0]: animeId='${result.latestAired[0].animeId}' activeSlug='${result.latestAired[0].activeSlug}'")
+            if (result.newOnSite.isNotEmpty()) println("[DEBUG-25ff72] newOnSite[0]: animeId='${result.newOnSite[0].animeId}' activeSlug='${result.newOnSite[0].activeSlug}'")
+            // #endregion agent log
             cachedHomeData = result
             result
         } catch (e: Exception) {
+            // #region agent log
+            println("[DEBUG-25ff72] fetchHomeData EXCEPTION: ${e.message}")
+            // #endregion agent log
             println("[HomeService] fetchHomeData error: ${e.message}")
             null
         }

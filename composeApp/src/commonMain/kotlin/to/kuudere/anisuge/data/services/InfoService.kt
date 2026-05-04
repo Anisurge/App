@@ -26,9 +26,13 @@ class InfoService(
                 if (tz != null) parameter("tz", tz)
                 if (stored != null) bearer(stored.token)
             }
-            response.body<AnimeDetails>()
+            println("[InfoService] getAnimeDetails response: slug=$slug status=${response.status.value}")
+            val result = response.body<AnimeDetails>()
+            println("[InfoService] getAnimeDetails OK: slug=$slug animeId=${result.animeId} title=${result.displayTitle}")
+            result
         } catch (e: Exception) {
-            println("[InfoService] getAnimeDetails error for slug='$slug': ${e.message}")
+            println("[InfoService] getAnimeDetails EXCEPTION for slug='$slug': ${e.message}")
+            e.printStackTrace()
             null
         }
     }
