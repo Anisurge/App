@@ -102,7 +102,6 @@ fun WatchScreen(
 
     LaunchedEffect(animeId, episodeNumber, offlinePath) {
         viewModel.initialize(animeId, episodeNumber, server, lang, offlinePath, offlineTitle)
-        to.kuudere.anisuge.AppComponent.realtimeService.joinRoom(animeId)
     }
 
     // Check if the ViewModel hasn't been initialized for this animeId yet.
@@ -519,16 +518,16 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                         val visibleEpisodes = remember(episodes, searchQuery, isAscending, currentPageStart) {
                             val baseEpisodes = if (searchQuery.isBlank()) {
                                 episodes.filter { episode ->
-                                    episode.number in currentPageStart until (currentPageStart + episodesPerPage)
+                                    episode.displayNumber in currentPageStart until (currentPageStart + episodesPerPage)
                                 }
                             } else {
                                 episodes.filter { episode ->
-                                    val episodeTitle = episode.titles?.firstOrNull().orEmpty()
-                                    episode.number.toString().contains(searchQuery) ||
+                                    val episodeTitle = episode.displayTitles?.firstOrNull().orEmpty()
+                                    episode.displayNumber.toString().contains(searchQuery) ||
                                         episodeTitle.contains(searchQuery, ignoreCase = true)
                                 }
                             }
-                            if (isAscending) baseEpisodes.sortedBy { it.number } else baseEpisodes.sortedByDescending { it.number }
+                            if (isAscending) baseEpisodes.sortedBy { it.displayNumber } else baseEpisodes.sortedByDescending { it.displayNumber }
                         }
 
                         LaunchedEffect(searchQuery, currentEpisodePageStart) {
@@ -545,7 +544,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
 
                         LaunchedEffect(uiState.activeSidePanel, searchQuery, isAscending, currentPageStart, isPageDropdownExpanded) {
                             if (uiState.activeSidePanel == "episodes" && !hasScrolled) {
-                                val currentEpIndex = visibleEpisodes.indexOfFirst { it.number == uiState.currentEpisodeNumber }
+                                val currentEpIndex = visibleEpisodes.indexOfFirst { it.displayNumber == uiState.currentEpisodeNumber }
                                 if (currentEpIndex >= 0) {
                                     listState.animateScrollToItem(currentEpIndex + headerItemCount)
                                 }
@@ -721,9 +720,9 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                         }
                                     }
                                 } else {
-                                    items(visibleEpisodes, key = { it.number }) { episode ->
-                                        val isSelected = episode.number == uiState.currentEpisodeNumber
-                                        val thumbnail = uiState.thumbnails[episode.number.toString()]
+                                    items(visibleEpisodes, key = { it.displayNumber }) { episode ->
+                                        val isSelected = episode.displayNumber == uiState.currentEpisodeNumber
+                                        val thumbnail = uiState.thumbnails[episode.displayNumber.toString()]
 
                                         Row(
                                             Modifier
@@ -740,14 +739,14 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                         RoundedCornerShape(10.dp)
                                                     ) else Modifier
                                                 )
-                                                .clickable { viewModel.onEpisodeSelected(episode.number) }
+                                                .clickable { viewModel.onEpisodeSelected(episode.displayNumber) }
                                                 .padding(8.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             if (thumbnail != null) {
                                                 AsyncImage(
                                                     model = thumbnail,
-                                                    contentDescription = "Episode ${episode.number} Thumbnail",
+                                                    contentDescription = "Episode ${episode.displayNumber} Thumbnail",
                                                     modifier = Modifier
                                                         .width(96.dp)
                                                         .aspectRatio(16f / 9f)
@@ -770,7 +769,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                 ) {
                                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                         Text(
-                                                            text = "${episode.number}",
+                                                            text = "${episode.displayNumber}",
                                                             color = Color.White.copy(alpha = 0.5f),
                                                             fontSize = 20.sp,
                                                             fontWeight = FontWeight.Bold
@@ -782,12 +781,12 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
 
                                             Column(Modifier.weight(1f)) {
                                                 Text(
-                                                    "Episode ${episode.number}",
+                                                    "Episode ${episode.displayNumber}",
                                                     color = if (isSelected) Color.White else Color.White.copy(alpha = 0.9f),
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                                     fontSize = 14.sp
                                                 )
-                                                val title = episode.titles?.firstOrNull()
+                                                val title = episode.displayTitles?.firstOrNull()
                                                 if (!title.isNullOrBlank()) {
                                                     Spacer(Modifier.height(3.dp))
                                                     Text(
@@ -1169,12 +1168,12 @@ fun WatchVideoPlayer(
             LaunchedEffect(uiState.episodeData, uiState.currentEpisodeNumber) {
                 val allEps = uiState.episodeData?.allEpisodes ?: emptyList()
                 val current = uiState.currentEpisodeNumber
-                playerState.hasPrevEpisode = allEps.any { it.number < current }
-                playerState.hasNextEpisode = allEps.any { it.number > current }
+                playerState.hasPrevEpisode = allEps.any { it.displayNumber < current }
+                playerState.hasNextEpisode = allEps.any { it.displayNumber > current }
             }
 
             val animeInfo = uiState.episodeData?.animeInfo
-            val currentEp = uiState.episodeData?.allEpisodes?.find { it.number == uiState.currentEpisodeNumber }
+            val currentEp = uiState.episodeData?.allEpisodes?.find { it.displayNumber == uiState.currentEpisodeNumber }
             val animeTitle = animeInfo?.english?.takeIf { !it.isNullOrBlank() }
                 ?: animeInfo?.romaji?.takeIf { !it.isNullOrBlank() }
                 ?: animeInfo?.native?.takeIf { !it.isNullOrBlank() }
@@ -1184,7 +1183,7 @@ fun WatchVideoPlayer(
                 if (currentEp != null || uiState.offlinePath != null) {
                     if (isNotEmpty()) append(" • ")
                     append("Episode ${uiState.currentEpisodeNumber}")
-                    currentEp?.titles?.firstOrNull()?.let { epTitle ->
+                    currentEp?.displayTitles?.firstOrNull()?.let { epTitle ->
                         if (epTitle.isNotEmpty()) append(" - $epTitle")
                     }
                 }
@@ -1197,7 +1196,7 @@ fun WatchVideoPlayer(
             val presencePositionBucket = (playerState.position / 15).toInt()
             LaunchedEffect(
                 animeTitle,
-                currentEp?.titles,
+                currentEp?.displayTitles,
                 uiState.currentEpisodeNumber,
                 playerState.isPlaying,
                 playerState.isPaused,
@@ -1205,7 +1204,7 @@ fun WatchVideoPlayer(
                 presencePositionBucket,
             ) {
                 val presenceTitle = animeTitle?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-                val episodeLabel = currentEp?.titles?.firstOrNull()?.takeIf { !it.isNullOrBlank() }
+                val episodeLabel = currentEp?.displayTitles?.firstOrNull()?.takeIf { !it.isNullOrBlank() }
                 val state = buildString {
                     append(if (playerState.isPaused || !playerState.isPlaying) "Paused" else "Episode")
                     append(" ${uiState.currentEpisodeNumber}")
@@ -1235,9 +1234,9 @@ fun WatchVideoPlayer(
                 
                 // Proactive Auto Next at the very end of the video
                 if (uiState.autoNext && playerState.hasNextEpisode && pos >= dur - 0.5) {
-                    val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
+                    val nextEp = uiState.episodeData?.allEpisodes?.filter { it.displayNumber > uiState.currentEpisodeNumber }?.minByOrNull { it.displayNumber }
                     if (nextEp != null) {
-                        viewModel.onEpisodeSelected(nextEp.number)
+                        viewModel.onEpisodeSelected(nextEp.displayNumber)
                         return@LaunchedEffect
                     }
                 }
@@ -1318,15 +1317,15 @@ fun WatchVideoPlayer(
                                 }
                                 Key.N -> {
                                     if (playerState.hasNextEpisode) {
-                                        val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
-                                        if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
+                                        val nextEp = uiState.episodeData?.allEpisodes?.filter { it.displayNumber > uiState.currentEpisodeNumber }?.minByOrNull { it.displayNumber }
+                                        if (nextEp != null) viewModel.onEpisodeSelected(nextEp.displayNumber)
                                         true
                                     } else false
                                 }
                                 Key.P -> {
                                     if (playerState.hasPrevEpisode) {
-                                        val prevEp = uiState.episodeData?.allEpisodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
-                                        if (prevEp != null) viewModel.onEpisodeSelected(prevEp.number)
+                                        val prevEp = uiState.episodeData?.allEpisodes?.filter { it.displayNumber < uiState.currentEpisodeNumber }?.maxByOrNull { it.displayNumber }
+                                        if (prevEp != null) viewModel.onEpisodeSelected(prevEp.displayNumber)
                                         true
                                     } else false
                                 }
@@ -1369,15 +1368,15 @@ fun WatchVideoPlayer(
                                 }
                                 Key.MediaNext -> {
                                     if (playerState.hasNextEpisode) {
-                                        val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
-                                        if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
+                                        val nextEp = uiState.episodeData?.allEpisodes?.filter { it.displayNumber > uiState.currentEpisodeNumber }?.minByOrNull { it.displayNumber }
+                                        if (nextEp != null) viewModel.onEpisodeSelected(nextEp.displayNumber)
                                         true
                                     } else false
                                 }
                                 Key.MediaPrevious -> {
                                     if (playerState.hasPrevEpisode) {
-                                        val prevEp = uiState.episodeData?.allEpisodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
-                                        if (prevEp != null) viewModel.onEpisodeSelected(prevEp.number)
+                                        val prevEp = uiState.episodeData?.allEpisodes?.filter { it.displayNumber < uiState.currentEpisodeNumber }?.maxByOrNull { it.displayNumber }
+                                        if (prevEp != null) viewModel.onEpisodeSelected(prevEp.displayNumber)
                                         true
                                     } else false
                                 }
@@ -1397,8 +1396,8 @@ fun WatchVideoPlayer(
                     modifier = Modifier.fillMaxSize(),
                     onFinished = {
                         if (uiState.autoNext && playerState.hasNextEpisode) {
-                            val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
-                            if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
+                            val nextEp = uiState.episodeData?.allEpisodes?.filter { it.displayNumber > uiState.currentEpisodeNumber }?.minByOrNull { it.displayNumber }
+                            if (nextEp != null) viewModel.onEpisodeSelected(nextEp.displayNumber)
                         }
                     }
                 )
@@ -1414,14 +1413,14 @@ fun WatchVideoPlayer(
                     onBack = onBack,
                     onNextEpisode = {
                         if (!isOffline) {
-                            val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
-                            if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
+                            val nextEp = uiState.episodeData?.allEpisodes?.filter { it.displayNumber > uiState.currentEpisodeNumber }?.minByOrNull { it.displayNumber }
+                            if (nextEp != null) viewModel.onEpisodeSelected(nextEp.displayNumber)
                         }
                     },
                     onPrevEpisode = {
                         if (!isOffline) {
-                            val prevEp = uiState.episodeData?.allEpisodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
-                            if (prevEp != null) viewModel.onEpisodeSelected(prevEp.number)
+                            val prevEp = uiState.episodeData?.allEpisodes?.filter { it.displayNumber < uiState.currentEpisodeNumber }?.maxByOrNull { it.displayNumber }
+                            if (prevEp != null) viewModel.onEpisodeSelected(prevEp.displayNumber)
                         }
                     },
                     onCaptionsClick = { viewModel.toggleSettingsOverlay(SettingsMenuPage.SUBTITLES) },
@@ -1450,8 +1449,8 @@ fun WatchVideoPlayer(
                                 .border(1.dp, Color.White.copy(alpha = 0.3f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
                                 .background(Color.Black.copy(alpha = 0.8f))
                                 .clickable {
-                                    val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
-                                    if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
+                                    val nextEp = uiState.episodeData?.allEpisodes?.filter { it.displayNumber > uiState.currentEpisodeNumber }?.minByOrNull { it.displayNumber }
+                                    if (nextEp != null) viewModel.onEpisodeSelected(nextEp.displayNumber)
                                 }
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically

@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.isActive
 import to.kuudere.anisuge.data.models.EpisodeDataResponse
+import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.models.EpisodeLink
 import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.StreamingData
@@ -60,6 +61,7 @@ data class WatchUiState(
 
 class WatchViewModel(
     private val infoService: InfoService,
+    private val watchService: to.kuudere.anisuge.data.services.WatchService,
     private val settingsStore: to.kuudere.anisuge.data.services.SettingsStore,
     private val settingsService: to.kuudere.anisuge.data.services.SettingsService,
     private val serverRepository: ServerRepository
@@ -216,7 +218,7 @@ class WatchViewModel(
             }
         }
 
-        val data = infoService.getEpisodes(currentAnimeId, episodeNumber)
+        val episodesResponse = infoService.getEpisodes(currentAnimeId)
 
         // Check if cancelled or switched to offline before updating state
         if (!coroutineContext.isActive || _uiState.value.offlinePath != null) {
@@ -224,21 +226,23 @@ class WatchViewModel(
             return
         }
 
-        if (data != null) {
+        if (episodesResponse != null) {
+            // Build an EpisodeDataResponse from the new API data for compatibility with existing UI state
+            val episodeData = EpisodeDataResponse(
+                current = episodeNumber,
+                allEpisodes = episodesResponse.episodeList,
+            )
+
             _uiState.update { state ->
                 state.copy(
                     isLoading = false,
                     loadingMessage = if (streamLoadingJob != null) null else "Switching servers...",
-                    episodeData = data,
-                    savedWatchPosition = data.current?.toDouble() ?: 0.0
+                    episodeData = episodeData,
+                    savedWatchPosition = 0.0
                 )
             }
 
-            data.animeInfo?.anilist?.let { anilistId ->
-                fetchThumbnails(anilistId)
-            }
-
-            // If we didn't start speculative loading (or it's the wrong anilistId), start it now
+            // If we didn't start speculative loading, start it now
             if (streamLoadingJob == null) {
                 val fallbackPriority = serverRepository.getFallbackPriority()
                 var targetServerName: String? = null
@@ -282,14 +286,8 @@ class WatchViewModel(
     }
 
     private fun fetchThumbnails(anilistId: Int) {
-        viewModelScope.launch {
-            val response = infoService.getThumbnails(anilistId)
-            if (response != null && response.success && response.thumbnails != null) {
-                _uiState.update { it.copy(thumbnails = response.thumbnails) }
-            }
-        }
+        // Thumbnails endpoint removed in Project-R API
     }
-
 
     private fun isSuzuServer(serverName: String): Boolean {
         return serverName.equals("suzu", ignoreCase = true)
@@ -302,161 +300,24 @@ class WatchViewModel(
             return
         }
 
-        val currState = _uiState.value
-        val anilistId = explicitAnilistId ?: currState.episodeData?.animeInfo?.anilist ?: return
-        val episodeNum = currState.currentEpisodeNumber
-
         _uiState.update { it.copy(isLoadingVideo = true, currentServer = serverName, loadingMessage = "Fetching streaming URL...") }
 
-            // Use server ID directly (e.g., "zen2", "zen", "hiya")
-            val response = infoService.getVideoStream(anilistId, episodeNum, serverName)
+        // TODO: Streaming is not yet available in the Project-R API.
+        //  The video stream loading logic will be re-implemented once the
+        //  backend adds /watch/* streaming routes.
+        val response = infoService.getVideoStream(
+            explicitAnilistId ?: _uiState.value.episodeData?.animeInfo?.anilist ?: return,
+            _uiState.value.currentEpisodeNumber,
+            serverName
+        )
 
-            // Check if cancelled before updating state
-            if (!coroutineContext.isActive) return
+        if (response == null) {
+            _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = "Streaming not yet available in new API") }
+            return
+        }
 
-            val streamData = response?.directLink?.data ?: response?.data
-            if (streamData != null) {
-                val isSuzuServer = isSuzuServer(serverName)
-                val qualities = mutableListOf<Pair<String, String>>()
-                val streamSources = if (isSuzuServer) {
-                    infoService.getSenshiSources(streamData.file_id ?: streamData.file_code.orEmpty())
-                        .ifEmpty { streamData.sources ?: emptyList() }
-                } else {
-                    streamData.sources ?: emptyList()
-                }
-
-                if (streamSources.isNotEmpty()) {
-                    streamSources.forEach {
-                        if (it.quality != null && it.url != null) {
-                            qualities.add(it.quality to it.url)
-                        }
-                    }
-                } else if (streamData.m3u8_url != null) {
-                    qualities.add("Auto" to streamData.m3u8_url)
-                }
-                val orderedQualities = if (isSuzuServer) {
-                    qualities.sortedBy { if (it.first.equals("HardSub", ignoreCase = true)) 0 else 1 }
-                } else {
-                    qualities
-                }
-
-                val subtitles = streamData.subtitles ?: emptyList()
-                
-                // Refined Subtitle Selection Logic mirroring +page.server.ts
-                var selectedSubUrl: String? = null
-                val isDub = currState.targetLang == "dub"
-                val englishSubs = subtitles.filter { 
-                    val lang = (it.language ?: it.lang ?: "").lowercase()
-                    lang == "en" || lang == "eng" || it.languageName?.lowercase()?.contains("english") == true
-                }
-
-                if (englishSubs.isNotEmpty()) {
-                    val candidates = englishSubs
-                    if (isDub) {
-                        // Priority for DUB: 1. dubtitle, 2. cc, 3. forced, 4. regular English, 5. first available
-                        selectedSubUrl = candidates.find { it.title?.lowercase()?.contains("dubtitle") == true }?.url
-                            ?: candidates.find { it.title?.lowercase()?.contains("cc") == true }?.url
-                            ?: candidates.find { it.title?.lowercase()?.contains("forced") == true }?.url
-                            ?: candidates.find { !listOf("signs", "songs", "commentary").any { k -> it.title?.lowercase()?.contains(k) == true } }?.url
-                            ?: candidates.firstOrNull()?.url
-                    } else {
-                        // Priority for SUB: 1. regular English, 2. full, 3. first available
-                        selectedSubUrl = candidates.find { !listOf("cc", "forced", "dubtitle", "signs", "songs", "commentary").any { k -> it.title?.lowercase()?.contains(k) == true } }?.url
-                            ?: candidates.find { it.title?.lowercase()?.contains("full") == true && !listOf("cc", "forced", "dubtitle").any { k -> it.title?.lowercase()?.contains(k) == true } }?.url
-                            ?: candidates.find { !listOf("cc", "forced", "dubtitle").any { k -> it.title?.lowercase()?.contains(k) == true } }?.url
-                            ?: candidates.firstOrNull()?.url
-                    }
-                }
-
-                // Final fallbacks
-                if (selectedSubUrl == null) {
-                    selectedSubUrl = subtitles.find { it.is_default == true }?.url 
-                        ?: subtitles.firstOrNull()?.url
-                }
-
-                // Handle missing chapters/intro/outro for Zen servers
-                var intro = streamData.intro
-                var outro = streamData.outro
-                val chapters = streamData.chapters ?: emptyList()
-
-                if (chapters.isNotEmpty()) {
-                    if (intro == null) {
-                        // Priority 1: Openings
-                        var foundIntro = chapters.find { ch ->
-                            val t = ch.title?.lowercase()?.trim() ?: ""
-                            t == "opening" || t == "title sequence" || t == "op" ||
-                            t.contains("opening") || t.contains("theme") || t.contains(" op") || t.contains("op ")
-                        }
-                        // Priority 2: Intro
-                        if (foundIntro == null) {
-                            foundIntro = chapters.find { ch ->
-                                val t = ch.title?.lowercase()?.trim() ?: ""
-                                t == "intro" || t.contains("intro")
-                            }
-                        }
-                        foundIntro?.let { ch ->
-                            intro = to.kuudere.anisuge.data.models.SkipData(ch.resolvedStart, ch.resolvedEnd)
-                        }
-                    }
-                    if (outro == null) {
-                        chapters.find { ch ->
-                            val t = ch.title?.lowercase()?.trim() ?: ""
-                            t.contains("credit") || t.contains("end") || t.contains("ed") ||
-                            t.contains("outro") || t.contains("closing") || t.contains("credits") ||
-                            t.contains(" ed") || t.contains("ed ")
-                        }?.let { ch ->
-                            outro = to.kuudere.anisuge.data.models.SkipData(ch.resolvedStart, ch.resolvedEnd)
-                        }
-                    }
-                }
-
-                val finalStreamData = streamData.copy(intro = intro, outro = outro)
-
-                // Download fonts in background so we don't block the player from starting.
-                // VideoPlayerSurface will reactively update sub-fonts-dir when this completes.
-                if (!streamData.fonts.isNullOrEmpty()) {
-                    viewModelScope.launch {
-                        val localFontsDir = to.kuudere.anisuge.utils.downloadFontsAndGetDir(streamData.fonts)
-                        _uiState.update { it.copy(currentFontsDir = localFontsDir) }
-                        println("[WatchVM] Background font download complete: $localFontsDir")
-                    }
-                }
-
-                // Final guard: if offlinePath was set while we were fetching, abort
-                if (_uiState.value.offlinePath != null) {
-                    println("[WatchVM] loadVideoStream aborted at final step - offlinePath was set")
-                    return
-                }
-
-                // Pre-warm DNS/TCP for the stream URL in parallel with handing it to the player.
-                // OkHttp shares the netd DNS cache with MPV's libcurl on Android, so this
-                // pre-resolve means MPV skips DNS lookup (~50-200ms saved on first connection).
-                val defaultQuality = if (isSuzuServer) {
-                    orderedQualities.firstOrNull { it.first.equals("HardSub", ignoreCase = true) }?.first
-                } else {
-                    null
-                } ?: orderedQualities.firstOrNull()?.first ?: "Auto"
-
-                orderedQualities.firstOrNull { it.first == defaultQuality }?.second?.let { streamUrl ->
-                    viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
-                }
-
-                _uiState.update { state ->
-                    state.copy(
-                        isLoadingVideo = false,
-                        loadingMessage = null,
-                        streamingData = finalStreamData,
-                        availableQualities = orderedQualities,
-                        currentQuality = defaultQuality,
-                        availableSubtitles = subtitles,
-                        currentSubtitleUrl = selectedSubUrl,
-                        offlinePath = null
-                    )
-                }
-                println("[WatchVM] Selected sub=$selectedSubUrl, intro=${intro?.start}-${intro?.end}, outro=${outro?.start}-${outro?.end}")
-            } else {
-                _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
-            }
+        // TODO: Re-implement stream parsing once API provides streaming data
+        _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null) }
     }
 
     fun setQuality(quality: String) {
@@ -589,37 +450,24 @@ class WatchViewModel(
         if (currentAnimeId.isEmpty() || duration <= 0) return
 
         viewModelScope.launch {
-            infoService.saveProgress(
-                animeId = currentAnimeId,
-                episodeId = episodeId,
-                currentTime = currentTime,
-                duration = duration,
-                server = server,
-                language = language
+            watchService.saveProgress(
+                to.kuudere.anisuge.data.services.ProgressRequest(
+                    animeId = currentAnimeId,
+                    episodeId = episodeId,
+                    currentTime = currentTime,
+                    duration = duration,
+                    server = server,
+                    language = language
+                )
             )
 
-            // AniList Sync
+            // Mark watched when progress threshold met
             val state = _uiState.value
             if (!state.didMarkWatched && duration > 0) {
                 val ratio = currentTime / duration
                 if (ratio * 100 >= state.syncPercentage) {
-                    val anilistId = state.episodeData?.animeInfo?.anilist
-                    if (anilistId != null) {
-                        _uiState.update { it.copy(didMarkWatched = true) }
-                        println("[WatchVM] Progress threshold met (${state.syncPercentage}%). Syncing episode ${state.currentEpisodeNumber} to AniList.")
-                        
-                        // Fetch token and sync
-                        to.kuudere.anisuge.AppComponent.authService.getAniListToken()?.let { token ->
-                            val folder = state.episodeData.folder ?: "Watching"
-                            val result = to.kuudere.anisuge.AppComponent.aniListService.updateStatus(
-                                accessToken = token,
-                                anilistId = anilistId,
-                                folder = folder,
-                                progress = state.currentEpisodeNumber
-                            )
-                            println("[WatchVM] AniList progress sync result: $result")
-                        } ?: println("[WatchVM] Failed to sync progress: No AniList token found.")
-                    }
+                    _uiState.update { it.copy(didMarkWatched = true) }
+                    println("[WatchVM] Progress threshold met (${state.syncPercentage}%). Episode ${state.currentEpisodeNumber} marked as watched.")
                 }
             }
         }
@@ -630,19 +478,8 @@ class WatchViewModel(
             _uiState.update { it.copy(isUpdatingWatchlist = true) }
             try {
                 if (currentAnimeId.isEmpty()) return@launch
-                val response = infoService.updateWatchlistStatus(currentAnimeId, folder)
-                if (response != null && response.success) {
-                    // AniList Sync
-                    response.data?.token?.let { token ->
-                        response.data.anilist?.let { anilistId ->
-                            println("[WatchVM] Triggering AniList sync for $anilistId to $folder")
-                            viewModelScope.launch {
-                                val syncResult = to.kuudere.anisuge.AppComponent.aniListService.updateStatus(token, anilistId, folder)
-                                println("[WatchVM] AniList sync result for $anilistId: $syncResult")
-                            }
-                        } ?: println("[WatchVM] No anilistId returned for sync")
-                    } ?: println("[WatchVM] No token returned for sync")
-
+                val success = to.kuudere.anisuge.AppComponent.watchlistService.updateStatus(currentAnimeId, folder)
+                if (success) {
                     _uiState.update { state ->
                         state.copy(
                             episodeData = state.episodeData?.copy(
@@ -696,9 +533,8 @@ class WatchViewModel(
         val state = _uiState.value
         viewModelScope.launch {
             try {
-                // We fetch first to avoid clobbering settings not managed by the player (like syncPercentage)
-                val current = settingsService.getPreferences()
-                val basePrefs = current?.preferences ?: to.kuudere.anisuge.data.models.UserPreferences()
+                val current = settingsService.getSettings()
+                val basePrefs = current ?: to.kuudere.anisuge.data.models.UserSettings()
                 
                 val updated = basePrefs.copy(
                     autoPlay = state.autoPlay,
@@ -706,9 +542,9 @@ class WatchViewModel(
                     skipIntro = state.autoSkipIntro,
                     skipOutro = state.autoSkipOutro,
                     defaultLang = state.defaultLang,
-                    syncPercentage = state.syncPercentage
+                    syncPercentage = state.syncPercentage.toDouble()
                 )
-                settingsService.updatePreferences(updated)
+                settingsService.updateSettings(updated)
             } catch (e: Exception) {
                 e.printStackTrace()
             }

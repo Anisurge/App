@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.models.LatestAiredResponse
 import to.kuudere.anisuge.data.services.LatestService
 import to.kuudere.anisuge.utils.isNetworkError
 
@@ -14,7 +15,7 @@ data class LatestUiState(
     val results: List<AnimeItem> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val currentPage: Int = 1,
+    val cursor: String? = null,
     val hasMore: Boolean = true,
     val isOffline: Boolean = false,
 )
@@ -28,30 +29,26 @@ class LatestViewModel(private val latestService: LatestService) : ViewModel() {
     }
 
     fun refresh() = viewModelScope.launch {
-        _uiState.value = _uiState.value.copy(isLoading = true, results = emptyList(), currentPage = 1)
-        loadPage(1)
+        _uiState.value = _uiState.value.copy(isLoading = true, results = emptyList(), cursor = null, hasMore = true)
+        loadMore()
     }
 
     fun loadMore() = viewModelScope.launch {
         val state = _uiState.value
         if (state.isLoadingMore || !state.hasMore) return@launch
         _uiState.value = state.copy(isLoadingMore = true)
-        loadPage(state.currentPage)
-    }
-
-    private suspend fun loadPage(page: Int) {
         try {
-            val response = latestService.getLatestUpdates(page)
-            if (response != null && response.success) {
-                val newItems = response.animeData ?: emptyList()
+            val response = latestService.getLatestUpdates(cursor = state.cursor)
+            if (response != null) {
+                val newItems = response.data
                 val currentState = _uiState.value
                 _uiState.value = currentState.copy(
-                    results = if (page == 1) newItems else currentState.results + newItems,
+                    results = if (state.cursor == null) newItems else currentState.results + newItems,
                     isLoading = false,
                     isLoadingMore = false,
                     isOffline = false,
-                    hasMore = response.hasMore ?: false,
-                    currentPage = if (newItems.isNotEmpty() && (response.hasMore ?: false)) page + 1 else page
+                    hasMore = response.hasMore,
+                    cursor = response.nextCursor,
                 )
             } else {
                 _uiState.value = _uiState.value.copy(

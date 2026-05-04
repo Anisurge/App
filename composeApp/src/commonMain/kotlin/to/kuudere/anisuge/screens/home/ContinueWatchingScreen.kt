@@ -126,9 +126,9 @@ fun ContinueWatchingScreen(
                             ContinueWatchingGridCard(
                                 item = item,
                                 onClick = {
-                                    val animeId = item.link.removePrefix("/").split("/").getOrNull(1).orEmpty()
-                                    val lang = parseQueryParam(item.link, "lang") ?: "sub"
-                                    val server = parseQueryParam(item.link, "server")
+                                    val animeId = item.animeId.ifBlank { item.link.removePrefix("/").split("/").getOrNull(1).orEmpty() }
+                                    val lang = item.language ?: parseQueryParam(item.link, "lang") ?: "sub"
+                                    val server = item.server ?: parseQueryParam(item.link, "server")
                                     onWatchClick(animeId, lang, item.episode, server)
                                 }
                             )

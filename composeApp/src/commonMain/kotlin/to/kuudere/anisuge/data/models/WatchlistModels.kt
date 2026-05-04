@@ -6,22 +6,24 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class WatchlistResponse(
     val data: List<AnimeItem> = emptyList(),
+    val items: List<AnimeItem> = emptyList(),
+    val results: List<AnimeItem> = emptyList(),
     @SerialName("watchlist") val watchlistList: List<AnimeItem>? = null,
-    @SerialName("current_page") val currentPageAlt: Int? = null,
-    val currentPage: Int = 1,
-    @SerialName("total_pages") val totalPagesAlt: Int? = null,
-    val totalPages: Int = 1
+    @SerialName("watchlist_items") val watchlistItems: List<AnimeItem> = emptyList(),
+    val total: Int = 0,
+    @SerialName("has_more") val hasMoreSnake: Boolean = false,
+    val hasMore: Boolean = false,
 ) {
-    val items: List<AnimeItem> get() = data.ifEmpty { watchlistList ?: emptyList() }
-    val page: Int get() = currentPageAlt ?: currentPage
-    val total: Int get() = totalPagesAlt ?: totalPages
+    val entries: List<AnimeItem> get() = data.ifEmpty { items.ifEmpty { results.ifEmpty { watchlistList ?: watchlistItems } } }
+    fun hasMore(limit: Int, offset: Int): Boolean = hasMore || hasMoreSnake || (offset + limit < total)
 }
 
 @Serializable
 data class WatchlistUpdateResponse(
-    val success: Boolean,
+    val success: Boolean = true,
     val message: String? = null,
-    val data: WatchlistUpdateData? = null
+    val data: WatchlistUpdateData? = null,
+    val error: String? = null,
 )
 
 @Serializable

@@ -247,7 +247,6 @@ fun HomeScreen(
             AnisugTab.Downloads -> "downloads"
             AnisugTab.Settings -> "settings"
         }
-        AppComponent.realtimeService.joinRoom(room)
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF000000))) {
@@ -256,7 +255,7 @@ fun HomeScreen(
         Row(Modifier.fillMaxSize()) {
             if (isDesktop) {
                 AnisugSidebar(
-                    avatarUrl = homeState.userProfile?.avatar,
+                    avatarUrl = homeState.userProfile?.effectiveAvatar,
                     selectedTab = currentTab,
                     isLoggingOut = homeState.isLoggingOut,
                     onTabSelect = switchTab,
@@ -369,7 +368,7 @@ fun HomeScreen(
 
                     // Top Bar — measured so content knows how tall it is
                     MobileTopBar(
-                        avatarUrl = homeState.userProfile?.avatar,
+                        avatarUrl = homeState.userProfile?.effectiveAvatar,
                         onDownloadClick = {
                             prevTabIndex = AnisugTab.entries.indexOf(currentTab)
                             currentTab = AnisugTab.Downloads
@@ -410,7 +409,7 @@ fun HomeScreen(
             WatchlistBottomSheet(
                 currentFolder = null, // We don't have this info here easily
                 onSelect = { folder ->
-                    homeViewModel.updateWatchlist(showWatchlistFor!!.id, folder)
+                    homeViewModel.updateWatchlist(showWatchlistFor!!.activeId, folder)
                     showWatchlistFor = null
                 },
                 onDismiss = { showWatchlistFor = null }
@@ -535,8 +534,8 @@ private fun HomeContent(
             if (state.topAiring.isNotEmpty()) {
                 HeroCarousel(
                     items = state.topAiring,
-                    onAnimeClick = { onAnimeClick(it.id) },
-                    onWatchClick = { item, lang, ep -> onWatchClick(item.id, lang, ep, null) },
+                    onAnimeClick = { onAnimeClick(it.activeId) },
+                    onWatchClick = { item, lang, ep -> onWatchClick(item.activeId, lang, ep, null) },
                     onWatchlistClick = onWatchlistClick
                 )
             }
@@ -564,7 +563,7 @@ private fun HomeContent(
             AnimeSection(
                 title = "Latest Episodes",
                 items = state.latestEpisodes,
-                onItemClick = { item -> onAnimeClick(item.id) },
+                onItemClick = { item -> onAnimeClick(item.activeId) },
                 onViewMoreClick = onViewLatestMore,
             )
         }
@@ -574,7 +573,7 @@ private fun HomeContent(
             AnimeSection(
                 title = "New On App",
                 items = state.newOnSite,
-                onItemClick = { item -> onAnimeClick(item.id) },
+                onItemClick = { item -> onAnimeClick(item.activeId) },
                 onViewMoreClick = onViewNewOnAppMore,
             )
         }
@@ -584,7 +583,7 @@ private fun HomeContent(
             AnimeSection(
                 title = "Top Upcoming",
                 items = state.topUpcoming,
-                onItemClick = { item -> onAnimeClick(item.id) },
+                onItemClick = { item -> onAnimeClick(item.activeId) },
                 showViewMore = false,
             )
         }
@@ -682,7 +681,7 @@ private fun HeroCarousel(
                         
                         AsyncImage(
                             model = imageUrl,
-                            contentDescription = animItem.title,
+                            contentDescription = animItem.displayTitle,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -721,8 +720,8 @@ private fun HeroCarousel(
                 ) {
                     // Left: Vertical Poster
                     AsyncImage(
-                        model = if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://anime.anisurge.qzz.io/img/poster/${animItem.imageUrl}",
-                        contentDescription = animItem.title,
+                        model = if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://api.reanime.to/img/poster/${animItem.imageUrl}",
+                        contentDescription = animItem.displayTitle,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .width(posterWidth)
@@ -733,7 +732,7 @@ private fun HeroCarousel(
                     // Middle: Text Info
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = animItem.title,
+                            text = animItem.displayTitle,
                             color = Color.White,
                             fontSize = titleSize,
                             fontWeight = FontWeight.Bold,
@@ -817,7 +816,7 @@ private fun HeroCarousel(
                             .clickable { onWatchClick(animItem, "sub", 1) }
                     ) {
                         AsyncImage(
-                            model = animItem.bannerUrl ?: (if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://anime.anisurge.qzz.io/img/poster/${animItem.imageUrl}"),
+                            model = animItem.bannerUrl ?: (if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://api.reanime.to/img/poster/${animItem.imageUrl}"),
                             contentDescription = "Episode",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
@@ -851,7 +850,7 @@ private fun HeroCarousel(
                         ) {
 
                             Text(
-                                "Episode 1" + if (animItem.epCount != null && animItem.epCount > 0) " / ${animItem.epCount}" else "",
+                                "Episode 1" + if (animItem.episodes != null && animItem.episodes > 0) " / ${animItem.episodes}" else "",
                                 color = Color.White.copy(alpha = 0.7f),
                                 fontSize = 14.sp
                             )
@@ -993,8 +992,8 @@ private fun FanCarousel(
             ) {
                 AsyncImage(
                     model = if (item.imageUrl.startsWith("http")) item.imageUrl
-                            else "https://anime.anisurge.qzz.io/img/poster/${item.imageUrl}",
-                    contentDescription = item.title,
+                            else "https://api.reanime.to/img/poster/${item.imageUrl}",
+                    contentDescription = item.displayTitle,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -1007,7 +1006,7 @@ private fun FanCarousel(
 
         // Title
         Text(
-            text = activeItem.title,
+            text = activeItem.displayTitle,
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.SemiBold,
@@ -1128,9 +1127,9 @@ private fun ContinueWatchingRow(
             val inter = remember { MutableInteractionSource() }
             val hovered by inter.collectIsHoveredAsState()
             // Parse anime id from link e.g. "/watch/{id}?ep=1&lang=sub"
-            val animeId = item.link.removePrefix("/").split("/").getOrNull(1) ?: ""
-            val lang    = Uri.parseQueryParam(item.link, "lang") ?: "sub"
-            val server  = Uri.parseQueryParam(item.link, "server")
+            val animeId = item.animeId.ifBlank { item.link.removePrefix("/").split("/").getOrNull(1) ?: "" }
+            val lang    = item.language ?: Uri.parseQueryParam(item.link, "lang") ?: "sub"
+            val server  = item.server ?: Uri.parseQueryParam(item.link, "server")
 
             Column(
                 Modifier
@@ -1387,7 +1386,7 @@ private fun AnisugSidebar(
     val fullAvatarUrl = when {
         avatarUrl == null -> null
         avatarUrl.startsWith("http") -> avatarUrl
-        else -> "https://anime.anisurge.qzz.io$avatarUrl"
+        else -> "https://api.reanime.to$avatarUrl"
     }
 
     DraggableWindowArea(

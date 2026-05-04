@@ -3,163 +3,101 @@ package to.kuudere.anisuge.data.services
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.client.request.head
-import io.ktor.client.request.post
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
-import io.ktor.client.request.setBody
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.buildJsonObject
-import to.kuudere.anisuge.data.models.AnimeDetailsResponse
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import io.ktor.http.encodeURLPathPart
+import to.kuudere.anisuge.data.models.AnimeDetails
+import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.EpisodeDataResponse
-import to.kuudere.anisuge.data.models.SessionInfo
-import to.kuudere.anisuge.data.models.SenshiSourceData
-import to.kuudere.anisuge.data.models.SourceData
-import to.kuudere.anisuge.data.models.ThumbnailsResponse
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.content.TextContent
+import to.kuudere.anisuge.data.models.EpisodeItem
+import to.kuudere.anisuge.data.models.EpisodeLink
+import to.kuudere.anisuge.data.models.EpisodesResponse
+import to.kuudere.anisuge.data.network.ApiConfig
+import to.kuudere.anisuge.data.network.bearer
 
 class InfoService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
-    companion object {
-        const val BASE_URL = "https://anime.anisurge.qzz.io"
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        coerceInputValues = true
+        explicitNulls = false
     }
 
-    private fun sessionToCookie(s: SessionInfo): String =
-        "session_id=${s.sessionId}; session_secret=${s.session}; user_id=${s.userId}"
-
-    suspend fun getAnimeDetails(id: String): AnimeDetailsResponse? {
+    suspend fun getAnimeDetails(slug: String, includeEpisodes: Boolean = false, tz: String? = null): AnimeDetails? {
         return try {
             val stored = sessionStore.get()
-            val response = httpClient.get("$BASE_URL/anime/$id") {
-                parameter("type", "api")
-                if (stored != null) header("Cookie", sessionToCookie(stored))
+            val response = httpClient.get("${ApiConfig.API_BASE}/anime/${slug.encodeURLPathPart()}") {
+                parameter("include_episodes", includeEpisodes)
+                if (tz != null) parameter("tz", tz)
+                if (stored != null) bearer(stored.token)
             }
-            response.body<AnimeDetailsResponse>()
+            response.body<JsonElement>().decodePayload()
         } catch (e: Exception) {
-            println("[InfoService] fetchAnimeDetails error: ${e.message}")
+            println("[InfoService] getAnimeDetails error for slug='$slug': ${e.message}")
             null
         }
     }
 
-    suspend fun getEpisodes(animeId: String, episodeNumber: Int = 1): EpisodeDataResponse? {
+    private inline fun <reified T> JsonElement.decodePayload(): T {
+        val obj = this as? JsonObject
+        val nested = obj?.get("data") ?: obj?.get("anime") ?: obj?.get("result") ?: this
+        return json.decodeFromJsonElement(nested)
+    }
+
+    suspend fun getEpisodes(
+        slug: String,
+        limit: Int = 30,
+        offset: Int = 0,
+        filler: Boolean = true,
+        recap: Boolean = true,
+    ): EpisodesResponse? {
         return try {
             val stored = sessionStore.get()
-            val response = httpClient.get("$BASE_URL/api/watch/$animeId/$episodeNumber") {
-                parameter("nolinks", "true")
-                if (stored != null) header("Cookie", sessionToCookie(stored))
+            val response = httpClient.get("${ApiConfig.API_BASE}/anime/${slug.encodeURLPathPart()}/episodes") {
+                parameter("limit", limit)
+                parameter("offset", offset)
+                parameter("filler", filler)
+                parameter("recap", recap)
+                if (stored != null) bearer(stored.token)
             }
-            response.body<EpisodeDataResponse>()
+            response.body<EpisodesResponse>()
         } catch (e: Exception) {
-            println("[InfoService] getEpisodes error: ${e.message}")
+            println("[InfoService] getEpisodes error for slug='$slug': ${e.message}")
             null
         }
     }
 
-    suspend fun getThumbnails(anilistId: Int): ThumbnailsResponse? {
+    suspend fun getRecommendations(slug: String): List<AnimeItem>? {
         return try {
-            val response = httpClient.get("$BASE_URL/api/thumbnails/$anilistId")
-            response.body<ThumbnailsResponse>()
+            val response = httpClient.get("${ApiConfig.API_BASE}/anime/${slug.encodeURLPathPart()}/recommendations")
+            response.body()
         } catch (e: Exception) {
-            println("[InfoService] getThumbnails error: ${e.message}")
+            println("[InfoService] getRecommendations error: ${e.message}")
             null
         }
     }
 
-    suspend fun updateWatchlistStatus(animeId: String, folder: String): to.kuudere.anisuge.data.models.WatchlistUpdateResponse? {
-        return try {
-            val stored = sessionStore.get() ?: return null
-            val payload = buildJsonObject {
-                put("animeId", animeId)
-                put("folder", folder)
-            }
-            val response = httpClient.post("$BASE_URL/api/anime/watchlist") {
-                header("Cookie", sessionToCookie(stored))
-                contentType(ContentType.Application.Json)
-                setBody(payload.toString())
-            }
-            if (response.status.value in 200..299) {
-                response.body<to.kuudere.anisuge.data.models.WatchlistUpdateResponse>()
-            } else null
-        } catch (e: Exception) {
-            println("[InfoService] updateWatchlistStatus error: ${e.message}")
-            null
-        }
+    // TODO: Streaming endpoints are not yet available in the Project-R API.
+    //  These placeholders return null/empty so the app compiles. Implement
+    //  once the backend adds /watch/* streaming routes.
+
+    suspend fun getVideoStream(anilistId: Int, episodeNum: Int, server: String): EpisodeDataResponse? {
+        println("[InfoService] TODO: getVideoStream not yet implemented in Project-R API")
+        return null
     }
 
-    suspend fun getVideoStream(anilistId: Int, episodeNumber: Int, server: String): to.kuudere.anisuge.data.models.WatchServerResponse? {
-        return try {
-            val stored = sessionStore.get()
-            val response = httpClient.get("$BASE_URL/$anilistId/$episodeNumber/$server") {
-                if (stored != null) header("Cookie", sessionToCookie(stored))
-            }
-            response.body<to.kuudere.anisuge.data.models.WatchServerResponse>()
-        } catch (e: Exception) {
-            println("[InfoService] getVideoStream error: ${e.message}")
-            null
-        }
+    suspend fun getSenshiSources(fileId: String): List<EpisodeLink> {
+        println("[InfoService] TODO: getSenshiSources not yet implemented in Project-R API")
+        return emptyList()
     }
 
-    suspend fun getSenshiSources(embedUrl: String): List<SourceData> {
-        return try {
-            if (!embedUrl.startsWith("https://senshi.live/episode-embeds/")) return emptyList()
-            val response = httpClient.get(embedUrl) {
-                header("Referer", "https://senshi.live")
-            }
-            response.body<List<SenshiSourceData>>().mapNotNull { source ->
-                val url = source.url ?: return@mapNotNull null
-                SourceData(quality = source.status ?: "Auto", url = url)
-            }
-        } catch (e: Exception) {
-            println("[InfoService] getSenshiSources error: ${e.message}")
-            emptyList()
-        }
-    }
-
-    /** Fire-and-forget HEAD request to warm the DNS + TCP/TLS path for a CDN stream URL.
-     *  OkHttp on Android shares the system netd DNS cache with MPV's libcurl, so this
-     *  pre-resolve saves ~50-200ms off the first MPV connection to the CDN. */
-    suspend fun prewarmStreamUrl(url: String) {
-        try {
-            httpClient.head(url)
-        } catch (_: Exception) {
-            // Ignore - this is best-effort only
-        }
-    }
-
-    suspend fun saveProgress(
-        animeId: String,
-        episodeId: String,
-        currentTime: Double,
-        duration: Double,
-        server: String,
-        language: String = "sub"
-    ): Boolean {
-        return try {
-            val stored = sessionStore.get() ?: return false
-            val payload = buildJsonObject {
-                put("animeId", animeId)
-                put("episodeId", episodeId)
-                put("currentTime", currentTime)
-                put("duration", duration)
-                put("server", server)
-                put("language", language)
-            }
-            println("[InfoService] Saving progress for $animeId / $episodeId => $currentTime / $duration")
-            val response = httpClient.post("$BASE_URL/api/save-progress") {
-                header("Cookie", sessionToCookie(stored))
-                setBody(TextContent(payload.toString(), ContentType.Application.Json))
-            }
-            println("[InfoService] Save-progress responded with: ${response.status} - ${response.bodyAsText()}")
-            response.status.value in 200..299
-        } catch (e: Exception) {
-            println("[InfoService] saveProgress error: ${e.message}")
-            false
-        }
+    suspend fun prewarmStreamUrl(streamUrl: String) {
+        // no-op placeholder until streaming is available
     }
 }

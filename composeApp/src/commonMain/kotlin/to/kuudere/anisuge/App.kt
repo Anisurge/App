@@ -48,8 +48,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
-import to.kuudere.anisuge.screens.update.UpdateScreen
-import to.kuudere.anisuge.screens.update.UpdateViewModel
 import to.kuudere.anisuge.platform.LockScreenOrientation
 import to.kuudere.anisuge.platform.PlatformBackHandler
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
@@ -75,20 +73,18 @@ fun App(
 ) {
     AnisugTheme {
         val navController = rememberNavController()
-        val splashVm = remember { SplashViewModel(AppComponent.authService, AppComponent.updateService, AppComponent.homeService) }
+        val splashVm = remember { SplashViewModel(AppComponent.authService, AppComponent.homeService) }
         val authVm   = remember { AuthViewModel(AppComponent.authService) }
-        val homeVm   = remember { HomeViewModel(AppComponent.homeService, AppComponent.authService, AppComponent.infoService, AppComponent.realtimeService) }
+        val homeVm   = remember { HomeViewModel(AppComponent.homeService, AppComponent.authService, AppComponent.infoService, AppComponent.watchService) }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }
         val infoVm   = remember { AnimeInfoViewModel(AppComponent.infoService) }
-        val watchVm  = remember { WatchViewModel(AppComponent.infoService, AppComponent.settingsStore, AppComponent.settingsService, AppComponent.serverRepository) }
+        val watchVm  = remember { WatchViewModel(AppComponent.infoService, AppComponent.watchService, AppComponent.settingsStore, AppComponent.settingsService, AppComponent.serverRepository) }
         val watchlistVm = remember { WatchlistViewModel() }
-        val scheduleVm = remember { ScheduleViewModel(AppComponent.scheduleService) }
-        val settingsVm = remember { SettingsViewModel(AppComponent.settingsService, AppComponent.settingsStore, AppComponent.serverRepository, AppComponent.authService) }
+        val scheduleVm = remember { ScheduleViewModel(AppComponent.scheduleService, AppComponent.watchlistService, AppComponent.sessionStore) }
+        val settingsVm = remember { SettingsViewModel(AppComponent.settingsService, AppComponent.settingsStore, AppComponent.serverRepository, AppComponent.authService, AppComponent.sessionStore) }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }
-        val updateVm = remember { UpdateViewModel(AppComponent.updateService) }
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
-        val updateState by updateVm.state.collectAsState()
         val appLocaleCode by AppComponent.settingsStore.appLocaleFlow.collectAsState(initial = AppLocale.default.code)
         val appStrings = appStringsFor(AppLocale.fromCode(appLocaleCode))
         val uriHandler = LocalUriHandler.current
@@ -125,7 +121,7 @@ fun App(
         LaunchedEffect(currentRoute, pendingNotificationLaunch?.id) {
             val launch = pendingNotificationLaunch ?: return@LaunchedEffect
             val route = currentRoute ?: return@LaunchedEffect
-            if (route == Screen.Splash.route || route == Screen.Auth.route || route.startsWith("update")) return@LaunchedEffect
+            if (route == Screen.Splash.route || route == Screen.Auth.route) return@LaunchedEffect
 
             pendingNotificationLaunch = null
             onNotificationLaunchConsumed()
@@ -198,33 +194,12 @@ fun App(
                     SplashScreen(
                         viewModel        = splashVm,
                         onNavigateToAuth = {
-                            val targetRoute = if (updateState.isUpdateAvailable == true) {
-                                Screen.Update(Screen.Auth.route).route
-                            } else if (updateState.isUpdateAvailable == null) {
-                                // Still checking, go to Update screen which shows spinner
-                                Screen.Update(Screen.Auth.route).route
-                            } else {
-                                // Definitely NO update, skip to Auth
-                                Screen.Auth.route
-                            }
-                            
-                            navController.navigate(targetRoute) {
+                            navController.navigate(Screen.Auth.route) {
                                 popUpTo(Screen.Splash.route) { inclusive = true }
                             }
                         },
                         onNavigateToHome = {
-                            val nextRoute = Screen.Home().route
-                            val targetRoute = if (updateState.isUpdateAvailable == true) {
-                                Screen.Update(nextRoute).route
-                            } else if (updateState.isUpdateAvailable == null) {
-                                // Still checking, go to Update screen which shows spinner
-                                Screen.Update(nextRoute).route
-                            } else {
-                                // Definitely NO update, skip to Home
-                                nextRoute
-                            }
-
-                            navController.navigate(targetRoute) {
+                            navController.navigate(Screen.Home().route) {
                                 popUpTo(Screen.Splash.route) { inclusive = true }
                             }
                         },
@@ -358,27 +333,6 @@ fun App(
                     )
                 }
 
-                composable(
-                    route = Screen.Update.route,
-                    arguments = listOf(
-                        navArgument("next") { type = androidx.navigation.NavType.StringType }
-                    )
-                ) { backStackEntry ->
-                    val next = backStackEntry.arguments.str("next")?.replace("_", "/") ?: Screen.Home().route
-                    val state by updateVm.state.collectAsState()
-                    UpdateScreen(
-                        state = state,
-                        onUpdateLater = {
-                            navController.navigate(next) {
-                                popUpTo(Screen.Update.route) { inclusive = true }
-                            }
-                        },
-                        onUpdateNow = {
-                            // Link is opened in UpdateScreen.kt, 
-                            // we stay here so user can finish download/install
-                        }
-                    )
-                }
             }
         }
         }

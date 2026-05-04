@@ -57,7 +57,6 @@ fun AnimeInfoScreen(
 ) {
     LaunchedEffect(animeId) {
         viewModel.loadAnimeInfo(animeId)
-        to.kuudere.anisuge.AppComponent.realtimeService.joinRoom(animeId)
     }
 
     val state by viewModel.uiState.collectAsState()
@@ -75,22 +74,22 @@ fun AnimeInfoScreen(
         val ep = selectedEpisodeForDownload!!
         val anilistId = state.details!!.anilistId ?: 0
         DownloadEpisodeDialog(
-            animeId = state.details!!.id,
+            animeId = state.details!!.activeSlug,
             episodeId = ep.id,
-            episodeNumber = ep.number,
+            episodeNumber = ep.displayNumber,
             anilistId = anilistId,
             durationMins = state.details!!.duration ?: 24,
             infoService = to.kuudere.anisuge.AppComponent.infoService,
             serverRepository = to.kuudere.anisuge.AppComponent.serverRepository,
             onDismiss = { selectedEpisodeForDownload = null },
             onStartDownload = { server, subLang, audioLang, downloadFonts, headers ->
-                val title = state.details!!.title
+                val title = state.details!!.displayTitle
                 to.kuudere.anisuge.utils.DownloadManager.startDownload(
-                    animeId = state.details!!.id,
+                    animeId = state.details!!.activeSlug,
                     anilistId = anilistId,
-                    episodeNumber = ep.number,
+                    episodeNumber = ep.displayNumber,
                     title = title,
-                    coverImage = state.details!!.cover,
+                    coverImage = state.details!!.imageUrl,
                     server = server,
                     subLang = subLang,
                     audioLang = audioLang,
@@ -123,8 +122,8 @@ fun AnimeInfoScreen(
                         anime = anime,
                         state = state,
                         onWatchlistUpdate = { viewModel.updateWatchlist(it) },
-                        onWatchNow = { onWatchEpisode(anime.id, "sub", 1) },
-                        onWatchEpisode = { epNum -> onWatchEpisode(anime.id, "sub", epNum) },
+                        onWatchNow = { onWatchEpisode(anime.activeSlug, "sub", 1) },
+                        onWatchEpisode = { epNum -> onWatchEpisode(anime.activeSlug, "sub", epNum) },
                         onGenreClick = onGenreClick,
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
                         onDownloadsClick = onDownloadsClick,
@@ -144,8 +143,8 @@ fun AnimeInfoScreen(
                         },
                         onBack = onBack,
                         onWatchlistUpdate = { viewModel.updateWatchlist(it) },
-                        onWatchNow = { onWatchEpisode(anime.id, "sub", 1) },
-                        onWatchEpisode = { epNum -> onWatchEpisode(anime.id, "sub", epNum) },
+                        onWatchNow = { onWatchEpisode(anime.activeSlug, "sub", 1) },
+                        onWatchEpisode = { epNum -> onWatchEpisode(anime.activeSlug, "sub", epNum) },
                         onGenreClick = onGenreClick,
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
                         onDownloadsClick = onDownloadsClick
@@ -181,10 +180,10 @@ private fun MobileLayout(
              // Header Background (Image + Gradient) — stays under but is not in the flow
              Box(Modifier.fillMaxWidth().height(250.dp)) {
                 // Blur Background — use cover as fallback with stronger blur
-                val bannerUrl = anime.banner?.takeIf { 
+                val bannerUrl = anime.bannerUrl?.takeIf { 
                     it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
                 }
-                val bgImage = bannerUrl ?: anime.cover
+                val bgImage = bannerUrl ?: anime.imageUrl
                 val hasBanner = bannerUrl != null
                 AsyncImage(
                     model = bgImage,
@@ -247,7 +246,7 @@ private fun MobileLayout(
              Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Top) {
                  // Poster
                  AsyncImage(
-                    model = anime.cover,
+                    model = anime.imageUrl,
                     contentDescription = "Cover",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -260,7 +259,7 @@ private fun MobileLayout(
                  Column(Modifier.weight(1f)) {
                      // Title
                      Text(
-                         text = anime.title,
+                         text = anime.displayTitle,
                          color = Color.White,
                          fontSize = 24.sp,
                          fontWeight = FontWeight.Bold,
@@ -429,10 +428,10 @@ private fun DesktopLayout(
             Column(Modifier.fillMaxSize().background(Color.Black).verticalScroll(scrollState)) {
                 // Hero Section Box
         Box(Modifier.fillMaxWidth().height(500.dp)) {
-            val bannerUrl = anime.banner?.takeIf { 
+            val bannerUrl = anime.bannerUrl?.takeIf { 
                 it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
             }
-            val bgImage = bannerUrl ?: anime.cover
+            val bgImage = bannerUrl ?: anime.imageUrl
             val hasBanner = bannerUrl != null
 
             AsyncImage(
@@ -506,7 +505,7 @@ private fun DesktopLayout(
                         modifier = Modifier.fillMaxWidth(0.6f)
                     ) {
                 Text(
-                    text = anime.title,
+                    text = anime.displayTitle,
                     color = Color.White,
                     fontSize = 44.sp,
                     fontWeight = FontWeight.Bold,
@@ -648,7 +647,7 @@ private fun DesktopLayout(
             
             // Cover Image on the right side
             AsyncImage(
-                model = anime.cover,
+                model = anime.imageUrl,
                 contentDescription = "Cover Image",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -908,14 +907,14 @@ private fun DesktopLayout(
                 // Episode List
                 val filteredEpisodes = state.episodes.filter { 
                     if (searchQuery.isNotBlank()) {
-                        val numMatch = it.number.toString().contains(searchQuery)
-                        val titleMatch = it.titles?.filterNotNull()?.firstOrNull()?.contains(searchQuery, ignoreCase = true) == true
+                        val numMatch = it.displayNumber.toString().contains(searchQuery)
+                        val titleMatch = it.displayTitles?.filterNotNull()?.firstOrNull()?.contains(searchQuery, ignoreCase = true) == true
                         numMatch || titleMatch
                     } else {
-                        it.number in currentPageStart until (currentPageStart + episodesPerPage)
+                        it.displayNumber in currentPageStart until (currentPageStart + episodesPerPage)
                     }
                 }.let { list ->
-                    if (isAscending) list.sortedBy { it.number } else list.sortedByDescending { it.number }
+                    if (isAscending) list.sortedBy { it.displayNumber } else list.sortedByDescending { it.displayNumber }
                 }
                 
                 val listState = rememberLazyListState()
@@ -942,12 +941,12 @@ private fun DesktopLayout(
                                 }
                             }
                     ) {
-                        items(filteredEpisodes, key = { it.number }) { episode ->
+                        items(filteredEpisodes, key = { it.displayNumber }) { episode ->
                             DesktopEpisodeCard(
                                 episode = episode,
-                                thumbnail = state.thumbnails[episode.number.toString()] ?: anime.cover,
+                                thumbnail = state.thumbnails[episode.displayNumber.toString()] ?: anime.imageUrl,
                                 modifier = Modifier.animateItem(),
-                                onClick = { onWatchEpisode(episode.number) },
+                                onClick = { onWatchEpisode(episode.displayNumber) },
                                 onDownloadClick = { onDownloadEpisode(episode) }
                             )
                         }
@@ -998,7 +997,7 @@ private fun DesktopEpisodeCard(episode: EpisodeItem, thumbnail: String?, modifie
         // Thumbnail
         AsyncImage(
             model = thumbnail,
-            contentDescription = "Episode ${episode.number}",
+            contentDescription = "Episode ${episode.displayNumber}",
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
@@ -1054,12 +1053,12 @@ private fun DesktopEpisodeCard(episode: EpisodeItem, thumbnail: String?, modifie
                     .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
-                Text("EPISODE ${episode.number}", color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text("EPISODE ${episode.displayNumber}", color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
             
             Spacer(Modifier.height(4.dp))
             
-            val title = episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
+            val title = episode.displayTitles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.displayNumber}"
             Text(
                 text = title,
                 color = Color.White,
@@ -1073,7 +1072,7 @@ private fun DesktopEpisodeCard(episode: EpisodeItem, thumbnail: String?, modifie
             
             // Description equivalent text (or skip if empty)
             Text(
-                text = "Watch episode ${episode.number} right now.",
+                text = "Watch episode ${episode.displayNumber} right now.",
                 color = Color.LightGray,
                 fontSize = 11.sp,
                 maxLines = 2,
@@ -1289,21 +1288,21 @@ private fun EpisodeListSection(
 
         // Filtered episode cards
         val filtered = state.episodes.filter {
-            val num = it.number
+            val num = it.displayNumber
             val inRange = num >= currentPageStart && num < currentPageStart + episodesPerPage
             if (searchQuery.isEmpty()) return@filter inRange
             val matchNum = num.toString().contains(searchQuery)
-            val titleMatches = it.titles?.filterNotNull()?.firstOrNull()?.contains(searchQuery, ignoreCase = true) == true
+            val titleMatches = it.displayTitles?.filterNotNull()?.firstOrNull()?.contains(searchQuery, ignoreCase = true) == true
             inRange && (matchNum || titleMatches)
-        }.sortedBy { it.number }
+        }.sortedBy { it.displayNumber }
 
         // List of episodes
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             filtered.forEach { episode ->
                 EpisodeItemRow(
                     episode = episode,
-                    thumbnail = state.thumbnails[episode.number.toString()],
-                    onClick = { onWatchEpisode(episode.number) },
+                    thumbnail = state.thumbnails[episode.displayNumber.toString()],
+                    onClick = { onWatchEpisode(episode.displayNumber) },
                     onDownloadClick = { onDownloadEpisode(episode) }
                 )
             }
@@ -1339,7 +1338,7 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
                 if (thumbnail != null) {
                     AsyncImage(
                         model = thumbnail,
-                        contentDescription = "Episode ${episode.number}",
+                        contentDescription = "Episode ${episode.displayNumber}",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -1362,7 +1361,7 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
                 )
 
                 Text(
-                    text = episode.number.toString().padStart(2, '0'),
+                    text = episode.displayNumber.toString().padStart(2, '0'),
                     color = Color.White,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -1384,7 +1383,7 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    val title = episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
+                    val title = episode.displayTitles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.displayNumber}"
                     Text(
                         text = title,
                         color = Color.White,
@@ -1395,7 +1394,7 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "EP ${episode.number}",
+                            text = "EP ${episode.displayNumber}",
                             color = Color.White.copy(alpha = 0.5f),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium

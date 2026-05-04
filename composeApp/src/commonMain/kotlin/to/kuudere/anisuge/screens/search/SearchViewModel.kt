@@ -123,27 +123,23 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
         val currentState = _uiState.value
         try {
             val response = searchService.search(
-                keyword = currentState.keyword.ifBlank { null },
-                page = currentState.currentPage,
-                genres = currentState.selectedGenres,
-                season = currentState.selectedSeason,
-                year = currentState.selectedYear,
-                type = currentState.selectedType,
+                q = currentState.keyword.ifBlank { null },
+                offset = (currentState.currentPage - 1) * 20,
+                genres = currentState.selectedGenres.takeIf { it.isNotEmpty() }?.joinToString(","),
+                format = currentState.selectedType,
                 status = currentState.selectedStatus,
-                language = currentState.selectedLanguage,
-                rating = currentState.selectedRating,
-                sort = currentState.selectedSort
             )
 
             if (response != null && response.success) {
-                val newItems = response.animeData ?: emptyList()
+                val newItems = response.items
+                val hasMore = response.hasMore || (response.offset + response.limit < response.total)
                 _uiState.value = _uiState.value.copy(
                     results = if (loadMore) _uiState.value.results + newItems else newItems,
                     isLoading = false,
                     isLoadingMore = false,
                     isOffline = false,
-                    hasMore = response.hasMore ?: false,
-                    currentPage = if (newItems.isNotEmpty() && (response.hasMore ?: false)) currentState.currentPage + 1 else currentState.currentPage
+                    hasMore = hasMore,
+                    currentPage = if (newItems.isNotEmpty() && hasMore) currentState.currentPage + 1 else currentState.currentPage
                 )
             } else {
                 _uiState.value = _uiState.value.copy(

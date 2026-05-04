@@ -66,11 +66,11 @@ fun WatchlistScreen(
         }
     }
 
-    val currentList = state.items.filter { it.folder == "Watching" || it.folder == "Current" }
-    val onHoldList = state.items.filter { it.folder == "On Hold" }
-    val planningList = state.items.filter { it.folder == "Plan To Watch" || it.folder == "Planning" }
-    val droppedList = state.items.filter { it.folder == "Dropped" }
-    val completedList = state.items.filter { it.folder == "Completed" }
+    val currentList = state.items.filter { it.displayFolder == "Watching" }
+    val onHoldList = state.items.filter { it.displayFolder == "On Hold" }
+    val planningList = state.items.filter { it.displayFolder == "Plan To Watch" }
+    val droppedList = state.items.filter { it.displayFolder == "Dropped" }
+    val completedList = state.items.filter { it.displayFolder == "Completed" }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val isDesktop = maxWidth >= 800.dp
@@ -476,7 +476,7 @@ fun WatchlistScreen(
 
                 LaunchedEffect(endReached) {
                     if (endReached) {
-                        viewModel.loadNextPage()
+                        viewModel.loadMore()
                     }
                 }
 
@@ -505,7 +505,7 @@ fun WatchlistScreen(
                     var hasAnyItems = false
 
                     if (showAll) {
-                        items(state.items) { AnimeCard(item = it, badgeText = it.folder, onClick = { onAnimeClick(it.activeId) }) }
+                        items(state.items) { AnimeCard(item = it, badgeText = it.displayFolder, onClick = { onAnimeClick(it.activeId) }) }
                         if (state.items.isNotEmpty()) hasAnyItems = true
                     } else {
                         if (selectedList == "Watching" && currentList.isNotEmpty()) {
@@ -748,4 +748,3 @@ fun SectionHeader(title: String, count: Int) {
         Text(count.toString(), color = Color.Gray, fontSize = 16.sp, fontWeight = FontWeight.Medium)
     }
 }
-

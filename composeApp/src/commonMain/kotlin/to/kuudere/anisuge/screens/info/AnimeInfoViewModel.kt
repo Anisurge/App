@@ -54,9 +54,9 @@ class AnimeInfoViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        details = response.data,
-                        inWatchlist = response.data.inWatchlist,
-                        folder = response.data.folder,
+                        details = response,
+                        inWatchlist = response.isInWatchlist,
+                        folder = response.folder ?: response.watchlist?.folder,
                     )
                 }
             } else {
@@ -76,13 +76,9 @@ class AnimeInfoViewModel(
             if (response != null) {
                 _uiState.update { 
                     it.copy(
-                        episodes = response.allEpisodes ?: emptyList(),
+                        episodes = response.episodeList,
                         isLoadingEpisodes = false
                     ) 
-                }
-                
-                response.animeInfo?.anilist?.let { anilistId ->
-                    loadThumbnails(anilistId)
                 }
             } else {
                 _uiState.update { it.copy(isLoadingEpisodes = false) }
@@ -91,14 +87,7 @@ class AnimeInfoViewModel(
     }
 
     private fun loadThumbnails(anilistId: Int) {
-        viewModelScope.launch {
-            val response = infoService.getThumbnails(anilistId)
-            if (response != null && response.success) {
-                _uiState.update { 
-                    it.copy(thumbnails = response.thumbnails ?: emptyMap()) 
-                }
-            }
-        }
+        // Thumbnails endpoint removed in Project-R API
     }
 
     fun updateWatchlist(folder: String) {
@@ -106,20 +95,9 @@ class AnimeInfoViewModel(
         
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdatingWatchlist = true) }
-            val response = infoService.updateWatchlistStatus(animeId, folder)
+            val success = to.kuudere.anisuge.AppComponent.watchlistService.updateStatus(animeId, folder)
             
-            if (response != null && response.success) {
-                // AniList Sync
-                response.data?.token?.let { token ->
-                    response.data.anilist?.let { anilistId ->
-                        println("[AnimeInfoVM] Triggering AniList sync for $anilistId to $folder")
-                        viewModelScope.launch {
-                            val syncResult = to.kuudere.anisuge.AppComponent.aniListService.updateStatus(token, anilistId, folder)
-                            println("[AnimeInfoVM] AniList sync result for $anilistId: $syncResult")
-                        }
-                    } ?: println("[AnimeInfoVM] No anilistId returned for sync")
-                } ?: println("[AnimeInfoVM] No token returned for sync")
-
+            if (success) {
                 _uiState.update {
                     it.copy(
                         isUpdatingWatchlist = false,

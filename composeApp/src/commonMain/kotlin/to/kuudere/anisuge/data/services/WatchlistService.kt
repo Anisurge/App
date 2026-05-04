@@ -2,62 +2,104 @@ package to.kuudere.anisuge.data.services
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import to.kuudere.anisuge.data.models.SessionInfo
-import to.kuudere.anisuge.data.models.WatchlistResponse
-import to.kuudere.anisuge.data.models.WatchlistUpdateResponse
 import kotlinx.serialization.Serializable
+import to.kuudere.anisuge.data.models.WatchlistResponse
+import to.kuudere.anisuge.data.network.ApiConfig
+import to.kuudere.anisuge.data.network.bearer
+
+@Serializable
+private data class WatchlistRequest(
+    val animeId: String,
+    val folder: String,
+    val notes: String? = null,
+)
 
 class WatchlistService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
-    companion object {
-        const val BASE_URL = "https://anime.anisurge.qzz.io"
-    }
-
-    private fun sessionToCookie(s: SessionInfo): String =
-        "session_id=${s.sessionId}; session_secret=${s.session}; user_id=${s.userId}"
-
-    suspend fun getWatchlist(page: Int = 1, folder: String? = null, keyword: String? = null, sort: String? = null, genres: String? = null, type: String? = null, status: String? = null): WatchlistResponse? {
+    suspend fun getWatchlist(
+        q: String? = null,
+        folder: String? = null,
+        format: String? = null,
+        status: String? = null,
+        season: String? = null,
+        year: Int? = null,
+        genre: String? = null,
+        tag: String? = null,
+        minScore: Int? = null,
+        limit: Int = 20,
+        offset: Int = 0,
+        sort: String? = null,
+    ): WatchlistResponse? {
         val stored = sessionStore.get()
-        val response = httpClient.get("$BASE_URL/api/anime/watchlist") {
-            parameter("page", page.toString())
-            parameter("perPage", "18")
-            folder?.let { parameter("folder", it) }
-            keyword?.takeIf { it.isNotBlank() }?.let { parameter("keyword", it) }
-            sort?.let { parameter("sort", it) }
-            genres?.let { parameter("genres", it) }
-            type?.let { parameter("type", it) }
-            status?.let { parameter("status", it) }
-            if (stored != null) header("Cookie", sessionToCookie(stored))
-        }
-        return response.body<WatchlistResponse>()
-    }
-
-    @Serializable
-    private data class UpdateStatusRequest(val animeId: String, val folder: String)
-
-    suspend fun updateStatus(animeId: String, folder: String): WatchlistUpdateResponse? {
         return try {
-            val stored = sessionStore.get() ?: return null
-            val response = httpClient.post("$BASE_URL/api/anime/watchlist") {
-                contentType(ContentType.Application.Json)
-                header("Cookie", sessionToCookie(stored))
-                setBody(UpdateStatusRequest(animeId, folder))
+            val response = httpClient.get("${ApiConfig.API_BASE}/watchlist") {
+                q?.let { parameter("q", it) }
+                folder?.let { parameter("folder", it) }
+                format?.let { parameter("format", it) }
+                status?.let { parameter("status", it) }
+                season?.let { parameter("season", it) }
+                year?.let { parameter("year", it) }
+                genre?.let { parameter("genre", it) }
+                tag?.let { parameter("tag", it) }
+                minScore?.let { parameter("min_score", it) }
+                parameter("limit", limit)
+                parameter("offset", offset)
+                sort?.let { parameter("sort", it) }
+                if (stored != null) bearer(stored.token)
             }
-            if (response.status.value in 200..299) {
-                response.body<WatchlistUpdateResponse>()
-            } else null
+            response.body<WatchlistResponse>()
         } catch (e: Exception) {
-            println("[WatchlistService] updateStatus error: ${e.message}")
+            println("[WatchlistService] getWatchlist error: ${e.message}")
             null
         }
+    }
+
+    suspend fun updateStatus(animeId: String, folder: String, notes: String? = null): Boolean {
+        return try {
+            val stored = sessionStore.get() ?: return false
+            if (folder.equals("Remove", ignoreCase = true)) {
+                return removeFromWatchlist(animeId)
+            }
+            val response = httpClient.post("${ApiConfig.API_BASE}/watchlist") {
+                bearer(stored.token)
+                contentType(ContentType.Application.Json)
+                setBody(WatchlistRequest(animeId, folder.toApiFolder(), notes))
+            }
+            response.status.value in 200..299
+        } catch (e: Exception) {
+            println("[WatchlistService] updateStatus error: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun removeFromWatchlist(animeId: String): Boolean {
+        return try {
+            val stored = sessionStore.get() ?: return false
+            val response = httpClient.delete("${ApiConfig.API_BASE}/watchlist/$animeId") {
+                bearer(stored.token)
+            }
+            response.status.value in 200..299
+        } catch (e: Exception) {
+            println("[WatchlistService] removeFromWatchlist error: ${e.message}")
+            false
+        }
+    }
+
+    private fun String.toApiFolder(): String = when (trim().uppercase()) {
+        "WATCHING", "CURRENT" -> "CURRENT"
+        "ON HOLD", "ON_HOLD", "PAUSED" -> "PAUSED"
+        "PLAN TO WATCH", "PLAN_TO_WATCH", "PLANNING" -> "PLANNING"
+        "COMPLETED" -> "COMPLETED"
+        "DROPPED" -> "DROPPED"
+        else -> trim().uppercase()
     }
 }

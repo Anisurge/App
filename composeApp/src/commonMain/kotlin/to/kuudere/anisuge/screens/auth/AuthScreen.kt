@@ -96,9 +96,8 @@ import androidx.compose.ui.unit.sp
 import anisurge.composeapp.generated.resources.Res
 import anisurge.composeapp.generated.resources.logo_txt
 import kotlinx.coroutines.delay
-import kotlinx.datetime.Clock
+
 import org.jetbrains.compose.resources.painterResource
-import to.kuudere.anisuge.platform.TvPairingQrCode
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.theme.Border
 import to.kuudere.anisuge.theme.Muted
@@ -138,7 +137,7 @@ fun AuthScreen(
             val isDesktop = maxWidth > 800.dp
 
             if (isAndroidTvPlatform) {
-                TvQrAuthLayout(state = state, viewModel = viewModel)
+                MobileAuthLayout(state, viewModel)
             } else if (isDesktop) {
                 // Desktop background — Frieren poster image
                 coil3.compose.AsyncImage(
@@ -195,149 +194,6 @@ fun AuthScreen(
                 contentColor = Color.White,
                 shape = RoundedCornerShape(8.dp),
             )
-        }
-    }
-}
-
-@Composable
-private fun TvQrAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
-    var nowMillis by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
-    val remainingSeconds = ((state.tvPairingExpiresAtMillis - nowMillis).coerceAtLeast(0L) / 1000L).toInt()
-
-    LaunchedEffect(Unit) {
-        viewModel.startTvPairing()
-    }
-
-    LaunchedEffect(state.tvPairingExpiresAtMillis) {
-        while (state.tvPairingExpiresAtMillis > 0L && Clock.System.now().toEpochMilliseconds() < state.tvPairingExpiresAtMillis) {
-            nowMillis = Clock.System.now().toEpochMilliseconds()
-            delay(1000)
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { viewModel.stopTvPairing() }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.72f)
-                .widthIn(max = 760.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color.White.copy(alpha = 0.06f))
-                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(24.dp))
-                .padding(horizontal = 48.dp, vertical = 40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Image(
-                painter = painterResource(Res.drawable.logo_txt),
-                contentDescription = "Anisurge Logo",
-                modifier = Modifier.height(56.dp),
-                contentScale = ContentScale.Fit,
-            )
-            Spacer(Modifier.height(28.dp))
-
-            // Title changes based on state
-            Text(
-                when {
-                    state.isSuccess -> "Welcome!"
-                    state.tvPairingConnected -> "Connecting..."
-                    else -> "Scan to sign in"
-                },
-                color = Color.White,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                when {
-                    state.isSuccess -> "Login successful. Redirecting..."
-                    state.tvPairingConnected -> "Authenticating your account..."
-                    else -> "Open Anisurge on your phone, go to Profile, and scan this TV QR."
-                },
-                color = Color.White.copy(alpha = 0.68f),
-                fontSize = 16.sp,
-            )
-            Spacer(Modifier.height(28.dp))
-
-            // QR Code or Loading State
-            when {
-                state.isSuccess -> {
-                    // Success state - show checkmark or loading
-                    Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            color = Color(0xFF4CAF50),
-                            strokeWidth = 4.dp,
-                            modifier = Modifier.size(80.dp)
-                        )
-                    }
-                }
-                state.tvPairingConnected -> {
-                    // Connected state - show loading animation
-                    Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            color = Color(0xFFBF80FF),
-                            strokeWidth = 4.dp,
-                            modifier = Modifier.size(80.dp)
-                        )
-                    }
-                }
-                else -> {
-                    // Waiting for scan
-                    val payload = state.tvPairingPayload
-                    if (payload == null) {
-                        Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Color.White)
-                        }
-                    } else {
-                        TvPairingQrCode(
-                            payload = payload,
-                            modifier = Modifier.size(280.dp),
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(22.dp))
-            Text(
-                state.errorMessage ?: state.tvPairingStatus,
-                color = when {
-                    state.errorMessage != null -> Color(0xFFFF6B6B)
-                    state.isSuccess -> Color(0xFF4CAF50)
-                    state.tvPairingConnected -> Color(0xFFBF80FF)
-                    else -> Color.White.copy(alpha = 0.78f)
-                },
-                fontSize = 15.sp,
-                fontWeight = if (state.tvPairingConnected || state.isSuccess) FontWeight.Medium else FontWeight.Normal,
-            )
-            Spacer(Modifier.height(8.dp))
-
-            // Only show expiry when waiting for scan
-            if (!state.tvPairingConnected && !state.isSuccess) {
-                Text(
-                    if (remainingSeconds > 0) "Expires in ${remainingSeconds}s" else "QR expired. Generate a new code.",
-                    color = Color.White.copy(alpha = 0.52f),
-                    fontSize = 13.sp,
-                )
-            }
-
-            // Only show regenerate button when not connected
-            if (!state.tvPairingConnected && !state.isSuccess) {
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = { viewModel.startTvPairing() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                ) {
-                    Text("Regenerate QR", fontWeight = FontWeight.SemiBold)
-                }
-            }
         }
     }
 }
@@ -470,7 +326,6 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                     AuthMode.LOGIN -> "Welcome back"
                     AuthMode.REGISTER -> "Create account"
                     AuthMode.FORGOT_PASSWORD -> "Forgot password"
-                    AuthMode.VERIFY_CODE -> "Verify code"
                     AuthMode.RESET_PASSWORD -> "Reset password"
                 },
                 style = MaterialTheme.typography.headlineSmall,
@@ -491,8 +346,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                     AuthMode.LOGIN -> "Sign in to continue watching"
                     AuthMode.REGISTER -> "Join our streaming platform"
                     AuthMode.FORGOT_PASSWORD -> "Enter your email to reset your password"
-                    AuthMode.VERIFY_CODE -> "Enter the 6-digit code sent to your email"
-                    AuthMode.RESET_PASSWORD -> "Enter your new password"
+                    AuthMode.RESET_PASSWORD -> "Enter the OTP and your new password"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF999999),
@@ -507,8 +361,8 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
     // REGISTER mode fields
     if (state.mode == AuthMode.REGISTER) {
         AnisugTextField(
-            value = state.displayName,
-            onValueChange = viewModel::onDisplayNameChange,
+            value = state.username,
+            onValueChange = viewModel::onUsernameChange,
             label = "Username",
             placeholder = "Enter your Username",
             imeAction = ImeAction.Next,
@@ -518,12 +372,12 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
     }
 
     // Email field
-    if (state.mode != AuthMode.RESET_PASSWORD && state.mode != AuthMode.VERIFY_CODE) {
+    if (state.mode != AuthMode.RESET_PASSWORD) {
         AnisugTextField(
             value = state.email,
             onValueChange = viewModel::onEmailChange,
-            label = "Email",
-            placeholder = "Enter your email address",
+            label = "Email or Username",
+            placeholder = "Enter your email or username",
             keyboardType = KeyboardType.Email,
             imeAction = ImeAction.Next,
             onImeAction = { passwordFocus.requestFocus() },
@@ -531,20 +385,20 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
         Spacer(Modifier.height(16.dp))
     }
 
-    // VERIFY_CODE mode fields
-    if (state.mode == AuthMode.VERIFY_CODE) {
+    // OTP field for RESET_PASSWORD mode
+    if (state.mode == AuthMode.RESET_PASSWORD) {
         AnisugTextField(
-            value = state.resetCode,
-            onValueChange = viewModel::onResetCodeChange,
-            label = "Reset Code",
-            placeholder = "Enter 6-digit code",
+            value = state.otp,
+            onValueChange = viewModel::onOtpChange,
+            label = "OTP Code",
+            placeholder = "Enter 6-digit OTP",
             keyboardType = KeyboardType.Number,
-            imeAction = ImeAction.Done,
-            onImeAction = { viewModel.submit() },
+            imeAction = ImeAction.Next,
+            onImeAction = { passwordFocus.requestFocus() },
             focusRequester = resetCodeFocus,
         )
         Spacer(Modifier.height(16.dp))
-        
+
         LaunchedEffect(Unit) {
             resetCodeFocus.requestFocus()
         }
@@ -655,7 +509,6 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                     AuthMode.LOGIN -> "Sign in"
                     AuthMode.REGISTER -> "Create account"
                     AuthMode.FORGOT_PASSWORD -> "Send Reset Code"
-                    AuthMode.VERIFY_CODE -> "Verify Code"
                     AuthMode.RESET_PASSWORD -> "Reset Password"
                 },
                 fontSize = 15.sp,

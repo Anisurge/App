@@ -31,12 +31,8 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.ServerInfo
-import to.kuudere.anisuge.data.models.WatchServerResponse
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
-import io.ktor.client.statement.bodyAsText
-import io.ktor.client.request.get
-import io.ktor.client.request.header
 import to.kuudere.anisuge.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,62 +100,11 @@ fun DownloadEpisodeDialog(
         isLoadingSubs = true
         estimatedSizeBytes = 0L
         try {
-            // Use server ID directly (e.g., "zen2", "zen", "hiya")
-            val response = infoService.getVideoStream(anilistId, episodeNumber, selectedServer)
-            val streamData = response?.directLink?.data ?: response?.data
-            
-            // 1. Subtitles
-            val subs = streamData?.subtitles?.mapNotNull { 
-                it.title ?: it.resolvedLang 
-            }?.distinct() ?: emptyList()
-            availableSubtitles = listOf("All") + subs
-            if (selectedSubLang !in availableSubtitles) {
-                selectedSubLang = if ("English" in availableSubtitles) "English" else availableSubtitles.getOrNull(1) ?: "All"
-            }
-
-            // 2. Audio Tracks and Size Estimation from M3U8
-            val m3u8Url = streamData?.m3u8_url
-            currentHeaders = streamData?.headers
-            if (m3u8Url != null) {
-                val masterContent = to.kuudere.anisuge.AppComponent.httpClient.get(m3u8Url) {
-                    currentHeaders?.forEach { (k, v) -> header(k, v) }
-                }.bodyAsText()
-                val tracks = mutableListOf<Pair<String, String>>()
-                var maxBandwidth = 0L
-
-                masterContent.lines().forEach { line ->
-                    if (line.startsWith("#EXT-X-MEDIA:TYPE=AUDIO")) {
-                        val lang = Regex("LANGUAGE=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: "unknown"
-                        val name = Regex("NAME=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: lang
-                        tracks.add(lang to name)
-                    }
-                    if (line.startsWith("#EXT-X-STREAM-INF:")) {
-                        val bwMatch = Regex("BANDWIDTH=(\\d+)").find(line)
-                        val bw = bwMatch?.groupValues?.get(1)?.toLongOrNull() ?: 0L
-                        if (bw > maxBandwidth) maxBandwidth = bw
-                    }
-                }
-                
-                // Estimate size: Bandwidth is bits/sec. 
-                // Formula: (bits/sec / 8) * duration_seconds
-                // If bandwidth is weirdly low (like 5184 from the curl), it might be kbps.
-                val adjustedBps = if (maxBandwidth > 0 && maxBandwidth < 100000) maxBandwidth * 1000 else maxBandwidth
-                if (adjustedBps > 0) {
-                    estimatedSizeBytes = (adjustedBps / 8) * (durationMins * 60)
-                }
-
-                availableAudioTracks = tracks.distinctBy { it.first }
-                
-                // Set default audio lang
-                if (availableAudioTracks.isNotEmpty()) {
-                    if (selectedAudioLang == null || availableAudioTracks.none { it.first == selectedAudioLang }) {
-                        selectedAudioLang = availableAudioTracks.find { it.first == "jpn" || it.first == "ja" }?.first 
-                            ?: availableAudioTracks.first().first
-                    }
-                }
-            } else {
-                availableAudioTracks = emptyList()
-            }
+            // TODO: Streaming is not yet available in the Project-R API.
+            //  Re-implement subtitle/audio/size estimation once the backend
+            //  adds /watch/* streaming routes.
+            availableSubtitles = listOf("All")
+            availableAudioTracks = emptyList()
         } catch (e: Exception) {
             println("Failed to fetch subs/audio for $selectedServer: ${e.message}")
         } finally {

@@ -15,10 +15,6 @@ import to.kuudere.anisuge.platform.createDataStore
 import to.kuudere.anisuge.data.services.HomeService
 import to.kuudere.anisuge.data.services.SearchService
 
-/**
- * Manual dependency graph — keeps it simple for now, easy to swap out for Koin later.
- * Everything is lazily initialised and kept as a singleton for the app lifetime.
- */
 object AppComponent {
     val httpClient: HttpClient by lazy {
         HttpClient {
@@ -26,15 +22,15 @@ object AppComponent {
                 json(Json {
                     ignoreUnknownKeys = true
                     isLenient         = true
+                    coerceInputValues = true
+                    explicitNulls     = false
                 })
             }
             install(Logging) { level = LogLevel.ALL }
             install(HttpTimeout) {
-                requestTimeoutMillis = 60000 // 60s
-                connectTimeoutMillis = 30000 // 30s
-                socketTimeoutMillis  = 60000 // 60s
-            }
-            install(io.ktor.client.plugins.websocket.WebSockets) {
+                requestTimeoutMillis = 60000
+                connectTimeoutMillis = 30000
+                socketTimeoutMillis  = 60000
             }
         }
     }
@@ -83,14 +79,6 @@ object AppComponent {
         to.kuudere.anisuge.data.services.SettingsService(sessionStore, httpClient)
     }
 
-    val aniListService: to.kuudere.anisuge.data.services.AniListService by lazy {
-        to.kuudere.anisuge.data.services.AniListService(httpClient)
-    }
-
-    val realtimeService: to.kuudere.anisuge.data.services.RealtimeService by lazy {
-        to.kuudere.anisuge.data.services.RealtimeService(httpClient, authService)
-    }
-
     val serverRepository: ServerRepository by lazy {
         ServerRepository(httpClient, dataStore, settingsStore)
     }
@@ -99,7 +87,35 @@ object AppComponent {
         to.kuudere.anisuge.data.services.LatestService(sessionStore, httpClient)
     }
 
-    val updateService: to.kuudere.anisuge.data.services.UpdateService by lazy {
-        to.kuudere.anisuge.data.services.UpdateService(httpClient)
+    val watchService: to.kuudere.anisuge.data.services.WatchService by lazy {
+        to.kuudere.anisuge.data.services.WatchService(sessionStore, httpClient)
+    }
+
+    val communityService: to.kuudere.anisuge.data.services.CommunityService by lazy {
+        to.kuudere.anisuge.data.services.CommunityService(sessionStore, httpClient)
+    }
+
+    val notificationService: to.kuudere.anisuge.data.services.NotificationService by lazy {
+        to.kuudere.anisuge.data.services.NotificationService(sessionStore, httpClient)
+    }
+
+    val requestService: to.kuudere.anisuge.data.services.RequestService by lazy {
+        to.kuudere.anisuge.data.services.RequestService(sessionStore, httpClient)
+    }
+
+    val oAuthService: to.kuudere.anisuge.data.services.OAuthService by lazy {
+        to.kuudere.anisuge.data.services.OAuthService(sessionStore, httpClient)
+    }
+
+    val publicService: to.kuudere.anisuge.data.services.PublicService by lazy {
+        to.kuudere.anisuge.data.services.PublicService(sessionStore, httpClient)
+    }
+
+    val contactService: to.kuudere.anisuge.data.services.ContactService by lazy {
+        to.kuudere.anisuge.data.services.ContactService(httpClient)
+    }
+
+    val topAnimeService: to.kuudere.anisuge.data.services.TopAnimeService by lazy {
+        to.kuudere.anisuge.data.services.TopAnimeService(httpClient)
     }
 }

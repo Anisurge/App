@@ -5,36 +5,27 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
 import to.kuudere.anisuge.data.services.AuthService
-import to.kuudere.anisuge.platform.TvQrPairingReceiver
-import to.kuudere.anisuge.platform.generatePairingNonce
 
-enum class AuthMode { LOGIN, REGISTER, FORGOT_PASSWORD, VERIFY_CODE, RESET_PASSWORD }
+enum class AuthMode { LOGIN, REGISTER, FORGOT_PASSWORD, RESET_PASSWORD }
 
 data class AuthUiState(
     val mode: AuthMode         = AuthMode.LOGIN,
     val email: String          = "",
     val password: String       = "",
     val confirmPassword: String = "",
-    val displayName: String    = "",
-    val resetCode: String      = "",
+    val username: String       = "",
+    val otp: String            = "",
     val isLoading: Boolean     = false,
     val errorMessage: String?  = null,
     val infoMessage: String?   = null,
     val isSuccess: Boolean     = false,
-    val tvPairingPayload: String? = null,
-    val tvPairingStatus: String = "Preparing QR login...",
-    val tvPairingExpiresAtMillis: Long = 0L,
-    val tvPairingConnected: Boolean = false,
 )
 
 class AuthViewModel(private val authService: AuthService) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
-    private val tvPairingReceiver = TvQrPairingReceiver()
 
     fun setMode(mode: AuthMode) {
         _uiState.value = _uiState.value.copy(
@@ -53,77 +44,10 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
     fun onEmailChange(v: String)           { _uiState.value = _uiState.value.copy(email = v) }
     fun onPasswordChange(v: String)        { _uiState.value = _uiState.value.copy(password = v) }
     fun onConfirmPasswordChange(v: String) { _uiState.value = _uiState.value.copy(confirmPassword = v) }
-    fun onDisplayNameChange(v: String)     { _uiState.value = _uiState.value.copy(displayName = v) }
-    fun onResetCodeChange(v: String)       { _uiState.value = _uiState.value.copy(resetCode = v) }
+    fun onUsernameChange(v: String)        { _uiState.value = _uiState.value.copy(username = v) }
+    fun onOtpChange(v: String)             { _uiState.value = _uiState.value.copy(otp = v) }
     fun clearError()                       { _uiState.value = _uiState.value.copy(errorMessage = null) }
     fun clearInfo()                        { _uiState.value = _uiState.value.copy(infoMessage = null) }
-
-    fun startTvPairing() {
-        tvPairingReceiver.stop()
-        val nonce = generatePairingNonce()
-        val expiresAtMillis = Clock.System.now().toEpochMilliseconds() + 120_000L
-        _uiState.value = _uiState.value.copy(
-            tvPairingPayload = null,
-            tvPairingStatus = "Starting secure local pairing...",
-            tvPairingExpiresAtMillis = expiresAtMillis,
-            tvPairingConnected = false,
-            errorMessage = null,
-        )
-
-        viewModelScope.launch {
-            try {
-                val endpoint = tvPairingReceiver.start(
-                    nonce = nonce,
-                    expiresAtMillis = expiresAtMillis,
-                    onClientConnected = {
-                        _uiState.value = _uiState.value.copy(
-                            tvPairingConnected = true,
-                            tvPairingStatus = "Phone connected, authenticating...",
-                        )
-                    },
-                    onSessionReceived = { session ->
-                        authService.savePairedSession(session)
-                        _uiState.value = _uiState.value.copy(
-                            isSuccess = true,
-                            tvPairingStatus = "Paired successfully",
-                            errorMessage = null,
-                        )
-                    }
-                )
-                val payload = "anisurge://tv-login?host=${endpoint.host}&port=${endpoint.port}&nonce=$nonce"
-                _uiState.value = _uiState.value.copy(
-                    tvPairingPayload = payload,
-                    tvPairingStatus = "Scan with Anisurge on your phone",
-                    tvPairingExpiresAtMillis = expiresAtMillis,
-                )
-                launch {
-                    delay((expiresAtMillis - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L))
-                    if (!_uiState.value.isSuccess && _uiState.value.tvPairingExpiresAtMillis == expiresAtMillis) {
-                        tvPairingReceiver.stop()
-                        _uiState.value = _uiState.value.copy(
-                            tvPairingStatus = "QR expired. Generate a new code.",
-                            tvPairingConnected = false,
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    tvPairingStatus = "Could not start QR login",
-                    errorMessage = e.message ?: "TV pairing failed",
-                    tvPairingConnected = false,
-                )
-            }
-        }
-    }
-
-    fun stopTvPairing() {
-        tvPairingReceiver.stop()
-    }
-
-    override fun onCleared() {
-        tvPairingReceiver.stop()
-        super.onCleared()
-    }
 
     fun submit() {
         val state = _uiState.value
@@ -139,10 +63,10 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
                         _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
                     }
                     AuthMode.REGISTER -> {
-                        if (state.email.isBlank() || state.password.isBlank() || state.displayName.isBlank()) {
+                        if (state.email.isBlank() || state.password.isBlank() || state.username.isBlank()) {
                             throw Exception("Please fill in all fields")
                         }
-                        authService.register(state.email, state.password, state.displayName)
+                        authService.signup(state.email, state.password, state.username)
                         _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
                     }
                     AuthMode.FORGOT_PASSWORD -> {
@@ -151,31 +75,21 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             infoMessage = msg,
-                            mode = AuthMode.VERIFY_CODE
+                            mode = AuthMode.RESET_PASSWORD
                         )
                     }
-                    AuthMode.VERIFY_CODE -> {
-                        if (state.resetCode.isBlank()) throw Exception("Please enter the reset code")
-                        val valid = authService.verifyResetCode(state.email, state.resetCode)
-                        if (valid) {
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                mode = AuthMode.RESET_PASSWORD
-                            )
-                        } else {
-                            throw Exception("Invalid reset code")
-                        }
-                    }
                     AuthMode.RESET_PASSWORD -> {
+                        if (state.otp.isBlank()) throw Exception("Please enter the OTP code")
                         if (state.password.isBlank()) throw Exception("Please enter a new password")
                         if (state.password != state.confirmPassword) throw Exception("Passwords do not match")
-                        val msg = authService.resetPassword(state.email, state.resetCode, state.password)
+                        val msg = authService.resetPassword(state.email, state.otp, state.password)
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             infoMessage = msg,
                             mode = AuthMode.LOGIN,
                             password = "",
-                            confirmPassword = ""
+                            confirmPassword = "",
+                            otp = ""
                         )
                     }
                 }

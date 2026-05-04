@@ -40,6 +40,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -76,6 +78,7 @@ private val BORDER = Color.White.copy(alpha = 0.10f)
 private val MUTED  = Color.White.copy(alpha = 0.50f)
 private val CARD   = Color.White.copy(alpha = 0.03f)
 private val CARD_H = Color.White.copy(alpha = 0.07f)
+private val ACCENT = Color(0xFF8B5CF6) // purple accent for watchlist
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -135,6 +138,7 @@ fun ScheduleScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val strings = LocalAppStrings.current
+    val displayedSchedule = state.displayedSchedule
 
     Box(Modifier.fillMaxSize().background(BG)) {
         when {
@@ -159,24 +163,9 @@ fun ScheduleScreen(
             }
 
             else -> {
-                val sortedDates = remember(state.schedule) { state.schedule.keys.sorted() }
+                val sortedDates = remember(displayedSchedule) { displayedSchedule.keys.sorted() }
                 val listState = rememberLazyListState()
-                // Keys of items that have already played their enter animation
                 val animatedKeys = remember { mutableStateSetOf<String>() }
-
-                // ── Sentinel: trigger loadMore when near the end ───────────
-                val nearEnd by remember {
-                    derivedStateOf {
-                        val info = listState.layoutInfo
-                        val last = info.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
-                        last >= info.totalItemsCount - 4
-                    }
-                }
-                LaunchedEffect(nearEnd) {
-                    if (nearEnd && state.hasMore && !state.isLoadingMore) {
-                        viewModel.loadMore()
-                    }
-                }
 
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     val cols = when {
@@ -191,16 +180,49 @@ fun ScheduleScreen(
                         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = if (maxWidth < 800.dp) 156.dp else 20.dp),
                     ) {
                         item {
-                           Box(Modifier.fillMaxWidth()) {
+                            Box(Modifier.fillMaxWidth()) {
                                 to.kuudere.anisuge.platform.WindowManagementButtons(
                                     onClose = onExit,
                                     modifier = Modifier.align(Alignment.TopEnd)
                                 )
-                           }
+                            }
+                        }
+
+                        // ── Watchlist filter toggle ───────────────────────────
+                        if (state.isAuthenticated) {
+                            item(key = "watchlist-filter") {
+                                WatchlistFilterToggle(
+                                    isActive = state.showWatchlistOnly,
+                                    onToggle = { viewModel.toggleWatchlistFilter() },
+                                )
+                            }
+                        }
+
+                        // ── Empty state when watchlist filter yields no results ──
+                        if (state.showWatchlistOnly && displayedSchedule.isEmpty() && !state.isLoading) {
+                            item(key = "watchlist-empty") {
+                                Column(
+                                    Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.BookmarkBorder,
+                                        contentDescription = null,
+                                        tint = MUTED,
+                                        modifier = Modifier.size(48.dp),
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        strings.noWatchlistInSchedule,
+                                        color = MUTED,
+                                        fontSize = 14.sp,
+                                    )
+                                }
+                            }
                         }
 
                         sortedDates.forEachIndexed { dateIdx, dateStr ->
-                            val animeList = state.schedule[dateStr] ?: return@forEachIndexed
+                            val animeList = displayedSchedule[dateStr] ?: return@forEachIndexed
                             val isToday = dateStr == todayString()
 
                             // ── Date header ───────────────────────────────
@@ -241,8 +263,11 @@ fun ScheduleScreen(
 
                             // ── Card rows ─────────────────────────────────
                             val rows = animeList.chunked(cols)
-                            items(rows, key = { "${dateStr}-r${rows.indexOf(it)}" }) { row ->
-                                val rowIdx = rows.indexOf(row)
+                            items(
+                                count = rows.size,
+                                key = { rowIdx -> "$dateStr-r$rowIdx" }
+                            ) { rowIdx ->
+                                val row = rows[rowIdx]
                                 AnimatedEntry(
                                     itemKey = "${dateStr}-r$rowIdx",
                                     animatedKeys = animatedKeys,
@@ -253,9 +278,13 @@ fun ScheduleScreen(
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     ) {
                                         row.forEach { anime ->
+                                            val isInWatchlist = state.watchlistAnimeIds.contains(anime.animeId) ||
+                                                state.watchlistAnimeIds.contains(anime.id) ||
+                                                state.watchlistAnimeIds.contains(anime.slug)
                                             AnimeScheduleCard(
                                                 anime = anime,
-                                                onClick = { onAnimeClick(anime.id) },
+                                                isInWatchlist = isInWatchlist,
+                                                onClick = { onAnimeClick(anime.activeSlug) },
                                                 modifier = Modifier.weight(1f),
                                             )
                                         }
@@ -265,29 +294,6 @@ fun ScheduleScreen(
                             }
                         }
 
-                        // ── Skeleton placeholder while loading more ────────
-                        if (state.isLoadingMore) {
-                            item(key = "skeleton") {
-                                Column {
-                                    Spacer(Modifier.height(28.dp))
-                                    // Skeleton header
-                                    SkeletonBox(Modifier.width(200.dp).height(22.dp))
-                                    Spacer(Modifier.height(12.dp))
-                                    Box(Modifier.fillMaxWidth().height(1.dp).background(BORDER))
-                                    Spacer(Modifier.height(12.dp))
-                                    // Skeleton cards
-                                    Row(
-                                        Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        repeat(3) {
-                                            SkeletonBox(Modifier.weight(1f).height(110.dp).clip(RoundedCornerShape(10.dp)))
-                                        }
-                                    }
-                                    Spacer(Modifier.height(80.dp))
-                                }
-                            }
-                        }
 
                         item { Spacer(Modifier.height(80.dp)) }
                     }
@@ -304,7 +310,6 @@ fun ScheduleScreen(
                     ) {
                         ScrollToTopButton {
                             coroutineScope.launch {
-                                // Jump close first so the animated portion is short (visible range only)
                                 if (listState.firstVisibleItemIndex > 4) {
                                     listState.scrollToItem(4)
                                 }
@@ -315,6 +320,57 @@ fun ScheduleScreen(
                 }
             }
         }
+    }
+}
+
+// ── Watchlist filter toggle ───────────────────────────────────────────────────
+
+@Composable
+private fun WatchlistFilterToggle(
+    isActive: Boolean,
+    onToggle: () -> Unit,
+) {
+    val strings = LocalAppStrings.current
+    val inter = remember { MutableInteractionSource() }
+    val hovered by inter.collectIsHoveredAsState()
+
+    val bg by animateColorAsState(
+        if (isActive) ACCENT.copy(alpha = 0.20f) else if (hovered) CARD_H else CARD,
+        tween(250)
+    )
+    val border by animateColorAsState(
+        if (isActive) ACCENT.copy(alpha = 0.60f) else if (hovered) Color.White.copy(alpha = 0.20f) else BORDER,
+        tween(250)
+    )
+    val iconTint by animateColorAsState(
+        if (isActive) ACCENT else Color.White.copy(alpha = 0.70f),
+        tween(250)
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(10.dp))
+            .hoverable(inter)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (isActive) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            if (isActive) strings.showingWatchlistOnly else strings.showWatchlistOnly,
+            color = if (isActive) Color.White else MUTED,
+            fontSize = 13.sp,
+            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+        )
     }
 }
 
@@ -405,6 +461,7 @@ private fun SkeletonBox(modifier: Modifier = Modifier) {
 @Composable
 private fun AnimeScheduleCard(
     anime: ScheduleAnime,
+    isInWatchlist: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -412,9 +469,17 @@ private fun AnimeScheduleCard(
     val inter = remember { MutableInteractionSource() }
     val hovered by inter.collectIsHoveredAsState()
 
-    val bgColor by animateColorAsState(if (hovered) CARD_H else CARD, tween(300, easing = FastOutSlowInEasing))
+    val bgColor by animateColorAsState(
+        if (hovered) CARD_H else if (isInWatchlist) ACCENT.copy(alpha = 0.04f) else CARD,
+        tween(300, easing = FastOutSlowInEasing)
+    )
     val borderColor by animateColorAsState(
-        if (hovered) Color.White.copy(alpha = 0.20f) else BORDER, tween(300, easing = FastOutSlowInEasing)
+        when {
+            hovered -> Color.White.copy(alpha = 0.20f)
+            isInWatchlist -> ACCENT.copy(alpha = 0.25f)
+            else -> BORDER
+        },
+        tween(300, easing = FastOutSlowInEasing)
     )
     val scale by animateFloatAsState(if (hovered) 1.015f else 1f, tween(300, easing = FastOutSlowInEasing))
 
@@ -454,7 +519,26 @@ private fun AnimeScheduleCard(
                     .background(Color.White)
                     .padding(horizontal = 5.dp, vertical = 2.dp)
             ) {
-                Text(strings.episodeShort(anime.episode), color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(strings.episodeShort(anime.displayEpisodeNumber), color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+            // Watchlist indicator — small bookmark icon at bottom-right
+            if (isInWatchlist) {
+                Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(3.dp)
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(ACCENT.copy(alpha = 0.90f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Bookmark,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(10.dp),
+                    )
+                }
             }
         }
 
@@ -469,11 +553,11 @@ private fun AnimeScheduleCard(
                         .padding(top = 3.dp)
                         .size(6.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.7f))
+                        .background(if (isInWatchlist) ACCENT else Color.White.copy(alpha = 0.7f))
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    anime.title,
+                    anime.displayTitle,
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -485,19 +569,23 @@ private fun AnimeScheduleCard(
 
             Spacer(Modifier.height(5.dp))
 
-            // Time + type
+            // Time + type + watchlist folder
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (anime.time.isNotBlank()) {
                     Text(anime.time, color = MUTED, fontSize = 12.sp)
                     Text(" • ", color = MUTED, fontSize = 12.sp)
                 }
                 Text(anime.type.ifBlank { "TV" }, color = MUTED, fontSize = 12.sp)
+                if (isInWatchlist && anime.displayFolder != null) {
+                    Text(" • ", color = MUTED, fontSize = 12.sp)
+                    Text(anime.displayFolder!!, color = ACCENT.copy(alpha = 0.80f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                }
             }
 
             Spacer(Modifier.height(7.dp))
 
             // Description
-            val desc = anime.description.replace(Regex("<[^>]*>"), "").trim()
+            val desc = anime.description?.replace(Regex("<[^>]*>"), "")?.trim() ?: ""
             if (desc.isNotBlank()) {
                 Text(
                     desc,

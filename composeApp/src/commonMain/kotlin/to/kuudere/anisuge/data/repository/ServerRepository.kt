@@ -37,7 +37,7 @@ class ServerRepository(
     private val settingsStore: SettingsStore
 ) {
     companion object {
-        private const val BASE_URL = "https://anime.anisurge.qzz.io"
+        private const val BASE_URL = "https://api.reanime.to"
         private const val CACHE_KEY_SERVERS = "cached_servers"
         private const val CACHE_KEY_TIMESTAMP = "servers_cache_timestamp"
         private const val REFRESH_INTERVAL_MS = 30 * 60 * 1000L // 30 minutes
@@ -182,7 +182,7 @@ class ServerRepository(
 
         _isLoading.value = true
         return try {
-            val response = httpClient.get("$BASE_URL/api/servers")
+            val response = httpClient.get("$BASE_URL/api/v1/servers")
             val serversResponse: ServersResponse = response.body()
 
             if (serversResponse.servers.isNotEmpty()) {

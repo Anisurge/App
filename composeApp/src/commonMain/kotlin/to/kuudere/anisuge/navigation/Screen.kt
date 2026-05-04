@@ -1,5 +1,7 @@
 package to.kuudere.anisuge.navigation
 
+import io.ktor.http.encodeURLPathPart
+
 /** All navigation destinations in the app */
 sealed class Screen(val route: String) {
     data object Splash : Screen("splash")
@@ -18,7 +20,7 @@ sealed class Screen(val route: String) {
         }
     }
     data object Search : Screen("search")
-    data class Info(val animeId: String) : Screen("info/$animeId") {
+    data class Info(val animeId: String) : Screen("info/${animeId.encodeURLPathPart()}") {
         companion object {
             const val route = "info/{animeId}"
         }
@@ -31,7 +33,7 @@ sealed class Screen(val route: String) {
         val offlinePath: String? = null,
         val offlineTitle: String? = null
     ) : Screen(
-        "watch/$animeId/$episodeNumber" + buildString {
+        "watch/${animeId.encodeURLPathPart()}/$episodeNumber" + buildString {
             if (server != null || lang != null || offlinePath != null || offlineTitle != null) append("?")
             val params = mutableListOf<String>()
             if (server != null) params.add("server=$server")
