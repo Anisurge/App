@@ -378,22 +378,22 @@ private fun MobileLayout(
                          Spacer(Modifier.height(24.dp))
                      }
 
-                     if (!anime.studios.isNullOrEmpty()) {
-                         Text("Studios", color = Color.White, fontSize = 16.sp)
-                         Spacer(Modifier.height(8.dp))
-                         @OptIn(ExperimentalLayoutApi::class)
-                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                             anime.studios.forEach { studio ->
-                                 Box(
-                                     Modifier
-                                         .clip(RoundedCornerShape(8.dp))
-                                         .background(Color(0xFF000000))
-                                         .padding(horizontal = 12.dp, vertical = 6.dp)
-                                 ) {
-                                     Text(studio, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
-                                 }
-                             }
-                         }
+                    if (!anime.studioNames.isNullOrEmpty()) {
+                        Text("Studios", color = Color.White, fontSize = 16.sp)
+                        Spacer(Modifier.height(8.dp))
+                        @OptIn(ExperimentalLayoutApi::class)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            anime.studioNames.forEach { studio ->
+                                Box(
+                                    Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF000000))
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(studio, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+                                }
+                            }
+                        }
                       }
                   }
               }

@@ -56,7 +56,7 @@ class AnimeInfoViewModel(
                         isLoading = false,
                         details = response,
                         inWatchlist = response.isInWatchlist,
-                        folder = response.folder ?: response.watchlist?.folder,
+                        folder = response.displayFolder,
                     )
                 }
             } else {
@@ -98,11 +98,20 @@ class AnimeInfoViewModel(
             val success = to.kuudere.anisuge.AppComponent.watchlistService.updateStatus(animeId, folder)
             
             if (success) {
+                val displayFolder = when (folder.trim().uppercase()) {
+                    "CURRENT", "WATCHING" -> "Watching"
+                    "PAUSED", "ON_HOLD", "ON HOLD" -> "On Hold"
+                    "PLANNING", "PLAN_TO_WATCH", "PLAN TO WATCH" -> "Plan To Watch"
+                    "COMPLETED" -> "Completed"
+                    "DROPPED" -> "Dropped"
+                    "REMOVE" -> null
+                    else -> folder
+                }
                 _uiState.update {
                     it.copy(
                         isUpdatingWatchlist = false,
                         inWatchlist = folder != "Remove",
-                        folder = if (folder != "Remove") folder else null
+                        folder = displayFolder,
                     )
                 }
             } else {

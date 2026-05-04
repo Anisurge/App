@@ -16,7 +16,7 @@ data class AnimeDetails(
     val type: String? = null,
     val status: String? = null,
     val genres: List<String>? = emptyList(),
-    val tags: List<String>? = emptyList(),
+    val tags: List<TagInfo>? = emptyList(),
     val season: String? = null,
     @SerialName("season_year") val seasonYear: Int? = null,
     @SerialName("episodes_total") val episodesTotal: Int? = null,
@@ -34,7 +34,7 @@ data class AnimeDetails(
     @SerialName("country_of_origin") val countryOfOrigin: String? = null,
     val country: String? = null,
     val source: String? = null,
-    val studios: List<String>? = emptyList(),
+    val studios: List<StudioInfo>? = emptyList(),
     val synonyms: List<String>? = emptyList(),
     @SerialName("start_date") val startDate: FuzzyDate? = null,
     @SerialName("end_date") val endDate: FuzzyDate? = null,
@@ -50,6 +50,8 @@ data class AnimeDetails(
     val artworks: List<ArtworkInfo>? = emptyList(),
     val trailer: TrailerInfo? = null,
     @SerialName("external_links") val externalLinks: List<ExternalLink>? = emptyList(),
+    val trending: Int? = null,
+    @SerialName("updated_at") val updatedAt: String? = null,
     // Legacy fields
     val id: String = "",
     val english: String? = null,
@@ -78,7 +80,38 @@ data class AnimeDetails(
     val displayYear: Int get() = seasonYear ?: year ?: 0
     val isInWatchlist: Boolean get() = inWatchlist || watchlist != null
     val displayCountry: String? get() = country ?: countryOfOrigin
+    val displayFolder: String? get() = when ((folder ?: watchlist?.folder)?.uppercase()) {
+        "CURRENT", "WATCHING" -> "Watching"
+        "PAUSED", "ON_HOLD", "ON HOLD" -> "On Hold"
+        "PLANNING", "PLAN_TO_WATCH", "PLAN TO WATCH" -> "Plan To Watch"
+        "COMPLETED" -> "Completed"
+        "DROPPED" -> "Dropped"
+        else -> folder ?: watchlist?.folder
+    }
+    /** Extract studio names as strings for display */
+    val studioNames: List<String> get() = studios?.mapNotNull { it.name } ?: emptyList()
+    /** Extract tag names as strings for display */
+    val tagNames: List<String> get() = tags?.mapNotNull { it.name } ?: emptyList()
 }
+
+@Serializable
+data class StudioInfo(
+    val id: Int? = null,
+    val name: String? = null,
+    @SerialName("is_main") val isMain: Boolean? = null,
+)
+
+@Serializable
+data class TagInfo(
+    val id: Int? = null,
+    val name: String? = null,
+    val category: String? = null,
+    val description: String? = null,
+    val rank: Int? = null,
+    @SerialName("is_adult") val isAdult: Boolean? = null,
+    @SerialName("is_general_spoiler") val isGeneralSpoiler: Boolean? = null,
+    @SerialName("is_media_spoiler") val isMediaSpoiler: Boolean? = null,
+)
 
 @Serializable
 data class NextAiringEpisode(
@@ -92,6 +125,8 @@ data class WatchlistInfo(
     val notes: String? = null,
     @SerialName("started_at") val startedAt: FuzzyDate? = null,
     @SerialName("completed_at") val completedAt: FuzzyDate? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("lastUpdated") val lastUpdated: String? = null,
 )
 
 @Serializable
@@ -113,13 +148,21 @@ data class FuzzyDate(
 @Serializable
 data class AnimeRelation(
     @SerialName("anime_id") val animeId: String? = null,
+    @SerialName("relation_type") val relationType: String? = null,
     val type: String? = null,
     val title: AnimeTitle? = null,
     val format: String? = null,
-)
+    @SerialName("season_year") val seasonYear: Int? = null,
+    @SerialName("cover_image") val coverImage: CoverImage? = null,
+) {
+    val displayTitle: String get() = title?.userPreferred ?: title?.english ?: title?.romaji ?: ""
+    val imageUrl: String get() = coverImage?.extraLarge ?: coverImage?.large ?: coverImage?.medium ?: ""
+    val displayRelation: String? get() = relationType ?: type
+}
 
 @Serializable
 data class CharacterInfo(
+    val id: Int? = null,
     val name: String? = null,
     val role: String? = null,
     val image: String? = null,
@@ -127,6 +170,7 @@ data class CharacterInfo(
 
 @Serializable
 data class StaffInfo(
+    val id: Int? = null,
     val name: String? = null,
     val role: String? = null,
     val image: String? = null,
@@ -153,6 +197,7 @@ data class ExternalLink(
     val url: String? = null,
     val site: String? = null,
     val type: String? = null,
+    val language: String? = null,
 )
 
 @Serializable
@@ -227,3 +272,25 @@ data class ThumbnailsResponse(
     val success: Boolean = true,
     val thumbnails: Map<String, String>? = emptyMap(),
 )
+
+@Serializable
+data class RecommendationsResponse(
+    val recommendations: List<RecommendationItem> = emptyList(),
+    val success: Boolean = true,
+)
+
+@Serializable
+data class RecommendationItem(
+    val id: String = "",
+    val title: AnimeTitle? = null,
+    @SerialName("cover_image") val coverImage: CoverImage? = null,
+    val format: String? = null,
+    val year: Int? = null,
+    val status: String? = null,
+    @SerialName("episodeCount") val episodeCount: Int? = null,
+    val genres: List<String>? = emptyList(),
+    @SerialName("average_score") val averageScore: Int? = null,
+) {
+    val displayTitle: String get() = title?.userPreferred ?: title?.english ?: title?.romaji ?: ""
+    val imageUrl: String get() = coverImage?.extraLarge ?: coverImage?.large ?: coverImage?.medium ?: ""
+}

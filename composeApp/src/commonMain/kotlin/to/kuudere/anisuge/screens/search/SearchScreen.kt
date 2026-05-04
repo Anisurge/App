@@ -157,7 +157,7 @@ fun SearchScreen(
                         to.kuudere.anisuge.ui.AnimeCard(
                             item     = anime,
                             modifier = Modifier.fillMaxWidth(),
-                            onClick  = { onAnimeClick(anime.id) }
+                            onClick  = { onAnimeClick(anime.activeSlug) }
                         )
                     }
                 }

@@ -110,8 +110,8 @@ data class HomeData(
     @SerialName("top_upcoming") val topUpcoming: List<AnimeItem> = emptyList(),
     @SerialName("hasContinueWatching") val hasContinueWatching: Boolean = false,
 ) {
-    val topAired: List<AnimeItem> get() = latestAired.ifEmpty { emptyList() }
-    val latestEps: List<AnimeItem> get() = newOnSite.ifEmpty { newAdditions }
+    val topAired: List<AnimeItem> get() = trending.ifEmpty { latestAired }
+    val latestEps: List<AnimeItem> get() = latestAired.ifEmpty { newOnSite.ifEmpty { newAdditions } }
     val displayUpcoming: List<AnimeItem> get() = upcoming.ifEmpty { topUpcoming }
 }
 

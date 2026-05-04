@@ -409,7 +409,7 @@ fun HomeScreen(
             WatchlistBottomSheet(
                 currentFolder = null, // We don't have this info here easily
                 onSelect = { folder ->
-                    homeViewModel.updateWatchlist(showWatchlistFor!!.activeId, folder)
+                    homeViewModel.updateWatchlist(showWatchlistFor!!.activeSlug, folder)
                     showWatchlistFor = null
                 },
                 onDismiss = { showWatchlistFor = null }
@@ -534,8 +534,8 @@ private fun HomeContent(
             if (state.topAiring.isNotEmpty()) {
                 HeroCarousel(
                     items = state.topAiring,
-                    onAnimeClick = { onAnimeClick(it.activeId) },
-                    onWatchClick = { item, lang, ep -> onWatchClick(item.activeId, lang, ep, null) },
+                    onAnimeClick = { onAnimeClick(it.activeSlug) },
+                    onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null) },
                     onWatchlistClick = onWatchlistClick
                 )
             }
@@ -563,7 +563,7 @@ private fun HomeContent(
             AnimeSection(
                 title = "Latest Episodes",
                 items = state.latestEpisodes,
-                onItemClick = { item -> onAnimeClick(item.activeId) },
+                onItemClick = { item -> onAnimeClick(item.activeSlug) },
                 onViewMoreClick = onViewLatestMore,
             )
         }
@@ -573,7 +573,7 @@ private fun HomeContent(
             AnimeSection(
                 title = "New On App",
                 items = state.newOnSite,
-                onItemClick = { item -> onAnimeClick(item.activeId) },
+                onItemClick = { item -> onAnimeClick(item.activeSlug) },
                 onViewMoreClick = onViewNewOnAppMore,
             )
         }
@@ -583,7 +583,7 @@ private fun HomeContent(
             AnimeSection(
                 title = "Top Upcoming",
                 items = state.topUpcoming,
-                onItemClick = { item -> onAnimeClick(item.activeId) },
+                onItemClick = { item -> onAnimeClick(item.activeSlug) },
                 showViewMore = false,
             )
         }
