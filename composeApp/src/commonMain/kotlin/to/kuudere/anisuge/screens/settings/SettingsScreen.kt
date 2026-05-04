@@ -52,7 +52,6 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Sync
@@ -109,7 +108,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -118,8 +116,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -645,9 +641,6 @@ private fun MobileSettingsList(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-
-        // Developer section — Auth Token
-        DeveloperTokenSection(authToken = uiState.authToken, sessionExpire = uiState.sessionExpire)
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -2476,9 +2469,6 @@ private fun ProfileTab(
             }
         }
 
-        // Developer section — Auth Token (always visible)
-        Spacer(Modifier.height(16.dp))
-        DeveloperTokenSection(authToken = uiState.authToken, sessionExpire = uiState.sessionExpire)
     }
 }
 
@@ -2608,8 +2598,6 @@ private fun MobileProfileContent(
         }
     }
 
-    // Developer section — Auth Token (always visible)
-    DeveloperTokenSection(authToken = uiState.authToken, sessionExpire = uiState.sessionExpire)
 }
 
 @Composable
@@ -2623,116 +2611,6 @@ private fun MobileProfileInfoItem(label: String, value: String) {
     ) {
         Text(label, color = MUTED, fontSize = 14.sp)
         Text(value, color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun DeveloperTokenSection(
-    authToken: String?,
-    sessionExpire: String?,
-) {
-    val clipboardManager = LocalClipboardManager.current
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(BG_CARD)
-            .padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.Security,
-                contentDescription = null,
-                tint = Color(0xFFBF80FF),
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "Developer",
-                color = TEXT,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        if (authToken != null) {
-            Text(
-                "Auth Token",
-                color = MUTED,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.5.sp
-            )
-            Spacer(Modifier.height(6.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.05f))
-                    .border(1.dp, BORDER, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    authToken,
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.White.copy(alpha = 0.10f))
-                        .clickable {
-                            clipboardManager.setText(AnnotatedString(authToken))
-                        }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Copy", color = Color(0xFFBF80FF), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
-
-            if (sessionExpire != null) {
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MUTED,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "Expires: $sessionExpire",
-                        color = MUTED,
-                        fontSize = 11.sp,
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Text(
-                "Usage: Authorization: Bearer <token>",
-                color = Color.White.copy(alpha = 0.35f),
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-            )
-        } else {
-            Text(
-                "No auth token found. Log in to view your token.",
-                color = MUTED,
-                fontSize = 13.sp,
-            )
-        }
     }
 }
 

@@ -60,8 +60,6 @@ data class SettingsUiState(
     val notificationsEnabled: Boolean = true,
     val hasNotificationPrefsChanges: Boolean = false,
 
-    val authToken: String? = null,
-    val sessionExpire: String? = null,
 )
 
 sealed class SettingsTab {
@@ -78,7 +76,6 @@ class SettingsViewModel(
     private val settingsStore: SettingsStore,
     private val serverRepository: ServerRepository,
     private val authService: AuthService,
-    private val sessionStore: to.kuudere.anisuge.data.services.SessionStore,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
 
@@ -94,17 +91,8 @@ class SettingsViewModel(
                     _uiState.update { it.copy(userProfile = result.user, isLoadingProfile = false) }
                     loadSettings()
                 } else if (result is SessionCheckResult.NoSession || result is SessionCheckResult.Expired) {
-                    _uiState.update { it.copy(userProfile = null, authToken = null, sessionExpire = null) }
+                    _uiState.update { it.copy(userProfile = null) }
                 }
-            }
-        }
-
-        viewModelScope.launch {
-            sessionStore.sessionFlow.collect { session ->
-                _uiState.update { it.copy(
-                    authToken = session?.token,
-                    sessionExpire = session?.expire,
-                ) }
             }
         }
 
