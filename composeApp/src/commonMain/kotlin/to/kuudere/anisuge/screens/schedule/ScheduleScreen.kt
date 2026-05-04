@@ -180,21 +180,20 @@ fun ScheduleScreen(
                         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = if (maxWidth < 800.dp) 156.dp else 20.dp),
                     ) {
                         item {
-                            Box(Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 to.kuudere.anisuge.platform.WindowManagementButtons(
                                     onClose = onExit,
-                                    modifier = Modifier.align(Alignment.TopEnd)
                                 )
-                            }
-                        }
-
-                        // ── Watchlist filter toggle ───────────────────────────
-                        if (state.isAuthenticated) {
-                            item(key = "watchlist-filter") {
-                                WatchlistFilterToggle(
-                                    isActive = state.showWatchlistOnly,
-                                    onToggle = { viewModel.toggleWatchlistFilter() },
-                                )
+                                Spacer(Modifier.weight(1f))
+                                if (state.isAuthenticated) {
+                                    WatchlistFilterToggle(
+                                        isActive = state.showWatchlistOnly,
+                                        onToggle = { viewModel.toggleWatchlistFilter() },
+                                    )
+                                }
                             }
                         }
 
@@ -349,26 +348,25 @@ private fun WatchlistFilterToggle(
 
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(bg)
-            .border(1.dp, border, RoundedCornerShape(10.dp))
+            .border(1.dp, border, RoundedCornerShape(8.dp))
             .hoverable(inter)
             .clickable(onClick = onToggle)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             if (isActive) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
             contentDescription = null,
             tint = iconTint,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(14.dp),
         )
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(6.dp))
         Text(
             if (isActive) strings.showingWatchlistOnly else strings.showWatchlistOnly,
             color = if (isActive) Color.White else MUTED,
-            fontSize = 13.sp,
+            fontSize = 11.sp,
             fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
         )
     }
@@ -569,13 +567,13 @@ private fun AnimeScheduleCard(
 
             Spacer(Modifier.height(5.dp))
 
-            // Time + type + watchlist folder
+            // Time + format + watchlist folder
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (anime.time.isNotBlank()) {
-                    Text(anime.time, color = MUTED, fontSize = 12.sp)
+                if (anime.displayTime.isNotBlank()) {
+                    Text(anime.displayTime, color = MUTED, fontSize = 12.sp)
                     Text(" • ", color = MUTED, fontSize = 12.sp)
                 }
-                Text(anime.type.ifBlank { "TV" }, color = MUTED, fontSize = 12.sp)
+                Text(anime.displayFormat, color = MUTED, fontSize = 12.sp)
                 if (isInWatchlist && anime.displayFolder != null) {
                     Text(" • ", color = MUTED, fontSize = 12.sp)
                     Text(anime.displayFolder!!, color = ACCENT.copy(alpha = 0.80f), fontSize = 11.sp, fontWeight = FontWeight.Medium)

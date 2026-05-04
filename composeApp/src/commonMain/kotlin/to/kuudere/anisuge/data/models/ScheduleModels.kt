@@ -12,14 +12,12 @@ data class ScheduleDay(
 
 @Serializable
 data class ScheduleApiResponse(
-    val success: Boolean = true,
     val month: Int = 0,
     val year: Int = 0,
     val timezone: String? = null,
     val schedule: List<ScheduleDay> = emptyList(),
     // Legacy
     val data: Map<String, List<ScheduleAnime>> = emptyMap(),
-    val hasMore: Boolean = false,
 ) {
     /** Convert schedule list to date-keyed map for backward compatibility */
     val scheduleMap: Map<String, List<ScheduleAnime>> get() {
@@ -40,13 +38,18 @@ data class ScheduleAnime(
     val genres: List<String>? = emptyList(),
     val season: String? = null,
     @SerialName("season_year") val seasonYear: Int? = null,
-    val episodes: Int? = null,
+    @SerialName("episodes_total") val episodesTotal: Int? = null,
     val duration: String? = null,
     val subbed: Int? = null,
     val dubbed: Int? = null,
     @SerialName("average_score") val averageScore: Int? = null,
     @SerialName("episode_number") val episodeNumber: Int? = null,
-    val episodeObj: LatestEpisode? = null,
+    @SerialName("episode_date") val episodeDate: String? = null,
+    @SerialName("air_type") val airType: String? = null,
+    @SerialName("airing_status") val airingStatus: String? = null,
+    val popularity: Int? = null,
+    @SerialName("anilist_id") val anilistId: Int? = null,
+    @SerialName("mal_id") val malId: Int? = null,
     val folder: String? = null,
     // Legacy fields
     val id: String = "",
@@ -71,7 +74,9 @@ data class ScheduleAnime(
         else -> null
     }
     val activeSlug: String get() = animeId.ifBlank { slug ?: id }
-    val displayEpisodeNumber: Int get() = episodeNumber ?: episodeObj?.episodeNumber ?: 0
+    val displayEpisodeNumber: Int get() = episodeNumber ?: 0
+    val displayFormat: String get() = format ?: type.ifBlank { "TV" }
+    val displayEpCount: Int get() = episodesTotal ?: epCount
     val displayFolder: String? get() = when (folder?.uppercase()) {
         "CURRENT", "WATCHING" -> "Watching"
         "PAUSED", "ON_HOLD", "ON HOLD" -> "On Hold"
@@ -79,5 +84,15 @@ data class ScheduleAnime(
         "COMPLETED" -> "Completed"
         "DROPPED" -> "Dropped"
         else -> folder
+    }
+    /** Extract time portion from episode_date (e.g. "2026-05-01T04:10:00+05:30" -> "04:10") */
+    val displayTime: String get() {
+        if (time.isNotBlank()) return time
+        val date = episodeDate ?: return ""
+        return try {
+            val timePart = date.substringAfter("T").substringBefore("+").substringBefore("-")
+            val (h, m) = timePart.split(":").let { it[0] to it[1] }
+            "$h:$m"
+        } catch (_: Exception) { "" }
     }
 }
