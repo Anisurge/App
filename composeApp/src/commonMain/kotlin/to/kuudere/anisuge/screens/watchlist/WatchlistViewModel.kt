@@ -145,8 +145,9 @@ class WatchlistViewModel : ViewModel() {
             }
             try {
                 val state = _uiState.value
-                val folderParam = if (state.selectedFolder == "All" || state.selectedFolder == "All lists") null else state.selectedFolder.toApiFolder()
-                val sortParam = if (state.sort == "last_updated" || state.sort == "Recently Updated") null else state.sort
+                val folderParam = if (state.selectedFolder == "All" || state.selectedFolder == "All lists") null
+                    else watchlistService.folderToGetParam(state.selectedFolder)
+                val sortParam = state.sort.toApiSort()
                 val genreParam = if (state.selectedGenres.isEmpty()) null else state.selectedGenres.joinToString(",")
                 val formatParam = if (state.format == "All formats") null else state.format
                 val statusParam = if (state.status == "All statuses") null else state.status
@@ -163,13 +164,13 @@ class WatchlistViewModel : ViewModel() {
                     offset = offset,
                 )
                 if (response != null) {
-                    val newItems = response.entries
+                    val newItems = response.entries.map { it.toAnimeItem() }
                     _uiState.update { it.copy(
                         items = if (append) it.items + newItems else newItems,
                         isLoading = false,
                         isPaginating = false,
                         isOffline = false,
-                        offset = offset + newItems.size,
+                        offset = offset + response.entries.size,
                         hasMore = response.hasMore(limit = 20, offset = offset),
                     ) }
                 } else {
@@ -187,14 +188,14 @@ class WatchlistViewModel : ViewModel() {
             val success = watchlistService.updateStatus(animeId, newFolder)
             if (success) {
                 val currentFolder = _uiState.value.selectedFolder
-                if (currentFolder != "All" && currentFolder != "All lists" && currentFolder != newFolder) {
+                if (currentFolder != "All" && currentFolder != "All lists" && currentFolder != newFolder.toDisplayFolder()) {
                     _uiState.update { state ->
-                        state.copy(items = state.items.filter { it.activeId != animeId && it.id != animeId })
+                        state.copy(items = state.items.filter { it.activeId != animeId && it.activeSlug != animeId && it.id != animeId })
                     }
                 } else {
                     _uiState.update { state ->
                         val updatedItems = state.items.map {
-                            if (it.activeId == animeId || it.id == animeId) it.copy(folder = newFolder.toDisplayFolder()) else it
+                            if (it.activeId == animeId || it.activeSlug == animeId || it.id == animeId) it.copy(folder = newFolder.toDisplayFolder()) else it
                         }
                         state.copy(items = updatedItems)
                     }
@@ -209,19 +210,19 @@ class WatchlistViewModel : ViewModel() {
             val success = watchlistService.removeFromWatchlist(animeId)
             if (success) {
                 _uiState.update { state ->
-                    state.copy(items = state.items.filter { it.activeId != animeId && it.id != animeId })
+                    state.copy(items = state.items.filter { it.activeId != animeId && it.activeSlug != animeId && it.id != animeId })
                 }
             }
         }
     }
 
-    private fun String.toApiFolder(): String = when (trim().uppercase()) {
-        "WATCHING", "CURRENT" -> "CURRENT"
-        "ON HOLD", "ON_HOLD", "PAUSED" -> "PAUSED"
-        "PLAN TO WATCH", "PLAN_TO_WATCH", "PLANNING" -> "PLANNING"
-        "COMPLETED" -> "COMPLETED"
-        "DROPPED" -> "DROPPED"
-        else -> trim().uppercase()
+    /** Map display sort names to API sort param values */
+    private fun String.toApiSort(): String? = when (this) {
+        "last_updated", "Recently Updated" -> null // default, no need to send
+        "Score" -> if (_uiState.value.searchQuery.isNotBlank()) "score_desc" else "last_updated"
+        "Popularity" -> if (_uiState.value.searchQuery.isNotBlank()) "popularity_desc" else "popularity_desc"
+        "score_desc", "score_asc", "popularity_desc", "popularity_asc", "updated_desc", "folder", "anime_id" -> this
+        else -> null
     }
 
     private fun String.toDisplayFolder(): String = when (trim().uppercase()) {

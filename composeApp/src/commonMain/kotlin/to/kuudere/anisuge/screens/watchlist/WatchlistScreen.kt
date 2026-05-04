@@ -505,14 +505,14 @@ fun WatchlistScreen(
                     var hasAnyItems = false
 
                     if (showAll) {
-                        items(state.items) { AnimeCard(item = it, badgeText = it.displayFolder, onClick = { onAnimeClick(it.activeId) }) }
+                        items(state.items) { AnimeCard(item = it, badgeText = it.displayFolder, onClick = { onAnimeClick(it.activeSlug) }) }
                         if (state.items.isNotEmpty()) hasAnyItems = true
                     } else {
                         if (selectedList == "Watching" && currentList.isNotEmpty()) {
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("Watching", currentList.size)
                             }
-                            items(currentList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(currentList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (currentList.isNotEmpty()) hasAnyItems = true
                         }
                         
@@ -520,7 +520,7 @@ fun WatchlistScreen(
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("On Hold", onHoldList.size)
                             }
-                            items(onHoldList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(onHoldList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (onHoldList.isNotEmpty()) hasAnyItems = true
                         }
 
@@ -528,7 +528,7 @@ fun WatchlistScreen(
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("Plan To Watch", planningList.size)
                             }
-                            items(planningList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(planningList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (planningList.isNotEmpty()) hasAnyItems = true
                         }
                         
@@ -536,7 +536,7 @@ fun WatchlistScreen(
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("Dropped", droppedList.size)
                             }
-                            items(droppedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(droppedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (droppedList.isNotEmpty()) hasAnyItems = true
                         }
 
@@ -544,7 +544,7 @@ fun WatchlistScreen(
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("Completed", completedList.size)
                             }
-                            items(completedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(completedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (completedList.isNotEmpty()) hasAnyItems = true
                         }
                     }

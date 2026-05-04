@@ -81,7 +81,7 @@ fun App(
         val watchVm  = remember { WatchViewModel(AppComponent.infoService, AppComponent.watchService, AppComponent.settingsStore, AppComponent.settingsService, AppComponent.serverRepository) }
         val watchlistVm = remember { WatchlistViewModel() }
         val scheduleVm = remember { ScheduleViewModel(AppComponent.scheduleService, AppComponent.watchlistService, AppComponent.sessionStore) }
-        val settingsVm = remember { SettingsViewModel(AppComponent.settingsService, AppComponent.settingsStore, AppComponent.serverRepository, AppComponent.authService) }
+        val settingsVm = remember { SettingsViewModel(AppComponent.settingsService, AppComponent.settingsStore, AppComponent.serverRepository, AppComponent.authService, AppComponent.sessionStore) }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true

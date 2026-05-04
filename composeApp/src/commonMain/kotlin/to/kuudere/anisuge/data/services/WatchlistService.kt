@@ -72,7 +72,7 @@ class WatchlistService(
             val response = httpClient.post("${ApiConfig.API_BASE}/watchlist") {
                 bearer(stored.token)
                 contentType(ContentType.Application.Json)
-                setBody(WatchlistRequest(animeId, folder.toApiFolder(), notes))
+                setBody(WatchlistRequest(animeId, folder.toPostFolder(), notes))
             }
             response.status.value in 200..299
         } catch (e: Exception) {
@@ -94,7 +94,18 @@ class WatchlistService(
         }
     }
 
-    private fun String.toApiFolder(): String = when (trim().uppercase()) {
+    /** Map display names to GET query param values (WATCHING, PLANNING, COMPLETED, PAUSED, DROPPED) */
+    fun folderToGetParam(folder: String): String = when (folder.trim().uppercase()) {
+        "WATCHING", "CURRENT" -> "WATCHING"
+        "ON HOLD", "ON_HOLD", "PAUSED" -> "PAUSED"
+        "PLAN TO WATCH", "PLAN_TO_WATCH", "PLANNING" -> "PLANNING"
+        "COMPLETED" -> "COMPLETED"
+        "DROPPED" -> "DROPPED"
+        else -> folder.trim().uppercase()
+    }
+
+    /** Map display names to POST body values (CURRENT, PLANNING, COMPLETED, PAUSED, DROPPED) */
+    private fun String.toPostFolder(): String = when (trim().uppercase()) {
         "WATCHING", "CURRENT" -> "CURRENT"
         "ON HOLD", "ON_HOLD", "PAUSED" -> "PAUSED"
         "PLAN TO WATCH", "PLAN_TO_WATCH", "PLANNING" -> "PLANNING"

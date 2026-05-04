@@ -120,11 +120,15 @@ class ScheduleViewModel(
                     if (response == null) break
                     val entries = response.entries
                     if (entries.isEmpty()) break
-                    entries.forEach { item ->
-                        allIds.add(item.animeId)
-                        allIds.add(item.activeId)
-                        allIds.add(item.activeSlug)
-                        item.slug?.let { allIds.add(it) }
+                    entries.forEach { entry ->
+                        allIds.add(entry.animeId)
+                        val anime = entry.anime
+                        if (anime != null) {
+                            allIds.add(anime.animeId)
+                            allIds.add(anime.activeId)
+                            allIds.add(anime.activeSlug)
+                            anime.slug?.let { allIds.add(it) }
+                        }
                     }
                     offset += entries.size
                     if (!response.hasMore(limit, offset - entries.size)) break

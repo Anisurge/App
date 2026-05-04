@@ -4,9 +4,10 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
-import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.models.WatchlistEntry
 import to.kuudere.anisuge.data.network.ApiConfig
 import to.kuudere.anisuge.data.network.bearer
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -22,10 +23,15 @@ data class PublicProfile(
 
 @Serializable
 data class PublicWatchlistResponse(
-    val data: List<AnimeItem> = emptyList(),
+    val data: List<WatchlistEntry> = emptyList(),
+    val results: List<WatchlistEntry> = emptyList(),
     val total: Int = 0,
+    @SerialName("has_more") val hasMoreSnake: Boolean = false,
     val hasMore: Boolean = false,
-)
+) {
+    val entries: List<WatchlistEntry> get() = results.ifEmpty { data }
+    fun hasMore(limit: Int, offset: Int): Boolean = hasMore || hasMoreSnake || (offset + limit < total)
+}
 
 class PublicService(
     private val sessionStore: SessionStore,
