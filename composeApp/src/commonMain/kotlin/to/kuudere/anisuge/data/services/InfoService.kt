@@ -10,6 +10,7 @@ import io.ktor.client.statement.bodyAsText
 import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.EpisodeDataResponse
+import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.models.EpisodesResponse
 import to.kuudere.anisuge.data.models.FetchStreamResponse
 import to.kuudere.anisuge.data.models.RecommendationItem
@@ -66,6 +67,34 @@ class InfoService(
             println("[InfoService] getEpisodes error for slug='$slug': ${e.message}")
             null
         }
+    }
+
+    suspend fun getAllEpisodes(
+        slug: String,
+        filler: Boolean = true,
+        recap: Boolean = true,
+    ): List<EpisodeItem> {
+        val allEpisodes = mutableListOf<EpisodeItem>()
+        var offset = 0
+        val pageSize = 100
+
+        do {
+            val response = getEpisodes(slug, limit = pageSize, offset = offset, filler = filler, recap = recap)
+            if (response == null) break
+
+            allEpisodes.addAll(response.episodeList)
+            offset += response.episodeList.size
+
+            if (response.episodeList.isEmpty()) break
+
+            val hasMorePages = response.hasMore
+                || (response.total > 0 && allEpisodes.size < response.total)
+                || response.episodeList.size >= pageSize
+
+            if (!hasMorePages) break
+        } while (true)
+
+        return allEpisodes
     }
 
     suspend fun getRecommendations(slug: String): List<RecommendationItem>? {

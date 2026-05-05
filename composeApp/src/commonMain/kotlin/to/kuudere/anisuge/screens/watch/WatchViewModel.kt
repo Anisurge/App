@@ -218,7 +218,7 @@ class WatchViewModel(
             }
         }
 
-        val episodesResponse = infoService.getEpisodes(currentAnimeId)
+        val allEpisodes = infoService.getAllEpisodes(currentAnimeId)
 
         // Check if cancelled or switched to offline before updating state
         if (!coroutineContext.isActive || _uiState.value.offlinePath != null) {
@@ -226,11 +226,11 @@ class WatchViewModel(
             return
         }
 
-        if (episodesResponse != null) {
+        if (allEpisodes.isNotEmpty()) {
             // Build an EpisodeDataResponse from the new API data for compatibility with existing UI state
             val episodeData = EpisodeDataResponse(
                 current = episodeNumber,
-                allEpisodes = episodesResponse.episodeList,
+                allEpisodes = allEpisodes,
             )
 
             _uiState.update { state ->

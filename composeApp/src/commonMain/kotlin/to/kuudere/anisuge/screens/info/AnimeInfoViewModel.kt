@@ -71,17 +71,13 @@ class AnimeInfoViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingEpisodes = true) }
-            val response = infoService.getEpisodes(animeId)
+            val allEpisodes = infoService.getAllEpisodes(animeId)
             
-            if (response != null) {
-                _uiState.update { 
-                    it.copy(
-                        episodes = response.episodeList,
-                        isLoadingEpisodes = false
-                    ) 
-                }
-            } else {
-                _uiState.update { it.copy(isLoadingEpisodes = false) }
+            _uiState.update { 
+                it.copy(
+                    episodes = allEpisodes,
+                    isLoadingEpisodes = false
+                ) 
             }
         }
     }
