@@ -182,13 +182,14 @@ class WatchViewModel(
 
     private suspend fun fetchEpisodeData(episodeNumber: Int, reqServer: String? = null, reqLang: String? = null) {
         if (_uiState.value.offlinePath != null) {
-            println("[WatchVM] fetchEpisodeData aborted - offlinePath is set")
             return
         }
 
         _uiState.update { it.copy(isLoading = true, loadingMessage = "Fetching episode data...") }
+        println("[WatchVM] fetchEpisodeData: animeId=$currentAnimeId, ep=$episodeNumber, server=$reqServer, lang=$reqLang")
         
         val speculativeAnilistId = currentAnimeId.toIntOrNull()
+        println("[WatchVM] speculativeAnilistId=$speculativeAnilistId (from slug=$currentAnimeId)")
         var streamLoadingJob: kotlinx.coroutines.Job? = null
         
         if (speculativeAnilistId != null) {
@@ -217,6 +218,7 @@ class WatchViewModel(
         }
 
         val data = infoService.getWatchInfo(currentAnimeId, ep = episodeNumber.toString())
+        println("[WatchVM] getWatchInfo result: data=${data != null}, anilistId=${data?.anilistId}, animeId=${data?.animeId}")
 
         if (!coroutineContext.isActive || _uiState.value.offlinePath != null) {
             streamLoadingJob?.cancel()
@@ -277,20 +279,21 @@ class WatchViewModel(
 
     private suspend fun loadVideoStream(serverName: String, explicitAnilistId: Int? = null) {
         if (_uiState.value.offlinePath != null) {
-            println("[WatchVM] loadVideoStream aborted - offlinePath is set")
             return
         }
 
         val currState = _uiState.value
         var anilistId = explicitAnilistId ?: currState.episodeData?.anilistId
 
-        // If anilistId not available from watch endpoint, fetch it from anime details
         if (anilistId == null) {
+            println("[WatchVM] anilistId null from WatchInfoResponse, fetching from getAnimeDetails for slug=$currentAnimeId")
             val details = infoService.getAnimeDetails(currentAnimeId)
             anilistId = details?.anilistId
+            println("[WatchVM] got anilistId=$anilistId from AnimeDetails")
         }
 
         if (anilistId == null) {
+            println("[WatchVM] FAILED: anilistId is still null, cannot load stream")
             _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null) }
             return
         }
@@ -300,11 +303,52 @@ class WatchViewModel(
         _uiState.update { it.copy(isLoadingVideo = true, currentServer = serverName, loadingMessage = "Fetching streaming URL...") }
 
             val response = infoService.getVideoStream(anilistId, episodeNum, serverName)
+            println("[WatchVM] getVideoStream response: sub=${response?.sub != null}, dub=${response?.dub != null}")
 
             if (!coroutineContext.isActive) return
 
             val isDub = currState.targetLang == "dub"
-            val streamSection = if (isDub) response?.dub else response?.sub
+            var streamSection = if (isDub) response?.dub else response?.sub
+            println("[WatchVM] using ${if (isDub) "dub" else "sub"}, streams=${streamSection?.streams?.size ?: 0}")
+
+            // For suzu server, fetch fresh stream URLs from the embed page
+            // because the batch_scrape URLs have IP-bound tokens that expire
+            if (serverName.equals("suzu", ignoreCase = true) && streamSection != null) {
+                val embedUrl = streamSection.episodeId
+                if (!embedUrl.isNullOrBlank()) {
+                    println("[WatchVM] suzu: fetching fresh URLs from embed: $embedUrl")
+                    val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
+                    if (embedStreams != null && embedStreams.isNotEmpty()) {
+                        println("[WatchVM] suzu: got ${embedStreams.size} fresh streams from embed")
+                        // Determine the referer from the embed URL
+                        val referer = try {
+                            val uri = java.net.URI(embedUrl)
+                            "${uri.scheme}://${uri.host}"
+                        } catch (_: Exception) {
+                            "https://senshi.live"
+                        }
+
+                        // Replace the stream URLs with fresh ones from the embed
+                        val freshStreams = embedStreams.map { embedStream ->
+                            to.kuudere.anisuge.data.models.StreamInfo(
+                                url = embedStream.url,
+                                quality = embedStream.status ?: "Auto",
+                                headers = to.kuudere.anisuge.data.models.StreamHeaders(
+                                    Referer = referer
+                                )
+                            )
+                        }
+
+                        // Build both sub and dub from the fresh embed streams
+                        val freshSection = streamSection.copy(streams = freshStreams)
+                        // For suzu, the embed returns both sub and dub streams together
+                        // Apply the same fresh URLs to both sub and dub sections
+                        streamSection = freshSection
+                    } else {
+                        println("[WatchVM] suzu: embed fetch failed or empty, using batch_scrape URLs")
+                    }
+                }
+            }
 
             if (streamSection != null && streamSection.streams.isNotEmpty()) {
                 val qualities = streamSection.streams.mapNotNull { stream ->
@@ -312,6 +356,7 @@ class WatchViewModel(
                     val url = stream.url.ifBlank { null }
                     if (url != null) quality to url else null
                 }
+                println("[WatchVM] qualities found: ${qualities.map { it.first }}, first url=${qualities.firstOrNull()?.second?.take(80)}")
 
                 val subtitles = emptyList<to.kuudere.anisuge.data.models.SubtitleData>()
 
@@ -352,6 +397,7 @@ class WatchViewModel(
                     )
                 }
             } else {
+                println("[WatchVM] NO STREAMS FOUND! streamSection is null or empty.")
                 _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
             }
     }

@@ -955,7 +955,9 @@ fun WatchVideoPlayer(
             ?: uiState.availableQualities.firstOrNull()?.second
 
         if (currentUrl != null) {
-            val streamHeaders = uiState.streamingData?.headers
+            // Get headers from the matching source in streamingData
+            val currentSource = uiState.streamingData?.sources?.find { it.url == currentUrl }
+            val streamHeaders = currentSource?.headers ?: uiState.streamingData?.headers
             val playbackUrl = remember(currentUrl, streamHeaders) {
                 StreamProxy.proxyUrl(currentUrl, streamHeaders)
             }

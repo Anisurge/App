@@ -17,6 +17,7 @@ import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import to.kuudere.anisuge.data.models.EpisodeListResponse
 import to.kuudere.anisuge.data.models.RecommendationsResponse
+import to.kuudere.anisuge.data.models.SuzuEmbedStream
 import to.kuudere.anisuge.data.models.WatchInfoResponse
 
 class InfoService(
@@ -105,6 +106,16 @@ class InfoService(
             response.body<BatchScrapeResponse>()
         } catch (e: Exception) {
             println("[InfoService] getVideoStream error: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun fetchSuzuEmbedStreams(embedUrl: String): List<SuzuEmbedStream>? {
+        return try {
+            val response = httpClient.get(embedUrl)
+            response.body<List<SuzuEmbedStream>>()
+        } catch (e: Exception) {
+            println("[InfoService] fetchSuzuEmbedStreams error: ${e.message}")
             null
         }
     }
