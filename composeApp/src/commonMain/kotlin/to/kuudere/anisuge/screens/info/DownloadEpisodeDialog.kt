@@ -50,12 +50,13 @@ fun DownloadEpisodeDialog(
     infoService: InfoService,
     serverRepository: ServerRepository,
     onDismiss: () -> Unit,
-    onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?) -> Unit
+    onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?, m3u8Url: String?) -> Unit
 ) {
     val strings = LocalAppStrings.current
     var selectedServer by remember { mutableStateOf("suzu") }
     var selectedSubLang by remember { mutableStateOf<String?>("English") }
     var selectedAudioLang by remember { mutableStateOf<String?>("sub") } // 'sub' or 'dub'
+    var selectedQualityIndex by remember { mutableIntStateOf(0) }
     
     val serverListState = rememberLazyListState()
     val subListState = rememberLazyListState()
@@ -63,6 +64,10 @@ fun DownloadEpisodeDialog(
 
     var availableSubtitles by remember { mutableStateOf<List<String>>(listOf("All", "English")) }
     var availableAudioTracks by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    var availableQualities by remember { mutableStateOf<List<Triple<String, String, Map<String, String>>>>(emptyList()) } // Triple(label, url, headers)
+    val selectedM3u8 by remember(availableQualities, selectedQualityIndex) {
+        derivedStateOf { availableQualities.getOrElse(selectedQualityIndex) { availableQualities.firstOrNull() }?.second }
+    }
     var isLoadingSubs by remember { mutableStateOf(false) }
     var estimatedSizeBytes by remember { mutableStateOf(0L) }
     var currentHeaders by remember { mutableStateOf<Map<String, String>?>(null) }
@@ -103,12 +108,14 @@ fun DownloadEpisodeDialog(
     LaunchedEffect(selectedServer) {
         isLoadingSubs = true
         estimatedSizeBytes = 0L
+        availableQualities = emptyList()
+        selectedQualityIndex = 0
         try {
             // Handle -dub suffix: "suzu-dub" -> API source "suzu", fetch dub section
             val isDubServer = selectedServer.endsWith("-dub", ignoreCase = true)
             val apiSource = if (isDubServer) selectedServer.substringBeforeLast("-dub") else selectedServer
             val response = infoService.getVideoStream(anilistId, episodeNumber, apiSource)
-            val streamSection = if (isDubServer) response?.dub else response?.sub
+            var streamSection = if (isDubServer) response?.dub else response?.sub
             
             // 1. Subtitles
             val subs = emptyList<String>()
@@ -117,11 +124,64 @@ fun DownloadEpisodeDialog(
                 selectedSubLang = if ("English" in availableSubtitles) "English" else availableSubtitles.getOrNull(1) ?: "All"
             }
 
-            // 2. Audio Tracks and Size Estimation from streams
+            // 2. Extract available qualities from streams
             val streams = streamSection?.streams ?: emptyList()
-            val bestStream = streams.firstOrNull()
-            val m3u8Url = bestStream?.url
-            currentHeaders = bestStream?.headers?.let { h -> buildMap { h.Referer?.let { put("Referer", it) }; h.userAgent?.let { put("User-Agent", it) } } }
+
+            // For suzu server, fetch fresh stream URLs from the embed page
+            if (apiSource.equals("suzu", ignoreCase = true)) {
+                val embedUrl = streamSection?.episodeId
+                if (!embedUrl.isNullOrBlank()) {
+                    val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
+                    if (embedStreams != null && embedStreams.isNotEmpty()) {
+                        val referer = try {
+                            val uri = java.net.URI(embedUrl)
+                            "${uri.scheme}://${uri.host}"
+                        } catch (_: Exception) {
+                            "https://senshi.live"
+                        }
+                        val freshStreams = embedStreams.map { embedStream ->
+                            to.kuudere.anisuge.data.models.StreamInfo(
+                                url = embedStream.url,
+                                quality = embedStream.status ?: "Auto",
+                                headers = to.kuudere.anisuge.data.models.StreamHeaders(
+                                    Referer = referer
+                                )
+                            )
+                        }
+                        val targetStreams = if (isDubServer) {
+                            freshStreams.filter { it.quality.equals("Dub", ignoreCase = true) }
+                        } else {
+                            freshStreams.filter { !it.quality.equals("Dub", ignoreCase = true) }
+                        }
+                        if (targetStreams.isNotEmpty()) {
+                            availableQualities = targetStreams.map { stream ->
+                                val hdrs = buildMap {
+                                    stream.headers?.Referer?.let { put("Referer", it) }
+                                    stream.headers?.userAgent?.let { put("User-Agent", it) }
+                                }
+                                Triple(stream.quality ?: "Auto", stream.url, hdrs)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If not suzu or embed fetch failed, use batch_scrape streams directly
+            if (availableQualities.isEmpty()) {
+                availableQualities = streams.map { stream ->
+                    val hdrs = buildMap {
+                        stream.headers?.Referer?.let { put("Referer", it) }
+                        stream.headers?.userAgent?.let { put("User-Agent", it) }
+                    }
+                    Triple(stream.quality ?: "Auto", stream.url, hdrs)
+                }
+            }
+            println("[DownloadDialog] server=$selectedServer qualities=${availableQualities.size} streams=${streams.size}")
+
+            // 3. Size estimation from the selected quality's M3U8
+            val selectedStream = availableQualities.getOrElse(selectedQualityIndex) { availableQualities.firstOrNull() }
+            val m3u8Url = selectedStream?.second
+            currentHeaders = selectedStream?.third
             if (m3u8Url != null) {
                 val masterContent = to.kuudere.anisuge.AppComponent.httpClient.get(m3u8Url) {
                     currentHeaders?.forEach { (k, v) -> header(k, v) }
@@ -142,9 +202,6 @@ fun DownloadEpisodeDialog(
                     }
                 }
                 
-                // Estimate size: Bandwidth is bits/sec. 
-                // Formula: (bits/sec / 8) * duration_seconds
-                // If bandwidth is weirdly low (like 5184 from the curl), it might be kbps.
                 val adjustedBps = if (maxBandwidth > 0 && maxBandwidth < 100000) maxBandwidth * 1000 else maxBandwidth
                 if (adjustedBps > 0) {
                     estimatedSizeBytes = (adjustedBps / 8) * (durationMins * 60)
@@ -152,7 +209,6 @@ fun DownloadEpisodeDialog(
 
                 availableAudioTracks = tracks.distinctBy { it.first }
                 
-                // Set default audio lang
                 if (availableAudioTracks.isNotEmpty()) {
                     if (selectedAudioLang == null || availableAudioTracks.none { it.first == selectedAudioLang }) {
                         selectedAudioLang = availableAudioTracks.find { it.first == "jpn" || it.first == "ja" }?.first 
@@ -163,7 +219,8 @@ fun DownloadEpisodeDialog(
                 availableAudioTracks = emptyList()
             }
         } catch (e: Exception) {
-            println("Failed to fetch subs/audio for $selectedServer: ${e.message}")
+            println("[DownloadDialog] Failed to fetch for $selectedServer: ${e.message}")
+            e.printStackTrace()
         } finally {
             isLoadingSubs = false
         }
@@ -173,7 +230,7 @@ fun DownloadEpisodeDialog(
         to.kuudere.anisuge.utils.RequestStoragePermission { granted ->
             shouldRequestPermission = false
             if (granted) {
-                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders)
+                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8)
             }
         }
     }
@@ -192,7 +249,7 @@ fun DownloadEpisodeDialog(
             // We don't block download for now because it might still work in foreground, 
             // but user won't see notification. We just try to get it.
             if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders)
+                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8)
             } else {
                 shouldRequestPermission = true
             }
@@ -256,6 +313,47 @@ fun DownloadEpisodeDialog(
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
+                        }
+                    }
+                }
+            }
+
+            // Quality Selection
+            if (availableQualities.size > 1) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Quality", color = Color.Gray, fontSize = 14.sp)
+                    androidx.compose.foundation.lazy.LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .draggable(
+                                orientation = Orientation.Horizontal,
+                                state = rememberDraggableState { delta ->
+                                    scope.launch { serverListState.scrollBy(-delta) }
+                                }
+                            ),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(availableQualities.size) { index ->
+                            val (label, _, _) = availableQualities[index]
+                            val isSelected = index == selectedQualityIndex
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) Color.White else Color(0xFF000000))
+                                    .clickable {
+                                        selectedQualityIndex = index
+                                        currentHeaders = availableQualities[index].third
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (isSelected) Color.Black else Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                 }
@@ -430,7 +528,7 @@ fun DownloadEpisodeDialog(
                 to.kuudere.anisuge.utils.RequestStoragePermission { granted ->
                     shouldRequestPermission = false
                     if (granted) {
-                        onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders)
+                        onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8)
                     }
                 }
             }
@@ -462,7 +560,7 @@ fun DownloadEpisodeDialog(
                             if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
                                 shouldRequestNotificationPermission = true
                             } else if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders)
+                                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8)
                             } else {
                                 shouldRequestPermission = true
                             }

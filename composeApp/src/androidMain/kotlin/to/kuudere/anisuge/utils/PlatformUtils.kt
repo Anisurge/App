@@ -166,20 +166,11 @@ actual suspend fun muxToMkv(
         cmd.append("-ignore_unknown")
 
         // Handle HLS/Stream Headers
+        // ALL headers must go into -headers to apply to every sub-request
+        // (key fetch, segment fetch, etc.), not just the initial request
         inputHeaders?.let { headers ->
-            val referer = headers["Referer"] ?: headers["referer"]
-            if (referer != null) {
-                cmd.append("-referer"); cmd.append(referer)
-            }
-            
-            val userAgent = headers["User-Agent"] ?: headers["user-agent"]
-            if (userAgent != null) {
-                cmd.append("-user_agent"); cmd.append(userAgent)
-            }
-
-            val otherHeaders = headers.filterKeys { it.lowercase() != "referer" && it.lowercase() != "user-agent" }
-            if (otherHeaders.isNotEmpty()) {
-                val headerStrings = otherHeaders.map { "${it.key}: ${it.value}" }.joinToString("\r\n") + "\r\n"
+            if (headers.isNotEmpty()) {
+                val headerStrings = headers.map { "${it.key}: ${it.value}" }.joinToString("\r\n") + "\r\n"
                 cmd.append("-headers"); cmd.append(headerStrings)
             }
         }

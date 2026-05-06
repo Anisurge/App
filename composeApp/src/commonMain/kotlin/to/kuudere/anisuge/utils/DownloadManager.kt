@@ -110,7 +110,8 @@ object DownloadManager {
         subLang: String?,
         audioLang: String?,
         downloadFonts: Boolean,
-        headers: Map<String, String>? = null
+        headers: Map<String, String>? = null,
+        m3u8Url: String? = null
     ) {
         val taskId = "${animeId}_$episodeNumber"
         val existing = tasks.value.find { it.id == taskId }
@@ -123,7 +124,7 @@ object DownloadManager {
         tasks.update { it + newTask }
         saveTasks()
 
-        executeDownload(newTask, anilistId, server, subLang, audioLang, downloadFonts)
+        executeDownload(newTask, anilistId, server, subLang, audioLang, downloadFonts, m3u8Url)
     }
 
     private fun executeDownload(
@@ -132,71 +133,79 @@ object DownloadManager {
         server: String,
         subLang: String?,
         audioLang: String?,
-        downloadFonts: Boolean
+        downloadFonts: Boolean,
+        preResolvedM3u8: String? = null
     ) {
         val taskId = task.id
         val taskHeaders = task.headers
         val job = scope.launch {
             try {
-                // 1. Fetch stream URL via batch_scrape
-                // Handle -dub suffix: "suzu-dub" -> API source "suzu", fetch dub section
-                val isDubServer = server.endsWith("-dub", ignoreCase = true)
-                val apiServer = if (isDubServer) server.substringBeforeLast("-dub") else server
-                val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
-                
-                // Extract stream data from BatchScrapeResponse
-                var streamData = if (isDubServer) response?.dub else response?.sub
-                var streamInfo = streamData?.streams?.firstOrNull()
-                
-                // For suzu server, fetch fresh stream URLs from the embed page
-                // because the batch_scrape URLs have IP-bound tokens that expire
-                if (apiServer.equals("suzu", ignoreCase = true)) {
-                    val embedUrl = streamData?.episodeId
-                    if (!embedUrl.isNullOrBlank()) {
-                        val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
-                        if (embedStreams != null && embedStreams.isNotEmpty()) {
-                            val referer = try {
-                                val uri = java.net.URI(embedUrl)
-                                "${uri.scheme}://${uri.host}"
-                            } catch (_: Exception) {
-                                "https://senshi.live"
-                            }
-                            val freshStreams = embedStreams.map { embedStream ->
-                                to.kuudere.anisuge.data.models.StreamInfo(
-                                    url = embedStream.url,
-                                    quality = embedStream.status ?: "Auto",
-                                    headers = to.kuudere.anisuge.data.models.StreamHeaders(
-                                        Referer = referer
+                val m3u8Url: String
+                val currentHeaders: MutableMap<String, String>
+                var subtitlesUrl: String? = null
+
+                if (!preResolvedM3u8.isNullOrBlank()) {
+                    // Use pre-resolved M3U8 URL (quality was selected in dialog)
+                    m3u8Url = preResolvedM3u8
+                    currentHeaders = (taskHeaders ?: emptyMap()).toMutableMap()
+                } else {
+                    // 1. Fetch stream URL via batch_scrape
+                    val isDubServer = server.endsWith("-dub", ignoreCase = true)
+                    val apiServer = if (isDubServer) server.substringBeforeLast("-dub") else server
+                    val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
+
+                    var streamData = if (isDubServer) response?.dub else response?.sub
+                    var streamInfo = streamData?.streams?.firstOrNull()
+
+                    // For suzu server, fetch fresh stream URLs from the embed page
+                    if (apiServer.equals("suzu", ignoreCase = true)) {
+                        val embedUrl = streamData?.episodeId
+                        if (!embedUrl.isNullOrBlank()) {
+                            val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
+                            if (embedStreams != null && embedStreams.isNotEmpty()) {
+                                val referer = try {
+                                    val uri = java.net.URI(embedUrl)
+                                    "${uri.scheme}://${uri.host}"
+                                } catch (_: Exception) {
+                                    "https://senshi.live"
+                                }
+                                val freshStreams = embedStreams.map { embedStream ->
+                                    to.kuudere.anisuge.data.models.StreamInfo(
+                                        url = embedStream.url,
+                                        quality = embedStream.status ?: "Auto",
+                                        headers = to.kuudere.anisuge.data.models.StreamHeaders(
+                                            Referer = referer
+                                        )
                                     )
-                                )
-                            }
-                            // Pick the right streams based on sub/dub
-                            val targetStreams = if (isDubServer) {
-                                freshStreams.filter { it.quality.equals("Dub", ignoreCase = true) }
-                            } else {
-                                freshStreams.filter { !it.quality.equals("Dub", ignoreCase = true) }
-                            }
-                            if (targetStreams.isNotEmpty()) {
-                                streamInfo = targetStreams.firstOrNull()
+                                }
+                                val targetStreams = if (isDubServer) {
+                                    freshStreams.filter { it.quality.equals("Dub", ignoreCase = true) }
+                                } else {
+                                    freshStreams.filter { !it.quality.equals("Dub", ignoreCase = true) }
+                                }
+                                if (targetStreams.isNotEmpty()) {
+                                    streamInfo = targetStreams.firstOrNull()
+                                }
                             }
                         }
                     }
-                }
-                
-                if (streamInfo == null) {
-                    updateTask(taskId) { it.copy(status = "Failed: No stream") }
-                    return@launch
-                }
 
-                val m3u8Url = streamInfo.url
-                if (m3u8Url.isBlank()) {
-                    updateTask(taskId) { it.copy(status = "Failed: No M3U8 URL") }
-                    return@launch
-                }
+                    if (streamInfo == null) {
+                        updateTask(taskId) { it.copy(status = "Failed: No stream") }
+                        return@launch
+                    }
 
-                val currentHeaders = (taskHeaders ?: emptyMap()).toMutableMap()
-                streamInfo.headers?.Referer?.let { currentHeaders["Referer"] = it }
-                streamInfo.headers?.userAgent?.let { currentHeaders["User-Agent"] = it }
+                    m3u8Url = streamInfo.url
+                    if (m3u8Url.isBlank()) {
+                        updateTask(taskId) { it.copy(status = "Failed: No M3U8 URL") }
+                        return@launch
+                    }
+
+                    currentHeaders = (taskHeaders ?: emptyMap()).toMutableMap()
+                    streamInfo.headers?.Referer?.let { currentHeaders["Referer"] = it }
+                    streamInfo.headers?.userAgent?.let { currentHeaders["User-Agent"] = it }
+                    subtitlesUrl = streamData?.subtitles
+                }
 
                 // Create folder
                 val currentPath = AppComponent.settingsStore.downloadPathFlow.first()
@@ -205,9 +214,8 @@ object DownloadManager {
                 val epDir = "$baseDir/$animeSafe/ep_${task.episodeNumber}"
                 KmpFileSystem.createDirectories(epDir)
 
-                // 2. Download Subtitles (from BatchScrapeStreamData.subtitles which is a String URL)
+                // 2. Download Subtitles (only when we fetched from API and have a subtitles URL)
                 val subsToDownload = mutableListOf<Pair<String, String>>()
-                val subtitlesUrl = streamData?.subtitles
                 if (!subtitlesUrl.isNullOrBlank()) {
                     updateTask(taskId) { it.copy(status = "Downloading subtitles...") }
                     try {
