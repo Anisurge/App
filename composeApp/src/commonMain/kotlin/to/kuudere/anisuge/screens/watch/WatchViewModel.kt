@@ -282,7 +282,19 @@ class WatchViewModel(
         }
 
         val currState = _uiState.value
-        val anilistId = explicitAnilistId ?: currState.episodeData?.anilistId ?: return
+        var anilistId = explicitAnilistId ?: currState.episodeData?.anilistId
+
+        // If anilistId not available from watch endpoint, fetch it from anime details
+        if (anilistId == null) {
+            val details = infoService.getAnimeDetails(currentAnimeId)
+            anilistId = details?.anilistId
+        }
+
+        if (anilistId == null) {
+            _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null) }
+            return
+        }
+
         val episodeNum = currState.currentEpisodeNumber
 
         _uiState.update { it.copy(isLoadingVideo = true, currentServer = serverName, loadingMessage = "Fetching streaming URL...") }
