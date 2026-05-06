@@ -57,7 +57,6 @@ fun AnimeInfoScreen(
 ) {
     LaunchedEffect(animeId) {
         viewModel.loadAnimeInfo(animeId)
-        to.kuudere.anisuge.AppComponent.realtimeService.joinRoom(animeId)
     }
 
     val state by viewModel.uiState.collectAsState()
@@ -79,18 +78,18 @@ fun AnimeInfoScreen(
             episodeId = ep.id,
             episodeNumber = ep.number,
             anilistId = anilistId,
-            durationMins = state.details!!.duration ?: 24,
+            durationMins = state.details!!.duration.filter { it.isDigit() }.toIntOrNull() ?: 24,
             infoService = to.kuudere.anisuge.AppComponent.infoService,
             serverRepository = to.kuudere.anisuge.AppComponent.serverRepository,
             onDismiss = { selectedEpisodeForDownload = null },
             onStartDownload = { server, subLang, audioLang, downloadFonts, headers ->
-                val title = state.details!!.title
+                val title = state.details!!.displayTitle
                 to.kuudere.anisuge.utils.DownloadManager.startDownload(
                     animeId = state.details!!.id,
                     anilistId = anilistId,
                     episodeNumber = ep.number,
                     title = title,
-                    coverImage = state.details!!.cover,
+                    coverImage = state.details!!.image ?: state.details!!.poster ?: state.details!!.cover,
                     server = server,
                     subLang = subLang,
                     audioLang = audioLang,
@@ -123,8 +122,8 @@ fun AnimeInfoScreen(
                         anime = anime,
                         state = state,
                         onWatchlistUpdate = { viewModel.updateWatchlist(it) },
-                        onWatchNow = { onWatchEpisode(anime.id, "sub", 1) },
-                        onWatchEpisode = { epNum -> onWatchEpisode(anime.id, "sub", epNum) },
+                        onWatchNow = { onWatchEpisode(anime.slug ?: anime.id, "sub", 1) },
+                        onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
                         onGenreClick = onGenreClick,
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
                         onDownloadsClick = onDownloadsClick,
@@ -144,8 +143,8 @@ fun AnimeInfoScreen(
                         },
                         onBack = onBack,
                         onWatchlistUpdate = { viewModel.updateWatchlist(it) },
-                        onWatchNow = { onWatchEpisode(anime.id, "sub", 1) },
-                        onWatchEpisode = { epNum -> onWatchEpisode(anime.id, "sub", epNum) },
+                        onWatchNow = { onWatchEpisode(anime.slug ?: anime.id, "sub", 1) },
+                        onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
                         onGenreClick = onGenreClick,
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
                         onDownloadsClick = onDownloadsClick
@@ -184,7 +183,7 @@ private fun MobileLayout(
                 val bannerUrl = anime.banner?.takeIf { 
                     it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
                 }
-                val bgImage = bannerUrl ?: anime.cover
+                val bgImage = bannerUrl ?: (anime.image ?: anime.poster ?: anime.cover)
                 val hasBanner = bannerUrl != null
                 AsyncImage(
                     model = bgImage,
@@ -247,7 +246,7 @@ private fun MobileLayout(
              Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Top) {
                  // Poster
                  AsyncImage(
-                    model = anime.cover,
+                    model = anime.image ?: anime.poster ?: anime.cover,
                     contentDescription = "Cover",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -259,21 +258,29 @@ private fun MobileLayout(
                  // Right Details
                  Column(Modifier.weight(1f)) {
                      // Title
-                     Text(
-                         text = anime.title,
-                         color = Color.White,
-                         fontSize = 24.sp,
+                    Text(
+                        text = anime.displayTitle,
+                        color = Color.White,
+                        fontSize = 24.sp,
                          fontWeight = FontWeight.Bold,
                          maxLines = 2,
                          overflow = TextOverflow.Ellipsis
                      )
                      Spacer(Modifier.height(8.dp))
                      // Stars
+                     val ratingValue = ((anime.score ?: 0)) / 20.0
                      Row(verticalAlignment = Alignment.CenterVertically) {
-                         repeat(4) {
-                             Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
+                         repeat(5) { i ->
+                             if (i < ratingValue.toInt()) {
+                                 Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
+                             } else {
+                                 Icon(Icons.Default.StarBorder, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
+                             }
                          }
-                         Icon(Icons.Default.StarBorder, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
+                         if (ratingValue > 0.0) {
+                             Spacer(Modifier.width(4.dp))
+                             Text(String.format("%.1f", ratingValue * 2.0), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                         }
                      }
                      Spacer(Modifier.height(8.dp))
                      // Duration - Genres
@@ -290,8 +297,8 @@ private fun MobileLayout(
                              .clip(RoundedCornerShape(8.dp))
                              .background(Color(0xFF1D1D1D))
                              .clickable {
-                                 if (anime.continueWatching != null && anime.continueWatching.episode != null) {
-                                     onWatchEpisode(anime.continueWatching.episode)
+                                 if (anime.watchProgress != null && anime.watchProgress.episode != null) {
+                                     onWatchEpisode(anime.watchProgress.episode)
                                  } else {
                                      onWatchNow()
                                  }
@@ -301,8 +308,8 @@ private fun MobileLayout(
                          Row(verticalAlignment = Alignment.CenterVertically) {
                              Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(16.dp))
                              Spacer(Modifier.width(8.dp))
-                             val watchText = if (anime.continueWatching != null && anime.continueWatching.episode != null) {
-                                 "Continue - EP ${anime.continueWatching.episode}"
+                            val watchText = if (anime.watchProgress != null && anime.watchProgress.episode != null) {
+                                "Continue - EP ${anime.watchProgress.episode}"
                              } else {
                                  "Watch Now"
                              }
@@ -384,14 +391,33 @@ private fun MobileLayout(
                          Spacer(Modifier.height(8.dp))
                          @OptIn(ExperimentalLayoutApi::class)
                          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                             anime.studios.forEach { studio ->
+                            anime.studios.forEach { studio ->
+                                Box(
+                                    Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF000000))
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(studio, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(24.dp))
+                     }
+
+                     if (!anime.tags.isNullOrEmpty()) {
+                         Text("Tags", color = Color.White, fontSize = 16.sp)
+                         Spacer(Modifier.height(8.dp))
+                         @OptIn(ExperimentalLayoutApi::class)
+                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                             anime.tags.forEach { tag ->
                                  Box(
                                      Modifier
                                          .clip(RoundedCornerShape(8.dp))
                                          .background(Color(0xFF000000))
                                          .padding(horizontal = 12.dp, vertical = 6.dp)
                                  ) {
-                                     Text(studio, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+                                     Text(tag, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
                                  }
                              }
                          }
@@ -432,7 +458,7 @@ private fun DesktopLayout(
             val bannerUrl = anime.banner?.takeIf { 
                 it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
             }
-            val bgImage = bannerUrl ?: anime.cover
+            val bgImage = bannerUrl ?: (anime.image ?: anime.poster ?: anime.cover)
             val hasBanner = bannerUrl != null
 
             AsyncImage(
@@ -506,7 +532,7 @@ private fun DesktopLayout(
                         modifier = Modifier.fillMaxWidth(0.6f)
                     ) {
                 Text(
-                    text = anime.title,
+                    text = anime.displayTitle,
                     color = Color.White,
                     fontSize = 44.sp,
                     fontWeight = FontWeight.Bold,
@@ -542,13 +568,13 @@ private fun DesktopLayout(
                     }
                     
                     // Duration
-                    if (anime.duration != null && anime.duration > 0) {
-                        Text("${anime.duration}m", color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
+                    if (anime.duration.isNotBlank()) {
+                        Text(anime.duration, color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
                         Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
                     }
                     
                     // Year
-                    if (anime.year != null && anime.year > 0) {
+                    if (anime.year != null && anime.year!! > 0) {
                         Text("${anime.year}", color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
                         Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
                     }
@@ -560,6 +586,17 @@ private fun DesktopLayout(
                                 Text("MAL", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             }
                             Text(anime.malScore.toString(), color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
+                        }
+                        Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
+                    }
+                    
+                    // Anisurge Score
+                    if (anime.score != null && anime.score!! > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Box(Modifier.background(Color(0xFF6C5CE7), RoundedCornerShape(2.dp)).padding(horizontal = 4.dp, vertical = 1.dp)) {
+                                Text("★", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Text(anime.score.toString(), color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
                         }
                         Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
                     }
@@ -588,8 +625,8 @@ private fun DesktopLayout(
                 ) {
                     Button(
                         onClick = {
-                            if (anime.continueWatching != null && anime.continueWatching.episode != null) {
-                                onWatchEpisode(anime.continueWatching.episode)
+                            if (anime.watchProgress != null && anime.watchProgress.episode != null) {
+                                onWatchEpisode(anime.watchProgress.episode)
                             } else {
                                 onWatchNow()
                             }
@@ -600,8 +637,8 @@ private fun DesktopLayout(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(20.dp))
-                            val watchText = if (anime.continueWatching != null && anime.continueWatching.episode != null) {
-                                "CONTINUE - EP ${anime.continueWatching.episode}"
+                            val watchText = if (anime.watchProgress != null && anime.watchProgress.episode != null) {
+                                "CONTINUE - EP ${anime.watchProgress.episode}"
                             } else {
                                 "WATCH NOW"
                             }
@@ -648,7 +685,7 @@ private fun DesktopLayout(
             
             // Cover Image on the right side
             AsyncImage(
-                model = anime.cover,
+                model = anime.image ?: anime.poster ?: anime.cover,
                 contentDescription = "Cover Image",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -909,7 +946,7 @@ private fun DesktopLayout(
                 val filteredEpisodes = state.episodes.filter { 
                     if (searchQuery.isNotBlank()) {
                         val numMatch = it.number.toString().contains(searchQuery)
-                        val titleMatch = it.titles?.filterNotNull()?.firstOrNull()?.contains(searchQuery, ignoreCase = true) == true
+                        val titleMatch = (it.title ?: it.titles?.filterNotNull()?.firstOrNull())?.contains(searchQuery, ignoreCase = true) == true
                         numMatch || titleMatch
                     } else {
                         it.number in currentPageStart until (currentPageStart + episodesPerPage)
@@ -945,7 +982,7 @@ private fun DesktopLayout(
                         items(filteredEpisodes, key = { it.number }) { episode ->
                             DesktopEpisodeCard(
                                 episode = episode,
-                                thumbnail = state.thumbnails[episode.number.toString()] ?: anime.cover,
+                                thumbnail = anime.image ?: anime.poster ?: anime.cover,
                                 modifier = Modifier.animateItem(),
                                 onClick = { onWatchEpisode(episode.number) },
                                 onDownloadClick = { onDownloadEpisode(episode) }
@@ -1015,14 +1052,23 @@ private fun DesktopEpisodeCard(episode: EpisodeItem, thumbnail: String?, modifie
             )
         )
 
-        // Rating Badge (from screenshot)
-        Box(
-            Modifier
-                .align(Alignment.TopStart)
-                .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(bottomEnd = 12.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            Text("8.0", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        // Filler/Recap Badge
+        if (episode.filler == true || episode.recap == true) {
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(bottomEnd = 12.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (episode.filler == true) {
+                        Text("FILLER", color = Color(0xFFFF9800), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    if (episode.recap == true) {
+                        Text("RECAP", color = Color(0xFF2196F3), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
 
         // Download Button
@@ -1054,12 +1100,20 @@ private fun DesktopEpisodeCard(episode: EpisodeItem, thumbnail: String?, modifie
                     .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
-                Text("EPISODE ${episode.number}", color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("EPISODE ${episode.number}", color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    if (episode.filler == true) {
+                        Text("FILLER", color = Color(0xFFFF9800), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    }
+                    if (episode.recap == true) {
+                        Text("RECAP", color = Color(0xFF2196F3), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
             
             Spacer(Modifier.height(4.dp))
             
-            val title = episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
+            val title = episode.title ?: episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
             Text(
                 text = title,
                 color = Color.White,
@@ -1177,7 +1231,7 @@ private fun EpisodeListSection(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "$totalEpisodes episodes / Released ${state.details?.subbedCount ?: totalEpisodes}",
+                        "$totalEpisodes episodes / Released ${state.details?.subbed ?: totalEpisodes}",
                         color = Color.Gray,
                         fontSize = 13.sp
                     )
@@ -1293,7 +1347,7 @@ private fun EpisodeListSection(
             val inRange = num >= currentPageStart && num < currentPageStart + episodesPerPage
             if (searchQuery.isEmpty()) return@filter inRange
             val matchNum = num.toString().contains(searchQuery)
-            val titleMatches = it.titles?.filterNotNull()?.firstOrNull()?.contains(searchQuery, ignoreCase = true) == true
+            val titleMatches = (it.title ?: it.titles?.filterNotNull()?.firstOrNull())?.contains(searchQuery, ignoreCase = true) == true
             inRange && (matchNum || titleMatches)
         }.sortedBy { it.number }
 
@@ -1302,7 +1356,7 @@ private fun EpisodeListSection(
             filtered.forEach { episode ->
                 EpisodeItemRow(
                     episode = episode,
-                    thumbnail = state.thumbnails[episode.number.toString()],
+                    thumbnail = state.details?.image ?: state.details?.poster ?: state.details?.cover,
                     onClick = { onWatchEpisode(episode.number) },
                     onDownloadClick = { onDownloadEpisode(episode) }
                 )
@@ -1384,7 +1438,7 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    val title = episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
+                    val title = episode.title ?: episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
                     Text(
                         text = title,
                         color = Color.White,
@@ -1400,6 +1454,22 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
+                        if (episode.filler == true) {
+                            Text(
+                                text = "FILLER",
+                                color = Color(0xFFFF9800),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        if (episode.recap == true) {
+                            Text(
+                                text = "RECAP",
+                                color = Color(0xFF2196F3),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                         if (episode.ago != null) {
                             Text(
                                 text = "• ${episode.ago}",

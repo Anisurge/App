@@ -14,7 +14,7 @@ data class LatestUiState(
     val results: List<AnimeItem> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val currentPage: Int = 1,
+    val nextCursor: String? = null,
     val hasMore: Boolean = true,
     val isOffline: Boolean = false,
 )
@@ -28,43 +28,36 @@ class LatestViewModel(private val latestService: LatestService) : ViewModel() {
     }
 
     fun refresh() = viewModelScope.launch {
-        _uiState.value = _uiState.value.copy(isLoading = true, results = emptyList(), currentPage = 1)
-        loadPage(1)
+        _uiState.value = _uiState.value.copy(isLoading = true, results = emptyList(), nextCursor = null)
+        loadPage(null)
     }
 
     fun loadMore() = viewModelScope.launch {
         val state = _uiState.value
         if (state.isLoadingMore || !state.hasMore) return@launch
         _uiState.value = state.copy(isLoadingMore = true)
-        loadPage(state.currentPage)
+        loadPage(state.nextCursor)
     }
 
-    private suspend fun loadPage(page: Int) {
+    private suspend fun loadPage(cursor: String?) {
         try {
-            val response = latestService.getLatestUpdates(page)
-            if (response != null && response.success) {
-                val newItems = response.animeData ?: emptyList()
+            val response = latestService.getLatestAired(cursor = cursor)
+            if (response != null) {
+                val newItems = response.episodes
                 val currentState = _uiState.value
                 _uiState.value = currentState.copy(
-                    results = if (page == 1) newItems else currentState.results + newItems,
+                    results = if (cursor == null) newItems else currentState.results + newItems,
                     isLoading = false,
                     isLoadingMore = false,
                     isOffline = false,
-                    hasMore = response.hasMore ?: false,
-                    currentPage = if (newItems.isNotEmpty() && (response.hasMore ?: false)) page + 1 else page
+                    hasMore = response.nextCursor != null,
+                    nextCursor = response.nextCursor
                 )
             } else {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    isLoadingMore = false,
-                )
+                _uiState.value = _uiState.value.copy(isLoading = false, isLoadingMore = false)
             }
         } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                isLoadingMore = false,
-                isOffline = e.isNetworkError()
-            )
+            _uiState.value = _uiState.value.copy(isLoading = false, isLoadingMore = false, isOffline = e.isNetworkError())
         }
     }
 }

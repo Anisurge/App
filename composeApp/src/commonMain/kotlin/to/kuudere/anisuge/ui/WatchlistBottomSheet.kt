@@ -23,11 +23,11 @@ data class WatchlistOption(
 )
 
 val WATCHLIST_OPTIONS = listOf(
-    WatchlistOption("Watching", Icons.Default.PlayArrow),
-    WatchlistOption("On Hold", Icons.Default.Pause),
-    WatchlistOption("Plan To Watch", Icons.Default.Schedule),
-    WatchlistOption("Dropped", Icons.Default.Close),
-    WatchlistOption("Completed", Icons.Default.CheckCircle),
+    WatchlistOption("WATCHING", Icons.Default.PlayArrow),
+    WatchlistOption("PAUSED", Icons.Default.Pause),
+    WatchlistOption("PLANNING", Icons.Default.Schedule),
+    WatchlistOption("DROPPED", Icons.Default.Close),
+    WatchlistOption("COMPLETED", Icons.Default.CheckCircle),
     WatchlistOption("Remove", Icons.Default.Delete),
 )
 

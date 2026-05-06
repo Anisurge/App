@@ -57,12 +57,9 @@ import to.kuudere.anisuge.ui.ConfirmDialog
 import androidx.savedstate.SavedState
 import androidx.savedstate.read
 import androidx.compose.ui.platform.LocalUriHandler
-import kotlinx.coroutines.flow.combine
 import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.appStringsFor
-import to.kuudere.anisuge.platform.DiscordRichPresenceManager
-
 /** Compat helper: reads a String from the new KMP SavedState arguments type. */
 private fun SavedState?.str(key: String): String? =
     try { this?.read { if (contains(key)) getString(key) else null } } catch (_: Exception) { null }
@@ -77,10 +74,10 @@ fun App(
         val navController = rememberNavController()
         val splashVm = remember { SplashViewModel(AppComponent.authService, AppComponent.updateService, AppComponent.homeService) }
         val authVm   = remember { AuthViewModel(AppComponent.authService) }
-        val homeVm   = remember { HomeViewModel(AppComponent.homeService, AppComponent.authService, AppComponent.infoService, AppComponent.realtimeService) }
+        val homeVm   = remember { HomeViewModel(AppComponent.homeService, AppComponent.authService, AppComponent.watchlistService) }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }
-        val infoVm   = remember { AnimeInfoViewModel(AppComponent.infoService) }
-        val watchVm  = remember { WatchViewModel(AppComponent.infoService, AppComponent.settingsStore, AppComponent.settingsService, AppComponent.serverRepository) }
+        val infoVm   = remember { AnimeInfoViewModel(AppComponent.infoService, AppComponent.watchlistService) }
+        val watchVm  = remember { WatchViewModel(AppComponent.infoService, AppComponent.watchlistService, AppComponent.settingsStore, AppComponent.settingsService, AppComponent.serverRepository) }
         val watchlistVm = remember { WatchlistViewModel() }
         val scheduleVm = remember { ScheduleViewModel(AppComponent.scheduleService) }
         val settingsVm = remember { SettingsViewModel(AppComponent.settingsService, AppComponent.settingsStore, AppComponent.serverRepository, AppComponent.authService) }
@@ -112,15 +109,7 @@ fun App(
             }
         }
 
-        LaunchedEffect(Unit) {
-            combine(
-                AppComponent.settingsStore.mobileDiscordRichPresenceEnabledFlow,
-                AppComponent.settingsStore.mobileDiscordRichPresenceTokenFlow,
-            ) { enabled, token -> enabled to token }
-                .collect { (enabled, token) ->
-                    DiscordRichPresenceManager.configureMobile(enabled, token)
-                }
-        }
+        // Discord Rich Presence removed - not supported by new API
 
         LaunchedEffect(currentRoute, pendingNotificationLaunch?.id) {
             val launch = pendingNotificationLaunch ?: return@LaunchedEffect
@@ -271,7 +260,6 @@ fun App(
                             }
                         },
                         onExit = onAppExit,
-                        onViewLatestMore = { navController.navigate(Screen.Latest.route) },
                         onViewContinueWatchingMore = { navController.navigate(Screen.ContinueWatching.route) },
                         startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
                         startTab = requestedTab

@@ -31,7 +31,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.ServerInfo
-import to.kuudere.anisuge.data.models.WatchServerResponse
+import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
 import io.ktor.client.statement.bodyAsText
@@ -53,7 +53,7 @@ fun DownloadEpisodeDialog(
     onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?) -> Unit
 ) {
     val strings = LocalAppStrings.current
-    var selectedServer by remember { mutableStateOf("zen2") }
+    var selectedServer by remember { mutableStateOf("suzu") }
     var selectedSubLang by remember { mutableStateOf<String?>("English") }
     var selectedAudioLang by remember { mutableStateOf<String?>("sub") } // 'sub' or 'dub'
     
@@ -91,7 +91,7 @@ fun DownloadEpisodeDialog(
     val currentTask = downloadTasks.find { it.animeId == animeId && it.episodeNumber == episodeNumber }
 
     val availableServers = serverRepository.servers.collectAsState()
-    val defaultServer = availableServers.value.firstOrNull()?.id ?: "zen2"
+    val defaultServer = availableServers.value.firstOrNull()?.id ?: "suzu"
 
     // Update selected server when repository loads
     LaunchedEffect(availableServers.value) {
@@ -104,22 +104,21 @@ fun DownloadEpisodeDialog(
         isLoadingSubs = true
         estimatedSizeBytes = 0L
         try {
-            // Use server ID directly (e.g., "zen2", "zen", "hiya")
             val response = infoService.getVideoStream(anilistId, episodeNumber, selectedServer)
-            val streamData = response?.directLink?.data ?: response?.data
+            val streamSection = response?.sub
             
             // 1. Subtitles
-            val subs = streamData?.subtitles?.mapNotNull { 
-                it.title ?: it.resolvedLang 
-            }?.distinct() ?: emptyList()
+            val subs = emptyList<String>()
             availableSubtitles = listOf("All") + subs
             if (selectedSubLang !in availableSubtitles) {
                 selectedSubLang = if ("English" in availableSubtitles) "English" else availableSubtitles.getOrNull(1) ?: "All"
             }
 
-            // 2. Audio Tracks and Size Estimation from M3U8
-            val m3u8Url = streamData?.m3u8_url
-            currentHeaders = streamData?.headers
+            // 2. Audio Tracks and Size Estimation from streams
+            val streams = streamSection?.streams ?: emptyList()
+            val bestStream = streams.firstOrNull()
+            val m3u8Url = bestStream?.url
+            currentHeaders = bestStream?.headers?.let { h -> buildMap { h.Referer?.let { put("Referer", it) }; h.userAgent?.let { put("User-Agent", it) } } }
             if (m3u8Url != null) {
                 val masterContent = to.kuudere.anisuge.AppComponent.httpClient.get(m3u8Url) {
                     currentHeaders?.forEach { (k, v) -> header(k, v) }
@@ -244,8 +243,6 @@ fun DownloadEpisodeDialog(
                                 .background(if (isSelected) Color.White else Color(0xFF000000))
                                 .clickable {
                                     selectedServer = server.id
-                                    if (server.id == "hiya-dub") selectedAudioLang = "dub"
-                                    if (server.id == "hiya") selectedAudioLang = "sub"
                                 }
                                 .padding(horizontal = 16.dp, vertical = 10.dp),
                             contentAlignment = Alignment.Center

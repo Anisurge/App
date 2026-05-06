@@ -1,5 +1,6 @@
 package to.kuudere.anisuge.data.models
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -16,11 +17,11 @@ data class Comment(
     val likes: Int = 0,
     val dislikes: Int = 0,
     val isLiked: Boolean = false,
-    val isUnliked: Boolean = false,
+    val isDisliked: Boolean = false,
+    @SerialName("likeState") val likeState: String? = null,
     val reply_count: Int = 0,
     val replies: List<Comment> = emptyList(),
     val highlight: Boolean = false,
-    // UI-only state — not serialized from server but populated locally
     val showReplies: Boolean = false,
     val isReplying: Boolean = false,
     val replyText: String = "",
@@ -50,4 +51,16 @@ data class PostCommentResponse(
 data class PostCommentData(
     val commentId: String? = null,
     val id: String? = null,
+)
+
+@Serializable
+data class CommentLikeRequest(
+    val commentId: String,
+    val likeState: String,
+)
+
+@Serializable
+data class CommentLikeResponse(
+    val success: Boolean? = null,
+    val message: String? = null,
 )

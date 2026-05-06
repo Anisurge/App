@@ -456,7 +456,7 @@ private fun MobileAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
 @Composable
 private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boolean) {
     val passwordFocus = remember { FocusRequester() }
-    val resetCodeFocus = remember { FocusRequester() }
+    val otpFocus = remember { FocusRequester() }
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
     Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
@@ -470,7 +470,6 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                     AuthMode.LOGIN -> "Welcome back"
                     AuthMode.REGISTER -> "Create account"
                     AuthMode.FORGOT_PASSWORD -> "Forgot password"
-                    AuthMode.VERIFY_CODE -> "Verify code"
                     AuthMode.RESET_PASSWORD -> "Reset password"
                 },
                 style = MaterialTheme.typography.headlineSmall,
@@ -490,8 +489,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                 text = when (mode) {
                     AuthMode.LOGIN -> "Sign in to continue watching"
                     AuthMode.REGISTER -> "Join our streaming platform"
-                    AuthMode.FORGOT_PASSWORD -> "Enter your email to reset your password"
-                    AuthMode.VERIFY_CODE -> "Enter the 6-digit code sent to your email"
+                    AuthMode.FORGOT_PASSWORD -> "Enter your email or username to reset your password"
                     AuthMode.RESET_PASSWORD -> "Enter your new password"
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -517,13 +515,13 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
         Spacer(Modifier.height(16.dp))
     }
 
-    // Email field
-    if (state.mode != AuthMode.RESET_PASSWORD && state.mode != AuthMode.VERIFY_CODE) {
+    // Identifier field (email or username) — shown in LOGIN, REGISTER, FORGOT_PASSWORD
+    if (state.mode != AuthMode.RESET_PASSWORD) {
         AnisugTextField(
-            value = state.email,
-            onValueChange = viewModel::onEmailChange,
-            label = "Email",
-            placeholder = "Enter your email address",
+            value = state.identifier,
+            onValueChange = viewModel::onIdentifierChange,
+            label = if (state.mode == AuthMode.LOGIN) "Email or Username" else "Email",
+            placeholder = if (state.mode == AuthMode.LOGIN) "Enter your email or username" else "Enter your email address",
             keyboardType = KeyboardType.Email,
             imeAction = ImeAction.Next,
             onImeAction = { passwordFocus.requestFocus() },
@@ -531,22 +529,22 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
         Spacer(Modifier.height(16.dp))
     }
 
-    // VERIFY_CODE mode fields
-    if (state.mode == AuthMode.VERIFY_CODE) {
+    // RESET_PASSWORD mode — OTP field
+    if (state.mode == AuthMode.RESET_PASSWORD) {
         AnisugTextField(
-            value = state.resetCode,
-            onValueChange = viewModel::onResetCodeChange,
-            label = "Reset Code",
-            placeholder = "Enter 6-digit code",
+            value = state.otp,
+            onValueChange = viewModel::onOtpChange,
+            label = "OTP Code",
+            placeholder = "Enter OTP code",
             keyboardType = KeyboardType.Number,
-            imeAction = ImeAction.Done,
-            onImeAction = { viewModel.submit() },
-            focusRequester = resetCodeFocus,
+            imeAction = ImeAction.Next,
+            onImeAction = { passwordFocus.requestFocus() },
+            focusRequester = otpFocus,
         )
         Spacer(Modifier.height(16.dp))
-        
+
         LaunchedEffect(Unit) {
-            resetCodeFocus.requestFocus()
+            otpFocus.requestFocus()
         }
     }
 
@@ -655,7 +653,6 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                     AuthMode.LOGIN -> "Sign in"
                     AuthMode.REGISTER -> "Create account"
                     AuthMode.FORGOT_PASSWORD -> "Send Reset Code"
-                    AuthMode.VERIFY_CODE -> "Verify Code"
                     AuthMode.RESET_PASSWORD -> "Reset Password"
                 },
                 fontSize = 15.sp,

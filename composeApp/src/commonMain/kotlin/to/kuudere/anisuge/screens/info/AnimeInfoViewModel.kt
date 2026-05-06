@@ -8,8 +8,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.AnimeDetails
+import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.services.InfoService
+import to.kuudere.anisuge.data.services.WatchlistService
 
 data class AnimeInfoUiState(
     val isLoading: Boolean = true,
@@ -19,7 +21,9 @@ data class AnimeInfoUiState(
     
     val isLoadingEpisodes: Boolean = false,
     val episodes: List<EpisodeItem> = emptyList(),
-    val thumbnails: Map<String, String> = emptyMap(),
+    
+    val isLoadingRecommendations: Boolean = false,
+    val recommendations: List<AnimeItem> = emptyList(),
     
     val isUpdatingWatchlist: Boolean = false,
     val inWatchlist: Boolean = false,
@@ -27,7 +31,8 @@ data class AnimeInfoUiState(
 )
 
 class AnimeInfoViewModel(
-    private val infoService: InfoService
+    private val infoService: InfoService,
+    private val watchlistService: WatchlistService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AnimeInfoUiState())
@@ -45,20 +50,21 @@ class AnimeInfoViewModel(
                     isLoading = true,
                     error = null,
                     episodes = emptyList(),
-                    thumbnails = emptyMap(),
                     isLoadingEpisodes = false
                 )
             }
-            val response = infoService.getAnimeDetails(id)
-            if (response != null) {
+            val details = infoService.getAnimeDetails(id)
+            if (details != null) {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        details = response.data,
-                        inWatchlist = response.data.inWatchlist,
-                        folder = response.data.folder,
+                        details = details,
+                        inWatchlist = details.inWatchlist || details.watchlist != null,
+                        folder = details.folder ?: details.watchlist?.folder,
+                        episodes = details.episodes ?: emptyList(),
                     )
                 }
+                loadRecommendations(id)
             } else {
                 _uiState.update { it.copy(isLoading = false, error = "Failed to load anime details.") }
             }
@@ -76,13 +82,9 @@ class AnimeInfoViewModel(
             if (response != null) {
                 _uiState.update { 
                     it.copy(
-                        episodes = response.allEpisodes ?: emptyList(),
+                        episodes = response.episodes,
                         isLoadingEpisodes = false
                     ) 
-                }
-                
-                response.animeInfo?.anilist?.let { anilistId ->
-                    loadThumbnails(anilistId)
                 }
             } else {
                 _uiState.update { it.copy(isLoadingEpisodes = false) }
@@ -90,13 +92,14 @@ class AnimeInfoViewModel(
         }
     }
 
-    private fun loadThumbnails(anilistId: Int) {
+    private fun loadRecommendations(slug: String) {
         viewModelScope.launch {
-            val response = infoService.getThumbnails(anilistId)
-            if (response != null && response.success) {
-                _uiState.update { 
-                    it.copy(thumbnails = response.thumbnails ?: emptyMap()) 
-                }
+            _uiState.update { it.copy(isLoadingRecommendations = true) }
+            val response = infoService.getRecommendations(slug)
+            if (response != null) {
+                _uiState.update { it.copy(recommendations = response.recommendations, isLoadingRecommendations = false) }
+            } else {
+                _uiState.update { it.copy(isLoadingRecommendations = false) }
             }
         }
     }
@@ -106,29 +109,32 @@ class AnimeInfoViewModel(
         
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdatingWatchlist = true) }
-            val response = infoService.updateWatchlistStatus(animeId, folder)
-            
-            if (response != null && response.success) {
-                // AniList Sync
-                response.data?.token?.let { token ->
-                    response.data.anilist?.let { anilistId ->
-                        println("[AnimeInfoVM] Triggering AniList sync for $anilistId to $folder")
-                        viewModelScope.launch {
-                            val syncResult = to.kuudere.anisuge.AppComponent.aniListService.updateStatus(token, anilistId, folder)
-                            println("[AnimeInfoVM] AniList sync result for $anilistId: $syncResult")
-                        }
-                    } ?: println("[AnimeInfoVM] No anilistId returned for sync")
-                } ?: println("[AnimeInfoVM] No token returned for sync")
-
-                _uiState.update {
-                    it.copy(
-                        isUpdatingWatchlist = false,
-                        inWatchlist = folder != "Remove",
-                        folder = if (folder != "Remove") folder else null
-                    )
+            if (folder == "Remove") {
+                val success = watchlistService.removeFromWatchlist(animeId)
+                if (success) {
+                    _uiState.update {
+                        it.copy(
+                            isUpdatingWatchlist = false,
+                            inWatchlist = false,
+                            folder = null
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(isUpdatingWatchlist = false) }
                 }
             } else {
-                _uiState.update { it.copy(isUpdatingWatchlist = false) }
+                val response = watchlistService.updateStatus(animeId, folder)
+                if (response != null) {
+                    _uiState.update {
+                        it.copy(
+                            isUpdatingWatchlist = false,
+                            inWatchlist = true,
+                            folder = folder
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(isUpdatingWatchlist = false) }
+                }
             }
         }
     }

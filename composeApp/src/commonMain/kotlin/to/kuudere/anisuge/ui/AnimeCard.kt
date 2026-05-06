@@ -77,12 +77,12 @@ fun AnimeCard(
             // main-image
             val url = when {
                 item.imageUrl.startsWith("http") -> item.imageUrl
-                item.imageUrl.isNotBlank()        -> "https://anime.anisurge.qzz.io/img/poster/${item.imageUrl}"
+                item.imageUrl.isNotBlank()        -> "https://api.reanime.to/img/poster/${item.imageUrl}"
                 else                              -> ""
             }
             AsyncImage(
                 model              = url,
-                contentDescription = item.title,
+                contentDescription = item.displayTitle,
                 contentScale       = ContentScale.Crop,
                 modifier           = Modifier.fillMaxSize()
             )
@@ -109,7 +109,7 @@ fun AnimeCard(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-            } else if ((item.malScore ?: 0.0) > 0.0) {
+            } else if ((item.score ?: 0) > 0) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -128,7 +128,7 @@ fun AnimeCard(
                         modifier = Modifier.size(12.dp)  // .material-icons { font-size: 12px }
                     )
                     Text(
-                        text = String.format("%.1f", item.malScore),
+                        text = String.format("%.1f", item.score?.toDouble() ?: 0.0),
                         color = Color.White,
                         fontSize = 10.sp,                // font-size: 10px
                         fontWeight = FontWeight.SemiBold  // font-weight: 600
@@ -145,13 +145,13 @@ fun AnimeCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 // .subtitle-badge → subtitles icon + epCount
-                val subCount = item.subbedCount ?: item.subbed ?: item.epCount ?: 0
+                val subCount = item.subbed.let { if (it > 0) it else item.epCount ?: 0 }
                 EpisodeBadge(
                     icon = Icons.Default.ClosedCaption,
                     count = subCount
                 )
                 // .dubbed-badge → mic icon + dubbedCount
-                val dubCount = item.dubbedCount ?: item.dubbed ?: 0
+                val dubCount = item.dubbed
                 if (dubCount > 0) {
                     EpisodeBadge(
                         icon = Icons.Default.Mic,
@@ -219,7 +219,7 @@ fun AnimeCard(
                 )
                 // .title: font-size:14px; font-weight:500; line-clamp:1
                 Text(
-                    text       = item.title,
+                    text       = item.displayTitle,
                     color      = Color.White,
                     fontSize   = 14.sp,
                     fontWeight = FontWeight.Medium,

@@ -102,7 +102,6 @@ fun WatchScreen(
 
     LaunchedEffect(animeId, episodeNumber, offlinePath) {
         viewModel.initialize(animeId, episodeNumber, server, lang, offlinePath, offlineTitle)
-        to.kuudere.anisuge.AppComponent.realtimeService.joinRoom(animeId)
     }
 
     // Check if the ViewModel hasn't been initialized for this animeId yet.
@@ -308,36 +307,23 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
             ) { activePanel ->
                 when (activePanel) {
                     "info" -> {
-                        val animeInfo = uiState.episodeData?.animeInfo
                         val episodeData = uiState.episodeData
                         var showWatchlistSheet by remember { mutableStateOf(false) }
-                        val title = animeInfo?.english?.takeIf { !it.isNullOrBlank() }
-                            ?: animeInfo?.romaji?.takeIf { !it.isNullOrBlank() }
-                            ?: animeInfo?.native?.takeIf { !it.isNullOrBlank() }
+                        val title = episodeData?.title?.displayTitle?.takeIf { it.isNotBlank() }
                             ?: uiState.offlineTitle
                             ?: "Unknown"
-                        val bannerUrl = animeInfo?.banner?.takeIf {
-                            !it.isNullOrBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
+                        val bannerUrl = episodeData?.bannerImage?.takeIf {
+                            it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
                         }
-                        val backgroundImage = bannerUrl ?: animeInfo?.cover
+                        val backgroundImage = bannerUrl ?: episodeData?.coverImage?.bestUrl
                         val hasBanner = bannerUrl != null
-                        val watchlistButtonLabel = if (episodeData?.inWatchlist == true) {
-                            episodeData.folder?.takeIf { it.isNotBlank() && it != "Remove" }
-                                ?: animeInfo?.folder?.takeIf { it.isNotBlank() && it != "Remove" }
+                        val isInWatchlist = episodeData?.folder != null
+                        val watchlistButtonLabel = if (isInWatchlist) {
+                            episodeData?.folder?.takeIf { it.isNotBlank() && it != "Remove" }
                                 ?: "In Watchlist"
                         } else {
                             "Watchlist"
                         }
-                        val metaText = buildList {
-                            animeInfo?.status?.takeIf { !it.isNullOrBlank() }?.let { add(it) }
-                            animeInfo?.genres.orEmpty()
-                                .filter { it.isNotBlank() }
-                                .take(2)
-                                .takeIf { it.isNotEmpty() }
-                                ?.let { add(it.joinToString(" / ")) }
-                        }.joinToString(" • ")
-                        val score = animeInfo?.averageScore?.takeIf { it > 0 }?.div(20f)
-                            ?: animeInfo?.malScore?.takeIf { it > 0 }?.div(2f)?.toFloat()
 
                         BoxWithConstraints(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                             val compact = maxWidth < 340.dp
@@ -380,7 +366,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                             verticalAlignment = Alignment.Top
                                         ) {
                                             AsyncImage(
-                                                model = animeInfo?.cover,
+                                                model = episodeData?.coverImage?.bestUrl,
                                                 contentDescription = "Cover",
                                                 contentScale = ContentScale.Crop,
                                                 modifier = Modifier
@@ -399,28 +385,6 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                     maxLines = 3,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
-                                                if (score != null) {
-                                                    Spacer(Modifier.height(8.dp))
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        val filledStars = score.coerceIn(0f, 5f).toInt()
-                                                        repeat(filledStars) {
-                                                            Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
-                                                        }
-                                                        repeat(5 - filledStars) {
-                                                            Icon(Icons.Default.StarBorder, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
-                                                        }
-                                                    }
-                                                }
-                                                if (metaText.isNotBlank()) {
-                                                    Spacer(Modifier.height(8.dp))
-                                                    Text(
-                                                        text = metaText,
-                                                        color = Color.Gray,
-                                                        fontSize = 13.sp,
-                                                        maxLines = 2,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                }
                                                 Spacer(Modifier.height(16.dp))
 
                                                 Box(
@@ -432,7 +396,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                 ) {
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Icon(
-                                                            if (episodeData?.inWatchlist == true) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                                            if (episodeData?.folder != null) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                                             null,
                                                             tint = Color.White,
                                                             modifier = Modifier.size(16.dp)
@@ -453,29 +417,6 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
 
                                         Spacer(Modifier.height(16.dp))
 
-                                        Column(Modifier.padding(horizontal = 16.dp)) {
-                                            var isExpanded by remember { mutableStateOf(false) }
-
-                                            Text(
-                                                "Storyline",
-                                                color = Color.White,
-                                                fontSize = 20.sp,
-                                                fontWeight = FontWeight.Normal
-                                            )
-                                            Spacer(Modifier.height(12.dp))
-                                            Text(
-                                                text = stripWatchHtmlTags(animeInfo?.description.orEmpty()),
-                                                color = Color.Gray,
-                                                fontSize = 14.sp,
-                                                lineHeight = 22.sp,
-                                                maxLines = if (isExpanded) Int.MAX_VALUE else 4,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.clickable(enabled = animeInfo?.description?.isNotBlank() == true) {
-                                                    isExpanded = !isExpanded
-                                                }
-                                            )
-                                        }
-
                                         Spacer(Modifier.height(20.dp))
                                     }
                                 }
@@ -494,7 +435,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                         }
                     }
                     "episodes" -> {
-                        val episodes = uiState.episodeData?.allEpisodes ?: emptyList()
+                        val episodes = uiState.episodeData?.episodes ?: emptyList()
                         val totalEpisodes = episodes.size
                         val episodesPerPage = 100
                         val pageGroups = remember(totalEpisodes) {
@@ -870,7 +811,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                     "comments" -> {
                         var fastUserId by remember { mutableStateOf<String?>(null) }
                         LaunchedEffect(Unit) {
-                            fastUserId = AppComponent.sessionStore.get()?.userId
+                            fastUserId = AppComponent.sessionStore.get()?.let { "me" }
                         }
 
                         val userProfile by produceState<to.kuudere.anisuge.data.models.UserProfile?>(null) {
@@ -1167,17 +1108,15 @@ fun WatchVideoPlayer(
             }
 
             LaunchedEffect(uiState.episodeData, uiState.currentEpisodeNumber) {
-                val allEps = uiState.episodeData?.allEpisodes ?: emptyList()
+                val allEps = uiState.episodeData?.episodes ?: emptyList()
                 val current = uiState.currentEpisodeNumber
                 playerState.hasPrevEpisode = allEps.any { it.number < current }
                 playerState.hasNextEpisode = allEps.any { it.number > current }
             }
 
-            val animeInfo = uiState.episodeData?.animeInfo
-            val currentEp = uiState.episodeData?.allEpisodes?.find { it.number == uiState.currentEpisodeNumber }
-            val animeTitle = animeInfo?.english?.takeIf { !it.isNullOrBlank() }
-                ?: animeInfo?.romaji?.takeIf { !it.isNullOrBlank() }
-                ?: animeInfo?.native?.takeIf { !it.isNullOrBlank() }
+            val episodeData = uiState.episodeData
+            val currentEp = uiState.episodeData?.episodes?.find { it.number == uiState.currentEpisodeNumber }
+            val animeTitle = episodeData?.title?.displayTitle?.takeIf { it.isNotBlank() }
                 ?: uiState.offlineTitle
             val title = buildString {
                 if (animeTitle != null) append(animeTitle)
@@ -1235,7 +1174,7 @@ fun WatchVideoPlayer(
                 
                 // Proactive Auto Next at the very end of the video
                 if (uiState.autoNext && playerState.hasNextEpisode && pos >= dur - 0.5) {
-                    val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
+                    val nextEp = uiState.episodeData?.episodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
                     if (nextEp != null) {
                         viewModel.onEpisodeSelected(nextEp.number)
                         return@LaunchedEffect
@@ -1318,14 +1257,14 @@ fun WatchVideoPlayer(
                                 }
                                 Key.N -> {
                                     if (playerState.hasNextEpisode) {
-                                        val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
+                                        val nextEp = uiState.episodeData?.episodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
                                         if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
                                         true
                                     } else false
                                 }
                                 Key.P -> {
                                     if (playerState.hasPrevEpisode) {
-                                        val prevEp = uiState.episodeData?.allEpisodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
+                                        val prevEp = uiState.episodeData?.episodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
                                         if (prevEp != null) viewModel.onEpisodeSelected(prevEp.number)
                                         true
                                     } else false
@@ -1369,14 +1308,14 @@ fun WatchVideoPlayer(
                                 }
                                 Key.MediaNext -> {
                                     if (playerState.hasNextEpisode) {
-                                        val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
+                                        val nextEp = uiState.episodeData?.episodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
                                         if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
                                         true
                                     } else false
                                 }
                                 Key.MediaPrevious -> {
                                     if (playerState.hasPrevEpisode) {
-                                        val prevEp = uiState.episodeData?.allEpisodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
+                                        val prevEp = uiState.episodeData?.episodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
                                         if (prevEp != null) viewModel.onEpisodeSelected(prevEp.number)
                                         true
                                     } else false
@@ -1397,7 +1336,7 @@ fun WatchVideoPlayer(
                     modifier = Modifier.fillMaxSize(),
                     onFinished = {
                         if (uiState.autoNext && playerState.hasNextEpisode) {
-                            val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
+                            val nextEp = uiState.episodeData?.episodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
                             if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
                         }
                     }
@@ -1414,13 +1353,13 @@ fun WatchVideoPlayer(
                     onBack = onBack,
                     onNextEpisode = {
                         if (!isOffline) {
-                            val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
+                            val nextEp = uiState.episodeData?.episodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
                             if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
                         }
                     },
                     onPrevEpisode = {
                         if (!isOffline) {
-                            val prevEp = uiState.episodeData?.allEpisodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
+                            val prevEp = uiState.episodeData?.episodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
                             if (prevEp != null) viewModel.onEpisodeSelected(prevEp.number)
                         }
                     },
@@ -1430,7 +1369,7 @@ fun WatchVideoPlayer(
                     onEpisodesClick = { if (!isOffline) viewModel.toggleSidePanel("episodes") },
                     onCommentsClick = { if (!isOffline) viewModel.toggleSidePanel("comments") },
                     onWatchlistClick = { if (!isOffline) viewModel.toggleSettingsOverlay(SettingsMenuPage.WATCHLIST) },
-                    isInWatchlist = uiState.episodeData?.inWatchlist ?: false,
+                    isInWatchlist = uiState.episodeData?.folder != null,
                     currentFolder = uiState.episodeData?.folder,
                     isOffline = isOffline,
                     onExit = onExit,
@@ -1450,7 +1389,7 @@ fun WatchVideoPlayer(
                                 .border(1.dp, Color.White.copy(alpha = 0.3f), androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
                                 .background(Color.Black.copy(alpha = 0.8f))
                                 .clickable {
-                                    val nextEp = uiState.episodeData?.allEpisodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
+                                    val nextEp = uiState.episodeData?.episodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
                                     if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
                                 }
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1590,41 +1529,14 @@ fun WatchVideoPlayer(
                         if (isOffline) return@SettingsOverlay
                         val currentServer = uiState.currentServer.lowercase()
                         val newServer = serverLabel.lowercase()
-                        
-                        val isFromZen = currentServer.startsWith("zen")
-                        val isToZen = newServer.startsWith("zen")
-                        val isFromHiya = currentServer.startsWith("hiya")
-                        val isToHiya = newServer.startsWith("hiya")
 
                         val currentAudioLabel = playerState.audioTracks.firstOrNull { it.first == playerState.selectedAudioTrack }?.second?.lowercase() ?: ""
                         val currentTrackLang = if (currentAudioLabel.contains("eng")) "dub" else "sub"
                         
-                        var targetAudioLang: String? = null
+                        var targetAudioLang: String? = currentTrackLang
                         val currentSubData = uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }
                         var targetSubtitleLang = currentSubData?.title ?: currentSubData?.resolvedLang
                         var targetSubtitleLangCode = currentSubData?.language ?: currentSubData?.lang
-                        
-                        // Zen > zen > subtitle title, time, audio track
-                        if (isFromZen && isToZen) {
-                            targetAudioLang = currentTrackLang
-                        } 
-                        // hiya > zen(1-2) > time, subtitle lang > default audio sub
-                        // hiya-dub > zen(1-2) > time, subtitle lang > default audio dub
-                        else if (isFromHiya && isToZen) {
-                            targetAudioLang = if (currentServer == "hiya-dub") "dub" else "sub"
-                            // Note: Zen servers ignore exactly named 'English' string since they use 'S&S@DiabloTripleA' 
-                            //   so we rely fully on `targetSubtitleLangCode == 'eng'`
-                        } 
-                        // Zen > hiya > time only
-                        else if (isFromZen && isToHiya) {
-                            targetAudioLang = null
-                            targetSubtitleLang = null
-                            targetSubtitleLangCode = null
-                        } 
-                        // Hiya > hia > time & subtitle title
-                        else if (isFromHiya && isToHiya) {
-                            targetAudioLang = null
-                        }
                         
                         viewModel.changeServerWithState(
                             newServer = serverLabel, 
@@ -1701,20 +1613,10 @@ fun WatchVideoPlayer(
                         viewModel.setSubtitle(url, lang) 
                     },
                     onServerSelected = { serverLabel -> 
-                        val currentServer = uiState.currentServer.lowercase()
-                        val newServer = serverLabel.lowercase()
-                        val isFromZen = currentServer.startsWith("zen")
-                        val isToZen = newServer.startsWith("zen")
-                        val isFromHiya = currentServer.startsWith("hiya")
-                        
-                        var targetAudioLang: String? = null
-                        if (isFromZen && isToZen) targetAudioLang = "sub"
-                        else if (isFromHiya && isToZen) targetAudioLang = if (currentServer == "hiya-dub") "dub" else "sub"
-                        
                         viewModel.changeServerWithState(
                             newServer = serverLabel, 
                             position = uiState.savedWatchPosition, 
-                            targetAudioLang = targetAudioLang,
+                            targetAudioLang = null,
                             targetSubtitleLang = null,
                             targetSubtitleLangCode = null
                         )
@@ -1748,15 +1650,4 @@ private fun formatTime(seconds: Double): String {
     val mStr = m.toString().padStart(2, '0')
     val sStr = s.toString().padStart(2, '0')
     return if (h > 0) "$hStr:$mStr:$sStr" else "$mStr:$sStr"
-}
-
-private fun stripWatchHtmlTags(htmlContent: String): String {
-    return htmlContent
-        .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-        .replace(Regex("<.*?>"), "")
-        .replace("&quot;", "\"")
-        .replace("&amp;", "&")
-        .replace("&#039;", "'")
-        .replace("\n\n\n", "\n\n")
-        .trim()
 }

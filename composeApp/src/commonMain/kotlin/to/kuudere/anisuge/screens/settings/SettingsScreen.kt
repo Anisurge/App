@@ -12,7 +12,6 @@ import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,20 +44,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.Computer
-import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.TabletAndroid
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Dns
@@ -69,8 +60,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -118,17 +107,12 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import anisurge.composeapp.generated.resources.Res
-import anisurge.composeapp.generated.resources.anilist
-import org.jetbrains.compose.resources.painterResource
 import coil3.compose.AsyncImage
-import to.kuudere.anisuge.data.models.SessionInfoResponse
+
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.data.models.AnimeFolderInfo
 import to.kuudere.anisuge.platform.AppVersion
@@ -191,8 +175,7 @@ fun SettingsScreen(
             snackbarHostState.showSnackbar(localizedSettingsMessage(it, strings))
             viewModel.clearMessages()
             // Refresh global session on success for security/profile stuff
-            if (it.contains("Password", ignoreCase = true) || 
-                it.contains("MFA", ignoreCase = true) || 
+            if (it.contains("Password", ignoreCase = true) ||
                 it.contains("Profile", ignoreCase = true)) {
                 onRefresh()
             }
@@ -209,10 +192,7 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
-        add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Storage, strings.storage, Icons.Default.Storage))
-        add(SettingsNavItem(SettingsTab.Sessions, strings.sessions, Icons.Default.Devices))
-        add(SettingsNavItem(SettingsTab.Security, strings.security, Icons.Default.Lock))
         if (!isDesktopPlatform) {
             add(SettingsNavItem(SettingsTab.Notifications, strings.notifications, Icons.Default.Notifications))
         }
@@ -325,45 +305,6 @@ fun SettingsScreen(
         }
 
         // Confirmation Dialogs
-        if (uiState.showDisconnectConfirm) {
-            ConfirmDialog(
-                title = strings.disconnectAniList,
-                message = strings.disconnectAniListMessage,
-                confirmLabel = strings.disconnect,
-                onConfirm = {
-                    viewModel.setShowDisconnectConfirm(false)
-                    viewModel.disconnectAniList()
-                },
-                onDismiss = { viewModel.setShowDisconnectConfirm(false) }
-            )
-        }
-
-        if (uiState.showDeleteAllSessionsConfirm) {
-            ConfirmDialog(
-                title = strings.endAllSessions,
-                message = strings.endAllSessionsMessage,
-                confirmLabel = strings.endAll,
-                onConfirm = {
-                    viewModel.setShowDeleteAllSessionsConfirm(false)
-                    viewModel.deleteAllSessions()
-                },
-                onDismiss = { viewModel.setShowDeleteAllSessionsConfirm(false) }
-            )
-        }
-
-        uiState.deleteSessionId?.let { sessionId ->
-            ConfirmDialog(
-                title = strings.endSessionTitle,
-                message = strings.endSessionMessage,
-                confirmLabel = strings.endSession,
-                onConfirm = {
-                    viewModel.setDeleteSessionId(null)
-                    viewModel.deleteSession(sessionId)
-                },
-                onDismiss = { viewModel.setDeleteSessionId(null) }
-            )
-        }
-
         if (uiState.showClearCacheConfirm) {
             ConfirmDialog(
                 title = strings.clearFontCache,
@@ -393,9 +334,9 @@ fun SettingsScreen(
 }
 
 private fun localizedSettingsMessage(message: String, strings: AppStrings): String = when (message) {
-    "Preferences saved successfully" -> strings.preferencesSavedSuccessfully
-    "Failed to save preferences" -> strings.failedToSavePreferences
-    "Failed to load preferences" -> strings.failedToLoadPreferences
+    "Settings saved successfully" -> strings.preferencesSavedSuccessfully
+    "Failed to save settings" -> strings.failedToSavePreferences
+    "Failed to load settings" -> strings.failedToLoadPreferences
     "Failed to load user profile" -> strings.failedToLoadUserProfile
     "Server priority saved" -> strings.serverPrioritySaved
     "Reset to default priority" -> strings.resetToDefaultPriority
@@ -520,16 +461,16 @@ private fun Sidebar(
         Spacer(modifier = Modifier.weight(1f))
 
         // App Stats
-        val displayPlatform = (uiState.currentSession?.osName?.takeIf { it.isNotBlank() } ?: PlatformName)
+        val displayPlatform = PlatformName
             .let { p ->
                 if (p.lowercase() == "macos") "macOS" 
                 else p.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
             }
 
         AppStatsSection(
-            version = "${uiState.currentSession?.clientVersion?.takeIf { it.isNotBlank() } ?: AppVersion}+$AppBuildNumber",
+            version = "$AppVersion+$AppBuildNumber",
             platform = displayPlatform,
-            userId = uiState.currentSession?.userId ?: "Not logged in",
+            userId = uiState.userProfile?.id ?: "Not logged in",
             modifier = Modifier.padding(start = 12.dp)
         )
     }
@@ -759,16 +700,16 @@ private fun MobileSettingsList(
         Spacer(modifier = Modifier.height(16.dp))
 
         // App Stats
-        val displayPlatform = (uiState.currentSession?.osName?.takeIf { it.isNotBlank() } ?: PlatformName)
+        val displayPlatform = PlatformName
             .let { p ->
                 if (p.lowercase() == "macos") "macOS"
                 else p.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
             }
 
         AppStatsSection(
-            version = "${uiState.currentSession?.clientVersion?.takeIf { it.isNotBlank() } ?: AppVersion}+$AppBuildNumber",
+            version = "$AppVersion+$AppBuildNumber",
             platform = displayPlatform,
-            userId = uiState.currentSession?.userId ?: "Not logged in"
+            userId = uiState.userProfile?.id ?: "Not logged in"
         )
     }
 }
@@ -888,43 +829,13 @@ private fun MobileSettingsDetail(
                     onSyncPercentageChange = viewModel::setSyncPercentage,
                     onSubtitleSizeChange = viewModel::setSubtitleSize,
                     onDownloadPathChange = viewModel::setDownloadPath,
-                    onMobileDiscordRichPresenceEnabledChange = viewModel::setMobileDiscordRichPresenceEnabled,
-                    onMobileDiscordRichPresenceTokenChange = viewModel::setMobileDiscordRichPresenceToken,
                     onAppLocaleChange = viewModel::setAppLocale,
-                    onSave = viewModel::savePreferences
-                )
-                is SettingsTab.Sessions -> MobileSessionsContent(
-                    uiState = uiState,
-                    onDeleteSession = { viewModel.setDeleteSessionId(it) },
-                    onDeleteAllSessions = { viewModel.setShowDeleteAllSessionsConfirm(true) },
-                    onLogout = onLogout
+                    onSave = viewModel::saveSettings
                 )
                 is SettingsTab.Appearance -> AppearanceTab(
                     uiState = uiState,
                     onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                     onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav
-                )
-                is SettingsTab.Security -> MobileSecurityContent(
-                    uiState = uiState,
-                    onToggleMfa = viewModel::toggleMfa,
-                    onSetupTotp = viewModel::setupTotp,
-                    onVerifyTotp = viewModel::verifyTotp,
-                    onLoadRecoveryCodes = viewModel::loadRecoveryCodes,
-                    onDismissRecoveryCodes = viewModel::dismissRecoveryCodes,
-                    onDismissTotpSetup = viewModel::dismissTotpSetup,
-                    onPasswordChange = viewModel::changePassword,
-                    onCurrentPasswordChange = viewModel::setCurrentPassword,
-                    onNewPasswordChange = viewModel::setNewPassword,
-                    onConfirmPasswordChange = viewModel::setConfirmPassword
-                )
-                is SettingsTab.Sync -> MobileSyncContent(
-                    uiState = uiState,
-                    onConnect = { viewModel.onConnectAniList { uriHandler.openUri(it) } },
-                    onDisconnect = { viewModel.setShowDisconnectConfirm(true) },
-                    onImport = viewModel::importFromAniList,
-                    onExport = viewModel::exportToAniList,
-                    onCancel = viewModel::cancelSyncOperation,
-                    onRefreshStatus = { viewModel.loadAniListStatus() }
                 )
                 is SettingsTab.Storage -> MobileStorageContent(
                     uiState = uiState,
@@ -982,43 +893,13 @@ private fun SettingsContent(
                 onSyncPercentageChange = viewModel::setSyncPercentage,
                 onSubtitleSizeChange = viewModel::setSubtitleSize,
                 onDownloadPathChange = viewModel::setDownloadPath,
-                onMobileDiscordRichPresenceEnabledChange = viewModel::setMobileDiscordRichPresenceEnabled,
-                onMobileDiscordRichPresenceTokenChange = viewModel::setMobileDiscordRichPresenceToken,
                 onAppLocaleChange = viewModel::setAppLocale,
-                onSave = viewModel::savePreferences
-            )
-            is SettingsTab.Sessions -> SessionsTab(
-                uiState = uiState,
-                onDeleteSession = { viewModel.setDeleteSessionId(it) },
-                onDeleteAllSessions = { viewModel.setShowDeleteAllSessionsConfirm(true) },
-                onLogout = onLogout
+                onSave = viewModel::saveSettings
             )
             is SettingsTab.Appearance -> AppearanceTab(
                 uiState = uiState,
                 onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                 onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav
-            )
-            is SettingsTab.Security -> SecurityTab(
-                uiState = uiState,
-                onToggleMfa = viewModel::toggleMfa,
-                onSetupTotp = viewModel::setupTotp,
-                onVerifyTotp = viewModel::verifyTotp,
-                onLoadRecoveryCodes = viewModel::loadRecoveryCodes,
-                onDismissRecoveryCodes = viewModel::dismissRecoveryCodes,
-                onDismissTotpSetup = viewModel::dismissTotpSetup,
-                onPasswordChange = viewModel::changePassword,
-                onCurrentPasswordChange = viewModel::setCurrentPassword,
-                onNewPasswordChange = viewModel::setNewPassword,
-                onConfirmPasswordChange = viewModel::setConfirmPassword
-            )
-            is SettingsTab.Sync -> SyncTab(
-                uiState = uiState,
-                onConnect = { viewModel.onConnectAniList { uriHandler.openUri(it) } },
-                onDisconnect = { viewModel.setShowDisconnectConfirm(true) },
-                onImport = viewModel::importFromAniList,
-                onExport = viewModel::exportToAniList,
-                onCancel = viewModel::cancelSyncOperation,
-                onRefreshStatus = { viewModel.loadAniListStatus() }
             )
             is SettingsTab.Storage -> StorageTab(
                 uiState = uiState,
@@ -1107,8 +988,6 @@ private fun PreferencesTab(
     onSyncPercentageChange: (Int) -> Unit,
     onSubtitleSizeChange: (Int) -> Unit,
     onDownloadPathChange: (String) -> Unit,
-    onMobileDiscordRichPresenceEnabledChange: (Boolean) -> Unit,
-    onMobileDiscordRichPresenceTokenChange: (String) -> Unit,
     onAppLocaleChange: (AppLocale) -> Unit,
     onSave: () -> Unit,
 ) {
@@ -1158,7 +1037,7 @@ private fun PreferencesTab(
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
-                    checked = uiState.preferences.autoPlay,
+                    checked = uiState.settings.autoPlay,
                     onCheckedChange = onAutoPlayChange,
                     label = strings.enableAutoPlay
                 )
@@ -1171,7 +1050,7 @@ private fun PreferencesTab(
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
-                    checked = uiState.preferences.autoNext,
+                    checked = uiState.settings.autoNext,
                     onCheckedChange = onAutoNextChange,
                     label = strings.enableAutoNext
                 )
@@ -1184,7 +1063,7 @@ private fun PreferencesTab(
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
-                    checked = uiState.preferences.skipIntro,
+                    checked = uiState.settings.skipIntro,
                     onCheckedChange = onSkipIntroChange,
                     label = strings.skipIntroAutomatically
                 )
@@ -1197,7 +1076,7 @@ private fun PreferencesTab(
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
-                    checked = uiState.preferences.skipOutro,
+                    checked = uiState.settings.skipOutro,
                     onCheckedChange = onSkipOutroChange,
                     label = strings.skipOutroAutomatically
                 )
@@ -1210,7 +1089,7 @@ private fun PreferencesTab(
                 modifier = Modifier.weight(1f)
             ) {
                 SettingToggle(
-                    checked = uiState.preferences.defaultLang,
+                    checked = uiState.settings.defaultLang,
                     onCheckedChange = onDefaultLangChange,
                     label = strings.defaultToEnglishDub
                 )
@@ -1231,11 +1110,11 @@ private fun PreferencesTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("${uiState.preferences.syncPercentage}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text("${uiState.settings.syncPercentage}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Slider(
-                    value = uiState.preferences.syncPercentage.toFloat(),
+                    value = uiState.settings.syncPercentage.toFloat(),
                     onValueChange = { onSyncPercentageChange(it.toInt()) },
                     valueRange = 50f..100f,
                     steps = 49,
@@ -1275,51 +1154,6 @@ private fun PreferencesTab(
         }
 
         Spacer(modifier = Modifier.height(32.dp))
-
-        if (!isDesktopPlatform) {
-            SettingCard(
-                title = strings.discordRichPresence,
-                description = strings.discordRichPresenceDescription,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SettingToggle(
-                        checked = uiState.mobileDiscordRichPresenceEnabled,
-                        onCheckedChange = onMobileDiscordRichPresenceEnabledChange,
-                        label = strings.enableMobileDiscordPresence
-                    )
-                    OutlinedTextField(
-                        value = uiState.mobileDiscordRichPresenceToken,
-                        onValueChange = onMobileDiscordRichPresenceTokenChange,
-                        enabled = uiState.mobileDiscordRichPresenceEnabled,
-                        label = { Text(strings.discordToken) },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TEXT,
-                            unfocusedTextColor = TEXT,
-                            disabledTextColor = MUTED,
-                            focusedBorderColor = Color.White,
-                            unfocusedBorderColor = BORDER,
-                            disabledBorderColor = BORDER.copy(alpha = 0.45f),
-                            cursorColor = Color.White,
-                            focusedLabelColor = Color.White,
-                            unfocusedLabelColor = MUTED,
-                            disabledLabelColor = MUTED.copy(alpha = 0.55f),
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        strings.discordTokenWarning,
-                        color = MUTED,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-        }
 
         // Download Path Section - Full Width
         SettingCard(
@@ -1379,10 +1213,10 @@ private fun PreferencesTab(
         Spacer(modifier = Modifier.height(24.dp))
         Button(
             onClick = onSave,
-            enabled = uiState.hasPreferencesChanges && !uiState.isSaving,
+            enabled = uiState.hasSettingsChanges && !uiState.isSaving,
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (uiState.hasPreferencesChanges) Color.White else BG_CARD,
-                contentColor = if (uiState.hasPreferencesChanges) Color.Black else MUTED,
+                containerColor = if (uiState.hasSettingsChanges) Color.White else BG_CARD,
+                contentColor = if (uiState.hasSettingsChanges) Color.Black else MUTED,
                 disabledContainerColor = BG_CARD,
                 disabledContentColor = MUTED
             ),
@@ -1526,266 +1360,6 @@ private fun AppLanguageSelector(
 }
 
 
-// ── Sessions Tab ─────────────────────────────────────────────────────────────────
-@Composable
-private fun SessionsTab(
-    uiState: SettingsUiState,
-    onDeleteSession: (String) -> Unit,
-    onDeleteAllSessions: () -> Unit,
-    onLogout: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            "Sessions",
-            color = TEXT,
-            fontSize = 42.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Text(
-            "Manage your active sessions across all devices",
-            color = MUTED,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-
-        if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White)
-            }
-        } else {
-            uiState.currentSession?.let { session ->
-                Text("Current Session", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
-                SessionCard(session = session, isCurrent = true, onDelete = null)
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            if (uiState.sessions.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Other Sessions", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    TextButton(
-                        onClick = { onDeleteAllSessions() },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFBF80FF))
-                    ) {
-                        Text("End All", fontSize = 13.sp)
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                uiState.sessions.forEach { session ->
-                    SessionCard(
-                        session = session,
-                        isCurrent = false,
-                        onDelete = { onDeleteSession(session.id) }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SessionCard(
-    session: SessionInfoResponse,
-    isCurrent: Boolean,
-    onDelete: (() -> Unit)?
-) {
-    // Better device detection from multiple fields
-    val clientName = session.clientName?.takeIf { it.isNotBlank() && it != "---" }
-        ?: session.deviceModel?.takeIf { it.isNotBlank() }
-        ?: "Unknown Device"
-
-    val deviceIcon = when {
-        clientName.contains("Mobile", true) -> Icons.Default.PhoneAndroid
-        clientName.contains("Tablet", true) -> Icons.Default.TabletAndroid
-        session.deviceName?.contains("Phone", true) == true -> Icons.Default.PhoneAndroid
-        session.deviceName?.contains("Tablet", true) == true -> Icons.Default.TabletAndroid
-        else -> Icons.Default.Computer
-    }
-
-    // Build location info from available fields
-    val locationInfo = buildList {
-        session.osName?.takeIf { it.isNotBlank() && it != "---" }?.let { add(it) }
-        session.countryName?.takeIf { it.isNotBlank() && it != "---" }?.let { add(it) }
-        session.ip?.takeIf { it.isNotBlank() }?.let { add(it) }
-    }.joinToString(" • ").takeIf { it.isNotEmpty() } ?: "Unknown location"
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(BG_CARD)
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(deviceIcon, contentDescription = null, tint = MUTED, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        clientName,
-                        color = TEXT,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        locationInfo,
-                        color = MUTED,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            if (isCurrent) {
-                Text("Current", color = Color(0xFF4CAF50), fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            } else {
-                onDelete?.let {
-                    TextButton(
-                        onClick = it,
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFBF80FF))
-                    ) {
-                        Text("End", fontSize = 13.sp)
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ── Security Tab ─────────────────────────────────────────────────────────────────
-@Composable
-private fun SecurityTab(
-    uiState: SettingsUiState,
-    onToggleMfa: (Boolean) -> Unit,
-    onSetupTotp: () -> Unit,
-    onVerifyTotp: (String) -> Unit,
-    onLoadRecoveryCodes: () -> Unit,
-    onDismissRecoveryCodes: () -> Unit,
-    onDismissTotpSetup: () -> Unit,
-    onPasswordChange: () -> Unit,
-    onCurrentPasswordChange: (String) -> Unit,
-    onNewPasswordChange: (String) -> Unit,
-    onConfirmPasswordChange: (String) -> Unit,
-) {
-    var showTotpDialog by remember { mutableStateOf(false) }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            "Security",
-            color = TEXT,
-            fontSize = 42.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Text(
-            "Manage your account security and authentication",
-            color = MUTED,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-
-        // MFA Section
-        SettingCard(
-            title = "Two-Factor Authentication",
-            description = "Add an extra layer of security to your account",
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        if (uiState.mfaStatus?.totpEnabled == true) "TOTP is enabled" else "TOTP is disabled",
-                        color = TEXT,
-                        fontSize = 14.sp
-                    )
-                    Switch(
-                        checked = uiState.mfaStatus?.totpEnabled == true,
-                        onCheckedChange = { enabled ->
-                            if (enabled) {
-                                onSetupTotp()
-                                showTotpDialog = true
-                            } else {
-                                onToggleMfa(false)
-                            }
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = Color.White.copy(alpha = 0.5f),
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = BORDER
-                        )
-                    )
-                }
-                if (uiState.mfaStatus?.totpEnabled == true) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = onLoadRecoveryCodes,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(BORDER))
-                    ) {
-                        Text("View Recovery Codes")
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Password Section - Inline Form
-        SettingCard(
-            title = "Change Password",
-            description = "Update your account password. Must be at least 8 characters.",
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            PasswordChangeForm(
-                currentPassword = uiState.currentPassword,
-                newPassword = uiState.newPassword,
-                confirmPassword = uiState.confirmPassword,
-                isLoading = uiState.isChangingPassword,
-                onCurrentPasswordChange = onCurrentPasswordChange,
-                onNewPasswordChange = onNewPasswordChange,
-                onConfirmPasswordChange = onConfirmPasswordChange,
-                onSubmit = onPasswordChange
-            )
-        }
-
-        // TOTP Setup Dialog
-        if (showTotpDialog && uiState.totpSetupData != null) {
-            TotpSetupDialog(
-                totpData = uiState.totpSetupData!!,
-                onDismiss = {
-                    showTotpDialog = false
-                    onDismissTotpSetup()
-                },
-                onVerify = { code ->
-                    onVerifyTotp(code)
-                    showTotpDialog = false
-                }
-            )
-        }
-
-        // Recovery Codes Dialog
-        if (uiState.showRecoveryCodes) {
-            RecoveryCodesDialog(
-                codes = uiState.recoveryCodes,
-                onDismiss = onDismissRecoveryCodes
-            )
-        }
-
-    }
-}
-
 // ── About Tab (Desktop) ─────────────────────────────────────────────────────────
 @Composable
 private fun AboutTab() {
@@ -1873,818 +1447,6 @@ private fun DesktopAboutStatRow(label: String, value: String) {
     }
 }
 
-// ── Sync Tab ────────────────────────────────────────────────────────────────────
-@Composable
-private fun SyncTab(
-    uiState: SettingsUiState,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
-    onImport: () -> Unit,
-    onExport: () -> Unit,
-    onCancel: () -> Unit,
-    onRefreshStatus: () -> Unit,
-) {
-    val uriHandler = LocalUriHandler.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Large Title
-        Text(
-            "Sync",
-            color = TEXT,
-            fontSize = 42.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Text(
-            "Connect your AniList account to sync your watch progress",
-            color = MUTED,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-
-        if (uiState.isLoadingAniList && !uiState.anilistConnected) {
-            Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White)
-            }
-        } else if (uiState.anilistConnected && uiState.anilistProfile != null) {
-            // Connected Profile Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(BG_CARD)
-            ) {
-                Column {
-                    // Banner image or gradient header
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp)
-                    ) {
-                        // Show banner image if available, otherwise gradient
-                        if (uiState.anilistProfile?.bannerImage != null) {
-                            AsyncImage(
-                                model = uiState.anilistProfile.bannerImage,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                            // Dark overlay for better text contrast
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.3f))
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                            colors = listOf(
-                                                Color(0xFF000000),
-                                                Color(0xFF000000)
-                                            )
-                                        )
-                                    )
-                            )
-                        }
-                    }
-
-                    // Profile section
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .padding(bottom = 24.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Avatar overlapping the banner
-                            uiState.anilistProfile?.avatar?.large?.let { avatarUrl ->
-                                AsyncImage(
-                                    model = avatarUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(80.dp)
-                                        .offset(y = (-40).dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .border(4.dp, BG_CARD, RoundedCornerShape(12.dp))
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(16.dp))
-
-                            Column(modifier = Modifier.offset(y = (-8).dp)) {
-                                Text(
-                                    uiState.anilistProfile?.name ?: "",
-                                    color = TEXT,
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFF4CAF50))
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        "Connected",
-                                        color = Color(0xFF4CAF50),
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = if (uiState.isLoadingAniList) ({}) else onDisconnect,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE50914)),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFE50914).copy(alpha = 0.5f))),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            if (uiState.isLoadingAniList) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text("Disconnect", fontWeight = FontWeight.Medium)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Stats Section
-            uiState.anilistProfile?.statistics?.anime?.let { stats ->
-                Text(
-                    "Your Anime Stats",
-                    color = TEXT,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    StatCard(
-                        value = "${stats.count}",
-                        label = "Total Anime",
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        value = "${stats.episodesWatched}",
-                        label = "Episodes",
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        value = "${(stats.minutesWatched / 60 / 24).coerceAtLeast(1)}",
-                        label = "Days Watched",
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (stats.meanScore > 0) {
-                        StatCard(
-                            value = "${stats.meanScore}",
-                            label = "Mean Score",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Import/Export Section
-                Text(
-                    "Sync Actions",
-                    color = TEXT,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                // Import Progress
-                if (uiState.isImportingFromAniList) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(BG_CARD)
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            "Importing from AniList...",
-                            color = TEXT,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress = { uiState.importProgress / 100f },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = Color.White,
-                            trackColor = BG_HOVER
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            uiState.importStatus,
-                            color = MUTED,
-                            fontSize = 12.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                // Export Progress
-                if (uiState.isExportingToAniList) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(BG_CARD)
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            "Exporting to AniList...",
-                            color = TEXT,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress = { uiState.exportProgress / 100f },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = Color.White,
-                            trackColor = BG_HOVER
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            uiState.exportStatus,
-                            color = MUTED,
-                            fontSize = 12.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                // Sync Log
-                if (uiState.syncLog.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF000000))
-                            .padding(8.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        uiState.syncLog.forEach { line ->
-                            Text(
-                                line,
-                                color = when {
-                                    "ERROR" in line || "✗" in line -> Color(0xFFBF80FF)
-                                    "✓" in line -> Color(0xFF22C55E)
-                                    "SKIP" in line -> Color(0xFFEAB308)
-                                    else -> Color(0xFF9CA3AF)
-                                },
-                                fontSize = 11.sp,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                modifier = Modifier.padding(vertical = 1.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                if (uiState.isImportingFromAniList || uiState.isExportingToAniList) {
-                    OutlinedButton(
-                        onClick = onCancel,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFBF80FF)),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFBF80FF).copy(alpha = 0.5f))),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Cancel", fontWeight = FontWeight.Medium)
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                // Import/Export Buttons
-                if (!uiState.isImportingFromAniList && !uiState.isExportingToAniList) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onImport,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(BORDER)),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Import from AniList")
-                        }
-
-                        OutlinedButton(
-                            onClick = onExport,
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(BORDER)),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Export to AniList")
-                        }
-                    }
-                }
-            }
-        } else {
-            // Not connected state - centered
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 48.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    // AniList logo
-                    Image(
-                        painter = painterResource(Res.drawable.anilist),
-                        contentDescription = "AniList",
-                        modifier = Modifier.size(80.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Text(
-                        "Connect to AniList",
-                        color = TEXT,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Sync your watch progress and anime lists",
-                        color = MUTED,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = onConnect,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White,
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.padding(horizontal = 32.dp).padding(top = 12.dp)
-                    ) {
-                        Text("Connect Account", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                    }
-                    
-                    TextButton(
-                        onClick = onRefreshStatus,
-                        modifier = Modifier.padding(top = 8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp), tint = MUTED)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Refresh Status", color = MUTED, fontSize = 14.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatCard(
-    value: String,
-    label: String,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(BG_CARD)
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            value,
-            color = TEXT,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            label,
-            color = MUTED,
-            fontSize = 12.sp
-        )
-    }
-}
-
-// ── Mobile Sync Content ─────────────────────────────────────────────────────────
-@Composable
-private fun MobileSyncContent(
-    uiState: SettingsUiState,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
-    onImport: () -> Unit,
-    onExport: () -> Unit,
-    onCancel: () -> Unit,
-    onRefreshStatus: () -> Unit,
-) {
-    val uriHandler = LocalUriHandler.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (uiState.isLoadingAniList && !uiState.anilistConnected) {
-            Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White)
-            }
-        } else if (uiState.anilistConnected && uiState.anilistProfile != null) {
-            // Profile Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(BG_CARD)
-            ) {
-                Column {
-                    // Banner
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(80.dp)
-                    ) {
-                        // Show banner image if available, otherwise gradient
-                        if (uiState.anilistProfile?.bannerImage != null) {
-                            AsyncImage(
-                                model = uiState.anilistProfile.bannerImage,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                            // Dark overlay for better text contrast
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.3f))
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                            colors = listOf(
-                                                Color(0xFF000000),
-                                                Color(0xFF000000)
-                                            )
-                                        )
-                                    )
-                            )
-                        }
-                    }
-
-                    // Profile info
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            uiState.anilistProfile?.avatar?.large?.let { avatarUrl ->
-                                AsyncImage(
-                                    model = avatarUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .offset(y = (-32).dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .border(3.dp, BG_CARD, RoundedCornerShape(12.dp))
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
-                            Column(modifier = Modifier.offset(y = (-4).dp)) {
-                                Text(
-                                    uiState.anilistProfile?.name ?: "",
-                                    color = TEXT,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFF4CAF50))
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        "Connected",
-                                        color = Color(0xFF4CAF50),
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-                        }
-
-                        TextButton(
-                            onClick = if (uiState.isLoadingAniList) ({}) else onDisconnect,
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE50914))
-                        ) {
-                            if (uiState.isLoadingAniList) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text("Disconnect", fontSize = 13.sp)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Stats
-            uiState.anilistProfile?.statistics?.anime?.let { stats ->
-                Text(
-                    "Your Stats",
-                    color = TEXT,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(BG_CARD)
-                        .padding(16.dp)
-                ) {
-                    MobileSyncStatRow("Total Anime", "${stats.count}")
-                    HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 12.dp))
-                    MobileSyncStatRow("Episodes Watched", "${stats.episodesWatched}")
-                    HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 12.dp))
-                    MobileSyncStatRow("Minutes Watched", "${stats.minutesWatched}")
-                    if (stats.meanScore > 0) {
-                        HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 12.dp))
-                        MobileSyncStatRow("Mean Score", "${stats.meanScore}")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Import/Export Section
-                Text(
-                    "Sync Actions",
-                    color = TEXT,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-
-                // Import Progress
-                if (uiState.isImportingFromAniList) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(BG_CARD)
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            "Importing from AniList...",
-                            color = TEXT,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress = { uiState.importProgress / 100f },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = Color.White,
-                            trackColor = BG_HOVER
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            uiState.importStatus,
-                            color = MUTED,
-                            fontSize = 12.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                // Export Progress
-                if (uiState.isExportingToAniList) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(BG_CARD)
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            "Exporting to AniList...",
-                            color = TEXT,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress = { uiState.exportProgress / 100f },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = Color.White,
-                            trackColor = BG_HOVER
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            uiState.exportStatus,
-                            color = MUTED,
-                            fontSize = 12.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                // Sync Log (mobile)
-                if (uiState.syncLog.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF000000))
-                            .padding(8.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        uiState.syncLog.forEach { line ->
-                            Text(
-                                line,
-                                color = when {
-                                    "ERROR" in line || "\u2717" in line -> Color(0xFFBF80FF)
-                                    "\u2713" in line -> Color(0xFF22C55E)
-                                    "SKIP" in line -> Color(0xFFEAB308)
-                                    else -> Color(0xFF9CA3AF)
-                                },
-                                fontSize = 11.sp,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                modifier = Modifier.padding(vertical = 1.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                if (uiState.isImportingFromAniList || uiState.isExportingToAniList) {
-                    OutlinedButton(
-                        onClick = onCancel,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFBF80FF)),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFBF80FF).copy(alpha = 0.5f))),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Cancel", fontWeight = FontWeight.Medium)
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                // Import/Export Buttons
-                if (!uiState.isImportingFromAniList && !uiState.isExportingToAniList) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = onImport,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(BORDER)),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Import from AniList")
-                        }
-
-                        OutlinedButton(
-                            onClick = onExport,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(BORDER)),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Sync,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Export to AniList")
-                        }
-                    }
-                }
-            }
-        } else {
-            // Not connected
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 48.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Image(
-                        painter = painterResource(Res.drawable.anilist),
-                        contentDescription = "AniList",
-                        modifier = Modifier.size(72.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Connect to AniList",
-                        color = TEXT,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "Sync your watch progress",
-                        color = MUTED,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = onConnect,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White,
-                            contentColor = Color.Black
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp).padding(top = 12.dp)
-                    ) {
-                        Text("Connect", fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                    }
-
-                    TextButton(
-                        onClick = onRefreshStatus,
-                        modifier = Modifier.padding(top = 8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp), tint = MUTED)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Refresh Status", color = MUTED, fontSize = 14.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MobileSyncStatRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = MUTED, fontSize = 14.sp)
-        Text(value, color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-    }
-}
 
 // ── Mobile Content Composables ──────────────────────────────────────────────────
 
@@ -2699,8 +1461,6 @@ private fun MobilePreferencesContent(
     onSyncPercentageChange: (Int) -> Unit,
     onSubtitleSizeChange: (Int) -> Unit,
     onDownloadPathChange: (String) -> Unit,
-    onMobileDiscordRichPresenceEnabledChange: (Boolean) -> Unit,
-    onMobileDiscordRichPresenceTokenChange: (String) -> Unit,
     onAppLocaleChange: (AppLocale) -> Unit,
     onSave: () -> Unit,
 ) {
@@ -2736,31 +1496,31 @@ private fun MobilePreferencesContent(
         MobileSettingRow(
             title = strings.autoPlay,
             description = strings.autoPlayDescription,
-            checked = uiState.preferences.autoPlay,
+            checked = uiState.settings.autoPlay,
             onCheckedChange = onAutoPlayChange
         )
         MobileSettingRow(
             title = strings.autoNext,
             description = strings.autoNextDescription,
-            checked = uiState.preferences.autoNext,
+            checked = uiState.settings.autoNext,
             onCheckedChange = onAutoNextChange
         )
         MobileSettingRow(
             title = strings.skipIntro,
             description = strings.skipIntroDescription,
-            checked = uiState.preferences.skipIntro,
+            checked = uiState.settings.skipIntro,
             onCheckedChange = onSkipIntroChange
         )
         MobileSettingRow(
             title = strings.skipOutro,
             description = strings.skipOutroDescription,
-            checked = uiState.preferences.skipOutro,
+            checked = uiState.settings.skipOutro,
             onCheckedChange = onSkipOutroChange
         )
         MobileSettingRow(
             title = strings.defaultToEnglishDub,
             description = strings.defaultAudioLanguageDescription,
-            checked = uiState.preferences.defaultLang,
+            checked = uiState.settings.defaultLang,
             onCheckedChange = onDefaultLangChange
         )
 
@@ -2784,7 +1544,7 @@ private fun MobilePreferencesContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Slider(
-                value = uiState.preferences.syncPercentage.toFloat(),
+                value = uiState.settings.syncPercentage.toFloat(),
                 onValueChange = { onSyncPercentageChange(it.toInt()) },
                 valueRange = 50f..100f,
                 steps = 49,
@@ -2796,7 +1556,7 @@ private fun MobilePreferencesContent(
                 modifier = Modifier.weight(1f)
             )
             Spacer(modifier = Modifier.width(16.dp))
-            Text("${uiState.preferences.syncPercentage}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text("${uiState.settings.syncPercentage}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
 
         HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
@@ -2833,43 +1593,6 @@ private fun MobilePreferencesContent(
             Spacer(modifier = Modifier.width(16.dp))
             Text("${uiState.subtitleSize}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
-
-        HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
-
-        MobileSettingRow(
-            title = "Discord Rich Presence",
-            description = "Publish the current episode through Discord Gateway",
-            checked = uiState.mobileDiscordRichPresenceEnabled,
-            onCheckedChange = onMobileDiscordRichPresenceEnabledChange
-        )
-        OutlinedTextField(
-            value = uiState.mobileDiscordRichPresenceToken,
-            onValueChange = onMobileDiscordRichPresenceTokenChange,
-            enabled = uiState.mobileDiscordRichPresenceEnabled,
-            label = { Text("Discord token") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = TEXT,
-                unfocusedTextColor = TEXT,
-                disabledTextColor = MUTED,
-                focusedBorderColor = Color.White,
-                unfocusedBorderColor = BORDER,
-                disabledBorderColor = BORDER.copy(alpha = 0.45f),
-                cursorColor = Color.White,
-                focusedLabelColor = Color.White,
-                unfocusedLabelColor = MUTED,
-                disabledLabelColor = MUTED.copy(alpha = 0.55f),
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Text(
-            "Use at your own risk. Android uses Discord Gateway because mobile Discord does not expose local Rich Presence IPC.",
-            color = MUTED,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            modifier = Modifier.padding(top = 8.dp)
-        )
 
         HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
 
@@ -2932,7 +1655,7 @@ private fun MobilePreferencesContent(
             )
         }
 
-        if (uiState.hasPreferencesChanges) {
+        if (uiState.hasSettingsChanges) {
             Spacer(modifier = Modifier.height(24.dp))
             Button(
                 onClick = onSave,
@@ -2985,159 +1708,6 @@ private fun MobileSettingRow(
     }
 }
 
-@Composable
-private fun MobileSessionsContent(
-    uiState: SettingsUiState,
-    onDeleteSession: (String) -> Unit,
-    onDeleteAllSessions: () -> Unit,
-    onLogout: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White)
-            }
-        } else {
-            uiState.currentSession?.let { session ->
-                Text("Current Session", color = MUTED, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
-                SessionCard(session = session, isCurrent = true, onDelete = null)
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            if (uiState.sessions.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Other Sessions", color = MUTED, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    TextButton(
-                        onClick = { onDeleteAllSessions() },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFBF80FF))
-                    ) {
-                        Text("End All", fontSize = 13.sp)
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                uiState.sessions.forEach { session ->
-                    SessionCard(
-                        session = session,
-                        isCurrent = false,
-                        onDelete = { onDeleteSession(session.id) }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            } else {
-                Text("No other active sessions", color = MUTED, fontSize = 14.sp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun MobileSecurityContent(
-    uiState: SettingsUiState,
-    onToggleMfa: (Boolean) -> Unit,
-    onSetupTotp: () -> Unit,
-    onVerifyTotp: (String) -> Unit,
-    onLoadRecoveryCodes: () -> Unit,
-    onDismissRecoveryCodes: () -> Unit,
-    onDismissTotpSetup: () -> Unit,
-    onPasswordChange: () -> Unit,
-    onCurrentPasswordChange: (String) -> Unit,
-    onNewPasswordChange: (String) -> Unit,
-    onConfirmPasswordChange: (String) -> Unit,
-) {
-    var showTotpDialog by remember { mutableStateOf(false) }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // MFA Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Two-Factor Authentication", color = TEXT, fontSize = 16.sp)
-                Text(
-                    if (uiState.mfaStatus?.totpEnabled == true) "Enabled" else "Disabled",
-                    color = MUTED,
-                    fontSize = 13.sp
-                )
-            }
-            Switch(
-                checked = uiState.mfaStatus?.totpEnabled == true,
-                onCheckedChange = { enabled ->
-                    if (enabled) {
-                        onSetupTotp()
-                        showTotpDialog = true
-                    } else {
-                        onToggleMfa(false)
-                    }
-                },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Color.White.copy(alpha = 0.5f),
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = BORDER
-                )
-            )
-        }
-
-        if (uiState.mfaStatus?.totpEnabled == true) {
-            OutlinedButton(
-                onClick = onLoadRecoveryCodes,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(BORDER)),
-                modifier = Modifier.padding(vertical = 8.dp)
-            ) {
-                Text("View Recovery Codes")
-            }
-        }
-
-        HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
-
-        // Password Section
-        Text("Change Password", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-        Text("Update your account password", color = MUTED, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
-
-        PasswordChangeForm(
-            currentPassword = uiState.currentPassword,
-            newPassword = uiState.newPassword,
-            confirmPassword = uiState.confirmPassword,
-            isLoading = uiState.isChangingPassword,
-            onCurrentPasswordChange = onCurrentPasswordChange,
-            onNewPasswordChange = onNewPasswordChange,
-            onConfirmPasswordChange = onConfirmPasswordChange,
-            onSubmit = onPasswordChange
-        )
-
-        // TOTP Setup Dialog
-        if (showTotpDialog && uiState.totpSetupData != null) {
-            TotpSetupDialog(
-                totpData = uiState.totpSetupData!!,
-                onDismiss = {
-                    showTotpDialog = false
-                    onDismissTotpSetup()
-                },
-                onVerify = { code ->
-                    onVerifyTotp(code)
-                    showTotpDialog = false
-                }
-            )
-        }
-
-        // Recovery Codes Dialog
-        if (uiState.showRecoveryCodes) {
-            RecoveryCodesDialog(
-                codes = uiState.recoveryCodes,
-                onDismiss = onDismissRecoveryCodes
-            )
-        }
-    }
-}
 
 // ── About Content ───────────────────────────────────────────────────────────────
 @Composable
@@ -3217,237 +1787,6 @@ private fun AboutStatItem(label: String, value: String) {
     ) {
         Text(label, color = MUTED, fontSize = 14.sp)
         Text(value, color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-// ── Dialogs ─────────────────────────────────────────────────────────────────────
-@Composable
-private fun TotpSetupDialog(
-    totpData: to.kuudere.anisuge.data.models.TotpSetupData,
-    onDismiss: () -> Unit,
-    onVerify: (String) -> Unit,
-) {
-    var code by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = BG_CARD,
-        title = { Text("Setup Authenticator", color = TEXT) },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Scan the QR code with your authenticator app", color = MUTED, fontSize = 14.sp)
-                Spacer(modifier = Modifier.height(16.dp))
-                AsyncImage(
-                    model = totpData.qrCode,
-                    contentDescription = "TOTP QR Code",
-                    modifier = Modifier.size(200.dp),
-                    contentScale = ContentScale.Fit
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Or enter the secret manually:", color = MUTED, fontSize = 13.sp)
-                Text(
-                    totpData.secret,
-                    color = TEXT,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = code,
-                    onValueChange = { code = it },
-                    label = { Text("Verification Code") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TEXT,
-                        unfocusedTextColor = TEXT,
-                        focusedLabelColor = MUTED,
-                        unfocusedLabelColor = MUTED,
-                        focusedBorderColor = TEXT,
-                        unfocusedBorderColor = BORDER
-                    )
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onVerify(code) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
-            ) {
-                Text("Verify")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = MUTED)
-            }
-        }
-    )
-}
-
-@Composable
-private fun RecoveryCodesDialog(
-    codes: List<String>,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = BG_CARD,
-        title = { Text("Recovery Codes", color = TEXT) },
-        text = {
-            Column {
-                Text("Save these codes in a secure location. They can be used to recover your account if you lose access to your authenticator.", color = MUTED, fontSize = 14.sp)
-                Spacer(modifier = Modifier.height(16.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(BG)
-                        .padding(16.dp)
-                ) {
-                    Column {
-                        codes.chunked(2).forEach { row ->
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                row.forEach { code ->
-                                    Text(
-                                        code,
-                                        color = TEXT,
-                                        fontSize = 14.sp,
-                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
-            ) {
-                Text("Done")
-            }
-        }
-    )
-}
-
-@Composable
-private fun PasswordChangeForm(
-    currentPassword: String,
-    newPassword: String,
-    confirmPassword: String,
-    isLoading: Boolean,
-    onCurrentPasswordChange: (String) -> Unit,
-    onNewPasswordChange: (String) -> Unit,
-    onConfirmPasswordChange: (String) -> Unit,
-    onSubmit: () -> Unit,
-) {
-    var showCurrent by remember { mutableStateOf(false) }
-    var showNew by remember { mutableStateOf(false) }
-    var showConfirm by remember { mutableStateOf(false) }
-    val isValid = newPassword == confirmPassword && newPassword.length >= 8
-
-    Column {
-        OutlinedTextField(
-            value = currentPassword,
-            onValueChange = onCurrentPasswordChange,
-            label = { Text("Current Password") },
-            singleLine = true,
-            visualTransformation = if (showCurrent) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { showCurrent = !showCurrent }) {
-                    Icon(
-                        if (showCurrent) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = null,
-                        tint = MUTED
-                    )
-                }
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = TEXT,
-                unfocusedTextColor = TEXT,
-                focusedLabelColor = MUTED,
-                unfocusedLabelColor = MUTED,
-                focusedBorderColor = TEXT,
-                unfocusedBorderColor = BORDER
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = newPassword,
-            onValueChange = onNewPasswordChange,
-            label = { Text("New Password") },
-            singleLine = true,
-            visualTransformation = if (showNew) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { showNew = !showNew }) {
-                    Icon(
-                        if (showNew) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = null,
-                        tint = MUTED
-                    )
-                }
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = TEXT,
-                unfocusedTextColor = TEXT,
-                focusedLabelColor = MUTED,
-                unfocusedLabelColor = MUTED,
-                focusedBorderColor = TEXT,
-                unfocusedBorderColor = BORDER
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
-            value = confirmPassword,
-            onValueChange = onConfirmPasswordChange,
-            label = { Text("Confirm Password") },
-            singleLine = true,
-            isError = confirmPassword.isNotEmpty() && confirmPassword != newPassword,
-            visualTransformation = if (showConfirm) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { showConfirm = !showConfirm }) {
-                    Icon(
-                        if (showConfirm) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = null,
-                        tint = MUTED
-                    )
-                }
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = TEXT,
-                unfocusedTextColor = TEXT,
-                focusedLabelColor = MUTED,
-                unfocusedLabelColor = MUTED,
-                focusedBorderColor = TEXT,
-                unfocusedBorderColor = BORDER
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = onSubmit,
-            enabled = !isLoading && isValid,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White,
-                contentColor = Color.Black
-            ),
-            shape = RoundedCornerShape(8.dp)
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Changing...")
-            } else {
-                Text("Change Password")
-            }
-        }
     }
 }
 

@@ -11,23 +11,23 @@ import kotlinx.serialization.json.Json
 import kotlinx.coroutines.flow.Flow
 import to.kuudere.anisuge.data.models.SessionInfo
 
-/**
- * Typed wrapper around DataStore<Preferences> for session persistence.
- * On desktop this writes to the user's home dir (see DataStoreFactory in platform source).
- */
 class SessionStore(private val dataStore: DataStore<Preferences>) {
     companion object {
         private val SESSION_KEY = stringPreferencesKey("session_info")
+        private const val TOKEN_PREFIX = "project_r_"
+        private val json = Json { ignoreUnknownKeys = true }
     }
 
     val sessionFlow: Flow<SessionInfo?> = dataStore.data
         .map { prefs ->
-            prefs[SESSION_KEY]?.let { Json.decodeFromString(it) }
+            prefs[SESSION_KEY]?.let {
+                try { json.decodeFromString<SessionInfo>(it) } catch (_: Exception) { null }
+            }
         }
 
     suspend fun save(session: SessionInfo) {
         dataStore.edit { prefs ->
-            prefs[SESSION_KEY] = Json.encodeToString(session)
+            prefs[SESSION_KEY] = json.encodeToString(session)
         }
     }
 
@@ -35,23 +35,16 @@ class SessionStore(private val dataStore: DataStore<Preferences>) {
         return dataStore.data
             .map { it[SESSION_KEY] }
             .firstOrNull()
-            ?.let { Json.decodeFromString(it) }
+            ?.let {
+                try { json.decodeFromString<SessionInfo>(it) } catch (_: Exception) { null }
+            }
     }
 
     suspend fun clear() {
         dataStore.edit { it.remove(SESSION_KEY) }
     }
 
-    fun isExpired(session: SessionInfo): Boolean {
-        if (session.expire.isBlank()) return false
-        return try {
-            // expire is ISO-8601 string, compare to current time
-            val expire = kotlinx.datetime.Instant.parse(session.expire)
-            val now    = kotlinx.datetime.Clock.System.now()
-            now > expire
-        } catch (e: Exception) {
-            println("[SessionStore] parse error for expire date '${session.expire}': ${e.message}")
-            false // assume valid if unparseable to avoid permanent logout
-        }
+    fun isValid(session: SessionInfo): Boolean {
+        return session.token.isNotBlank() && session.token.startsWith(TOKEN_PREFIX)
     }
 }
