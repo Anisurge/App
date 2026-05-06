@@ -104,8 +104,11 @@ fun DownloadEpisodeDialog(
         isLoadingSubs = true
         estimatedSizeBytes = 0L
         try {
-            val response = infoService.getVideoStream(anilistId, episodeNumber, selectedServer)
-            val streamSection = response?.sub
+            // Handle -dub suffix: "suzu-dub" -> API source "suzu", fetch dub section
+            val isDubServer = selectedServer.endsWith("-dub", ignoreCase = true)
+            val apiSource = if (isDubServer) selectedServer.substringBeforeLast("-dub") else selectedServer
+            val response = infoService.getVideoStream(anilistId, episodeNumber, apiSource)
+            val streamSection = if (isDubServer) response?.dub else response?.sub
             
             // 1. Subtitles
             val subs = emptyList<String>()
