@@ -139,12 +139,49 @@ object DownloadManager {
         val job = scope.launch {
             try {
                 // 1. Fetch stream URL via batch_scrape
-                val apiServer = if (server == "zen2") "zen-2" else server
+                // Handle -dub suffix: "suzu-dub" -> API source "suzu", fetch dub section
+                val isDubServer = server.endsWith("-dub", ignoreCase = true)
+                val apiServer = if (isDubServer) server.substringBeforeLast("-dub") else server
                 val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
                 
                 // Extract stream data from BatchScrapeResponse
-                val streamData = response?.sub ?: response?.dub
-                val streamInfo = streamData?.streams?.firstOrNull()
+                var streamData = if (isDubServer) response?.dub else response?.sub
+                var streamInfo = streamData?.streams?.firstOrNull()
+                
+                // For suzu server, fetch fresh stream URLs from the embed page
+                // because the batch_scrape URLs have IP-bound tokens that expire
+                if (apiServer.equals("suzu", ignoreCase = true)) {
+                    val embedUrl = streamData?.episodeId
+                    if (!embedUrl.isNullOrBlank()) {
+                        val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
+                        if (embedStreams != null && embedStreams.isNotEmpty()) {
+                            val referer = try {
+                                val uri = java.net.URI(embedUrl)
+                                "${uri.scheme}://${uri.host}"
+                            } catch (_: Exception) {
+                                "https://senshi.live"
+                            }
+                            val freshStreams = embedStreams.map { embedStream ->
+                                to.kuudere.anisuge.data.models.StreamInfo(
+                                    url = embedStream.url,
+                                    quality = embedStream.status ?: "Auto",
+                                    headers = to.kuudere.anisuge.data.models.StreamHeaders(
+                                        Referer = referer
+                                    )
+                                )
+                            }
+                            // Pick the right streams based on sub/dub
+                            val targetStreams = if (isDubServer) {
+                                freshStreams.filter { it.quality.equals("Dub", ignoreCase = true) }
+                            } else {
+                                freshStreams.filter { !it.quality.equals("Dub", ignoreCase = true) }
+                            }
+                            if (targetStreams.isNotEmpty()) {
+                                streamInfo = targetStreams.firstOrNull()
+                            }
+                        }
+                    }
+                }
                 
                 if (streamInfo == null) {
                     updateTask(taskId) { it.copy(status = "Failed: No stream") }
@@ -170,7 +207,7 @@ object DownloadManager {
 
                 // 2. Download Subtitles (from BatchScrapeStreamData.subtitles which is a String URL)
                 val subsToDownload = mutableListOf<Pair<String, String>>()
-                val subtitlesUrl = streamData.subtitles
+                val subtitlesUrl = streamData?.subtitles
                 if (!subtitlesUrl.isNullOrBlank()) {
                     updateTask(taskId) { it.copy(status = "Downloading subtitles...") }
                     try {
@@ -207,7 +244,7 @@ object DownloadManager {
                     }.bodyAsText())
                 } else emptyList()
 
-                if (videoSegments.isEmpty()) {
+                if (videoSegments.isEmpty() && !isEncrypted) {
                     updateTask(taskId) { it.copy(status = "Failed: No video segments") }
                     return@launch
                 }
@@ -288,7 +325,7 @@ object DownloadManager {
                 updateTask(taskId) { it.copy(status = "Muxing into MKV...", progress = 0.99f, downloadSpeed = "", eta = "") }
                 
                 val muxSuccess = muxToMkv(
-                    videoPath = if (isEncrypted) m3u8Url else rawVideoPath,
+                    videoPath = if (isEncrypted) videoPlaylistUrl else rawVideoPath,
                     audioPath = if (audioSegments.isNotEmpty() && !isEncrypted) rawAudioPath else null,
                     subtitles = subsToDownload,
                     fonts = emptyList(),
