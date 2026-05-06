@@ -56,7 +56,7 @@ data class WatchUiState(
     val didMarkWatched: Boolean = false,
     val offlinePath: String? = null,
     // Offline metadata
-    val offlineTitle: String? = null
+    val offlineTitle: String? = null,
 )
 
 class WatchViewModel(
@@ -294,23 +294,28 @@ class WatchViewModel(
 
         val episodeNum = currState.currentEpisodeNumber
 
+        // Handle -dub suffix: "suzu-dub" -> API source "suzu", force dub section
+        val isDubServer = serverName.endsWith("-dub", ignoreCase = true)
+        val apiSource = if (isDubServer) serverName.substringBeforeLast("-dub") else serverName
+        // Determine if we should use dub: explicit -dub server, or targetLang is "dub"
+        val isDub = isDubServer || currState.targetLang == "dub"
+
         _uiState.update { it.copy(isLoadingVideo = true, currentServer = serverName, loadingMessage = "Fetching streaming URL...") }
 
-            val response = infoService.getVideoStream(anilistId, episodeNum, serverName)
+            val response = infoService.getVideoStream(anilistId, episodeNum, apiSource)
 
             if (!coroutineContext.isActive) return
 
-            val isDub = currState.targetLang == "dub"
-            var streamSection = if (isDub) response?.dub else response?.sub
+            var subStreams = response?.sub
+            var dubStreams = response?.dub
 
             // For suzu server, fetch fresh stream URLs from the embed page
             // because the batch_scrape URLs have IP-bound tokens that expire
-            if (serverName.equals("suzu", ignoreCase = true) && streamSection != null) {
-                val embedUrl = streamSection.episodeId
+            if (apiSource.equals("suzu", ignoreCase = true)) {
+                val embedUrl = subStreams?.episodeId ?: dubStreams?.episodeId
                 if (!embedUrl.isNullOrBlank()) {
                     val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
                     if (embedStreams != null && embedStreams.isNotEmpty()) {
-                        // Determine the referer from the embed URL
                         val referer = try {
                             val uri = java.net.URI(embedUrl)
                             "${uri.scheme}://${uri.host}"
@@ -318,7 +323,6 @@ class WatchViewModel(
                             "https://senshi.live"
                         }
 
-                        // Replace the stream URLs with fresh ones from the embed
                         val freshStreams = embedStreams.map { embedStream ->
                             to.kuudere.anisuge.data.models.StreamInfo(
                                 url = embedStream.url,
@@ -329,16 +333,29 @@ class WatchViewModel(
                             )
                         }
 
-                        // Build both sub and dub from the fresh embed streams
-                        val freshSection = streamSection.copy(streams = freshStreams)
-                        // For suzu, the embed returns both sub and dub streams together
-                        // Apply the same fresh URLs to both sub and dub sections
-                        streamSection = freshSection
+                        val dubEmbedStreams = freshStreams.filter { it.quality.equals("Dub", ignoreCase = true) }
+                        val subEmbedStreams = freshStreams.filter { !it.quality.equals("Dub", ignoreCase = true) }
+
+                        if (subEmbedStreams.isNotEmpty()) {
+                            subStreams = (subStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(streams = subEmbedStreams)
+                        }
+                        if (dubEmbedStreams.isNotEmpty()) {
+                            dubStreams = (dubStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(streams = dubEmbedStreams)
+                        }
                     }
                 }
             }
 
+            // Pick the right section based on sub/dub
+            var streamSection = if (isDub) dubStreams else subStreams
+
+            // If chosen lang has no streams, fall back to the other
+            if (streamSection == null || streamSection.streams.isEmpty()) {
+                streamSection = if (isDub) subStreams else dubStreams
+            }
+
             if (streamSection != null && streamSection.streams.isNotEmpty()) {
+                // Deduplicate qualities: if same quality name appears, append language tag
                 val qualities = streamSection.streams.mapNotNull { stream ->
                     val quality = stream.quality ?: "Auto"
                     val url = stream.url.ifBlank { null }
@@ -380,7 +397,7 @@ class WatchViewModel(
                         currentQuality = defaultQuality,
                         availableSubtitles = subtitles,
                         currentSubtitleUrl = selectedSubUrl,
-                        offlinePath = null
+                        offlinePath = null,
                     )
                 }
             } else {
@@ -458,8 +475,8 @@ class WatchViewModel(
     /**
      * Get the list of available server IDs for UI display
      */
-    fun getAvailableServers(): List<String> {
-        return serverRepository.serverIds
+    fun getAvailableServers(): List<ServerInfo> {
+        return serverRepository.getAvailableServers()
     }
 
     /**

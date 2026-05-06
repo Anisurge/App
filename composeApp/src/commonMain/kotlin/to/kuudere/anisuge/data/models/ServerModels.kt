@@ -20,6 +20,8 @@ data class ServerInfo(
 }
 
 val FALLBACK_SERVERS = listOf(
-    ServerInfo(id = "suzu", label = "Suzu", type = "sub_dub", active = true),
-    ServerInfo(id = "animepahe", label = "AnimePahe", type = "sub_dub", active = true),
+    ServerInfo(id = "suzu", label = "Suzu (Sub)", type = "sub", active = true),
+    ServerInfo(id = "suzu-dub", label = "Suzu (Dub)", type = "dub", active = true),
+    ServerInfo(id = "animepahe", label = "AnimePahe (Sub)", type = "sub", active = true),
+    ServerInfo(id = "animepahe-dub", label = "AnimePahe (Dub)", type = "dub", active = true),
 )

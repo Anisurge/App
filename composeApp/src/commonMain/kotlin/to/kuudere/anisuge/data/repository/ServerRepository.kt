@@ -88,8 +88,10 @@ class ServerRepository(
         } else {
             val priority = mutableListOf<String>()
             if (currentServers.contains("suzu")) priority.add("suzu")
+            if (currentServers.contains("suzu-dub")) priority.add("suzu-dub")
             if (currentServers.contains("animepahe")) priority.add("animepahe")
-            priority.addAll(currentServers.filter { it != "suzu" && it != "animepahe" })
+            if (currentServers.contains("animepahe-dub")) priority.add("animepahe-dub")
+            priority.addAll(currentServers.filter { it !in priority })
             priority
         }
     }

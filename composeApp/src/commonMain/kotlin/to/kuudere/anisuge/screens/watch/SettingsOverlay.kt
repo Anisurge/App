@@ -37,13 +37,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 enum class SettingsMenuPage {
-    MAIN, SERVER, AUDIO, QUALITY, SUBTITLES, SPEED, WATCHLIST, AUTOPLAY
+    MAIN, SERVER, QUALITY, SUBTITLES, SPEED, WATCHLIST, AUTOPLAY
 }
 
 @Composable
 fun SettingsOverlay(
     uiState: WatchUiState,
-    servers: List<String>,
+    servers: List<to.kuudere.anisuge.data.models.ServerInfo>,
     onDismiss: () -> Unit,
     onQualitySelected: (String) -> Unit,
     onSubtitleSelected: (String?) -> Unit,
@@ -122,10 +122,11 @@ fun SettingsOverlay(
                             Column(modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
                                 // 1. Server
                                 if (servers.isNotEmpty()) {
+                                    val currentServerLabel = servers.find { it.id == uiState.currentServer }?.label ?: uiState.currentServer
                                     SettingsMenuItem(
                                         icon = { Icon(getServerIcon(), contentDescription = null, tint = Color.White) },
                                         title = "Server",
-                                        subtitle = uiState.currentServer,
+                                        subtitle = currentServerLabel,
                                         onClick = { currentPage = SettingsMenuPage.SERVER }
                                     )
                                 }
@@ -133,14 +134,25 @@ fun SettingsOverlay(
                                 // 2. Quality
                                 if (uiState.availableQualities.size > 1 || (servers.isNotEmpty() && uiState.availableQualities.isNotEmpty())) {
                                     SettingsMenuItem(
-                                        icon = { Icon(getSignalIcon(), contentDescription = null, tint = Color.White) }, // Icon
+                                        icon = { Icon(getSignalIcon(), contentDescription = null, tint = Color.White) },
                                         title = "Quality",
                                         subtitle = uiState.currentQuality,
                                         onClick = { currentPage = SettingsMenuPage.QUALITY }
                                     )
                                 }
 
-                                // 3. Playback settings
+                                // 3. Audio Track
+                                if (audioTracks.isNotEmpty()) {
+                                    val currentLabel = audioTracks.firstOrNull { it.first == selectedAudioTrack }?.second ?: "Default"
+                                    SettingsMenuItem(
+                                        icon = { Icon(getLanguagesIcon(), contentDescription = null, tint = Color.White) },
+                                        title = "Audio Track",
+                                        subtitle = currentLabel,
+                                        onClick = onCycleAudio
+                                    )
+                                }
+
+                                // 4. Playback settings
                                 val isAutoplayOn = uiState.autoPlay || uiState.autoNext || uiState.autoSkipIntro || uiState.autoSkipOutro
                                 SettingsMenuItem(
                                     icon = { Icon(Icons.Default.PlayCircleFilled, contentDescription = null, tint = Color.White) },
@@ -148,25 +160,6 @@ fun SettingsOverlay(
                                     subtitle = if (isAutoplayOn) "On" else "Off",
                                     onClick = { currentPage = SettingsMenuPage.AUTOPLAY }
                                 )
-
-                                // 4. Audio Track
-                                if (audioTracks.isNotEmpty()) {
-                                    val currentLabel = audioTracks.firstOrNull { it.first == selectedAudioTrack }?.second ?: "Default"
-                                    SettingsMenuItem(
-                                        icon = { Icon(getLanguagesIcon(), contentDescription = null, tint = Color.White) },
-                                        title = "Audio Track",
-                                        subtitle = currentLabel,
-                                        onClick = { currentPage = SettingsMenuPage.AUDIO }
-                                    )
-                                } else {
-                                    // Fallback cycle
-                                    SettingsMenuItem(
-                                        icon = { Icon(getLanguagesIcon(), contentDescription = null, tint = Color.White) },
-                                        title = "Audio Track",
-                                        subtitle = "Cycle",
-                                        onClick = { onCycleAudio(); onDismiss() }
-                                    )
-                                }
                                 
                                 // 5. Captions
                                 if (uiState.availableSubtitles.isNotEmpty() || subtitleTracks.isNotEmpty()) {
@@ -198,7 +191,6 @@ fun SettingsOverlay(
                                         SettingsMenuItem(
                                             icon = { 
                                                 if (uiState.isUpdatingWatchlist) {
-                                                     // Micro-Dual-Circle for Watchlist Sync
                                                      Box(contentAlignment = Alignment.Center, modifier = Modifier.size(20.dp)) {
                                                          val infiniteTransition = rememberInfiniteTransition()
                                                          val rotateCW by infiniteTransition.animateFloat(0f, 360f, infiniteRepeatable(tween(800, easing = LinearEasing)))
@@ -240,11 +232,11 @@ fun SettingsOverlay(
                         Column(modifier = Modifier.fillMaxWidth()) {
                             SubMenuHeader("Server") { currentPage = SettingsMenuPage.MAIN }
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
-                                items(servers) { serverName ->
+                                items(servers) { server ->
                                     SubMenuItem(
-                                        title = serverName,
-                                        isSelected = serverName == uiState.currentServer,
-                                        onClick = { onServerSelected(serverName); onDismiss() }
+                                        title = server.label,
+                                        isSelected = server.id == uiState.currentServer,
+                                        onClick = { onServerSelected(server.id); onDismiss() }
                                     )
                                 }
                             }
@@ -259,20 +251,6 @@ fun SettingsOverlay(
                                         title = quality,
                                         isSelected = quality == uiState.currentQuality,
                                         onClick = { onQualitySelected(quality); onDismiss() }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    SettingsMenuPage.AUDIO -> {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Audio Track") { currentPage = SettingsMenuPage.MAIN }
-                            LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
-                                items(audioTracks) { (id, label) ->
-                                    SubMenuItem(
-                                        title = label,
-                                        isSelected = id == selectedAudioTrack,
-                                        onClick = { onAudioTrackSelected(id); onDismiss() }
                                     )
                                 }
                             }
