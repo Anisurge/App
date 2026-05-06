@@ -453,7 +453,7 @@ private fun AnimeScheduleCard(
                     .background(Color.White)
                     .padding(horizontal = 5.dp, vertical = 2.dp)
             ) {
-                Text(strings.episodeShort(anime.nextAiringEpisode?.episode ?: 1), color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(strings.episodeShort(anime.displayEpisodeNumber), color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
         }
 

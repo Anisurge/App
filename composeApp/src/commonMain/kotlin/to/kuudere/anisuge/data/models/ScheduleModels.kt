@@ -27,20 +27,31 @@ data class ScheduleAnime(
     val description: String = "",
     val format: String = "TV",
     val status: String = "",
-    val episodes: Int = 0,
     val genres: List<String> = emptyList(),
     @SerialName("season_year") val seasonYear: Int = 0,
     val season: String? = null,
     @SerialName("average_score") val averageScore: Int? = null,
+    val popularity: Int? = null,
     val subbed: Int = 0,
     val dubbed: Int = 0,
     val duration: String = "",
+    @SerialName("episode_number") val episodeNumber: Int = 1,
+    @SerialName("episodes_total") val episodesTotal: Int = 0,
+    @SerialName("airing_status") val airingStatus: String = "",
+    @SerialName("air_type") val airType: String = "",
+    @SerialName("episode_date") val episodeDate: String = "",
+    val route: String = "",
+    @SerialName("anilist_id") val anilistId: Int? = null,
+    @SerialName("mal_id") val malId: Int? = null,
+    @SerialName("delayed_from") val delayedFrom: String? = null,
+    @SerialName("delayed_until") val delayedUntil: String? = null,
+    // Legacy fields kept for backward compatibility in UI
+    val episodes: Int = 0,
     @SerialName("can_watch") val canWatch: Boolean = false,
     val type: String? = null,
     @SerialName("next_airing_episode") val nextAiringEpisode: NextAiringEpisode? = null,
     @SerialName("airing_at") val airingAt: String? = null,
     @SerialName("sub_release") val subRelease: String? = null,
-    // Legacy fields
     val id: String = "",
     val time: String = "",
     val cover: String = "",
@@ -52,4 +63,5 @@ data class ScheduleAnime(
     val bannerUrl: String? get() = bannerImage.ifBlank { null } ?: banner?.let { if (it.startsWith("http")) it else if (it.isNotBlank()) "https://api.reanime.to/img/banner/$it" else null }
     val activeSlug: String get() = animeId.ifBlank { id }
     val displayTitle: String get() = title.displayTitle
+    val displayEpisodeNumber: Int get() = if (episodeNumber > 0) episodeNumber else (nextAiringEpisode?.episode ?: 1)
 }
