@@ -24,13 +24,9 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val DOWNLOAD_PATH_KEY = stringPreferencesKey("download_path")
         val NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("notifications_enabled")
         val NOTIFICATIONS_NEW_EPISODE_KEY = booleanPreferencesKey("notifications_new_episode")
-        val NOTIFICATIONS_DONATION_KEY = booleanPreferencesKey("notifications_donation")
         val NOTIFICATIONS_ANNOUNCEMENT_KEY = booleanPreferencesKey("notifications_announcement")
-        val NOTIFICATIONS_MAINTENANCE_KEY = booleanPreferencesKey("notifications_maintenance")
         val FLOATING_BOTTOM_NAV_KEY = booleanPreferencesKey("floating_bottom_nav")
         val LIQUID_GLASS_BOTTOM_NAV_KEY = booleanPreferencesKey("liquid_glass_bottom_nav")
-        val MOBILE_DISCORD_RICH_PRESENCE_ENABLED_KEY = booleanPreferencesKey("mobile_discord_rich_presence_enabled")
-        val MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY = stringPreferencesKey("mobile_discord_rich_presence_token")
         val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
 
         private val json = Json { ignoreUnknownKeys = true }
@@ -44,139 +40,48 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val syncPercentageFlow: Flow<Int> = dataStore.data.map { it[SYNC_PERCENTAGE_KEY] ?: 80 }
     val subtitleSizeFlow: Flow<Int> = dataStore.data.map { it[SUBTITLE_SIZE_KEY] ?: 100 }
     val downloadPathFlow: Flow<String> = dataStore.data.map { it[DOWNLOAD_PATH_KEY] ?: "" }
-
-    // Notification preferences
     val notificationsEnabledFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_ENABLED_KEY] ?: true }
     val notificationsNewEpisodeFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_NEW_EPISODE_KEY] ?: true }
-    val notificationsDonationFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_DONATION_KEY] ?: true }
     val notificationsAnnouncementFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] ?: true }
-    val notificationsMaintenanceFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_MAINTENANCE_KEY] ?: true }
     val floatingBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[FLOATING_BOTTOM_NAV_KEY] ?: true }
     val liquidGlassBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[LIQUID_GLASS_BOTTOM_NAV_KEY] ?: false }
-    val mobileDiscordRichPresenceEnabledFlow: Flow<Boolean> = dataStore.data.map { it[MOBILE_DISCORD_RICH_PRESENCE_ENABLED_KEY] ?: false }
-    val mobileDiscordRichPresenceTokenFlow: Flow<String> = dataStore.data.map { it[MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY] ?: "" }
     val appLocaleFlow: Flow<String> = dataStore.data.map { it[APP_LOCALE_KEY] ?: "en" }
 
-    /**
-     * Flow of user-defined server priority list.
-     * Returns empty list if not set (use default priority).
-     */
     val serverPriorityFlow: Flow<List<String>> = dataStore.data.map { preferences ->
         val jsonStr = preferences[SERVER_PRIORITY_KEY]
         if (jsonStr != null) {
-            try {
-                json.decodeFromString<List<String>>(jsonStr)
-            } catch (e: Exception) {
-                emptyList()
-            }
-        } else {
-            emptyList()
-        }
+            try { json.decodeFromString<List<String>>(jsonStr) } catch (e: Exception) { emptyList() }
+        } else { emptyList() }
     }
 
-    /**
-     * Get current server priority synchronously
-     */
     suspend fun getServerPriority(): List<String> {
         return dataStore.data.map { preferences ->
             val jsonStr = preferences[SERVER_PRIORITY_KEY]
             if (jsonStr != null) {
-                try {
-                    json.decodeFromString<List<String>>(jsonStr)
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            } else {
-                emptyList()
-            }
+                try { json.decodeFromString<List<String>>(jsonStr) } catch (e: Exception) { emptyList() }
+            } else { emptyList() }
         }.first()
     }
 
-    /**
-     * Save server priority list
-     */
     suspend fun setServerPriority(priority: List<String>) {
         dataStore.edit { it[SERVER_PRIORITY_KEY] = json.encodeToString(priority) }
     }
 
-    suspend fun setAutoPlay(enabled: Boolean) {
-        dataStore.edit { it[AUTO_PLAY_KEY] = enabled }
-    }
+    suspend fun setAutoPlay(enabled: Boolean) { dataStore.edit { it[AUTO_PLAY_KEY] = enabled } }
+    suspend fun setAutoNext(enabled: Boolean) { dataStore.edit { it[AUTO_NEXT_KEY] = enabled } }
+    suspend fun setAutoSkipIntro(enabled: Boolean) { dataStore.edit { it[AUTO_SKIP_INTRO_KEY] = enabled } }
+    suspend fun setAutoSkipOutro(enabled: Boolean) { dataStore.edit { it[AUTO_SKIP_OUTRO_KEY] = enabled } }
+    suspend fun setDefaultLang(enabled: Boolean) { dataStore.edit { it[DEFAULT_LANG_KEY] = enabled } }
+    suspend fun setSyncPercentage(percentage: Int) { dataStore.edit { it[SYNC_PERCENTAGE_KEY] = percentage } }
+    suspend fun setSubtitleSize(sizePercent: Int) { dataStore.edit { it[SUBTITLE_SIZE_KEY] = sizePercent.coerceIn(60, 200) } }
+    suspend fun setDownloadPath(path: String) { dataStore.edit { it[DOWNLOAD_PATH_KEY] = path } }
+    suspend fun setNotificationsEnabled(enabled: Boolean) { dataStore.edit { it[NOTIFICATIONS_ENABLED_KEY] = enabled } }
+    suspend fun setNotificationsNewEpisode(enabled: Boolean) { dataStore.edit { it[NOTIFICATIONS_NEW_EPISODE_KEY] = enabled } }
+    suspend fun setNotificationsAnnouncement(enabled: Boolean) { dataStore.edit { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] = enabled } }
+    suspend fun setFloatingBottomNav(enabled: Boolean) { dataStore.edit { it[FLOATING_BOTTOM_NAV_KEY] = enabled } }
+    suspend fun setLiquidGlassBottomNav(enabled: Boolean) { dataStore.edit { it[LIQUID_GLASS_BOTTOM_NAV_KEY] = enabled } }
+    suspend fun setAppLocale(localeCode: String) { dataStore.edit { it[APP_LOCALE_KEY] = localeCode } }
 
-    suspend fun setAutoNext(enabled: Boolean) {
-        dataStore.edit { it[AUTO_NEXT_KEY] = enabled }
-    }
-
-    suspend fun setAutoSkipIntro(enabled: Boolean) {
-        dataStore.edit { it[AUTO_SKIP_INTRO_KEY] = enabled }
-    }
-
-    suspend fun setAutoSkipOutro(enabled: Boolean) {
-        dataStore.edit { it[AUTO_SKIP_OUTRO_KEY] = enabled }
-    }
-
-    suspend fun setDefaultLang(enabled: Boolean) {
-        dataStore.edit { it[DEFAULT_LANG_KEY] = enabled }
-    }
-
-    suspend fun setSyncPercentage(percentage: Int) {
-        dataStore.edit { it[SYNC_PERCENTAGE_KEY] = percentage }
-    }
-
-    suspend fun setSubtitleSize(sizePercent: Int) {
-        dataStore.edit { it[SUBTITLE_SIZE_KEY] = sizePercent.coerceIn(60, 200) }
-    }
-
-    suspend fun setDownloadPath(path: String) {
-        dataStore.edit { it[DOWNLOAD_PATH_KEY] = path }
-    }
-
-    // Notification setters
-    suspend fun setNotificationsEnabled(enabled: Boolean) {
-        dataStore.edit { it[NOTIFICATIONS_ENABLED_KEY] = enabled }
-    }
-
-    suspend fun setNotificationsNewEpisode(enabled: Boolean) {
-        dataStore.edit { it[NOTIFICATIONS_NEW_EPISODE_KEY] = enabled }
-    }
-
-    suspend fun setNotificationsDonation(enabled: Boolean) {
-        dataStore.edit { it[NOTIFICATIONS_DONATION_KEY] = enabled }
-    }
-
-    suspend fun setNotificationsAnnouncement(enabled: Boolean) {
-        dataStore.edit { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] = enabled }
-    }
-
-    suspend fun setNotificationsMaintenance(enabled: Boolean) {
-        dataStore.edit { it[NOTIFICATIONS_MAINTENANCE_KEY] = enabled }
-    }
-
-    suspend fun setFloatingBottomNav(enabled: Boolean) {
-        dataStore.edit { it[FLOATING_BOTTOM_NAV_KEY] = enabled }
-    }
-
-    suspend fun setLiquidGlassBottomNav(enabled: Boolean) {
-        dataStore.edit { it[LIQUID_GLASS_BOTTOM_NAV_KEY] = enabled }
-    }
-
-    suspend fun setMobileDiscordRichPresenceEnabled(enabled: Boolean) {
-        dataStore.edit { it[MOBILE_DISCORD_RICH_PRESENCE_ENABLED_KEY] = enabled }
-    }
-
-    suspend fun setMobileDiscordRichPresenceToken(token: String) {
-        dataStore.edit { preferences ->
-            val value = token.trim()
-            if (value.isBlank()) preferences.remove(MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY)
-            else preferences[MOBILE_DISCORD_RICH_PRESENCE_TOKEN_KEY] = value
-        }
-    }
-
-    suspend fun setAppLocale(localeCode: String) {
-        dataStore.edit { it[APP_LOCALE_KEY] = localeCode }
-    }
-
-    // Blocking reads for FCM service (runs on worker thread, safe to block)
     fun notificationsEnabledBlocking(): Boolean {
         return kotlinx.coroutines.runBlocking { notificationsEnabledFlow.first() }
     }

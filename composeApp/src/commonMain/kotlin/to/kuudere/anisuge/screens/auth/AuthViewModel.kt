@@ -12,15 +12,15 @@ import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.platform.TvQrPairingReceiver
 import to.kuudere.anisuge.platform.generatePairingNonce
 
-enum class AuthMode { LOGIN, REGISTER, FORGOT_PASSWORD, VERIFY_CODE, RESET_PASSWORD }
+enum class AuthMode { LOGIN, REGISTER, FORGOT_PASSWORD, RESET_PASSWORD }
 
 data class AuthUiState(
     val mode: AuthMode         = AuthMode.LOGIN,
-    val email: String          = "",
+    val identifier: String     = "",
     val password: String       = "",
     val confirmPassword: String = "",
     val displayName: String    = "",
-    val resetCode: String      = "",
+    val otp: String            = "",
     val isLoading: Boolean     = false,
     val errorMessage: String?  = null,
     val infoMessage: String?   = null,
@@ -50,13 +50,13 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
         setMode(newMode)
     }
 
-    fun onEmailChange(v: String)           { _uiState.value = _uiState.value.copy(email = v) }
-    fun onPasswordChange(v: String)        { _uiState.value = _uiState.value.copy(password = v) }
+    fun onIdentifierChange(v: String)   { _uiState.value = _uiState.value.copy(identifier = v) }
+    fun onPasswordChange(v: String)     { _uiState.value = _uiState.value.copy(password = v) }
     fun onConfirmPasswordChange(v: String) { _uiState.value = _uiState.value.copy(confirmPassword = v) }
-    fun onDisplayNameChange(v: String)     { _uiState.value = _uiState.value.copy(displayName = v) }
-    fun onResetCodeChange(v: String)       { _uiState.value = _uiState.value.copy(resetCode = v) }
-    fun clearError()                       { _uiState.value = _uiState.value.copy(errorMessage = null) }
-    fun clearInfo()                        { _uiState.value = _uiState.value.copy(infoMessage = null) }
+    fun onDisplayNameChange(v: String)  { _uiState.value = _uiState.value.copy(displayName = v) }
+    fun onOtpChange(v: String)          { _uiState.value = _uiState.value.copy(otp = v) }
+    fun clearError()                    { _uiState.value = _uiState.value.copy(errorMessage = null) }
+    fun clearInfo()                     { _uiState.value = _uiState.value.copy(infoMessage = null) }
 
     fun startTvPairing() {
         tvPairingReceiver.stop()
@@ -132,50 +132,39 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
             try {
                 when (state.mode) {
                     AuthMode.LOGIN -> {
-                        if (state.email.isBlank() || state.password.isBlank()) {
+                        if (state.identifier.isBlank() || state.password.isBlank()) {
                             throw Exception("Please fill in all fields")
                         }
-                        authService.login(state.email, state.password)
+                        authService.login(state.identifier, state.password)
                         _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
                     }
                     AuthMode.REGISTER -> {
-                        if (state.email.isBlank() || state.password.isBlank() || state.displayName.isBlank()) {
+                        if (state.identifier.isBlank() || state.password.isBlank() || state.displayName.isBlank()) {
                             throw Exception("Please fill in all fields")
                         }
-                        authService.register(state.email, state.password, state.displayName)
+                        authService.register(state.displayName, state.identifier, state.password)
                         _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
                     }
                     AuthMode.FORGOT_PASSWORD -> {
-                        if (state.email.isBlank()) throw Exception("Please enter your email")
-                        val msg = authService.forgotPassword(state.email)
+                        if (state.identifier.isBlank()) throw Exception("Please enter your email or username")
+                        val msg = authService.forgotPassword(state.identifier)
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             infoMessage = msg,
-                            mode = AuthMode.VERIFY_CODE
+                            mode = AuthMode.RESET_PASSWORD
                         )
                     }
-                    AuthMode.VERIFY_CODE -> {
-                        if (state.resetCode.isBlank()) throw Exception("Please enter the reset code")
-                        val valid = authService.verifyResetCode(state.email, state.resetCode)
-                        if (valid) {
-                            _uiState.value = _uiState.value.copy(
-                                isLoading = false,
-                                mode = AuthMode.RESET_PASSWORD
-                            )
-                        } else {
-                            throw Exception("Invalid reset code")
-                        }
-                    }
                     AuthMode.RESET_PASSWORD -> {
+                        if (state.otp.isBlank()) throw Exception("Please enter the OTP code")
                         if (state.password.isBlank()) throw Exception("Please enter a new password")
-                        if (state.password != state.confirmPassword) throw Exception("Passwords do not match")
-                        val msg = authService.resetPassword(state.email, state.resetCode, state.password)
+                        val msg = authService.resetPassword(state.identifier, state.otp, state.password)
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             infoMessage = msg,
                             mode = AuthMode.LOGIN,
                             password = "",
-                            confirmPassword = ""
+                            confirmPassword = "",
+                            otp = ""
                         )
                     }
                 }

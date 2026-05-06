@@ -66,11 +66,11 @@ fun WatchlistScreen(
         }
     }
 
-    val currentList = state.items.filter { it.folder == "Watching" || it.folder == "Current" }
-    val onHoldList = state.items.filter { it.folder == "On Hold" }
-    val planningList = state.items.filter { it.folder == "Plan To Watch" || it.folder == "Planning" }
-    val droppedList = state.items.filter { it.folder == "Dropped" }
-    val completedList = state.items.filter { it.folder == "Completed" }
+    val currentList = state.items.filter { it.folder == "WATCHING" || it.folder == "Current" }
+    val onHoldList = state.items.filter { it.folder == "PAUSED" || it.folder == "On Hold" }
+    val planningList = state.items.filter { it.folder == "PLANNING" || it.folder == "Plan To Watch" }
+    val droppedList = state.items.filter { it.folder == "DROPPED" }
+    val completedList = state.items.filter { it.folder == "COMPLETED" }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val isDesktop = maxWidth >= 800.dp
@@ -86,7 +86,7 @@ fun WatchlistScreen(
             val searchOptionsBlock = @Composable { modifier: Modifier ->
                 var showDesktopDropdown by remember { mutableStateOf(false) }
                 var showMobileDropdown by remember { mutableStateOf(false) }
-                val folderOptions = listOf("All lists", "Watching", "On Hold", "Plan To Watch", "Dropped", "Completed")
+                val folderOptions = listOf("All lists", "WATCHING", "PAUSED", "PLANNING", "DROPPED", "COMPLETED")
                 val density = LocalDensity.current
 
                 Column(
@@ -476,7 +476,7 @@ fun WatchlistScreen(
 
                 LaunchedEffect(endReached) {
                     if (endReached) {
-                        viewModel.loadNextPage()
+                        viewModel.loadMore()
                     }
                 }
 
@@ -505,46 +505,46 @@ fun WatchlistScreen(
                     var hasAnyItems = false
 
                     if (showAll) {
-                        items(state.items) { AnimeCard(item = it, badgeText = it.folder, onClick = { onAnimeClick(it.activeId) }) }
+                        items(state.items) { AnimeCard(item = it, badgeText = it.folder, onClick = { onAnimeClick(it.activeSlug) }) }
                         if (state.items.isNotEmpty()) hasAnyItems = true
                     } else {
-                        if (selectedList == "Watching" && currentList.isNotEmpty()) {
+                        if (selectedList == "WATCHING" && currentList.isNotEmpty()) {
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("Watching", currentList.size)
                             }
-                            items(currentList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(currentList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (currentList.isNotEmpty()) hasAnyItems = true
                         }
                         
-                        if (selectedList == "On Hold" && onHoldList.isNotEmpty()) {
+                        if (selectedList == "PAUSED" && onHoldList.isNotEmpty()) {
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("On Hold", onHoldList.size)
                             }
-                            items(onHoldList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(onHoldList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (onHoldList.isNotEmpty()) hasAnyItems = true
                         }
 
-                        if (selectedList == "Plan To Watch" && planningList.isNotEmpty()) {
+                        if (selectedList == "PLANNING" && planningList.isNotEmpty()) {
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("Plan To Watch", planningList.size)
                             }
-                            items(planningList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(planningList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (planningList.isNotEmpty()) hasAnyItems = true
                         }
                         
-                        if (selectedList == "Dropped" && droppedList.isNotEmpty()) {
+                        if (selectedList == "DROPPED" && droppedList.isNotEmpty()) {
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("Dropped", droppedList.size)
                             }
-                            items(droppedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(droppedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (droppedList.isNotEmpty()) hasAnyItems = true
                         }
 
-                        if (selectedList == "Completed" && completedList.isNotEmpty()) {
+                        if (selectedList == "COMPLETED" && completedList.isNotEmpty()) {
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                 SectionHeader("Completed", completedList.size)
                             }
-                            items(completedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeId) }) }
+                            items(completedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
                             if (completedList.isNotEmpty()) hasAnyItems = true
                         }
                     }

@@ -15,11 +15,10 @@ import to.kuudere.anisuge.platform.createDataStore
 import to.kuudere.anisuge.data.services.HomeService
 import to.kuudere.anisuge.data.services.SearchService
 
-/**
- * Manual dependency graph — keeps it simple for now, easy to swap out for Koin later.
- * Everything is lazily initialised and kept as a singleton for the app lifetime.
- */
 object AppComponent {
+    const val BASE_URL = "https://api.reanime.to/api/v1"
+    const val STREAMING_URL = "https://fetch.anisurge.lol/api"
+
     val httpClient: HttpClient by lazy {
         HttpClient {
             install(ContentNegotiation) {
@@ -30,11 +29,9 @@ object AppComponent {
             }
             install(Logging) { level = LogLevel.ALL }
             install(HttpTimeout) {
-                requestTimeoutMillis = 60000 // 60s
-                connectTimeoutMillis = 30000 // 30s
-                socketTimeoutMillis  = 60000 // 60s
-            }
-            install(io.ktor.client.plugins.websocket.WebSockets) {
+                requestTimeoutMillis = 60000
+                connectTimeoutMillis = 30000
+                socketTimeoutMillis  = 60000
             }
         }
     }
@@ -81,14 +78,6 @@ object AppComponent {
 
     val settingsService: to.kuudere.anisuge.data.services.SettingsService by lazy {
         to.kuudere.anisuge.data.services.SettingsService(sessionStore, httpClient)
-    }
-
-    val aniListService: to.kuudere.anisuge.data.services.AniListService by lazy {
-        to.kuudere.anisuge.data.services.AniListService(httpClient)
-    }
-
-    val realtimeService: to.kuudere.anisuge.data.services.RealtimeService by lazy {
-        to.kuudere.anisuge.data.services.RealtimeService(httpClient, authService)
     }
 
     val serverRepository: ServerRepository by lazy {

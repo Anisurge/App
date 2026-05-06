@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 import okio.buffer
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.platform.KmpFileSystem
-import to.kuudere.anisuge.data.models.StreamingData
+import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import kotlinx.coroutines.Job
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -135,27 +135,31 @@ object DownloadManager {
         downloadFonts: Boolean
     ) {
         val taskId = task.id
-        val headers = task.headers
+        val taskHeaders = task.headers
         val job = scope.launch {
             try {
-                // 1. Fetch stream URL
+                // 1. Fetch stream URL via batch_scrape
                 val apiServer = if (server == "zen2") "zen-2" else server
                 val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
-                val streamData = response?.directLink?.data ?: response?.data
                 
-                if (streamData == null) {
+                // Extract stream data from BatchScrapeResponse
+                val streamData = response?.sub ?: response?.dub
+                val streamInfo = streamData?.streams?.firstOrNull()
+                
+                if (streamInfo == null) {
                     updateTask(taskId) { it.copy(status = "Failed: No stream") }
                     return@launch
                 }
 
-                val m3u8Url = streamData.m3u8_url
-                if (m3u8Url == null) {
+                val m3u8Url = streamInfo.url
+                if (m3u8Url.isBlank()) {
                     updateTask(taskId) { it.copy(status = "Failed: No M3U8 URL") }
                     return@launch
                 }
 
-                val currentHeaders = (headers ?: emptyMap()).toMutableMap()
-                streamData.headers?.forEach { (k, v) -> currentHeaders[k] = v }
+                val currentHeaders = (taskHeaders ?: emptyMap()).toMutableMap()
+                streamInfo.headers?.Referer?.let { currentHeaders["Referer"] = it }
+                streamInfo.headers?.userAgent?.let { currentHeaders["User-Agent"] = it }
 
                 // Create folder
                 val currentPath = AppComponent.settingsStore.downloadPathFlow.first()
@@ -164,56 +168,24 @@ object DownloadManager {
                 val epDir = "$baseDir/$animeSafe/ep_${task.episodeNumber}"
                 KmpFileSystem.createDirectories(epDir)
 
-                // 2. Download Fonts
-                val downloadedFonts = mutableListOf<String>()
-                if (!streamData.fonts.isNullOrEmpty()) {
-                    updateTask(taskId) { it.copy(status = "Downloading fonts...") }
-                    streamData.fonts.forEach { font ->
-                        if (font.url != null && font.name != null) {
-                            try {
-                                val fontBytes = httpClient.get(font.url) {
-                                    currentHeaders.forEach { (k, v) -> header(k, v) }
-                                }.readBytes()
-                                val fontFile = "$epDir/${font.name}"
-                                KmpFileSystem.write(fontFile, fontBytes)
-                                downloadedFonts.add(fontFile)
-                            } catch (e: Exception) { }
-                        }
-                    }
-                }
-
-                // 3. Download Subtitles
-                val subsToDownload = if (subLang == "All") {
-                    streamData.subtitles ?: emptyList()
-                } else {
-                    val target = streamData.subtitles?.find { 
-                        it.title?.equals(subLang, ignoreCase = true) == true || 
-                        it.resolvedLang?.equals(subLang, ignoreCase = true) == true 
-                    }
-                    if (target != null) listOf(target) else emptyList()
-                }
-
-                val downloadedSubs = mutableListOf<Pair<String, String>>()
-                if (subsToDownload.isNotEmpty()) {
+                // 2. Download Subtitles (from BatchScrapeStreamData.subtitles which is a String URL)
+                val subsToDownload = mutableListOf<Pair<String, String>>()
+                val subtitlesUrl = streamData.subtitles
+                if (!subtitlesUrl.isNullOrBlank()) {
                     updateTask(taskId) { it.copy(status = "Downloading subtitles...") }
-                    subsToDownload.forEach { sub ->
-                        if (sub.url != null) {
-                            try {
-                                val subBytes = httpClient.get(sub.url) {
-                                    currentHeaders.forEach { (k, v) -> header(k, v) }
-                                }.readBytes()
-                                val label = (sub.title ?: sub.resolvedLang)?.replace("[^A-Za-z0-9 ]".toRegex(), "_") ?: "unknown"
-                                val format = if (sub.url.contains(".vtt")) "vtt" else if (sub.url.contains(".srt")) "srt" else "ass"
-                                val fileName = "subtitle_$label.$format"
-                                val subFile = "$epDir/$fileName"
-                                KmpFileSystem.write(subFile, subBytes)
-                                downloadedSubs.add(subFile to (sub.title ?: sub.resolvedLang ?: "Subtitle"))
-                            } catch (e: Exception) { }
-                        }
-                    }
+                    try {
+                        val subBytes = httpClient.get(subtitlesUrl) {
+                            currentHeaders.forEach { (k, v) -> header(k, v) }
+                        }.readBytes()
+                        val format = if (subtitlesUrl.contains(".vtt")) "vtt" else if (subtitlesUrl.contains(".srt")) "srt" else "ass"
+                        val fileName = "subtitle_default.$format"
+                        val subFile = "$epDir/$fileName"
+                        KmpFileSystem.write(subFile, subBytes)
+                        subsToDownload.add(subFile to "Default")
+                    } catch (e: Exception) { }
                 }
 
-                // 4. Download Video & Audio
+                // 3. Download Video & Audio
                 updateTask(taskId) { it.copy(status = "Parsing playlist...") }
                 val masterPlaylist = httpClient.get(m3u8Url) {
                     currentHeaders.forEach { (k, v) -> header(k, v) }
@@ -238,23 +210,6 @@ object DownloadManager {
                 if (videoSegments.isEmpty()) {
                     updateTask(taskId) { it.copy(status = "Failed: No video segments") }
                     return@launch
-                }
-
-                // Generate FFmetadata for chapters
-                val metadataPath = "$epDir/metadata.txt"
-                val chapters = streamData.chapters ?: emptyList()
-                if (chapters.isNotEmpty()) {
-                    val sb = StringBuilder(";FFMETADATA1\n")
-                    chapters.forEach { ch ->
-                        val startMs = ((ch.start_time ?: 0.0) * 1000).toLong()
-                        val endMs = ((ch.end_time ?: 0.0) * 1000).toLong()
-                        sb.append("\n[CHAPTER]\n")
-                        sb.append("TIMEBASE=1/1000\n")
-                        sb.append("START=$startMs\n")
-                        sb.append("END=$endMs\n")
-                        sb.append("title=${ch.title ?: "Chapter"}\n")
-                    }
-                    KmpFileSystem.write(metadataPath, sb.toString().toByteArray())
                 }
 
                 val rawVideoPath = "$epDir/video_raw.ts"
@@ -314,7 +269,7 @@ object DownloadManager {
                                 kotlinx.coroutines.delay(1000)
                             }
                             val segmentBytes = httpClient.get(segmentUrl) {
-                                headers?.forEach { (k, v) -> header(k, v) }
+                                currentHeaders.forEach { (k, v) -> header(k, v) }
                             }.readBytes()
                             audioSink.write(segmentBytes)
                             
@@ -329,15 +284,15 @@ object DownloadManager {
                     }
                 }
 
-                // 5. Muxing
+                // 4. Muxing
                 updateTask(taskId) { it.copy(status = "Muxing into MKV...", progress = 0.99f, downloadSpeed = "", eta = "") }
                 
                 val muxSuccess = muxToMkv(
                     videoPath = if (isEncrypted) m3u8Url else rawVideoPath,
                     audioPath = if (audioSegments.isNotEmpty() && !isEncrypted) rawAudioPath else null,
-                    subtitles = downloadedSubs,
-                    fonts = downloadedFonts,
-                    metadataPath = if (chapters.isNotEmpty()) metadataPath else null,
+                    subtitles = subsToDownload,
+                    fonts = emptyList(),
+                    metadataPath = null,
                     outputPath = finalMkvPath,
                     inputHeaders = currentHeaders
                 )
@@ -349,9 +304,7 @@ object DownloadManager {
                             KmpFileSystem.delete(rawVideoPath)
                             if (audioSegments.isNotEmpty()) KmpFileSystem.delete(rawAudioPath)
                         }
-                        downloadedSubs.forEach { (path, _) -> KmpFileSystem.delete(path) }
-                        downloadedFonts.forEach { KmpFileSystem.delete(it) }
-                        if (chapters.isNotEmpty()) KmpFileSystem.delete(metadataPath)
+                        subsToDownload.forEach { (path, _) -> KmpFileSystem.delete(path) }
                     } catch (e: Exception) { }
                     
                     updateTask(taskId) { it.copy(status = "Finished", progress = 1f, localPath = finalMkvPath) }

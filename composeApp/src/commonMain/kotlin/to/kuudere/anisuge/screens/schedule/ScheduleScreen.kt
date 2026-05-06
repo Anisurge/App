@@ -173,9 +173,7 @@ fun ScheduleScreen(
                     }
                 }
                 LaunchedEffect(nearEnd) {
-                    if (nearEnd && state.hasMore && !state.isLoadingMore) {
-                        viewModel.loadMore()
-                    }
+                    // Schedule uses date-based navigation, not pagination
                 }
 
                 BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -241,32 +239,33 @@ fun ScheduleScreen(
 
                             // ── Card rows ─────────────────────────────────
                             val rows = animeList.chunked(cols)
-                            items(rows, key = { "${dateStr}-r${rows.indexOf(it)}" }) { row ->
-                                val rowIdx = rows.indexOf(row)
-                                AnimatedEntry(
-                                    itemKey = "${dateStr}-r$rowIdx",
-                                    animatedKeys = animatedKeys,
-                                    delayMs = (dateIdx * 60 + rowIdx * 40).coerceAtMost(400)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            rows.forEachIndexed { rowIdx, row ->
+                                item(key = "${dateStr}-r$rowIdx") {
+                                    AnimatedEntry(
+                                        itemKey = "${dateStr}-r$rowIdx",
+                                        animatedKeys = animatedKeys,
+                                        delayMs = (dateIdx * 60 + rowIdx * 40).coerceAtMost(400)
                                     ) {
-                                        row.forEach { anime ->
-                                            AnimeScheduleCard(
-                                                anime = anime,
-                                                onClick = { onAnimeClick(anime.id) },
-                                                modifier = Modifier.weight(1f),
-                                            )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        ) {
+                                            row.forEach { anime ->
+                                                AnimeScheduleCard(
+                                                    anime = anime,
+                                                    onClick = { onAnimeClick(anime.activeSlug) },
+                                                    modifier = Modifier.weight(1f),
+                                                )
+                                            }
+                                            repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
                                         }
-                                        repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
                                     }
                                 }
                             }
                         }
 
                         // ── Skeleton placeholder while loading more ────────
-                        if (state.isLoadingMore) {
+                        if (state.isLoading) {
                             item(key = "skeleton") {
                                 Column {
                                     Spacer(Modifier.height(28.dp))
@@ -454,7 +453,7 @@ private fun AnimeScheduleCard(
                     .background(Color.White)
                     .padding(horizontal = 5.dp, vertical = 2.dp)
             ) {
-                Text(strings.episodeShort(anime.episode), color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(strings.episodeShort(anime.nextAiringEpisode?.episode ?: 1), color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -473,7 +472,7 @@ private fun AnimeScheduleCard(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    anime.title,
+                    anime.displayTitle,
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -491,7 +490,7 @@ private fun AnimeScheduleCard(
                     Text(anime.time, color = MUTED, fontSize = 12.sp)
                     Text(" • ", color = MUTED, fontSize = 12.sp)
                 }
-                Text(anime.type.ifBlank { "TV" }, color = MUTED, fontSize = 12.sp)
+                Text((anime.type ?: anime.format).ifBlank { "TV" }, color = MUTED, fontSize = 12.sp)
             }
 
             Spacer(Modifier.height(7.dp))

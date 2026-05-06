@@ -87,7 +87,7 @@ private fun Comment.toUi(): CommentUiModel = CommentUiModel(
     likes = this.likes,
     dislikes = this.dislikes,
     isLiked = this.isLiked,
-    isUnliked = this.isUnliked,
+    isUnliked = this.isDisliked,
     showReplies = this.showReplies,
     replies = this.replies.map { it.toUi() },
     hasMoreReplies = this.hasMoreReplies,
@@ -181,7 +181,7 @@ fun CommentsSection(
             )
         }
         updateComment(model.data.id) { updated }
-        scope.launch { commentService.voteComment(model.data.id, type) }
+        scope.launch { commentService.toggleLike(model.data.id, type) }
     }
 
     fun postRoot() {
@@ -189,7 +189,7 @@ fun CommentsSection(
         if (!isAuthenticated || rootText.isBlank()) return
         scope.launch {
             isPostingRoot = true
-            val res = commentService.postComment(animeId, episodeNumber, rootText, rootIsSpoiler)
+            val res = commentService.postComment(animeId, episodeNumber, rootText)
             println("[CommentsSection] postRoot response: $res")
             if (res?.success == true) {
                 val id = res.data?.commentId ?: res.data?.id ?: System.currentTimeMillis().toString()
@@ -233,7 +233,7 @@ fun CommentsSection(
         if (!isAuthenticated || parent.replyText.isBlank()) return
         updateComment(parent.data.id) { it.copy(isSubmitting = true) }
         scope.launch {
-            val res = commentService.postComment(animeId, episodeNumber, parent.replyText, parent.replyIsSpoiler, parent.data.id)
+            val res = commentService.postComment(animeId, episodeNumber, parent.replyText, parent.data.id)
             if (res?.success == true) {
                 val id = res.data?.commentId ?: res.data?.id ?: System.currentTimeMillis().toString()
                 updateComment(parent.data.id) { c ->
@@ -254,20 +254,17 @@ fun CommentsSection(
     }
 
     fun deleteComment(id: String) {
-        scope.launch {
-            val ok = commentService.deleteComment(id)
-            if (ok) {
-                fun filterRecursive(nodes: List<CommentUiModel>): List<CommentUiModel> {
-                    return nodes.filter { it.data.id != id }.map {
-                        val newReps = filterRecursive(it.replies)
-                        if (newReps !== it.replies) it.copy(replies = newReps) else it
-                    }
-                }
-                val oldSize = comments.size
-                comments = filterRecursive(comments)
-                if (comments.size < oldSize) totalComments = maxOf(0, totalComments - 1)
+        // Delete comment endpoint not available in new API
+        // Remove locally only
+        fun filterRecursive(nodes: List<CommentUiModel>): List<CommentUiModel> {
+            return nodes.filter { it.data.id != id }.map {
+                val newReps = filterRecursive(it.replies)
+                if (newReps !== it.replies) it.copy(replies = newReps) else it
             }
         }
+        val oldSize = comments.size
+        comments = filterRecursive(comments)
+        if (comments.size < oldSize) totalComments = maxOf(0, totalComments - 1)
     }
 
     // ── UI ───────────────────────────────────────────────────────────────────

@@ -4,10 +4,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SearchResponse(
-    val success: Boolean,
-    val animeData: List<AnimeItem>? = emptyList(),
-    val total: Int? = 0,
-    val totalPages: Int? = 0,
-    val currentPage: Int? = 1,
-    val hasMore: Boolean? = false,
+    val results: List<AnimeItem> = emptyList(),
+    val total: Int = 0,
+    val limit: Int = 20,
+    val offset: Int = 0,
+    @kotlinx.serialization.Transient val hasMore: Boolean = false,
 )

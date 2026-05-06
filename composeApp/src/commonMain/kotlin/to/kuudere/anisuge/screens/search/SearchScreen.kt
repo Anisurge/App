@@ -157,7 +157,7 @@ fun SearchScreen(
                         to.kuudere.anisuge.ui.AnimeCard(
                             item     = anime,
                             modifier = Modifier.fillMaxWidth(),
-                            onClick  = { onAnimeClick(anime.id) }
+                            onClick  = { onAnimeClick(anime.activeSlug) }
                         )
                     }
                 }
@@ -283,9 +283,9 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
             ) { viewModel.onSeasonChange(it) }
             
             KAdvancedFilterDropdown(
-                strings.origin, strings.anyOrigin, state.selectedLanguage, KUUDERE_ORIGINS, 
+                strings.origin, strings.anyOrigin, null, KUUDERE_ORIGINS, 
                 Icons.Default.Public, Modifier.weight(1f)
-            ) { viewModel.onLanguageChange(it) }
+            ) { /* language filter removed */ }
         }
     }
 }
@@ -345,7 +345,7 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
                     KAdvancedFilterDropdown(strings.format, strings.anyFormat, state.selectedType, KUUDERE_FORMATS, Icons.Default.Tv, Modifier.weight(1f)) { viewModel.onTypeChange(it) }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KAdvancedFilterDropdown(strings.origin, strings.anyOrigin, state.selectedLanguage, KUUDERE_ORIGINS, Icons.Default.Public, Modifier.weight(1f)) { viewModel.onLanguageChange(it) }
+                    KAdvancedFilterDropdown(strings.origin, strings.anyOrigin, null, KUUDERE_ORIGINS, Icons.Default.Public, Modifier.weight(1f)) { /* language filter removed */ }
                     
                     Button(
                         onClick = { viewModel.clearFilters() },

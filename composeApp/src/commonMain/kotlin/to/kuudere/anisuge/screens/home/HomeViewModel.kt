@@ -11,23 +11,20 @@ import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.data.services.HomeService
-
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.models.UserProfile
 import to.kuudere.anisuge.data.services.AuthService
-
 import kotlinx.coroutines.flow.update
-import to.kuudere.anisuge.data.services.InfoService
+import to.kuudere.anisuge.data.services.WatchlistService
 
 data class HomeUiState(
     val isLoading:        Boolean              = true,
     val isLoggingOut:     Boolean              = false,
     val isOffline:        Boolean              = false,
     val userProfile:      UserProfile?         = null,
-    val topAiring:        List<AnimeItem>       = emptyList(),
-    val latestEpisodes:   List<AnimeItem>       = emptyList(),
+    val latestAired:      List<AnimeItem>       = emptyList(),
     val newOnSite:        List<AnimeItem>       = emptyList(),
-    val topUpcoming:      List<AnimeItem>       = emptyList(),
+    val upcoming:         List<AnimeItem>       = emptyList(),
     val continueWatching: List<ContinueWatchingItem> = emptyList(),
     val isUpdatingWatchlist: Boolean            = false,
     val error:            String?               = null,
@@ -36,8 +33,7 @@ data class HomeUiState(
 class HomeViewModel(
     private val homeService: HomeService,
     private val authService: AuthService,
-    private val infoService: InfoService,
-    private val realtimeService: to.kuudere.anisuge.data.services.RealtimeService
+    private val watchlistService: WatchlistService,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var homeDataJob: Job? = null
@@ -52,21 +48,10 @@ class HomeViewModel(
                 _uiState.update { it.copy(userProfile = userProfile) }
 
                 if (userProfile != null) {
-                    userProfile.effectiveId?.let { uid ->
-                        realtimeService.connect(
-                            to.kuudere.anisuge.data.models.UserInfoData(
-                                userId = uid,
-                                username = userProfile.username ?: "User",
-                                avatar = userProfile.avatar
-                            )
-                        )
-                    }
                     if (!itHasHomeContent()) {
                         loadHomeData(showLoading = true)
                     }
                     fetchPersonalizedData()
-                } else {
-                    realtimeService.disconnect()
                 }
             }
         }
@@ -75,10 +60,9 @@ class HomeViewModel(
 
     private fun itHasHomeContent(): Boolean {
         val state = _uiState.value
-        return state.topAiring.isNotEmpty() ||
-            state.latestEpisodes.isNotEmpty() ||
+        return state.latestAired.isNotEmpty() ||
             state.newOnSite.isNotEmpty() ||
-            state.topUpcoming.isNotEmpty()
+            state.upcoming.isNotEmpty()
     }
 
     private fun loadHomeData(force: Boolean = false, showLoading: Boolean = false) {
@@ -95,10 +79,9 @@ class HomeViewModel(
                         isLoading        = false,
                         isOffline        = false,
                         error            = null,
-                        topAiring        = homeData?.topAired    ?: emptyList(),
-                        latestEpisodes   = homeData?.latestEps   ?: emptyList(),
-                        newOnSite        = homeData?.lastUpdated ?: emptyList(),
-                        topUpcoming      = homeData?.topUpcoming ?: emptyList(),
+                        latestAired      = homeData?.latestAired  ?: emptyList(),
+                        newOnSite        = homeData?.newOnSite   ?: emptyList(),
+                        upcoming         = homeData?.upcoming     ?: emptyList(),
                     )
                 }
             } catch (e: Exception) {
@@ -135,15 +118,13 @@ class HomeViewModel(
                             isLoading        = false,
                             isOffline        = false,
                             error            = null,
-                            topAiring        = data.topAired,
-                            latestEpisodes   = data.latestEps,
-                            newOnSite        = data.lastUpdated,
-                            topUpcoming      = data.topUpcoming,
+                            latestAired      = data.latestAired,
+                            newOnSite        = data.newOnSite,
+                            upcoming         = data.upcoming,
                         )
                     }
                 } ?: _uiState.update { it.copy(isLoading = false) }
 
-                // Results flow into the auth collector, but home lists no longer wait on it.
                 authCheck.await()
             } catch (e: Exception) {
                 handleHomeLoadError(e)
@@ -169,19 +150,7 @@ class HomeViewModel(
         scope.launch {
             _uiState.update { it.copy(isUpdatingWatchlist = true) }
             try {
-                val response = infoService.updateWatchlistStatus(animeId, folder)
-                if (response != null && response.success) {
-                    // AniList Sync
-                    response.data?.token?.let { token ->
-                        response.data.anilist?.let { anilistId ->
-                            println("[HomeVM] Triggering AniList sync for $anilistId to $folder")
-                            scope.launch {
-                                val syncResult = to.kuudere.anisuge.AppComponent.aniListService.updateStatus(token, anilistId, folder)
-                                println("[HomeVM] AniList sync result for $anilistId: $syncResult")
-                            }
-                        } ?: println("[HomeVM] No anilistId returned for sync")
-                    } ?: println("[HomeVM] No token returned for sync")
-                }
+                watchlistService.updateStatus(animeId, folder)
             } finally {
                 _uiState.update { it.copy(isUpdatingWatchlist = false) }
             }
@@ -192,7 +161,6 @@ class HomeViewModel(
         scope.launch {
             _uiState.update { it.copy(isLoggingOut = true) }
             try {
-                realtimeService.disconnect()
                 authService.logout()
             } finally {
                 _uiState.update { it.copy(isLoggingOut = false) }

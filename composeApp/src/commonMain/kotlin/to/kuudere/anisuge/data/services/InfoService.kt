@@ -4,132 +4,114 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.head
-import io.ktor.client.request.post
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
-import to.kuudere.anisuge.data.models.AnimeDetailsResponse
-import to.kuudere.anisuge.data.models.EpisodeDataResponse
-import to.kuudere.anisuge.data.models.SessionInfo
-import to.kuudere.anisuge.data.models.SenshiSourceData
-import to.kuudere.anisuge.data.models.SourceData
-import to.kuudere.anisuge.data.models.ThumbnailsResponse
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.content.TextContent
+import kotlinx.serialization.json.put
+import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.models.AnimeDetails
+import to.kuudere.anisuge.data.models.BatchScrapeResponse
+import to.kuudere.anisuge.data.models.EpisodeListResponse
+import to.kuudere.anisuge.data.models.RecommendationsResponse
+import to.kuudere.anisuge.data.models.WatchInfoResponse
 
 class InfoService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
-    companion object {
-        const val BASE_URL = "https://anime.anisurge.qzz.io"
-    }
-
-    private fun sessionToCookie(s: SessionInfo): String =
-        "session_id=${s.sessionId}; session_secret=${s.session}; user_id=${s.userId}"
-
-    suspend fun getAnimeDetails(id: String): AnimeDetailsResponse? {
+    suspend fun getAnimeDetails(slug: String): AnimeDetails? {
         return try {
             val stored = sessionStore.get()
-            val response = httpClient.get("$BASE_URL/anime/$id") {
-                parameter("type", "api")
-                if (stored != null) header("Cookie", sessionToCookie(stored))
+            val response = httpClient.get("${AppComponent.BASE_URL}/anime/$slug") {
+                parameter("include_episodes", "true")
+                if (stored != null) header("Authorization", "Bearer ${stored.token}")
             }
-            response.body<AnimeDetailsResponse>()
+            response.body<AnimeDetails>()
         } catch (e: Exception) {
-            println("[InfoService] fetchAnimeDetails error: ${e.message}")
+            println("[InfoService] getAnimeDetails error: ${e.message}")
             null
         }
     }
 
-    suspend fun getEpisodes(animeId: String, episodeNumber: Int = 1): EpisodeDataResponse? {
+    suspend fun getEpisodes(
+        slug: String,
+        limit: Int = 30,
+        offset: Int = 0,
+        filler: Boolean = true,
+        recap: Boolean = true,
+    ): EpisodeListResponse? {
         return try {
-            val stored = sessionStore.get()
-            val response = httpClient.get("$BASE_URL/api/watch/$animeId/$episodeNumber") {
-                parameter("nolinks", "true")
-                if (stored != null) header("Cookie", sessionToCookie(stored))
+            val response = httpClient.get("${AppComponent.BASE_URL}/anime/$slug/episodes") {
+                parameter("limit", limit)
+                if (offset > 0) parameter("offset", offset)
+                parameter("filler", filler)
+                parameter("recap", recap)
             }
-            response.body<EpisodeDataResponse>()
+            response.body<EpisodeListResponse>()
         } catch (e: Exception) {
             println("[InfoService] getEpisodes error: ${e.message}")
             null
         }
     }
 
-    suspend fun getThumbnails(anilistId: Int): ThumbnailsResponse? {
-        return try {
-            val response = httpClient.get("$BASE_URL/api/thumbnails/$anilistId")
-            response.body<ThumbnailsResponse>()
-        } catch (e: Exception) {
-            println("[InfoService] getThumbnails error: ${e.message}")
-            null
-        }
-    }
-
-    suspend fun updateWatchlistStatus(animeId: String, folder: String): to.kuudere.anisuge.data.models.WatchlistUpdateResponse? {
-        return try {
-            val stored = sessionStore.get() ?: return null
-            val payload = buildJsonObject {
-                put("animeId", animeId)
-                put("folder", folder)
-            }
-            val response = httpClient.post("$BASE_URL/api/anime/watchlist") {
-                header("Cookie", sessionToCookie(stored))
-                contentType(ContentType.Application.Json)
-                setBody(payload.toString())
-            }
-            if (response.status.value in 200..299) {
-                response.body<to.kuudere.anisuge.data.models.WatchlistUpdateResponse>()
-            } else null
-        } catch (e: Exception) {
-            println("[InfoService] updateWatchlistStatus error: ${e.message}")
-            null
-        }
-    }
-
-    suspend fun getVideoStream(anilistId: Int, episodeNumber: Int, server: String): to.kuudere.anisuge.data.models.WatchServerResponse? {
+    suspend fun getWatchInfo(
+        slug: String,
+        ep: String? = null,
+        nid: String? = null,
+        tz: String? = null,
+    ): WatchInfoResponse? {
         return try {
             val stored = sessionStore.get()
-            val response = httpClient.get("$BASE_URL/$anilistId/$episodeNumber/$server") {
-                if (stored != null) header("Cookie", sessionToCookie(stored))
+            val response = httpClient.get("${AppComponent.BASE_URL}/watch/$slug") {
+                if (stored != null) header("Authorization", "Bearer ${stored.token}")
+                ep?.let { parameter("ep", it) }
+                nid?.let { parameter("nid", it) }
+                tz?.let { parameter("tz", it) }
             }
-            response.body<to.kuudere.anisuge.data.models.WatchServerResponse>()
+            response.body<WatchInfoResponse>()
+        } catch (e: Exception) {
+            println("[InfoService] getWatchInfo error: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun getRecommendations(slug: String): RecommendationsResponse? {
+        return try {
+            val response = httpClient.get("${AppComponent.BASE_URL}/anime/$slug/recommendations")
+            response.body<RecommendationsResponse>()
+        } catch (e: Exception) {
+            println("[InfoService] getRecommendations error: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun getVideoStream(
+        anilistId: Int,
+        episodeNumber: Int,
+        server: String
+    ): BatchScrapeResponse? {
+        return try {
+            val response = httpClient.get(AppComponent.STREAMING_URL) {
+                parameter("action", "batch_scrape")
+                parameter("anilistId", anilistId)
+                parameter("episode", episodeNumber)
+                parameter("source", server)
+            }
+            response.body<BatchScrapeResponse>()
         } catch (e: Exception) {
             println("[InfoService] getVideoStream error: ${e.message}")
             null
         }
     }
 
-    suspend fun getSenshiSources(embedUrl: String): List<SourceData> {
-        return try {
-            if (!embedUrl.startsWith("https://senshi.live/episode-embeds/")) return emptyList()
-            val response = httpClient.get(embedUrl) {
-                header("Referer", "https://senshi.live")
-            }
-            response.body<List<SenshiSourceData>>().mapNotNull { source ->
-                val url = source.url ?: return@mapNotNull null
-                SourceData(quality = source.status ?: "Auto", url = url)
-            }
-        } catch (e: Exception) {
-            println("[InfoService] getSenshiSources error: ${e.message}")
-            emptyList()
-        }
-    }
-
-    /** Fire-and-forget HEAD request to warm the DNS + TCP/TLS path for a CDN stream URL.
-     *  OkHttp on Android shares the system netd DNS cache with MPV's libcurl, so this
-     *  pre-resolve saves ~50-200ms off the first MPV connection to the CDN. */
     suspend fun prewarmStreamUrl(url: String) {
         try {
             httpClient.head(url)
-        } catch (_: Exception) {
-            // Ignore - this is best-effort only
-        }
+        } catch (_: Exception) {}
     }
 
     suspend fun saveProgress(
@@ -150,12 +132,11 @@ class InfoService(
                 put("server", server)
                 put("language", language)
             }
-            println("[InfoService] Saving progress for $animeId / $episodeId => $currentTime / $duration")
-            val response = httpClient.post("$BASE_URL/api/save-progress") {
-                header("Cookie", sessionToCookie(stored))
-                setBody(TextContent(payload.toString(), ContentType.Application.Json))
+            val response = httpClient.post("${AppComponent.BASE_URL}/watch/progress") {
+                header("Authorization", "Bearer ${stored.token}")
+                contentType(ContentType.Application.Json)
+                setBody(payload.toString())
             }
-            println("[InfoService] Save-progress responded with: ${response.status} - ${response.bodyAsText()}")
             response.status.value in 200..299
         } catch (e: Exception) {
             println("[InfoService] saveProgress error: ${e.message}")

@@ -11,15 +11,12 @@ import to.kuudere.anisuge.data.models.ScheduleAnime
 import to.kuudere.anisuge.data.services.ScheduleService
 import to.kuudere.anisuge.utils.isNetworkError
 
-private const val PAGE_SIZE = 3
-
 data class ScheduleUiState(
     val isLoading: Boolean = true,
-    val isLoadingMore: Boolean = false,
     val schedule: Map<String, List<ScheduleAnime>> = emptyMap(),
-    val hasMore: Boolean = false,
-    val loadedDates: Int = 0,
-    val totalDates: Int = 0,
+    val timezone: String = "UTC",
+    val year: Int? = null,
+    val month: Int? = null,
     val error: String? = null,
     val isOffline: Boolean = false,
 )
@@ -38,15 +35,12 @@ class ScheduleViewModel(
         scope.launch {
             _uiState.update { ScheduleUiState(isLoading = true) }
             try {
-                val resp = scheduleService.fetchSchedule(limit = PAGE_SIZE, offset = 0)
+                val resp = scheduleService.fetchSchedule(tz = _uiState.value.timezone, year = _uiState.value.year, month = _uiState.value.month)
                 _uiState.update {
                     it.copy(
-                        isLoading    = false,
-                        schedule     = resp.data,
-                        hasMore      = resp.hasMore,
-                        isOffline    = false,
-                        loadedDates  = resp.loadedDates ?: resp.data.size,
-                        totalDates   = resp.totalDates ?: resp.data.size,
+                        isLoading = false,
+                        schedule = resp.schedule.associate { it.date to it.episodes },
+                        isOffline = false,
                     )
                 }
             } catch (e: Exception) {
@@ -55,24 +49,13 @@ class ScheduleViewModel(
         }
     }
 
-    fun loadMore() {
-        val current = _uiState.value
-        if (current.isLoadingMore || !current.hasMore) return
-        scope.launch {
-            _uiState.update { it.copy(isLoadingMore = true) }
-            try {
-                val resp = scheduleService.fetchSchedule(limit = PAGE_SIZE, offset = current.loadedDates)
-                _uiState.update { state ->
-                    state.copy(
-                        isLoadingMore = false,
-                        schedule      = state.schedule + resp.data,   // merge
-                        hasMore       = resp.hasMore,
-                        loadedDates   = state.loadedDates + (resp.loadedDates ?: resp.data.size),
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoadingMore = false) }
-            }
-        }
+    fun setTimezone(tz: String) {
+        _uiState.update { it.copy(timezone = tz) }
+        refresh()
+    }
+
+    fun setYearMonth(year: Int?, month: Int?) {
+        _uiState.update { it.copy(year = year, month = month) }
+        refresh()
     }
 }

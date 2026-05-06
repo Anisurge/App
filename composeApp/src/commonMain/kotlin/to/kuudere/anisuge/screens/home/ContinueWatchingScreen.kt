@@ -126,10 +126,7 @@ fun ContinueWatchingScreen(
                             ContinueWatchingGridCard(
                                 item = item,
                                 onClick = {
-                                    val animeId = item.link.removePrefix("/").split("/").getOrNull(1).orEmpty()
-                                    val lang = parseQueryParam(item.link, "lang") ?: "sub"
-                                    val server = parseQueryParam(item.link, "server")
-                                    onWatchClick(animeId, lang, item.episode, server)
+                                    onWatchClick(item.animeId, item.language ?: "sub", item.episode, item.server)
                                 }
                             )
                         }
@@ -158,8 +155,8 @@ private fun ContinueWatchingGridCard(
                 .background(Color(0xFF111111))
         ) {
             AsyncImage(
-                model = item.thumbnail,
-                contentDescription = item.title,
+                model = item.cover,
+                contentDescription = item.displayTitle,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
@@ -219,7 +216,7 @@ private fun ContinueWatchingGridCard(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            item.title,
+            item.displayTitle,
             color = Color.White,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
@@ -229,22 +226,6 @@ private fun ContinueWatchingGridCard(
     }
 }
 
-private fun parseProgressFraction(progress: String, duration: String): Float {
-    fun toSeconds(value: String): Int {
-        val parts = value.trim().split(":").mapNotNull { it.toIntOrNull() }
-        return when (parts.size) {
-            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
-            2 -> parts[0] * 60 + parts[1]
-            1 -> parts[0]
-            else -> 0
-        }
-    }
-
-    val total = toSeconds(duration)
-    return if (total > 0) (toSeconds(progress).toFloat() / total).coerceIn(0f, 1f) else 0f
-}
-
-private fun parseQueryParam(url: String, key: String): String? {
-    val query = url.substringAfter('?', "")
-    return query.split('&').firstOrNull { it.startsWith("$key=") }?.substringAfter('=')
+private fun parseProgressFraction(progress: Double, duration: Double): Float {
+    return if (duration > 0) (progress / duration).toFloat().coerceIn(0f, 1f) else 0f
 }

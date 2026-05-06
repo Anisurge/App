@@ -72,7 +72,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import to.kuudere.anisuge.utils.Uri
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Folder
@@ -198,7 +197,6 @@ fun HomeScreen(
     onWatchOffline: (String, Int, String, String) -> Unit = { _, _, _, _ -> },
     onLogout: () -> Unit = {},
     onExit: () -> Unit = {},
-    onViewLatestMore: () -> Unit = {},
     onViewContinueWatchingMore: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
@@ -237,18 +235,6 @@ fun HomeScreen(
         // but we can still trigger a global sync here if needed.
     }
 
-    // Join room based on current tab
-    LaunchedEffect(currentTab) {
-        val room = when (currentTab) {
-            AnisugTab.Home -> "home"
-            AnisugTab.Search -> "search"
-            AnisugTab.Calendar -> "countdowns"
-            AnisugTab.Bookmarks -> "watchlist"
-            AnisugTab.Downloads -> "downloads"
-            AnisugTab.Settings -> "settings"
-        }
-        AppComponent.realtimeService.joinRoom(room)
-    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF000000))) {
         val isDesktop = maxWidth >= 800.dp
@@ -294,7 +280,6 @@ fun HomeScreen(
                                 onWatchClick = onWatchClick,
                                 onWatchOffline = onWatchOffline,
                                 onLogout = { showLogoutConfirm = true },
-                                onViewLatestMore = onViewLatestMore,
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onWatchlistClick = { showWatchlistFor = it },
                                 onSearchLatest = {
@@ -352,7 +337,6 @@ fun HomeScreen(
                                 onWatchClick = onWatchClick,
                                 onWatchOffline = onWatchOffline,
                                 onLogout = { showLogoutConfirm = true },
-                                onViewLatestMore = onViewLatestMore,
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onWatchlistClick = { showWatchlistFor = it },
                                 onSearchLatest = {
@@ -445,7 +429,6 @@ private fun TabContent(
     onWatchClick: (String, String, Int, String?) -> Unit,
     onWatchOffline: (String, Int, String, String) -> Unit,
     onLogout: () -> Unit,
-    onViewLatestMore: () -> Unit,
     onViewContinueWatchingMore: () -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
     onSearchLatest: () -> Unit,
@@ -460,7 +443,7 @@ private fun TabContent(
         when (tab) {
             AnisugTab.Home -> {
                 AnimatedContent(
-                    targetState = homeState.isLoading && homeState.topAiring.isEmpty(),
+                    targetState = homeState.isLoading && homeState.latestAired.isEmpty(),
                     transitionSpec = { fadeIn(tween(400)) togetherWith fadeOut(tween(300)) },
                     label = "HomeLoadingTransition"
                 ) { isLoading ->
@@ -469,9 +452,9 @@ private fun TabContent(
                             Box(Modifier.fillMaxSize(), Alignment.Center) {
                                 CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
                             }
-                        homeState.isOffline && homeState.topAiring.isEmpty() ->
+                        homeState.isOffline && homeState.latestAired.isEmpty() ->
                             to.kuudere.anisuge.ui.OfflineState(onRetry = { homeViewModel.refresh(force = true) }, isLoading = homeState.isLoading)
-                        homeState.error != null && homeState.topAiring.isEmpty() ->
+                        homeState.error != null && homeState.latestAired.isEmpty() ->
                             Box(Modifier.fillMaxSize(), Alignment.Center) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Text(homeState.error!!, color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center)
@@ -488,7 +471,6 @@ private fun TabContent(
                                 onWatchClick,
                                 onWatchlistClick = onWatchlistClick,
                                 onRefresh = { homeViewModel.refresh(force = true) },
-                                onViewLatestMore = onViewLatestMore,
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onViewNewOnAppMore = onSearchLatest,
                                 onExit = onExit
@@ -521,7 +503,6 @@ private fun HomeContent(
     onWatchClick: (String, String, Int, String?) -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
     onRefresh: () -> Unit = {},
-    onViewLatestMore: () -> Unit = {},
     onViewContinueWatchingMore: () -> Unit = {},
     onViewNewOnAppMore: () -> Unit = {},
     onExit: () -> Unit = {},
@@ -532,11 +513,11 @@ private fun HomeContent(
         Column(Modifier.fillMaxSize().verticalScroll(scrollState)) {
         Box(Modifier.fillMaxWidth()) {
             // ── Hero Carousel ──────────────────────────────────────────────
-            if (state.topAiring.isNotEmpty()) {
+            if (state.latestAired.isNotEmpty()) {
                 HeroCarousel(
-                    items = state.topAiring,
-                    onAnimeClick = { onAnimeClick(it.id) },
-                    onWatchClick = { item, lang, ep -> onWatchClick(item.id, lang, ep, null) },
+                    items = state.latestAired,
+                    onAnimeClick = { onAnimeClick(it.activeSlug) },
+                    onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null) },
                     onWatchlistClick = onWatchlistClick
                 )
             }
@@ -559,32 +540,22 @@ private fun HomeContent(
             Spacer(Modifier.height(24.dp))
         }
 
-        // ── Latest Episodes ────────────────────────────────────────────
-        if (state.latestEpisodes.isNotEmpty()) {
-            AnimeSection(
-                title = "Latest Episodes",
-                items = state.latestEpisodes,
-                onItemClick = { item -> onAnimeClick(item.id) },
-                onViewMoreClick = onViewLatestMore,
-            )
-        }
-
-        // ── New On Site ────────────────────────────────────────────────
+        // ── New Additions ────────────────────────────────────────────────
         if (state.newOnSite.isNotEmpty()) {
             AnimeSection(
-                title = "New On App",
+                title = "New Additions",
                 items = state.newOnSite,
-                onItemClick = { item -> onAnimeClick(item.id) },
+                onItemClick = { item -> onAnimeClick(item.activeSlug) },
                 onViewMoreClick = onViewNewOnAppMore,
             )
         }
 
-        // ── Top Upcoming ───────────────────────────────────────────────
-        if (state.topUpcoming.isNotEmpty()) {
+        // ── Upcoming ───────────────────────────────────────────────
+        if (state.upcoming.isNotEmpty()) {
             AnimeSection(
-                title = "Top Upcoming",
-                items = state.topUpcoming,
-                onItemClick = { item -> onAnimeClick(item.id) },
+                title = "Upcoming",
+                items = state.upcoming,
+                onItemClick = { item -> onAnimeClick(item.activeSlug) },
                 showViewMore = false,
             )
         }
@@ -682,7 +653,7 @@ private fun HeroCarousel(
                         
                         AsyncImage(
                             model = imageUrl,
-                            contentDescription = animItem.title,
+                            contentDescription = animItem.displayTitle,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -721,8 +692,8 @@ private fun HeroCarousel(
                 ) {
                     // Left: Vertical Poster
                     AsyncImage(
-                        model = if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://anime.anisurge.qzz.io/img/poster/${animItem.imageUrl}",
-                        contentDescription = animItem.title,
+                        model = if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://api.reanime.to/img/poster/${animItem.imageUrl}",
+                        contentDescription = animItem.displayTitle,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .width(posterWidth)
@@ -733,7 +704,7 @@ private fun HeroCarousel(
                     // Middle: Text Info
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = animItem.title,
+                            text = animItem.displayTitle,
                             color = Color.White,
                             fontSize = titleSize,
                             fontWeight = FontWeight.Bold,
@@ -817,7 +788,7 @@ private fun HeroCarousel(
                             .clickable { onWatchClick(animItem, "sub", 1) }
                     ) {
                         AsyncImage(
-                            model = animItem.bannerUrl ?: (if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://anime.anisurge.qzz.io/img/poster/${animItem.imageUrl}"),
+                            model = animItem.bannerUrl ?: (if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://api.reanime.to/img/poster/${animItem.imageUrl}"),
                             contentDescription = "Episode",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
@@ -851,7 +822,7 @@ private fun HeroCarousel(
                         ) {
 
                             Text(
-                                "Episode 1" + if (animItem.epCount != null && animItem.epCount > 0) " / ${animItem.epCount}" else "",
+                                "Episode 1" + if (animItem.epCount != null && animItem.epCount!! > 0) " / ${animItem.epCount}" else "",
                                 color = Color.White.copy(alpha = 0.7f),
                                 fontSize = 14.sp
                             )
@@ -993,8 +964,8 @@ private fun FanCarousel(
             ) {
                 AsyncImage(
                     model = if (item.imageUrl.startsWith("http")) item.imageUrl
-                            else "https://anime.anisurge.qzz.io/img/poster/${item.imageUrl}",
-                    contentDescription = item.title,
+                            else "https://api.reanime.to/img/poster/${item.imageUrl}",
+                    contentDescription = item.displayTitle,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -1007,7 +978,7 @@ private fun FanCarousel(
 
         // Title
         Text(
-            text = activeItem.title,
+            text = activeItem.displayTitle,
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.SemiBold,
@@ -1127,10 +1098,9 @@ private fun ContinueWatchingRow(
         itemsIndexed(items) { _, item ->
             val inter = remember { MutableInteractionSource() }
             val hovered by inter.collectIsHoveredAsState()
-            // Parse anime id from link e.g. "/watch/{id}?ep=1&lang=sub"
-            val animeId = item.link.removePrefix("/").split("/").getOrNull(1) ?: ""
-            val lang    = Uri.parseQueryParam(item.link, "lang") ?: "sub"
-            val server  = Uri.parseQueryParam(item.link, "server")
+            val animeId = item.animeId
+            val lang    = item.language ?: "sub"
+            val server  = item.server
 
             Column(
                 Modifier
@@ -1145,13 +1115,13 @@ private fun ContinueWatchingRow(
                         .clip(RoundedCornerShape(8.dp))
                 ) {
                     AsyncImage(
-                        model             = item.thumbnail,
-                        contentDescription = item.title,
+                        model             = item.imageUrl,
+                        contentDescription = item.displayTitle,
                         contentScale      = ContentScale.Crop,
                         modifier          = Modifier.fillMaxSize(),
                     )
                     // Progress bar
-                    val progress = parseProgressFraction(item.progress, item.duration)
+                    val progress = if (item.duration > 0) (item.progress / item.duration).toFloat().coerceIn(0f, 1f) else 0f
                     Box(
                         Modifier
                             .align(Alignment.BottomStart)
@@ -1214,12 +1184,12 @@ private fun ContinueWatchingRow(
                             .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("${item.progress}/${item.duration}", color = Color.White, fontSize = 12.sp)
+                        Text("${formatDuration(item.progress)}/${formatDuration(item.duration)}", color = Color.White, fontSize = 12.sp)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    item.title, 
+                    item.displayTitle, 
                     color = Color.White, 
                     fontSize = 14.sp, 
                     maxLines = 1, 
@@ -1387,7 +1357,7 @@ private fun AnisugSidebar(
     val fullAvatarUrl = when {
         avatarUrl == null -> null
         avatarUrl.startsWith("http") -> avatarUrl
-        else -> "https://anime.anisurge.qzz.io$avatarUrl"
+        else -> "https://api.reanime.to$avatarUrl"
     }
 
     DraggableWindowArea(
@@ -1898,28 +1868,19 @@ private fun BottomBarIcon(
 
 // ── Utility ────────────────────────────────────────────────────────────────
 
-private fun parseProgressFraction(progress: String, duration: String): Float {
-    fun toSeconds(t: String): Int {
-        val parts = t.trim().split(":").mapNotNull { it.toIntOrNull() }
-        return when (parts.size) {
-            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
-            2 -> parts[0] * 60 + parts[1]
-            1 -> parts[0]
-            else -> 0
-        }
+private fun formatDuration(seconds: Double): String {
+    val totalSeconds = seconds.toInt()
+    val mins = totalSeconds / 60
+    val secs = totalSeconds % 60
+    return if (mins >= 60) {
+        val hrs = mins / 60
+        val remainingMins = mins % 60
+        "%d:%02d:%02d".format(hrs, remainingMins, secs)
+    } else {
+        "%d:%02d".format(mins, secs)
     }
-    val cur = toSeconds(progress)
-    val tot = toSeconds(duration)
-    return if (tot > 0) (cur.toFloat() / tot).coerceIn(0f, 1f) else 0f
 }
 
-/** Minimal URL query param parser (no android dependency). */
-private object Uri {
-    fun parseQueryParam(url: String, key: String): String? {
-        val query = url.substringAfter('?', "")
-        return query.split('&').firstOrNull { it.startsWith("$key=") }?.substringAfter('=')
-    }
-}
 
 // ── Offline State ─────────────────────────────────────────────────────────
 

@@ -4,15 +4,30 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class WatchServerResponse(
-    val success: Boolean = false,
-    val data: StreamingData? = null,
-    val directLink: DirectLinkWrapper? = null
+data class BatchScrapeResponse(
+    val sub: BatchScrapeStreamData? = null,
+    val dub: BatchScrapeStreamData? = null,
 )
 
 @Serializable
-data class DirectLinkWrapper(
-    val data: StreamingData? = null
+data class BatchScrapeStreamData(
+    @SerialName("providerId") val providerId: String? = null,
+    @SerialName("episodeId") val episodeId: String? = null,
+    val streams: List<StreamInfo> = emptyList(),
+    val subtitles: String = "",
+)
+
+@Serializable
+data class StreamInfo(
+    val url: String = "",
+    val quality: String? = null,
+    val headers: StreamHeaders? = null,
+)
+
+@Serializable
+data class StreamHeaders(
+    val Referer: String? = null,
+    @SerialName("User-Agent") val userAgent: String? = null,
 )
 
 @Serializable
@@ -32,7 +47,6 @@ data class StreamingData(
 
 @Serializable
 data class SubtitleData(
-    // zen server uses "language"/"language_name", other servers may use "lang"
     val lang: String? = null,
     val language: String? = null,
     @SerialName("language_name") val languageName: String? = null,
@@ -41,7 +55,6 @@ data class SubtitleData(
     val title: String? = null,
     val format: String? = null,
 ) {
-    // Resolved language label regardless of which field is populated
     val resolvedLang: String? get() = languageName ?: language ?: lang
 }
 
@@ -54,13 +67,8 @@ data class FontData(
 @Serializable
 data class SourceData(
     val quality: String? = null,
-    val url: String? = null
-)
-
-@Serializable
-data class SenshiSourceData(
     val url: String? = null,
-    val status: String? = null
+    val headers: Map<String, String>? = null,
 )
 
 @Serializable

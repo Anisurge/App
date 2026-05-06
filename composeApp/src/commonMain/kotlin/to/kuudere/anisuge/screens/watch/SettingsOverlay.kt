@@ -222,7 +222,7 @@ fun SettingsOverlay(
                                                          )
                                                      }
                                                  } else {
-                                                    Icon(getBookmarkIcon(data.inWatchlist), contentDescription = null, tint = Color.White) 
+                                                    Icon(getBookmarkIcon(data.folder != null), contentDescription = null, tint = Color.White) 
                                                 }
                                             },
                                             title = "Watchlist",
@@ -375,7 +375,7 @@ fun SettingsOverlay(
                                 items(folders) { folder ->
                                     SubMenuItem(
                                         title = folder,
-                                        isSelected = if (folder == "Remove") uiState.episodeData?.inWatchlist == false else folder == currentFolder,
+                                        isSelected = if (folder == "Remove") uiState.episodeData?.folder == null else folder == currentFolder,
                                         onClick = { onWatchlistStatusSelected(folder); onDismiss() }
                                     )
                                 }

@@ -16,7 +16,7 @@ data class SearchUiState(
     val results: List<AnimeItem> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
-    val currentPage: Int = 1,
+    val currentOffset: Int = 0,
     val hasMore: Boolean = true,
     val keyword: String = "",
     val selectedGenres: List<String> = emptyList(),
@@ -24,8 +24,6 @@ data class SearchUiState(
     val selectedYear: String? = null,
     val selectedType: String? = null,
     val selectedStatus: String? = null,
-    val selectedLanguage: String? = null,
-    val selectedRating: String? = null,
     val selectedSort: String? = "Popularity",
     val isOffline: Boolean = false,
 )
@@ -37,7 +35,6 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
     private var searchJob: Job? = null
 
     init {
-        // Initial search
         search()
     }
 
@@ -82,16 +79,6 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
         search()
     }
 
-    fun onLanguageChange(lang: String?) {
-        _uiState.value = _uiState.value.copy(selectedLanguage = lang)
-        search()
-    }
-
-    fun onRatingChange(rating: String?) {
-        _uiState.value = _uiState.value.copy(selectedRating = rating)
-        search()
-    }
-
     fun onSortChange(sort: String?) {
         _uiState.value = _uiState.value.copy(selectedSort = sort)
         search()
@@ -104,8 +91,6 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
             selectedYear = null,
             selectedType = null,
             selectedStatus = null,
-            selectedLanguage = null,
-            selectedRating = null,
             selectedSort = "Popularity"
         )
         search()
@@ -117,33 +102,29 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
             if (state.isLoadingMore || !state.hasMore) return@launch
             _uiState.value = state.copy(isLoadingMore = true)
         } else {
-            _uiState.value = state.copy(isLoading = true, results = emptyList(), currentPage = 1)
+            _uiState.value = state.copy(isLoading = true, results = emptyList(), currentOffset = 0)
         }
 
         val currentState = _uiState.value
         try {
             val response = searchService.search(
-                keyword = currentState.keyword.ifBlank { null },
-                page = currentState.currentPage,
-                genres = currentState.selectedGenres,
-                season = currentState.selectedSeason,
-                year = currentState.selectedYear,
-                type = currentState.selectedType,
+                q = currentState.keyword.ifBlank { null },
+                limit = 20,
+                offset = currentState.currentOffset,
+                format = currentState.selectedType,
                 status = currentState.selectedStatus,
-                language = currentState.selectedLanguage,
-                rating = currentState.selectedRating,
-                sort = currentState.selectedSort
+                genres = currentState.selectedGenres.ifEmpty { null }?.joinToString(","),
             )
 
-            if (response != null && response.success) {
-                val newItems = response.animeData ?: emptyList()
+            if (response != null) {
+                val newItems = response.results
                 _uiState.value = _uiState.value.copy(
                     results = if (loadMore) _uiState.value.results + newItems else newItems,
                     isLoading = false,
                     isLoadingMore = false,
                     isOffline = false,
-                    hasMore = response.hasMore ?: false,
-                    currentPage = if (newItems.isNotEmpty() && (response.hasMore ?: false)) currentState.currentPage + 1 else currentState.currentPage
+                    hasMore = (newItems.size >= 20),
+                    currentOffset = _uiState.value.currentOffset + newItems.size
                 )
             } else {
                 _uiState.value = _uiState.value.copy(
