@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.AnimeDetails
-import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.models.RecommendationItem
 import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.services.WatchlistService
@@ -23,7 +23,7 @@ data class AnimeInfoUiState(
     val episodes: List<EpisodeItem> = emptyList(),
     
     val isLoadingRecommendations: Boolean = false,
-    val recommendations: List<AnimeItem> = emptyList(),
+    val recommendations: List<RecommendationItem> = emptyList(),
     
     val isUpdatingWatchlist: Boolean = false,
     val inWatchlist: Boolean = false,
@@ -53,13 +53,14 @@ class AnimeInfoViewModel(
                     isLoadingEpisodes = false
                 )
             }
-            val details = infoService.getAnimeDetails(id)
-            if (details != null) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        details = details,
-                        inWatchlist = details.inWatchlist || details.watchlist != null,
+            try {
+                val details = infoService.getAnimeDetails(id)
+                if (details != null) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            details = details,
+                            inWatchlist = details.inWatchlist || details.watchlist != null,
                         folder = details.folder ?: details.watchlist?.folder,
                         episodes = details.episodes ?: emptyList(),
                     )
@@ -67,6 +68,11 @@ class AnimeInfoViewModel(
                 loadRecommendations(id)
             } else {
                 _uiState.update { it.copy(isLoading = false, error = "Failed to load anime details.") }
+            }
+            } catch (e: Exception) {
+                System.err.println("[AnimeInfoVM] loadAnimeInfo error: ${e.javaClass.simpleName}: ${e.message}")
+                e.printStackTrace(System.err)
+                _uiState.update { it.copy(isLoading = false, error = "Error: ${e.javaClass.simpleName}: ${e.message}") }
             }
         }
     }

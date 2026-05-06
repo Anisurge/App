@@ -32,7 +32,8 @@ class InfoService(
             }
             response.body<AnimeDetails>()
         } catch (e: Exception) {
-            println("[InfoService] getAnimeDetails error: ${e.message}")
+            System.err.println("[InfoService] getAnimeDetails error for slug=$slug: ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace(System.err)
             null
         }
     }

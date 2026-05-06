@@ -21,24 +21,24 @@ data class AnimeDetails(
     @SerialName("season_year") val seasonYear: Int? = null,
     val season: String? = null,
     val genres: List<String> = emptyList(),
-    val tags: List<String> = emptyList(),
-    val studios: List<String> = emptyList(),
+    val tags: List<JsonObject> = emptyList(),
+    val studios: List<JsonObject> = emptyList(),
     @SerialName("average_score") val averageScore: Int? = null,
     @SerialName("mal_score") val malScore: Int? = null,
     @SerialName("mean_score") val meanScore: Int? = null,
     val popularity: Int? = null,
-    val duration: String = "",
+    val duration: Int? = null,
     val subbed: Int = 0,
     val dubbed: Int = 0,
-    @SerialName("start_date") val startDate: String? = null,
-    @SerialName("end_date") val endDate: String? = null,
+    @SerialName("start_date") val startDate: DateObject? = null,
+    @SerialName("end_date") val endDate: DateObject? = null,
     val synonyms: List<String> = emptyList(),
     @SerialName("country_of_origin") val countryOfOrigin: String? = null,
     val source: String? = null,
     @SerialName("is_adult") val isAdult: Boolean = false,
     val favourites: Int? = null,
     val ranking: Int? = null,
-    val trailer: String? = null,
+    val trailer: TrailerInfo? = null,
     val hashtag: String? = null,
     @SerialName("can_watch") val canWatch: Boolean = false,
     @SerialName("can_request") val canRequest: Boolean = false,
@@ -54,16 +54,30 @@ data class AnimeDetails(
     @SerialName("watch_progress") val watchProgress: WatchProgress? = null,
     @SerialName("score_distribution") val scoreDistribution: Map<String, Int>? = null,
     @SerialName("status_distribution") val statusDistribution: Map<String, Int>? = null,
-    @SerialName("external_seasons") val externalSeasons: List<JsonObject>? = null,
+    @SerialName("external_seasons") val externalSeasons: Map<String, Int>? = null,
     val chapters: Int? = null,
     val volumes: Int? = null,
     @SerialName("last_episode") val lastEpisode: Int? = null,
+    @SerialName("last_episode_aired_at") val lastEpisodeAiredAt: String? = null,
     @SerialName("last_updated") val lastUpdated: String? = null,
     @SerialName("updated_at") val updatedAt: String? = null,
     @SerialName("is_licensed") val isLicensed: Boolean? = null,
     @SerialName("is_locked") val isLocked: Boolean? = null,
-    val trending: Boolean? = null,
+    val trending: Int? = null,
     val requested: Boolean? = null,
+    val rankings: List<JsonObject>? = null,
+    // Extra IDs from the API
+    @SerialName("anidb_id") val anidbId: Int? = null,
+    @SerialName("anime_planet_id") val animePlanetId: String? = null,
+    @SerialName("animecountdown_id") val animecountdownId: String? = null,
+    @SerialName("animenewsnetwork_id") val animenewsnetworkId: Int? = null,
+    @SerialName("anisearch_id") val anisearchId: Int? = null,
+    @SerialName("imdb_id") val imdbId: String? = null,
+    @SerialName("kitsu_id") val kitsuId: Int? = null,
+    @SerialName("livechart_id") val livechartId: Int? = null,
+    @SerialName("simkl_id") val simklId: Int? = null,
+    @SerialName("themoviedb_id") val themoviedbId: Int? = null,
+    @SerialName("tvdb_id") val tvdbId: Int? = null,
 ) {
     val displayTitle: String get() = title.displayTitle
     val imageUrl: String get() = coverImage.bestUrl
@@ -85,6 +99,20 @@ data class AnimeDetails(
     val slug: String get() = animeId
     val year: Int? get() = seasonYear
 }
+
+@Serializable
+data class DateObject(
+    val year: Int = 0,
+    val month: Int = 0,
+    val day: Int = 0,
+)
+
+@Serializable
+data class TrailerInfo(
+    val id: String = "",
+    val site: String = "",
+    val thumbnail: String = "",
+)
 
 @Serializable
 data class WatchlistInfo(
@@ -110,7 +138,10 @@ data class SubRelease(
 @Serializable
 data class Artwork(
     val url: String? = null,
-    val type: String? = null,
+    @SerialName("image_type") val imageType: String? = null,
+    val source: String? = null,
+    val height: Int? = null,
+    val width: Int? = null,
 )
 
 @Serializable
@@ -161,21 +192,51 @@ data class EpisodeListResponse(
 
 @Serializable
 data class WatchInfoResponse(
-    @SerialName("anime_id") val animeId: String? = null,
-    val title: AnimeTitle? = null,
-    @SerialName("cover_image") val coverImage: CoverImage? = null,
-    @SerialName("banner_image") val bannerImage: String? = null,
-    @SerialName("anilist_id") val anilistId: Int? = null,
+    val anime: AnimeItem? = null,
     val folder: String? = null,
-    val episode: Int? = null,
+    val progress: WatchProgressDetail? = null,
+) {
+    val animeId: String? get() = anime?.animeId
+    val title: AnimeTitle? get() = anime?.title
+    val coverImage: CoverImage? get() = anime?.coverImage
+    val bannerImage: String? get() = anime?.bannerImage
+    val anilistId: Int? get() = anime?.anilistId
+    val episodes: List<EpisodeItem>? get() = null
+    val currentTime: Double? get() = progress?.currentTime
+    val server: String? get() = progress?.server
+    val language: String? get() = progress?.language
+    val episode: Int? get() = null
+}
+
+@Serializable
+data class WatchProgressDetail(
+    @SerialName("episode_id") val episodeId: String? = null,
     @SerialName("current_time") val currentTime: Double? = null,
+    val duration: Double? = null,
     val server: String? = null,
     val language: String? = null,
-    val episodes: List<EpisodeItem>? = null,
-    @SerialName("sub_release") val subRelease: SubRelease? = null,
+    @SerialName("last_updated") val lastUpdated: String? = null,
 )
 
 @Serializable
 data class RecommendationsResponse(
-    val recommendations: List<AnimeItem> = emptyList(),
+    val recommendations: List<RecommendationItem> = emptyList(),
+    val success: Boolean? = null,
 )
+
+@Serializable
+data class RecommendationItem(
+    val id: String = "",
+    val title: AnimeTitle = AnimeTitle(),
+    @SerialName("cover_image") val coverImage: CoverImage = CoverImage(),
+    val format: String = "",
+    val year: Int? = null,
+    val status: String = "",
+    @SerialName("episodeCount") val episodeCount: Int? = null,
+    val genres: List<String> = emptyList(),
+    @SerialName("average_score") val averageScore: Int? = null,
+) {
+    val displayTitle: String get() = title.displayTitle
+    val imageUrl: String get() = coverImage.bestUrl
+    val activeSlug: String get() = id
+}

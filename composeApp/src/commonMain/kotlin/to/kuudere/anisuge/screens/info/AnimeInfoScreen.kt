@@ -78,7 +78,7 @@ fun AnimeInfoScreen(
             episodeId = ep.id,
             episodeNumber = ep.number,
             anilistId = anilistId,
-            durationMins = state.details!!.duration.filter { it.isDigit() }.toIntOrNull() ?: 24,
+            durationMins = state.details!!.duration ?: 24,
             infoService = to.kuudere.anisuge.AppComponent.infoService,
             serverRepository = to.kuudere.anisuge.AppComponent.serverRepository,
             onDismiss = { selectedEpisodeForDownload = null },
@@ -391,14 +391,17 @@ private fun MobileLayout(
                          Spacer(Modifier.height(8.dp))
                          @OptIn(ExperimentalLayoutApi::class)
                          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            anime.studios.forEach { studio ->
-                                Box(
-                                    Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFF000000))
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                                ) {
-                                    Text(studio, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+                            anime.studios.forEach { studioObj ->
+                                val studioName = studioObj["name"]?.toString()?.trim('"') ?: ""
+                                if (studioName.isNotBlank()) {
+                                    Box(
+                                        Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF000000))
+                                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(studioName, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+                                    }
                                 }
                             }
                         }
@@ -410,14 +413,17 @@ private fun MobileLayout(
                          Spacer(Modifier.height(8.dp))
                          @OptIn(ExperimentalLayoutApi::class)
                          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                             anime.tags.forEach { tag ->
-                                 Box(
-                                     Modifier
-                                         .clip(RoundedCornerShape(8.dp))
-                                         .background(Color(0xFF000000))
-                                         .padding(horizontal = 12.dp, vertical = 6.dp)
-                                 ) {
-                                     Text(tag, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+                             anime.tags.forEach { tagObj ->
+                                 val tagName = tagObj["name"]?.toString()?.trim('"') ?: ""
+                                 if (tagName.isNotBlank()) {
+                                     Box(
+                                         Modifier
+                                             .clip(RoundedCornerShape(8.dp))
+                                             .background(Color(0xFF000000))
+                                             .padding(horizontal = 12.dp, vertical = 6.dp)
+                                     ) {
+                                         Text(tagName, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+                                     }
                                  }
                              }
                          }
@@ -568,8 +574,8 @@ private fun DesktopLayout(
                     }
                     
                     // Duration
-                    if (anime.duration.isNotBlank()) {
-                        Text(anime.duration, color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
+                    if (anime.duration != null && anime.duration!! > 0) {
+                        Text("${anime.duration}m", color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
                         Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
                     }
                     
