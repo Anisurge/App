@@ -31,6 +31,12 @@ data class StreamHeaders(
 )
 
 @Serializable
+data class SuzuEmbedStream(
+    val url: String = "",
+    val status: String? = null,
+)
+
+@Serializable
 data class StreamingData(
     val file_id: String? = null,
     val file_code: String? = null,
