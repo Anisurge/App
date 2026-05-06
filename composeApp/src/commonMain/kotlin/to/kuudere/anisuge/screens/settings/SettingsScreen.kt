@@ -102,6 +102,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -655,9 +656,12 @@ private fun MobileSettingsList(
                     .clip(RoundedCornerShape(14.dp))
                     .background(BG_CARD)
                     .border(1.dp, BORDER, RoundedCornerShape(14.dp))
-                    .padding(16.dp)
             ) {
-                Column {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .blur(20.dp)
+                ) {
                     Text(
                         "Connect to Android TV",
                         color = TEXT,
@@ -673,6 +677,20 @@ private fun MobileSettingsList(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     TvQrPairingAction()
+                }
+                // Overlay with Coming Soon text
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF0D0D0D).copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Coming Soon",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
