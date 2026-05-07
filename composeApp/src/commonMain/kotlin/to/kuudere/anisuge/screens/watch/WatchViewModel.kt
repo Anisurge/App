@@ -59,7 +59,7 @@ data class WatchUiState(
     // Offline metadata
     val offlineTitle: String? = null,
 )
-
+    
 class WatchViewModel(
     private val infoService: InfoService,
     private val watchlistService: WatchlistService,
@@ -83,7 +83,15 @@ class WatchViewModel(
         viewModelScope.launch { settingsStore.subtitleSizeFlow.collect { v -> _uiState.update { it.copy(subtitleSize = v) } } }
     }
 
-    fun initialize(animeId: String, episodeNumber: Int, server: String? = null, lang: String? = null, offlinePath: String? = null, offlineTitle: String? = null) {
+    fun initialize(
+        animeId: String,
+        episodeNumber: Int,
+        server: String? = null,
+        lang: String? = null,
+        offlinePath: String? = null,
+        offlineTitle: String? = null,
+        resumeFromContinueSeconds: Double? = null,
+    ) {
         // Cancel any ongoing loading IMMEDIATELY before touching state
         // This prevents race conditions when switching between videos
         loadJob?.cancel()
@@ -106,7 +114,7 @@ class WatchViewModel(
                 availableSubtitles = emptyList(),
                 currentSubtitleUrl = null,
                 currentFontsDir = null,
-                savedWatchPosition = 0.0,
+                savedWatchPosition = resumeFromContinueSeconds?.takeIf { it >= 1.0 } ?: 0.0,
                 targetLang = null,
                 targetSubtitleLang = null,
                 targetSubtitleLangCode = null,
@@ -227,11 +235,12 @@ class WatchViewModel(
             val dataWithEpisodes = data.copy(episodes = mergedEpisodes.takeIf { it.isNotEmpty() })
 
             _uiState.update { state ->
+                val mergedResume = mergeResumeHint(data.currentTime, state.savedWatchPosition)
                 state.copy(
                     isLoading = false,
                     loadingMessage = if (streamLoadingJob != null) null else "Switching servers...",
                     episodeData = dataWithEpisodes,
-                    savedWatchPosition = data.currentTime ?: 0.0
+                    savedWatchPosition = mergedResume
                 )
             }
 
@@ -660,6 +669,12 @@ class WatchViewModel(
         viewModelScope.launch {
             settingsStore.setSubtitleSize(sizePercent)
         }
+    }
+
+    /** GET /watch often returns progress.current_time = 0; keep UI-supplied resume (continue-watching) until API sends a real offset. */
+    private fun mergeResumeHint(fromApi: Double?, retained: Double): Double {
+        val api = fromApi ?: 0.0
+        return if (api > 1.0) api else retained
     }
 
     private fun syncPreferencesToServer() {

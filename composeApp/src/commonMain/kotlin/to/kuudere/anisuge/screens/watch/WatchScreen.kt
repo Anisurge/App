@@ -81,6 +81,7 @@ fun WatchScreen(
     lang: String? = null,
     offlinePath: String? = null,
     offlineTitle: String? = null,
+    resumeAtSeconds: Double? = null,
     viewModel: WatchViewModel,
     onBack: () -> Unit,
     onExit: () -> Unit = {}
@@ -100,8 +101,16 @@ fun WatchScreen(
         handleBack()
     }
 
-    LaunchedEffect(animeId, episodeNumber, offlinePath) {
-        viewModel.initialize(animeId, episodeNumber, server, lang, offlinePath, offlineTitle)
+    LaunchedEffect(animeId, episodeNumber, offlinePath, server, lang, offlineTitle, resumeAtSeconds) {
+        viewModel.initialize(
+            animeId,
+            episodeNumber,
+            server,
+            lang,
+            offlinePath,
+            offlineTitle,
+            resumeFromContinueSeconds = resumeAtSeconds,
+        )
     }
 
     // Check if the ViewModel hasn't been initialized for this animeId yet.
@@ -981,6 +990,24 @@ fun WatchVideoPlayer(
                 subtitleSize = uiState.subtitleSize,
                 headers = uiState.streamingData?.headers
             )
+
+            // Resume: [rememberVideoPlayerState] keys only on [playbackUrl], so [savedWatchPosition] can
+            // arrive after the player is created (e.g. GET /watch returns after the stream is ready).
+            // Seek once duration is known and playback is still at the beginning.
+            LaunchedEffect(playbackUrl, uiState.currentEpisodeNumber, uiState.savedWatchPosition) {
+                val resumeAt = uiState.savedWatchPosition
+                if (resumeAt < 1.0) return@LaunchedEffect
+                var waited = 0
+                while (waited < 6_000 && playerState.duration < 0.25) {
+                    kotlinx.coroutines.delay(24)
+                    waited += 24
+                }
+                if (playerState.duration < 0.25) return@LaunchedEffect
+                if (playerState.position > 2.0) return@LaunchedEffect
+                val safeEnd = (playerState.duration - 0.75).coerceAtLeast(0.0)
+                val target = resumeAt.coerceIn(0.0, safeEnd)
+                playerState.seekTarget = target
+            }
 
             LaunchedEffect(Unit) {
                 if (to.kuudere.anisuge.platform.isDesktopPlatform) {

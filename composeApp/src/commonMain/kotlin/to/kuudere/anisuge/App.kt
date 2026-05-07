@@ -257,7 +257,9 @@ fun App(
                         scheduleViewModel = scheduleVm,
                         settingsViewModel = settingsVm,
                         onAnimeClick = { animeId -> navController.navigate(Screen.Info(animeId).route) },
-                        onWatchClick = { id, lang, ep, server -> navController.navigate(Screen.Watch(id, ep, server, lang).route) },
+                        onWatchClick = { id, lang, ep, server, resumeAt ->
+                            navController.navigate(Screen.Watch(id, ep, server, lang, resumeAtSeconds = resumeAt).route)
+                        },
                         onWatchOffline = { id, ep, path, title ->
                             navController.navigate(Screen.Watch(id, ep, offlinePath = path, offlineTitle = title).route)
                         },
@@ -313,7 +315,8 @@ fun App(
                         navArgument("server") { type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null },
                         navArgument("lang") { type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null },
                         navArgument("offlinePath") { type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null },
-                        navArgument("offlineTitle") { type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null }
+                        navArgument("offlineTitle") { type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("resumeAt") { type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null },
                     )
                 ) { backStackEntry ->
                     val animeId = backStackEntry.arguments.str("animeId") ?: ""
@@ -323,6 +326,8 @@ fun App(
                     val lang = backStackEntry.arguments.str("lang")
                     val offlinePath = backStackEntry.arguments.str("offlinePath")
                     val offlineTitle = backStackEntry.arguments.str("offlineTitle")
+                    val resumeAtStr = backStackEntry.arguments.str("resumeAt")
+                    val resumeAtSeconds = resumeAtStr?.toDoubleOrNull()
 
                     WatchScreen(
                         animeId = animeId,
@@ -331,6 +336,7 @@ fun App(
                         lang = lang,
                         offlinePath = offlinePath,
                         offlineTitle = offlineTitle,
+                        resumeAtSeconds = resumeAtSeconds,
                         viewModel = watchVm,
                         onBack = { navController.popBackStack() },
                         onExit = onAppExit
@@ -348,7 +354,9 @@ fun App(
                 composable(Screen.ContinueWatching.route) {
                     ContinueWatchingScreen(
                         viewModel = homeVm,
-                        onWatchClick = { id, lang, ep, server -> navController.navigate(Screen.Watch(id, ep, server, lang).route) },
+                        onWatchClick = { id, lang, ep, server, resumeAt ->
+                            navController.navigate(Screen.Watch(id, ep, server, lang, resumeAtSeconds = resumeAt).route)
+                        },
                         onBack = { navController.popBackStack() }
                     )
                 }
