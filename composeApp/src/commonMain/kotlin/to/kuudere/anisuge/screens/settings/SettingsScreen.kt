@@ -855,7 +855,7 @@ private fun MobileSettingsDetail(
                     uiState = uiState,
                     onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                     onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
-                    onPreferNativeAnimeTitlesChange = viewModel::setPreferNativeAnimeTitles,
+                    onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
                 )
                 is SettingsTab.Storage -> MobileStorageContent(
                     uiState = uiState,
@@ -920,7 +920,7 @@ private fun SettingsContent(
                 uiState = uiState,
                 onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                 onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
-                onPreferNativeAnimeTitlesChange = viewModel::setPreferNativeAnimeTitles,
+                onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
             )
             is SettingsTab.Storage -> StorageTab(
                 uiState = uiState,
@@ -954,7 +954,7 @@ private fun AppearanceTab(
     uiState: SettingsUiState,
     onFloatingBottomNavChange: (Boolean) -> Unit,
     onLiquidGlassBottomNavChange: (Boolean) -> Unit,
-    onPreferNativeAnimeTitlesChange: (Boolean) -> Unit,
+    onPreferRomajiAnimeTitlesChange: (Boolean) -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -972,9 +972,9 @@ private fun AppearanceTab(
             modifier = Modifier.fillMaxWidth()
         ) {
             SettingToggle(
-                checked = uiState.preferNativeAnimeTitles,
-                onCheckedChange = onPreferNativeAnimeTitlesChange,
-                label = strings.showNativeAnimeTitles
+                checked = uiState.preferRomajiAnimeTitles,
+                onCheckedChange = onPreferRomajiAnimeTitlesChange,
+                label = strings.showRomajiAnimeTitles
             )
         }
 

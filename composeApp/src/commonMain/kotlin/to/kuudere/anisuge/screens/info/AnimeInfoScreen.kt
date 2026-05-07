@@ -61,7 +61,7 @@ fun AnimeInfoScreen(
     }
 
     val state by viewModel.uiState.collectAsState()
-    val preferNativeAnimeTitles by to.kuudere.anisuge.AppComponent.settingsStore.preferNativeAnimeTitlesFlow.collectAsState(initial = false)
+    val preferRomajiAnimeTitles by to.kuudere.anisuge.AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(initial = false)
     var showEpisodes by remember { mutableStateOf(true) }
     var selectedEpisodeForDownload by remember { mutableStateOf<to.kuudere.anisuge.data.models.EpisodeItem?>(null) }
 
@@ -85,7 +85,7 @@ fun AnimeInfoScreen(
             serverRepository = to.kuudere.anisuge.AppComponent.serverRepository,
             onDismiss = { selectedEpisodeForDownload = null },
             onStartDownload = { server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub ->
-                val title = state.details!!.title.displayTitle(preferNativeAnimeTitles)
+                val title = state.details!!.title.displayTitle(preferRomajiAnimeTitles)
                 to.kuudere.anisuge.utils.DownloadManager.startDownload(
                     animeId = state.details!!.id,
                     anilistId = anilistId,

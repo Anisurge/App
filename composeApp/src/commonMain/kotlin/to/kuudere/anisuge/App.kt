@@ -59,7 +59,7 @@ import androidx.savedstate.read
 import androidx.compose.ui.platform.LocalUriHandler
 import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.i18n.LocalAppStrings
-import to.kuudere.anisuge.i18n.LocalPreferNativeAnimeTitles
+import to.kuudere.anisuge.i18n.LocalPreferRomajiAnimeTitles
 import to.kuudere.anisuge.i18n.appStringsFor
 /** Compat helper: reads a String from the new KMP SavedState arguments type. */
 private fun SavedState?.str(key: String): String? =
@@ -96,7 +96,7 @@ fun App(
         val updateState by updateVm.state.collectAsState()
         val appLocaleCode by AppComponent.settingsStore.appLocaleFlow.collectAsState(initial = AppLocale.default.code)
         val appStrings = appStringsFor(AppLocale.fromCode(appLocaleCode))
-        val preferNativeAnimeTitles by AppComponent.settingsStore.preferNativeAnimeTitlesFlow.collectAsState(initial = false)
+        val preferRomajiAnimeTitles by AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(initial = false)
         val uriHandler = LocalUriHandler.current
         
         var showExitConfirm by remember { mutableStateOf(false) }
@@ -144,7 +144,7 @@ fun App(
 
         CompositionLocalProvider(
             LocalAppStrings provides appStrings,
-            LocalPreferNativeAnimeTitles provides preferNativeAnimeTitles,
+            LocalPreferRomajiAnimeTitles provides preferRomajiAnimeTitles,
         ) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             if (!isWatchScreen) {
