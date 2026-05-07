@@ -69,6 +69,7 @@ import to.kuudere.anisuge.ui.WatchlistBottomSheet
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.SessionCheckResult
+import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
@@ -318,7 +319,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                     "info" -> {
                         val episodeData = uiState.episodeData
                         var showWatchlistSheet by remember { mutableStateOf(false) }
-                        val title = episodeData?.title?.displayTitle?.takeIf { it.isNotBlank() }
+                        val title = episodeData?.title?.resolveDisplayTitle()?.takeIf { it.isNotBlank() }
                             ?: uiState.offlineTitle
                             ?: "Unknown"
                         val bannerUrl = episodeData?.bannerImage?.takeIf {
@@ -1163,7 +1164,7 @@ fun WatchVideoPlayer(
 
             val episodeData = uiState.episodeData
             val currentEp = uiState.episodeData?.episodes?.find { it.number == uiState.currentEpisodeNumber }
-            val animeTitle = episodeData?.title?.displayTitle?.takeIf { it.isNotBlank() }
+            val animeTitle = episodeData?.title?.resolveDisplayTitle()?.takeIf { it.isNotBlank() }
                 ?: uiState.offlineTitle
             val title = buildString {
                 if (animeTitle != null) append(animeTitle)

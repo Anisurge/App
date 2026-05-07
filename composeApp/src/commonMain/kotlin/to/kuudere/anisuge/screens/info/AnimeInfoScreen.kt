@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeDetails
+import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.WatchlistBottomSheet
 import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.ui.tvFocusableClick
@@ -60,6 +61,7 @@ fun AnimeInfoScreen(
     }
 
     val state by viewModel.uiState.collectAsState()
+    val preferNativeAnimeTitles by to.kuudere.anisuge.AppComponent.settingsStore.preferNativeAnimeTitlesFlow.collectAsState(initial = false)
     var showEpisodes by remember { mutableStateOf(true) }
     var selectedEpisodeForDownload by remember { mutableStateOf<to.kuudere.anisuge.data.models.EpisodeItem?>(null) }
 
@@ -83,7 +85,7 @@ fun AnimeInfoScreen(
             serverRepository = to.kuudere.anisuge.AppComponent.serverRepository,
             onDismiss = { selectedEpisodeForDownload = null },
             onStartDownload = { server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub ->
-                val title = state.details!!.displayTitle
+                val title = state.details!!.title.displayTitle(preferNativeAnimeTitles)
                 to.kuudere.anisuge.utils.DownloadManager.startDownload(
                     animeId = state.details!!.id,
                     anilistId = anilistId,
@@ -261,7 +263,7 @@ private fun MobileLayout(
                  Column(Modifier.weight(1f)) {
                      // Title
                     Text(
-                        text = anime.displayTitle,
+                        text = anime.resolveDisplayTitle(),
                         color = Color.White,
                         fontSize = 24.sp,
                          fontWeight = FontWeight.Bold,
@@ -540,7 +542,7 @@ private fun DesktopLayout(
                         modifier = Modifier.fillMaxWidth(0.6f)
                     ) {
                 Text(
-                    text = anime.displayTitle,
+                    text = anime.resolveDisplayTitle(),
                     color = Color.White,
                     fontSize = 44.sp,
                     fontWeight = FontWeight.Bold,

@@ -174,6 +174,7 @@ import to.kuudere.anisuge.screens.settings.SettingsScreen
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
 import to.kuudere.anisuge.ui.ConfirmDialog
 import to.kuudere.anisuge.i18n.LocalAppStrings
+import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -653,7 +654,7 @@ private fun HeroCarousel(
                         
                         AsyncImage(
                             model = imageUrl,
-                            contentDescription = animItem.displayTitle,
+                            contentDescription = animItem.resolveDisplayTitle(),
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -693,7 +694,7 @@ private fun HeroCarousel(
                     // Left: Vertical Poster
                     AsyncImage(
                         model = if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://api.reanime.to/img/poster/${animItem.imageUrl}",
-                        contentDescription = animItem.displayTitle,
+                        contentDescription = animItem.resolveDisplayTitle(),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .width(posterWidth)
@@ -704,7 +705,7 @@ private fun HeroCarousel(
                     // Middle: Text Info
                     Column(Modifier.weight(1f)) {
                         Text(
-                            text = animItem.displayTitle,
+                            text = animItem.resolveDisplayTitle(),
                             color = Color.White,
                             fontSize = titleSize,
                             fontWeight = FontWeight.Bold,
@@ -965,7 +966,7 @@ private fun FanCarousel(
                 AsyncImage(
                     model = if (item.imageUrl.startsWith("http")) item.imageUrl
                             else "https://api.reanime.to/img/poster/${item.imageUrl}",
-                    contentDescription = item.displayTitle,
+                    contentDescription = item.resolveDisplayTitle(),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -978,7 +979,7 @@ private fun FanCarousel(
 
         // Title
         Text(
-            text = activeItem.displayTitle,
+            text = activeItem.resolveDisplayTitle(),
             color = Color.White,
             fontSize = 22.sp,
             fontWeight = FontWeight.SemiBold,
@@ -1116,7 +1117,7 @@ private fun ContinueWatchingRow(
                 ) {
                     AsyncImage(
                         model             = item.imageUrl,
-                        contentDescription = item.displayTitle,
+                        contentDescription = item.resolveDisplayTitle(),
                         contentScale      = ContentScale.Crop,
                         modifier          = Modifier.fillMaxSize(),
                     )
@@ -1189,7 +1190,7 @@ private fun ContinueWatchingRow(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    item.displayTitle, 
+                    item.resolveDisplayTitle(), 
                     color = Color.White, 
                     fontSize = 14.sp, 
                     maxLines = 1, 
