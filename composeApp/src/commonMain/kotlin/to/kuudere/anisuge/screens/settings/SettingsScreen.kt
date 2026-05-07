@@ -114,7 +114,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 
-import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.data.models.AnimeFolderInfo
 import to.kuudere.anisuge.data.repository.ServerRepository
@@ -2348,15 +2347,9 @@ private fun ServersTab(
             modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
         )
         Text(
-            "The list is loaded from the site catalog (one source id per provider; Sub and Dub share the same entry).",
+            "The list comes from the site catalog. Providers with both Sub and Dub appear as two separate entries.",
             color = MUTED,
             fontSize = 13.sp,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
-        Text(
-            AppComponent.STREAMING_SERVERS_CATALOG_URL,
-            color = MUTED.copy(alpha = 0.85f),
-            fontSize = 11.sp,
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
@@ -2568,15 +2561,9 @@ private fun MobileServersContent(
             modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
         )
         Text(
-            "List from site catalog — one source per provider (Sub/Dub share one entry).",
+            "List from site catalog. Providers with both Sub and Dub appear as two separate entries.",
             color = MUTED,
             fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
-        Text(
-            AppComponent.STREAMING_SERVERS_CATALOG_URL,
-            color = MUTED.copy(alpha = 0.85f),
-            fontSize = 10.sp,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
