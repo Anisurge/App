@@ -140,8 +140,6 @@ kotlin {
             implementation(libs.zxing.core)
             implementation(libs.zxing.android.embedded)
 
-            // Firebase Cloud Messaging
-            implementation("com.google.firebase:firebase-messaging:24.1.0")
         }
 
         desktopMain.dependencies {
@@ -167,6 +165,20 @@ kotlin {
             implementation(libs.kotlin.test)
         }
     }
+}
+
+afterEvaluate {
+    // Firebase Cloud Messaging (phone flavor only)
+    val phoneConfigs = listOf(
+        "phoneImplementation",
+        "phoneDebugImplementation",
+        "phoneReleaseImplementation"
+    )
+    phoneConfigs
+        .filter { configurations.findByName(it) != null }
+        .forEach { configName ->
+            dependencies.add(configName, "com.google.firebase:firebase-messaging:24.1.0")
+        }
 }
 
 buildConfig {
@@ -331,6 +343,11 @@ tasks.register("checkAndroidForegroundServicePermissions") {
 
 tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn("checkAndroidForegroundServicePermissions")
+}
+
+// TV flavor does not use Firebase notifications; skip Google Services processing for TV variants.
+tasks.matching { it.name.startsWith("processTv") && it.name.endsWith("GoogleServices") }.configureEach {
+    enabled = false
 }
 
 compose {

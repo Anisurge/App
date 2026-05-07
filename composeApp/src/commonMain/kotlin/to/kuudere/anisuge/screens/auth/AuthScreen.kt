@@ -96,9 +96,7 @@ import androidx.compose.ui.unit.sp
 import anisurge.composeapp.generated.resources.Res
 import anisurge.composeapp.generated.resources.logo_txt
 import kotlinx.coroutines.delay
-import kotlinx.datetime.Clock
 import org.jetbrains.compose.resources.painterResource
-import to.kuudere.anisuge.platform.TvPairingQrCode
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.theme.Border
 import to.kuudere.anisuge.theme.Muted
@@ -138,7 +136,7 @@ fun AuthScreen(
             val isDesktop = maxWidth > 800.dp
 
             if (isAndroidTvPlatform) {
-                TvQrAuthLayout(state = state, viewModel = viewModel)
+                TvPasswordAuthLayout(state = state, viewModel = viewModel)
             } else if (isDesktop) {
                 // Desktop background — Frieren poster image
                 coil3.compose.AsyncImage(
@@ -200,144 +198,31 @@ fun AuthScreen(
 }
 
 @Composable
-private fun TvQrAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
-    var nowMillis by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
-    val remainingSeconds = ((state.tvPairingExpiresAtMillis - nowMillis).coerceAtLeast(0L) / 1000L).toInt()
-
+private fun TvPasswordAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
     LaunchedEffect(Unit) {
-        viewModel.startTvPairing()
-    }
-
-    LaunchedEffect(state.tvPairingExpiresAtMillis) {
-        while (state.tvPairingExpiresAtMillis > 0L && Clock.System.now().toEpochMilliseconds() < state.tvPairingExpiresAtMillis) {
-            nowMillis = Clock.System.now().toEpochMilliseconds()
-            delay(1000)
+        // TV should default to classic credential login (no QR pairing).
+        // If the user previously navigated to forgot/reset flows, force back to LOGIN on TV.
+        if (state.mode != AuthMode.LOGIN) {
+            viewModel.setMode(AuthMode.LOGIN)
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose { viewModel.stopTvPairing() }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black),
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.72f)
-                .widthIn(max = 760.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Color.White.copy(alpha = 0.06f))
-                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(24.dp))
-                .padding(horizontal = 48.dp, vertical = 40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp, vertical = 32.dp)
+                .verticalScroll(rememberScrollState()),
         ) {
             Image(
                 painter = painterResource(Res.drawable.logo_txt),
-                contentDescription = "Anisurge Logo",
-                modifier = Modifier.height(56.dp),
+                contentDescription = "AnisugeLogo",
+                modifier = Modifier.height(76.dp),
                 contentScale = ContentScale.Fit,
             )
             Spacer(Modifier.height(28.dp))
-
-            // Title changes based on state
-            Text(
-                when {
-                    state.isSuccess -> "Welcome!"
-                    state.tvPairingConnected -> "Connecting..."
-                    else -> "Scan to sign in"
-                },
-                color = Color.White,
-                fontSize = 34.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                when {
-                    state.isSuccess -> "Login successful. Redirecting..."
-                    state.tvPairingConnected -> "Authenticating your account..."
-                    else -> "Open Anisurge on your phone, go to Profile, and scan this TV QR."
-                },
-                color = Color.White.copy(alpha = 0.68f),
-                fontSize = 16.sp,
-            )
-            Spacer(Modifier.height(28.dp))
-
-            // QR Code or Loading State
-            when {
-                state.isSuccess -> {
-                    // Success state - show checkmark or loading
-                    Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            color = Color(0xFF4CAF50),
-                            strokeWidth = 4.dp,
-                            modifier = Modifier.size(80.dp)
-                        )
-                    }
-                }
-                state.tvPairingConnected -> {
-                    // Connected state - show loading animation
-                    Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            color = Color(0xFFBF80FF),
-                            strokeWidth = 4.dp,
-                            modifier = Modifier.size(80.dp)
-                        )
-                    }
-                }
-                else -> {
-                    // Waiting for scan
-                    val payload = state.tvPairingPayload
-                    if (payload == null) {
-                        Box(Modifier.size(280.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Color.White)
-                        }
-                    } else {
-                        TvPairingQrCode(
-                            payload = payload,
-                            modifier = Modifier.size(280.dp),
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(22.dp))
-            Text(
-                state.errorMessage ?: state.tvPairingStatus,
-                color = when {
-                    state.errorMessage != null -> Color(0xFFFF6B6B)
-                    state.isSuccess -> Color(0xFF4CAF50)
-                    state.tvPairingConnected -> Color(0xFFBF80FF)
-                    else -> Color.White.copy(alpha = 0.78f)
-                },
-                fontSize = 15.sp,
-                fontWeight = if (state.tvPairingConnected || state.isSuccess) FontWeight.Medium else FontWeight.Normal,
-            )
-            Spacer(Modifier.height(8.dp))
-
-            // Only show expiry when waiting for scan
-            if (!state.tvPairingConnected && !state.isSuccess) {
-                Text(
-                    if (remainingSeconds > 0) "Expires in ${remainingSeconds}s" else "QR expired. Generate a new code.",
-                    color = Color.White.copy(alpha = 0.52f),
-                    fontSize = 13.sp,
-                )
-            }
-
-            // Only show regenerate button when not connected
-            if (!state.tvPairingConnected && !state.isSuccess) {
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = { viewModel.startTvPairing() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                ) {
-                    Text("Regenerate QR", fontWeight = FontWeight.SemiBold)
-                }
-            }
+            AuthForm(state = state, viewModel = viewModel, centered = false)
         }
     }
 }

@@ -43,6 +43,7 @@ import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.WatchlistBottomSheet
 import to.kuudere.anisuge.data.models.EpisodeItem
+import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.ui.tvFocusableClick
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,7 +122,16 @@ fun AnimeInfoScreen(
             val anime = state.details!!
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val isDesktop = maxWidth >= 1024.dp
-                if (isDesktop) {
+                if (isAndroidTvPlatform) {
+                    TvLayout(
+                        anime = anime,
+                        state = state,
+                        onBack = onBack,
+                        onWatchlistUpdate = { viewModel.updateWatchlist(it) },
+                        onWatchNow = { onWatchEpisode(anime.slug ?: anime.id, "sub", 1) },
+                        onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
+                    )
+                } else if (isDesktop) {
                     DesktopLayout(
                         anime = anime,
                         state = state,
@@ -161,6 +171,236 @@ fun AnimeInfoScreen(
 
 private fun stripHtmlTags(htmlContent: String): String {
     return htmlContent.replace(Regex("<.*?>"), "").replace("&quot;", "\"").replace("&amp;", "&").replace("&#039;", "'").replace("<br>", "\n").replace("<br/>", "\n")
+}
+
+@Composable
+private fun TvLayout(
+    anime: AnimeDetails,
+    state: AnimeInfoUiState,
+    onBack: () -> Unit,
+    onWatchlistUpdate: (String) -> Unit,
+    onWatchNow: () -> Unit,
+    onWatchEpisode: (Int) -> Unit,
+) {
+    val episodesState = rememberLazyListState()
+
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .padding(horizontal = 34.dp, vertical = 26.dp),
+        horizontalArrangement = Arrangement.spacedBy(26.dp),
+    ) {
+        // Left: anime card + info (static)
+        Column(
+            modifier = Modifier
+                .weight(0.58f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.10f))
+                        .tvFocusableClick(shape = RoundedCornerShape(14.dp), onClick = onBack)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        Text("Back", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                Box {
+                    var showSheet by remember { mutableStateOf(false) }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White.copy(alpha = 0.10f))
+                            .tvFocusableClick(shape = RoundedCornerShape(14.dp), onClick = { showSheet = true })
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(
+                                if (state.inWatchlist) Icons.Default.Check else Icons.Default.Add,
+                                contentDescription = "Watchlist",
+                                tint = Color.White,
+                            )
+                            Text(
+                                if (state.inWatchlist) "In Watchlist" else "Add Watchlist",
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+
+                    if (showSheet) {
+                        WatchlistBottomSheet(
+                            currentFolder = state.folder,
+                            onSelect = { option ->
+                                showSheet = false
+                                onWatchlistUpdate(option)
+                            },
+                            onDismiss = { showSheet = false },
+                        )
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                AsyncImage(
+                    model = anime.image ?: anime.poster ?: anime.cover,
+                    contentDescription = "Cover",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .width(240.dp)
+                        .aspectRatio(2f / 3f)
+                        .clip(RoundedCornerShape(18.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(18.dp)),
+                )
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = anime.resolveDisplayTitle(),
+                        color = Color.White,
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 38.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    val meta = buildList {
+                        anime.year?.takeIf { it > 0 }?.let { add(it.toString()) }
+                        anime.status?.takeIf { it.isNotBlank() }?.let { add(it) }
+                        anime.type?.takeIf { it.isNotBlank() }?.let { add(it) }
+                        anime.duration?.takeIf { it > 0 }?.let { add("${it}m") }
+                    }.joinToString(" • ")
+
+                    if (meta.isNotBlank()) {
+                        Text(meta, color = Color.White.copy(alpha = 0.65f), fontSize = 15.sp)
+                    }
+
+                    val genres = anime.genres?.take(3)?.joinToString(" • ").orEmpty()
+                    if (genres.isNotBlank()) {
+                        Text(genres, color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+
+                    val desc = stripHtmlTags(anime.description ?: "").trim()
+                    if (desc.isNotBlank()) {
+                        Text(
+                            text = desc,
+                            color = Color.White.copy(alpha = 0.78f),
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    val watchText = if (anime.watchProgress?.episode != null) "Continue • EP ${anime.watchProgress.episode}" else "Watch Now"
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color.White)
+                            .tvFocusableClick(
+                                shape = RoundedCornerShape(18.dp),
+                                onClick = {
+                                    val ep = anime.watchProgress?.episode
+                                    if (ep != null) onWatchEpisode(ep) else onWatchNow()
+                                },
+                            )
+                            .padding(horizontal = 18.dp, vertical = 12.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
+                            Text(watchText, color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Right: episode list (only scrollable section)
+        Column(
+            modifier = Modifier
+                .weight(0.42f)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White.copy(alpha = 0.06f))
+                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(18.dp))
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Episodes",
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+            )
+
+            if (state.isLoadingEpisodes) {
+                Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+                }
+            } else if (state.episodes.isEmpty()) {
+                Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
+                    Text("No episodes", color = Color.White.copy(alpha = 0.6f))
+                }
+            } else {
+                LazyColumn(
+                    state = episodesState,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 10.dp),
+                ) {
+                    items(state.episodes.sortedBy { it.number }) { ep ->
+                        val title = ep.title ?: ep.titles?.filterNotNull()?.firstOrNull()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .tvFocusableClick(shape = RoundedCornerShape(14.dp), onClick = { onWatchEpisode(ep.number) })
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "EP ${ep.number}",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                    )
+                                    if (!title.isNullOrBlank()) {
+                                        Text(
+                                            text = title,
+                                            color = Color.White.copy(alpha = 0.70f),
+                                            fontSize = 13.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.9f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

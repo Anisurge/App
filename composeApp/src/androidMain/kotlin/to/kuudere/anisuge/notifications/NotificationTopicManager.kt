@@ -1,52 +1,53 @@
 package to.kuudere.anisuge.notifications
 
 import android.util.Log
-import com.google.firebase.messaging.FirebaseMessaging
-import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.platform.isAndroidTvPlatform
 
 object NotificationTopicManager {
 
     private const val TAG = "NotificationTopics"
+    private val topics = listOf(
+        "anisurge_all",
+        "anisurge_new_episode",
+        "anisurge_donation",
+        "anisurge_announcement",
+        "anisurge_maintenance"
+    )
 
     fun subscribeToDefaultTopics() {
-        val topics = listOf(
-            AnisurgeMessagingService.TOPIC_ALL,
-            AnisurgeMessagingService.TOPIC_NEW_EPISODE,
-            AnisurgeMessagingService.TOPIC_DONATION,
-            AnisurgeMessagingService.TOPIC_ANNOUNCEMENT,
-            AnisurgeMessagingService.TOPIC_MAINTENANCE
-        )
+        if (isAndroidTvPlatform) {
+            Log.d(TAG, "TV platform detected; skipping topic subscription")
+            return
+        }
 
         for (topic in topics) {
-            FirebaseMessaging.getInstance().subscribeToTopic(topic)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d(TAG, "Subscribed to $topic")
-                    } else {
-                        Log.w(TAG, "Failed to subscribe to $topic: ${task.exception?.message}")
-                    }
-                }
+            runFirebaseTopicCall(topic = topic, subscribe = true)
         }
     }
 
     fun unsubscribeFromAllTopics() {
-        val topics = listOf(
-            AnisurgeMessagingService.TOPIC_ALL,
-            AnisurgeMessagingService.TOPIC_NEW_EPISODE,
-            AnisurgeMessagingService.TOPIC_DONATION,
-            AnisurgeMessagingService.TOPIC_ANNOUNCEMENT,
-            AnisurgeMessagingService.TOPIC_MAINTENANCE
-        )
+        if (isAndroidTvPlatform) {
+            Log.d(TAG, "TV platform detected; skipping topic unsubscription")
+            return
+        }
 
         for (topic in topics) {
-            FirebaseMessaging.getInstance().unsubscribeFromTopic(topic)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d(TAG, "Unsubscribed from $topic")
-                    } else {
-                        Log.w(TAG, "Failed to unsubscribe from $topic: ${task.exception?.message}")
-                    }
-                }
+            runFirebaseTopicCall(topic = topic, subscribe = false)
+        }
+    }
+
+    private fun runFirebaseTopicCall(topic: String, subscribe: Boolean) {
+        val action = if (subscribe) "subscribeToTopic" else "unsubscribeFromTopic"
+        runCatching {
+            val firebaseMessagingClass = Class.forName("com.google.firebase.messaging.FirebaseMessaging")
+            val getInstance = firebaseMessagingClass.getMethod("getInstance")
+            val firebaseMessaging = getInstance.invoke(null)
+            val topicMethod = firebaseMessagingClass.getMethod(action, String::class.java)
+            topicMethod.invoke(firebaseMessaging, topic)
+        }.onSuccess {
+            Log.d(TAG, "${if (subscribe) "Subscribed" else "Unsubscribed"} to $topic")
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to $action for $topic: ${error.message}")
         }
     }
 }

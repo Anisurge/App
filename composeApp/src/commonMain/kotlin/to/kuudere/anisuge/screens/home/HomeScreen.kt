@@ -174,7 +174,9 @@ import to.kuudere.anisuge.screens.settings.SettingsViewModel
 import to.kuudere.anisuge.ui.ConfirmDialog
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
+import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.platform.isDesktopPlatform
+import to.kuudere.anisuge.ui.tvFocusableClick
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -199,6 +201,7 @@ fun HomeScreen(
     onExit: () -> Unit = {},
     onViewContinueWatchingMore: () -> Unit = {},
     onViewLatestEpisodesMore: () -> Unit = {},
+    onViewNewOnAppMore: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
 ) {
@@ -284,6 +287,7 @@ fun HomeScreen(
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onWatchlistClick = { showWatchlistFor = it },
                                 onViewLatestEpisodesMore = onViewLatestEpisodesMore,
+                                onViewNewOnAppMore = onViewNewOnAppMore,
                                 onSearchLatest = {
                                     searchViewModel.onSortChange("Latest")
                                     searchViewModel.search()
@@ -342,6 +346,7 @@ fun HomeScreen(
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onWatchlistClick = { showWatchlistFor = it },
                                 onViewLatestEpisodesMore = onViewLatestEpisodesMore,
+                                onViewNewOnAppMore = onViewNewOnAppMore,
                                 onSearchLatest = {
                                     searchViewModel.onSortChange("Latest")
                                     searchViewModel.search()
@@ -435,6 +440,7 @@ private fun TabContent(
     onViewContinueWatchingMore: () -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
     onViewLatestEpisodesMore: () -> Unit,
+    onViewNewOnAppMore: () -> Unit,
     onSearchLatest: () -> Unit,
     onExit: () -> Unit,
     initialSettingsTab: SettingsTab?,
@@ -477,7 +483,7 @@ private fun TabContent(
                                 onRefresh = { homeViewModel.refresh(force = true) },
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onViewLatestEpisodesMore = onViewLatestEpisodesMore,
-                                onViewNewOnAppMore = onSearchLatest,
+                                onViewNewOnAppMore = onViewNewOnAppMore,
                                 onExit = onExit
                             )
                         }
@@ -1494,7 +1500,7 @@ private fun SidebarIcon(
                 .size(48.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(animatedBg)
-                .clickable { onClick() },
+                .tvFocusableClick(shape = RoundedCornerShape(12.dp), onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, contentDescription = null, tint = animatedTint, modifier = Modifier.size(22.dp))
@@ -1677,7 +1683,7 @@ private fun AnisugBottomBar(
     liquidGlass: Boolean,
     modifier: Modifier = Modifier
 ) {
-    if (liquidGlass && !isDesktopPlatform) {
+    if (liquidGlass && !isDesktopPlatform && !isAndroidTvPlatform) {
         LiquidGlassBottomBar(
             selectedTab = selectedTab,
             onTabSelect = onTabSelect,
@@ -1876,7 +1882,10 @@ private fun BottomBarIcon(
                     Modifier
                 }
             )
-            .clickable { onClick() },
+            .tvFocusableClick(
+                shape = RoundedCornerShape(if (liquidGlass) 18.dp else 12.dp),
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
