@@ -275,6 +275,7 @@ fun App(
                         },
                         onExit = onAppExit,
                         onViewContinueWatchingMore = { navController.navigate(Screen.ContinueWatching.route) },
+                        onViewLatestEpisodesMore = { navController.navigate(Screen.Latest.route) },
                         startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
                         startTab = requestedTab
                     )
