@@ -72,7 +72,14 @@ fun App(
 ) {
     AnisugTheme {
         val navController = rememberNavController()
-        val splashVm = remember { SplashViewModel(AppComponent.authService, AppComponent.updateService, AppComponent.homeService) }
+        val splashVm = remember {
+            SplashViewModel(
+                AppComponent.authService,
+                AppComponent.updateService,
+                AppComponent.homeService,
+                AppComponent.analyticsPingService,
+            )
+        }
         val authVm   = remember { AuthViewModel(AppComponent.authService) }
         val homeVm   = remember { HomeViewModel(AppComponent.homeService, AppComponent.authService, AppComponent.watchlistService) }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }

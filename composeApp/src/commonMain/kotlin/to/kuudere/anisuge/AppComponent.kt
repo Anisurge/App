@@ -19,6 +19,8 @@ object AppComponent {
     const val BASE_URL = "https://api.reanime.to/api/v1"
     /** Public catalog for batch_scrape source ids (Next site); not the Project-R API host. */
     const val STREAMING_SERVERS_CATALOG_URL = "https://www.anisurge.lol/api/v1/streaming/servers"
+    /** Anonymous install heartbeat for admin dashboard metrics (no account or PII). */
+    const val ANALYTICS_PING_URL = "https://www.anisurge.lol/api/v1/app/ping"
     const val STREAMING_URL = "https://fetch.anisurge.lol/api"
 
     val httpClient: HttpClient by lazy {
@@ -92,5 +94,9 @@ object AppComponent {
 
     val updateService: to.kuudere.anisuge.data.services.UpdateService by lazy {
         to.kuudere.anisuge.data.services.UpdateService(httpClient)
+    }
+
+    val analyticsPingService: to.kuudere.anisuge.data.services.AnalyticsPingService by lazy {
+        to.kuudere.anisuge.data.services.AnalyticsPingService(httpClient, settingsStore, ANALYTICS_PING_URL)
     }
 }

@@ -24,6 +24,7 @@ import to.kuudere.anisuge.MainActivity
 import to.kuudere.anisuge.R
 import to.kuudere.anisuge.services.DownloadService
 import android.provider.DocumentsContract
+import java.util.UUID
 
 actual val isDesktopPlatform: Boolean = false
 actual val isAndroidTvPlatform: Boolean
@@ -367,3 +368,7 @@ actual fun startNotificationListenerService() {
 actual fun stopNotificationListenerService() {
     to.kuudere.anisuge.notifications.NotificationTopicManager.unsubscribeFromAllTopics()
 }
+
+actual fun randomInstallUuid(): String = UUID.randomUUID().toString()
+
+actual fun analyticsPingOs(): String? = Build.VERSION.RELEASE

@@ -1423,6 +1423,13 @@ private fun AboutTab() {
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Anonymous device metrics (install id, platform, app version) may be sent to help improve the app. No account or personal data is included. An opt-out setting may be added later.",
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
             }
         }
 
@@ -1792,6 +1799,13 @@ private fun MobileAboutContent() {
             color = TEXT,
             fontSize = 14.sp,
             lineHeight = 20.sp
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            "Anonymous device metrics (install id, platform, app version) may be sent to help improve the app. No account or personal data is included. An opt-out setting may be added later.",
+            color = MUTED,
+            fontSize = 12.sp,
+            lineHeight = 18.sp
         )
     }
 }
