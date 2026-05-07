@@ -186,33 +186,22 @@ class WatchViewModel(
             return
         }
 
-        _uiState.update { it.copy(isLoading = true, loadingMessage = "Fetching episode data...") }
-        
+        val (streamLang, streamServer) = pickStreamServer(reqServer, reqLang)
+
+        _uiState.update {
+            it.copy(
+                isLoading = true,
+                loadingMessage = "Fetching episode data...",
+                targetLang = streamLang
+            )
+        }
+
         val speculativeAnilistId = currentAnimeId.toIntOrNull()
         var streamLoadingJob: kotlinx.coroutines.Job? = null
-        
+
         if (speculativeAnilistId != null) {
-            val priorityLang = reqLang ?: if (_uiState.value.defaultLang) "dub" else "sub"
-            var speculativeServer: String? = reqServer
-            
-            if (speculativeServer == null) {
-                for (candidate in serverRepository.getFallbackPriority()) {
-                    val serverInfo = serverRepository.getServerById(candidate)
-                    val supportsLang = when (priorityLang) {
-                        "dub" -> serverInfo?.supportsDub ?: false
-                        "sub" -> serverInfo?.supportsSub ?: true
-                        else -> true
-                    }
-                    if (supportsLang) {
-                        speculativeServer = candidate
-                        break
-                    }
-                }
-            }
-            
-            val finalSpeculativeServer = speculativeServer ?: "suzu"
             streamLoadingJob = viewModelScope.launch {
-                loadVideoStream(finalSpeculativeServer, speculativeAnilistId)
+                loadVideoStream(streamServer, speculativeAnilistId)
             }
         }
 
@@ -246,40 +235,60 @@ class WatchViewModel(
             }
 
             if (streamLoadingJob == null) {
-                val fallbackPriority = serverRepository.getFallbackPriority()
-                var targetServerName: String? = null
-                var finalLang: String? = reqLang
-
-                if (reqServer != null) {
-                    targetServerName = reqServer.lowercase()
-                    finalLang = reqLang
-                }
-
-                if (targetServerName == null) {
-                    val priorityLang = reqLang ?: if (_uiState.value.defaultLang) "dub" else "sub"
-                    for (candidate in fallbackPriority) {
-                        val serverInfo = serverRepository.getServerById(candidate)
-                        val supportsLang = when (priorityLang) {
-                            "dub" -> serverInfo?.supportsDub ?: false
-                            "sub" -> serverInfo?.supportsSub ?: true
-                            else -> true
-                        }
-
-                        if (supportsLang) {
-                            targetServerName = candidate
-                            finalLang = priorityLang
-                            break
-                        }
-                    }
-                }
-
-                val serverName = targetServerName ?: fallbackPriority.firstOrNull() ?: "suzu"
-                _uiState.update { it.copy(targetLang = finalLang) }
-                loadVideoStream(serverName)
+                loadVideoStream(streamServer)
             }
         } else {
             streamLoadingJob?.cancel()
             _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    /**
+     * Resolves sub/dub and server for a fetch. Uses [reqServer]/[reqLang] when supplied (e.g. deep link),
+     * otherwise keeps [WatchUiState.currentServer] when it supports the active language preference.
+     */
+    private fun pickStreamServer(reqServer: String?, reqLang: String?): Pair<String, String> {
+        val state = _uiState.value
+        val preferenceIfUnset = if (state.defaultLang) "dub" else "sub"
+        val effectiveLang = normalizeWatchLang(reqLang ?: state.targetLang, preferenceIfUnset)
+
+        fun supportsServerLang(serverId: String, lang: String): Boolean {
+            val info = serverRepository.getServerById(serverId) ?: return false
+            return when (lang) {
+                "dub" -> info.supportsDub
+                "sub" -> info.supportsSub
+                else -> true
+            }
+        }
+
+        fun fallbackServerForLang(lang: String): String {
+            for (id in serverRepository.getFallbackPriority()) {
+                if (supportsServerLang(id, lang)) return id
+            }
+            return serverRepository.getFallbackPriority().firstOrNull() ?: "suzu"
+        }
+
+        if (reqServer != null) {
+            val s = reqServer.lowercase()
+            val lang = normalizeWatchLang(reqLang ?: state.targetLang, preferenceIfUnset)
+            return lang to s
+        }
+
+        val prior = state.currentServer.lowercase().takeIf {
+            it.isNotBlank() && !it.equals("offline", ignoreCase = true)
+        }
+        if (prior != null && supportsServerLang(prior, effectiveLang)) {
+            return effectiveLang to prior
+        }
+
+        return effectiveLang to fallbackServerForLang(effectiveLang)
+    }
+
+    private fun normalizeWatchLang(raw: String?, fallback: String): String {
+        val v = raw?.lowercase()
+        return when (v) {
+            "dub", "sub" -> v
+            else -> fallback
         }
     }
 
