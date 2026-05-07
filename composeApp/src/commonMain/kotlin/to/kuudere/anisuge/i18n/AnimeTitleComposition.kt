@@ -10,12 +10,12 @@ import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.data.models.RecommendationItem
 import to.kuudere.anisuge.data.models.ScheduleAnime
 
-val LocalPreferNativeAnimeTitles = compositionLocalOf { false }
+val LocalPreferRomajiAnimeTitles = compositionLocalOf { false }
 
 @Composable
 @ReadOnlyComposable
 fun AnimeTitle.resolveDisplayTitle(): String =
-    displayTitle(preferNativeTitles = LocalPreferNativeAnimeTitles.current)
+    displayTitle(preferRomajiTitles = LocalPreferRomajiAnimeTitles.current)
 
 @Composable
 @ReadOnlyComposable

@@ -10,15 +10,19 @@ data class AnimeTitle(
     val romaji: String = "",
     @SerialName("user_preferred") val userPreferred: String = "",
 ) {
-    fun displayTitle(preferNativeTitles: Boolean): String =
-        if (preferNativeTitles) {
-            native.ifBlank { english.ifBlank { userPreferred.ifBlank { romaji } } }
+    /**
+     * @param preferRomajiTitles When true, prefer romanized Japanese (Latin letters, e.g. `Ganbare! Nakamura-kun!!`)
+     *   instead of English/localized titles (`Go For It, Nakamura-kun!!`) or native script.
+     */
+    fun displayTitle(preferRomajiTitles: Boolean): String =
+        if (preferRomajiTitles) {
+            romaji.ifBlank { userPreferred.ifBlank { english.ifBlank { native } } }
         } else {
             english.ifBlank { userPreferred.ifBlank { romaji.ifBlank { native } } }
         }
 
-    /** English-first; use [displayTitle] with user preference in Composables ([resolveDisplayTitle]). */
-    val displayTitle: String get() = displayTitle(preferNativeTitles = false)
+    /** English/localized first; use [displayTitle] with settings in UI ([resolveDisplayTitle]). */
+    val displayTitle: String get() = displayTitle(preferRomajiTitles = false)
 }
 
 @Serializable
@@ -63,7 +67,7 @@ data class AnimeItem(
     @SerialName("anilist_id") val anilistId: Int? = null,
     @SerialName("mal_id") val malId: Int? = null,
 ) {
-    fun displayTitle(preferNativeTitles: Boolean): String = title.displayTitle(preferNativeTitles)
+    fun displayTitle(preferRomajiTitles: Boolean): String = title.displayTitle(preferRomajiTitles)
     val displayTitle: String get() = title.displayTitle
     val imageUrl: String get() = coverImage.bestUrl
     val bannerUrl: String? get() = bannerImage.ifBlank { null }
