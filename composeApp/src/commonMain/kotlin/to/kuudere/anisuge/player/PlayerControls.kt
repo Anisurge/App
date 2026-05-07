@@ -41,6 +41,7 @@ import to.kuudere.anisuge.data.models.StreamingData
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
@@ -71,16 +72,23 @@ fun PlayerControls(
     onExit: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val hideDelayMillis = 1500L
+    val pointerMoveThrottleMillis = 250L
     var controlsVisible by remember { mutableStateOf(true) }
     var isSeeking by remember { mutableStateOf(false) }
     var seekValue by remember { mutableStateOf(0f) }
     var expectedPosition by remember { mutableStateOf<Double?>(null) }
     val scope = rememberCoroutineScope()
-    var hideJob by remember { mutableStateOf<Job?>(null) }
+    var lastInteractionAt by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+    var lastPointerMoveWakeAt by remember { mutableStateOf(0L) }
 
     val isLoading = playerState.isBuffering || (!playerState.isPlaying && playerState.duration <= 0.0) || expectedPosition != null
-    val isPlayingActively = playerState.isPlaying && !playerState.isPaused
-    val isMobile = !to.kuudere.anisuge.platform.isDesktopPlatform
+    
+    fun shouldKeepControlsVisible(): Boolean = playerState.isLocked || isSeeking || isLoading
+    fun recordInteraction(forceShow: Boolean = true) {
+        lastInteractionAt = Clock.System.now().toEpochMilliseconds()
+        if (forceShow) controlsVisible = true
+    }
 
     // Clear expected position when actual catches up
     LaunchedEffect(playerState.position) {
@@ -98,38 +106,43 @@ fun PlayerControls(
         }
     }
 
-    // Auto-hide controls after 3.5s of inactivity
-    fun scheduleHide() {
-        if (playerState.isLocked) return 
-        hideJob?.cancel()
-        hideJob = scope.launch {
-            delay(3500)
-            val currentIsLoading = playerState.isBuffering || (!playerState.isPlaying && playerState.duration <= 0.0) || expectedPosition != null
-            val currentIsPlayingActively = playerState.isPlaying && !playerState.isPaused
-            
-            // On mobile, we are extra strict: never hide if loading or paused
-            if (!isSeeking && !currentIsLoading && currentIsPlayingActively) {
-                controlsVisible = false
-            } else if (isMobile && (currentIsLoading || !currentIsPlayingActively)) {
-                // Explicitly keep visible
-                controlsVisible = true
-            }
+    // Show controls initially, then let idle timer handle auto-hide.
+    LaunchedEffect(Unit) { 
+        controlsVisible = true
+        recordInteraction(forceShow = false)
+    }
+
+    // Keep controls visible while loading, then restart idle timer once loading settles.
+    LaunchedEffect(isLoading) {
+        if (isLoading) {
+            controlsVisible = true
+        } else {
+            recordInteraction(forceShow = false)
         }
     }
 
-    // Show controls initially
-    LaunchedEffect(Unit) { 
-        controlsVisible = true
-        scheduleHide() 
+    // Restart idle timer after scrubbing ends.
+    LaunchedEffect(isSeeking) {
+        if (!isSeeking) recordInteraction(forceShow = false)
     }
 
-    // If it's loading or not playing actively, keep controls visible
-    LaunchedEffect(isLoading, isPlayingActively) {
-        if (isLoading || !isPlayingActively) {
+    // Keep controls visible while locked and reset idle baseline on lock changes.
+    LaunchedEffect(playerState.isLocked) {
+        if (playerState.isLocked) controlsVisible = true
+        recordInteraction(forceShow = false)
+    }
+
+    // Single auto-hide owner with final-state guards.
+    LaunchedEffect(lastInteractionAt, playerState.isLocked, isSeeking, isLoading) {
+        if (shouldKeepControlsVisible()) {
             controlsVisible = true
-            hideJob?.cancel()
-        } else {
-            scheduleHide()
+            return@LaunchedEffect
+        }
+        val now = Clock.System.now().toEpochMilliseconds()
+        val remaining = (hideDelayMillis - (now - lastInteractionAt)).coerceAtLeast(0L)
+        if (remaining > 0L) delay(remaining)
+        if (!shouldKeepControlsVisible()) {
+            controlsVisible = false
         }
     }
 
@@ -138,10 +151,10 @@ fun PlayerControls(
         if (playerState.canvasClicked > 0) {
             if (playerState.isLocked) {
                 controlsVisible = true
-                scheduleHide()
+                recordInteraction(forceShow = false)
             } else {
                 controlsVisible = !controlsVisible
-                if (controlsVisible) scheduleHide()
+                if (controlsVisible) recordInteraction(forceShow = false)
             }
         }
     }
@@ -155,8 +168,7 @@ fun PlayerControls(
     // Hook up desktop AWT Canvas pointer moves to wake up controls
     LaunchedEffect(playerState.canvasPointerMoved) {
         if (playerState.canvasPointerMoved > 0) {
-            controlsVisible = true
-            scheduleHide()
+            recordInteraction()
         }
     }
 
@@ -171,11 +183,11 @@ fun PlayerControls(
                     while (true) {
                         val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Main)
                         if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Move) {
-                            val currentIsLoadingNow = playerState.isBuffering || (!playerState.isPlaying && playerState.duration <= 0.0) || expectedPosition != null
-                            if (!controlsVisible && !currentIsLoadingNow) {
-                                controlsVisible = true
+                            val now = Clock.System.now().toEpochMilliseconds()
+                            if (now - lastPointerMoveWakeAt >= pointerMoveThrottleMillis) {
+                                lastPointerMoveWakeAt = now
+                                recordInteraction(forceShow = !controlsVisible)
                             }
-                            scheduleHide()
                         }
                     }
                 }
@@ -185,7 +197,7 @@ fun PlayerControls(
                     onTap = {
                         if (playerState.isLocked) {
                             controlsVisible = !controlsVisible
-                            if (controlsVisible) scheduleHide()
+                            if (controlsVisible) recordInteraction(forceShow = false)
                             return@detectTapGestures
                         }
 
@@ -197,13 +209,12 @@ fun PlayerControls(
                             // But for now, we'll keep the standard behavior.
                         }
 
-                        val currentIsLoadingNow = playerState.isBuffering || (!playerState.isPlaying && playerState.duration <= 0.0) || expectedPosition != null
-                        val currentIsPlayingActively = playerState.isPlaying && !playerState.isPaused
-                        if (currentIsLoadingNow || !currentIsPlayingActively) {
+                        if (isLoading) {
                             controlsVisible = true
+                            recordInteraction(forceShow = false)
                         } else {
                             controlsVisible = !controlsVisible
-                            if (controlsVisible) scheduleHide()
+                            if (controlsVisible) recordInteraction(forceShow = false)
                         }
                     },
                     onDoubleTap = { offset ->
@@ -247,7 +258,7 @@ fun PlayerControls(
                         }
                         
                         controlsVisible = true
-                        scheduleHide()
+                        recordInteraction(forceShow = false)
                     }
                 )
             }
@@ -310,6 +321,11 @@ fun PlayerControls(
                 )
             }
     ) {
+        // Desktop-only: hide the OS cursor when controls are hidden.
+        to.kuudere.anisuge.platform.SyncCursorHidden(
+            hidden = to.kuudere.anisuge.platform.isDesktopPlatform && !controlsVisible
+        )
+
         // Double Tap Seek Animation Overlay
         DoubleTapSeekOverlay(
             side = doubleTapSide,
@@ -476,7 +492,7 @@ fun PlayerControls(
                             horizontalArrangement = Arrangement.Start
                         ) {
                             IconButton(
-                                onClick = { playerState.isLocked = false; scheduleHide() },
+                                onClick = { playerState.isLocked = false; recordInteraction(forceShow = false) },
                                 modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha=0.5f), CircleShape)
                             ) {
                                 Icon(Icons.Default.Lock, null, tint = Color.White, modifier = Modifier.size(32.dp))
@@ -510,10 +526,10 @@ fun PlayerControls(
                                             detectTapGestures(
                                                 onTap = { offset ->
                                                     if (duration <= 0) return@detectTapGestures
-                                                    val tapValue = ((offset.x / size.width) * duration).toDouble().coerceIn(0.0, duration)
+                                                    val tapValue = ((offset.x / size.width) * duration).coerceIn(0.0, duration)
                                                     playerState.seekTarget = tapValue
                                                     expectedPosition = tapValue
-                                                    scheduleHide()
+                                                    recordInteraction(forceShow = false)
                                                 }
                                             )
                                         }
@@ -522,7 +538,8 @@ fun PlayerControls(
                                                 onDragStart = { offset ->
                                                     if (duration <= 0) return@detectDragGestures
                                                     isSeeking = true
-                                                    hideJob?.cancel()
+                                                    controlsVisible = true
+                                                    recordInteraction(forceShow = false)
                                                     seekValue = ((offset.x / size.width) * duration).toFloat().coerceIn(0f, duration.toFloat())
                                                 },
                                                 onDrag = { change, _ ->
@@ -534,10 +551,10 @@ fun PlayerControls(
                                                         playerState.seekTarget = seekValue.toDouble()
                                                         expectedPosition = seekValue.toDouble()
                                                         isSeeking = false
-                                                        scheduleHide()
+                                                        recordInteraction(forceShow = false)
                                                     }
                                                 },
-                                                onDragCancel = { isSeeking = false; scheduleHide() }
+                                                onDragCancel = { isSeeking = false; recordInteraction(forceShow = false) }
                                             )
                                         },
                                     contentAlignment = Alignment.CenterStart
@@ -605,13 +622,13 @@ fun PlayerControls(
                             ) {
                                 // Left actions: Lock, Volume, Watchlist
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { playerState.isLocked = true; scheduleHide() }, modifier = Modifier.size(36.dp)) {
+                                    IconButton(onClick = { playerState.isLocked = true; recordInteraction(forceShow = false) }, modifier = Modifier.size(36.dp)) {
                                         Icon(Icons.Default.LockOpen, null, tint = Color.White, modifier = Modifier.size(20.dp))
                                     }
-                                    IconButton(onClick = { playerState.isMuted = !playerState.isMuted; scheduleHide() }, modifier = Modifier.size(38.dp)) {
+                                    IconButton(onClick = { playerState.isMuted = !playerState.isMuted; recordInteraction(forceShow = false) }, modifier = Modifier.size(38.dp)) {
                                         Icon(if (playerState.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, null, tint = Color.White, modifier = Modifier.size(24.dp))
                                     }
-                                    IconButton(onClick = { if (!isOffline) onWatchlistClick(); scheduleHide() }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
+                                    IconButton(onClick = { if (!isOffline) onWatchlistClick(); recordInteraction(forceShow = false) }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
                                         Icon(
                                             if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, 
                                             null, 
@@ -627,12 +644,12 @@ fun PlayerControls(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(onClick = { 
                                         val nPos = (playerState.position - 10).coerceAtLeast(0.0)
-                                        playerState.seekTarget = nPos; expectedPosition = nPos; scheduleHide() 
+                                        playerState.seekTarget = nPos; expectedPosition = nPos; recordInteraction(forceShow = false) 
                                     }, modifier = Modifier.size(40.dp)) {
                                         Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(24.dp))
                                     }
                                     IconButton(
-                                        onClick = { onPrevEpisode(); scheduleHide() }, 
+                                        onClick = { onPrevEpisode(); recordInteraction(forceShow = false) }, 
                                         enabled = playerState.hasPrevEpisode,
                                         modifier = Modifier.size(40.dp)
                                     ) {
@@ -643,7 +660,7 @@ fun PlayerControls(
                                     Box(
                                         Modifier.size(54.dp).padding(4.dp).clip(CircleShape).background(Color.White).clickable { 
                                             playerState.pauseRequested = !playerState.isPaused
-                                            scheduleHide()
+                                            recordInteraction(forceShow = false)
                                         },
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -656,7 +673,7 @@ fun PlayerControls(
                                     }
 
                                     IconButton(
-                                        onClick = { onNextEpisode(); scheduleHide() }, 
+                                        onClick = { onNextEpisode(); recordInteraction(forceShow = false) }, 
                                         enabled = playerState.hasNextEpisode,
                                         modifier = Modifier.size(40.dp)
                                     ) {
@@ -664,7 +681,7 @@ fun PlayerControls(
                                     }
                                     IconButton(onClick = { 
                                         val nPos = (playerState.position + 10).coerceAtMost(duration)
-                                        playerState.seekTarget = nPos; expectedPosition = nPos; scheduleHide() 
+                                        playerState.seekTarget = nPos; expectedPosition = nPos; recordInteraction(forceShow = false) 
                                     }, modifier = Modifier.size(40.dp)) {
                                         Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(24.dp))
                                     }
@@ -674,17 +691,17 @@ fun PlayerControls(
 
                                 // Right actions: Info, Episodes, Comments, [Fullscreen on Desktop]
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { if (!isOffline) onInfoClick(); scheduleHide() }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
+                                    IconButton(onClick = { if (!isOffline) onInfoClick(); recordInteraction(forceShow = false) }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
                                         Icon(Icons.Default.Info, null, tint = if (isOffline) Color.Gray else Color.White, modifier = Modifier.size(22.dp))
                                     }
-                                    IconButton(onClick = { if (!isOffline) onEpisodesClick(); scheduleHide() }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
+                                    IconButton(onClick = { if (!isOffline) onEpisodesClick(); recordInteraction(forceShow = false) }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
                                         Icon(Icons.AutoMirrored.Filled.FormatListBulleted, null, tint = if (isOffline) Color.Gray else Color.White, modifier = Modifier.size(22.dp))
                                     }
-                                    IconButton(onClick = { if (!isOffline) onCommentsClick(); scheduleHide() }, modifier = Modifier.size(40.dp), enabled = !isOffline) {
+                                    IconButton(onClick = { if (!isOffline) onCommentsClick(); recordInteraction(forceShow = false) }, modifier = Modifier.size(40.dp), enabled = !isOffline) {
                                         Icon(Icons.Default.ChatBubbleOutline, null, tint = if (isOffline) Color.Gray else Color.White, modifier = Modifier.size(22.dp))
                                     }
                                     if (to.kuudere.anisuge.platform.isDesktopPlatform) {
-                                        IconButton(onClick = { onFullscreenToggle(); scheduleHide() }, modifier = Modifier.size(40.dp)) {
+                                        IconButton(onClick = { onFullscreenToggle(); recordInteraction(forceShow = false) }, modifier = Modifier.size(40.dp)) {
                                             Icon(
                                                 if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, 
                                                 null, 
