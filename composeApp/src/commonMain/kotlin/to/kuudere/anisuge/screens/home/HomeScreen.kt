@@ -242,7 +242,7 @@ fun HomeScreen(
         Row(Modifier.fillMaxSize()) {
             if (isDesktop) {
                 AnisugSidebar(
-                    avatarUrl = homeState.userProfile?.avatar,
+                    avatarUrl = homeState.userProfile?.effectiveAvatar,
                     selectedTab = currentTab,
                     isLoggingOut = homeState.isLoggingOut,
                     onTabSelect = switchTab,
@@ -353,7 +353,7 @@ fun HomeScreen(
 
                     // Top Bar — measured so content knows how tall it is
                     MobileTopBar(
-                        avatarUrl = homeState.userProfile?.avatar,
+                        avatarUrl = homeState.userProfile?.effectiveAvatar,
                         onDownloadClick = {
                             prevTabIndex = AnisugTab.entries.indexOf(currentTab)
                             currentTab = AnisugTab.Downloads
@@ -1327,6 +1327,13 @@ private fun stripHtmlTags(htmlContent: String): String {
     return div.replace(Regex("<[^>]*>"), "").trim()
 }
 
+/** Profile / CDN paths from Project-R: absolute URL or path relative to API host. */
+private fun resolveProfileImageUrl(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    if (raw.startsWith("http", ignoreCase = true)) return raw
+    return "https://api.reanime.to${if (raw.startsWith("/")) raw else "/$raw"}"
+}
+
 @Composable
 private fun SmallBadge(text: String, color: Color = Color.White) {
     Box(
@@ -1354,11 +1361,7 @@ private fun AnisugSidebar(
     onLogout: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
-    val fullAvatarUrl = when {
-        avatarUrl == null -> null
-        avatarUrl.startsWith("http") -> avatarUrl
-        else -> "https://api.reanime.to$avatarUrl"
-    }
+    val fullAvatarUrl = resolveProfileImageUrl(avatarUrl)
 
     DraggableWindowArea(
         modifier = Modifier
@@ -1612,6 +1615,7 @@ private fun MobileTopBar(
                     )
                 }
 
+                val fullAvatarUrl = resolveProfileImageUrl(avatarUrl)
                 // User avatar right
                 Box(
                     modifier = Modifier
@@ -1620,9 +1624,9 @@ private fun MobileTopBar(
                         .background(Color(0xFF1F1F1F)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (!avatarUrl.isNullOrBlank()) {
+                    if (fullAvatarUrl != null) {
                         AsyncImage(
-                            model = avatarUrl,
+                            model = fullAvatarUrl,
                             contentDescription = "Profile",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize().clip(CircleShape)
