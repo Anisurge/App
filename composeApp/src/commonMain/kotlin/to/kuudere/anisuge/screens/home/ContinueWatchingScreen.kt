@@ -126,7 +126,7 @@ fun ContinueWatchingScreen(
                             ContinueWatchingGridCard(
                                 item = item,
                                 onClick = {
-                                    onWatchClick(item.animeId, item.language ?: "sub", item.episode, item.server)
+                                    onWatchClick(item.animeId, item.language ?: "sub", item.displayEpisode, item.server)
                                 }
                             )
                         }
@@ -190,7 +190,7 @@ private fun ContinueWatchingGridCard(
             }
 
             Text(
-                "EP ${item.episode}",
+                "EP ${item.displayEpisode}",
                 color = Color.White,
                 fontSize = 12.sp,
                 modifier = Modifier

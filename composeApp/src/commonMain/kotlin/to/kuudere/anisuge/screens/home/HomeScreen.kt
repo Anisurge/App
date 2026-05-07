@@ -1106,7 +1106,7 @@ private fun ContinueWatchingRow(
                 Modifier
                     .width(260.dp)
                     .hoverable(inter)
-                    .clickable { onWatchClick(animeId, lang, item.episode, server) }
+                    .clickable { onWatchClick(animeId, lang, item.displayEpisode, server) }
             ) {
                 Box(
                     Modifier
@@ -1173,7 +1173,7 @@ private fun ContinueWatchingRow(
                             .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("EP ${item.episode}", color = Color.White, fontSize = 12.sp)
+                        Text("EP ${item.displayEpisode}", color = Color.White, fontSize = 12.sp)
                     }
 
                     // Bottom Right Time badge

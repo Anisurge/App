@@ -214,7 +214,8 @@ class WatchViewModel(
 
         if (data != null) {
             val slug = data.anime?.animeId?.takeIf { it.isNotBlank() } ?: currentAnimeId
-            val loadedEpisodes = fetchAllEpisodes(slug)
+            val loadedEpisodes = reuseOrNullEpisodes(_uiState.value.episodeData, data, slug)
+                ?: fetchAllEpisodes(slug)
             val mergedEpisodes = when {
                 loadedEpisodes.isNotEmpty() -> loadedEpisodes
                 data.episodes?.isNotEmpty() == true -> data.episodes
@@ -290,6 +291,22 @@ class WatchViewModel(
             "dub", "sub" -> v
             else -> fallback
         }
+    }
+
+    /**
+     * If [prior] already holds a non-empty episode list for the same anime as [newData], reuse it and
+     * avoid redundant paginated `/episodes` calls when only the episode number changed.
+     */
+    private fun reuseOrNullEpisodes(
+        prior: WatchInfoResponse?,
+        newData: WatchInfoResponse,
+        slug: String,
+    ): List<EpisodeItem>? {
+        val list = prior?.episodes
+        if (list.isNullOrEmpty()) return null
+        val newKey = newData.anime?.animeId?.takeIf { it.isNotBlank() } ?: slug
+        val oldKey = prior.anime?.animeId?.takeIf { it.isNotBlank() } ?: return null
+        return if (oldKey == newKey) list else null
     }
 
     private suspend fun fetchAllEpisodes(slug: String): List<EpisodeItem> {
