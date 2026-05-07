@@ -193,7 +193,7 @@ fun HomeScreen(
     scheduleViewModel: ScheduleViewModel,
     settingsViewModel: SettingsViewModel,
     onAnimeClick: (String) -> Unit,
-    onWatchClick: (String, String, Int, String?) -> Unit,
+    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
     onWatchOffline: (String, Int, String, String) -> Unit = { _, _, _, _ -> },
     onLogout: () -> Unit = {},
     onExit: () -> Unit = {},
@@ -426,7 +426,7 @@ private fun TabContent(
     scheduleViewModel: ScheduleViewModel,
     settingsViewModel: SettingsViewModel,
     onAnimeClick: (String) -> Unit,
-    onWatchClick: (String, String, Int, String?) -> Unit,
+    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
     onWatchOffline: (String, Int, String, String) -> Unit,
     onLogout: () -> Unit,
     onViewContinueWatchingMore: () -> Unit,
@@ -500,7 +500,7 @@ private fun TabContent(
 private fun HomeContent(
     state: HomeUiState,
     onAnimeClick: (String) -> Unit,
-    onWatchClick: (String, String, Int, String?) -> Unit,
+    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
     onRefresh: () -> Unit = {},
     onViewContinueWatchingMore: () -> Unit = {},
@@ -517,7 +517,7 @@ private fun HomeContent(
                 HeroCarousel(
                     items = state.latestAired,
                     onAnimeClick = { onAnimeClick(it.activeSlug) },
-                    onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null) },
+                    onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null, null) },
                     onWatchlistClick = onWatchlistClick
                 )
             }
@@ -535,7 +535,7 @@ private fun HomeContent(
             SectionHeader(title = "Continue Watching", onViewMore = onViewContinueWatchingMore)
             ContinueWatchingRow(
                 items = state.continueWatching,
-                onWatchClick = { id, lang, ep, server -> onWatchClick(id, lang, ep, server) },
+                onWatchClick = onWatchClick,
             )
             Spacer(Modifier.height(24.dp))
         }
@@ -1078,7 +1078,7 @@ private fun FanCarousel(
 @Composable
 private fun ContinueWatchingRow(
     items: List<ContinueWatchingItem>,
-    onWatchClick: (String, String, Int, String?) -> Unit,
+    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -1106,7 +1106,7 @@ private fun ContinueWatchingRow(
                 Modifier
                     .width(260.dp)
                     .hoverable(inter)
-                    .clickable { onWatchClick(animeId, lang, item.displayEpisode, server) }
+                    .clickable { onWatchClick(animeId, lang, item.displayEpisode, server, item.progress) }
             ) {
                 Box(
                     Modifier

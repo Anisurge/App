@@ -50,7 +50,7 @@ import to.kuudere.anisuge.data.models.ContinueWatchingItem
 @Composable
 fun ContinueWatchingScreen(
     viewModel: HomeViewModel,
-    onWatchClick: (String, String, Int, String?) -> Unit,
+    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
     onBack: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -126,7 +126,7 @@ fun ContinueWatchingScreen(
                             ContinueWatchingGridCard(
                                 item = item,
                                 onClick = {
-                                    onWatchClick(item.animeId, item.language ?: "sub", item.displayEpisode, item.server)
+                                    onWatchClick(item.animeId, item.language ?: "sub", item.displayEpisode, item.server, item.progress)
                                 }
                             )
                         }

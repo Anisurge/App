@@ -29,20 +29,28 @@ sealed class Screen(val route: String) {
         val server: String? = null,
         val lang: String? = null,
         val offlinePath: String? = null,
-        val offlineTitle: String? = null
+        val offlineTitle: String? = null,
+        /** Seconds; from continue-watching feed when API watch info omits progress.current_time */
+        val resumeAtSeconds: Double? = null,
     ) : Screen(
         "watch/$animeId/$episodeNumber" + buildString {
-            if (server != null || lang != null || offlinePath != null || offlineTitle != null) append("?")
             val params = mutableListOf<String>()
             if (server != null) params.add("server=$server")
             if (lang != null) params.add("lang=$lang")
             if (offlinePath != null) params.add("offlinePath=$offlinePath")
             if (offlineTitle != null) params.add("offlineTitle=$offlineTitle")
-            append(params.joinToString("&"))
+            if (resumeAtSeconds != null && resumeAtSeconds >= 1.0) {
+                params.add("resumeAt=$resumeAtSeconds")
+            }
+            if (params.isNotEmpty()) {
+                append("?")
+                append(params.joinToString("&"))
+            }
         }
     ) {
         companion object {
-            const val route = "watch/{animeId}/{episodeNumber}?server={server}&lang={lang}&offlinePath={offlinePath}&offlineTitle={offlineTitle}"
+            const val route =
+                "watch/{animeId}/{episodeNumber}?server={server}&lang={lang}&offlinePath={offlinePath}&offlineTitle={offlineTitle}&resumeAt={resumeAt}"
         }
     }
 
