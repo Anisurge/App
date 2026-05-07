@@ -487,7 +487,8 @@ class WatchViewModel(
      * Get server info by ID
      */
     fun getServerInfo(serverId: String): ServerInfo? {
-        return serverRepository.getServerById(serverId)
+        return serverRepository.getSelectableServerInfo(serverId)
+            ?: serverRepository.getServerById(serverId)
     }
 
     fun toggleSettingsOverlay(page: SettingsMenuPage? = null) {

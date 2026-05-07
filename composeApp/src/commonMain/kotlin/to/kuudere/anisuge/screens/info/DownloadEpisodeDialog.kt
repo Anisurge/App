@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
+import to.kuudere.anisuge.data.models.expandForSelection
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
 import io.ktor.client.statement.bodyAsText
@@ -98,13 +99,15 @@ fun DownloadEpisodeDialog(
     val downloadTasks by to.kuudere.anisuge.utils.DownloadManager.tasks.collectAsState()
     val currentTask = downloadTasks.find { it.animeId == animeId && it.episodeNumber == episodeNumber }
 
-    val availableServers = serverRepository.servers.collectAsState()
-    val defaultServer = availableServers.value.firstOrNull()?.id ?: "suzu"
+    val catalogServers = serverRepository.servers.collectAsState()
+    val selectableServers = remember(catalogServers.value) {
+        catalogServers.value.expandForSelection()
+    }
 
     // Update selected server when repository loads
-    LaunchedEffect(availableServers.value) {
-        if (selectedServer !in availableServers.value.map { it.id } && availableServers.value.isNotEmpty()) {
-            selectedServer = defaultServer
+    LaunchedEffect(selectableServers) {
+        if (selectableServers.none { it.id == selectedServer } && selectableServers.isNotEmpty()) {
+            selectedServer = selectableServers.first().id
         }
     }
 
@@ -308,8 +311,8 @@ fun DownloadEpisodeDialog(
                         ),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(availableServers.value.size) { index ->
-                        val server = availableServers.value[index]
+                    items(selectableServers.size) { index ->
+                        val server = selectableServers[index]
                         val isSelected = server.id == selectedServer
                         Box(
                             modifier = Modifier
@@ -327,37 +330,6 @@ fun DownloadEpisodeDialog(
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
-                        }
-                    }
-                }
-            }
-
-            val selectedServerInfo = availableServers.value.find { it.id == selectedServer }
-            if (selectedServerInfo?.type == "sub_dub" && !selectedServer.endsWith("-dub", ignoreCase = true)) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Episode audio", color = Color.Gray, fontSize = 14.sp)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(false to "Sub", true to "Dub").forEach { (dub, label) ->
-                            val isSel = preferBatchDub == dub
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSel) Color.White else Color(0xFF000000))
-                                    .clickable { preferBatchDub = dub }
-                                    .padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    color = if (isSel) Color.Black else Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
                         }
                     }
                 }
