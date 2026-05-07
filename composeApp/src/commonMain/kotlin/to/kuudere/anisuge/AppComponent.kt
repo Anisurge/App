@@ -17,6 +17,8 @@ import to.kuudere.anisuge.data.services.SearchService
 
 object AppComponent {
     const val BASE_URL = "https://api.reanime.to/api/v1"
+    /** Public catalog for batch_scrape source ids (Next site); not the Project-R API host. */
+    const val STREAMING_SERVERS_CATALOG_URL = "https://www.anisurge.lol/api/v1/streaming/servers"
     const val STREAMING_URL = "https://fetch.anisurge.lol/api"
 
     val httpClient: HttpClient by lazy {

@@ -111,7 +111,8 @@ object DownloadManager {
         audioLang: String?,
         downloadFonts: Boolean,
         headers: Map<String, String>? = null,
-        m3u8Url: String? = null
+        m3u8Url: String? = null,
+        preferBatchDub: Boolean = false,
     ) {
         val taskId = "${animeId}_$episodeNumber"
         val existing = tasks.value.find { it.id == taskId }
@@ -124,7 +125,7 @@ object DownloadManager {
         tasks.update { it + newTask }
         saveTasks()
 
-        executeDownload(newTask, anilistId, server, subLang, audioLang, downloadFonts, m3u8Url)
+        executeDownload(newTask, anilistId, server, subLang, audioLang, downloadFonts, m3u8Url, preferBatchDub)
     }
 
     private fun executeDownload(
@@ -134,7 +135,8 @@ object DownloadManager {
         subLang: String?,
         audioLang: String?,
         downloadFonts: Boolean,
-        preResolvedM3u8: String? = null
+        preResolvedM3u8: String? = null,
+        preferBatchDub: Boolean = false,
     ) {
         val taskId = task.id
         val taskHeaders = task.headers
@@ -149,12 +151,20 @@ object DownloadManager {
                     m3u8Url = preResolvedM3u8
                     currentHeaders = (taskHeaders ?: emptyMap()).toMutableMap()
                 } else {
-                    // 1. Fetch stream URL via batch_scrape
-                    val isDubServer = server.endsWith("-dub", ignoreCase = true)
-                    val apiServer = if (isDubServer) server.substringBeforeLast("-dub") else server
+                    val legacyDub = server.endsWith("-dub", ignoreCase = true)
+                    val apiServer = if (legacyDub) server.dropLast(4) else server
+                    val meta = AppComponent.serverRepository.getServerById(server)
+                        ?: AppComponent.serverRepository.getServerById(apiServer)
+                    val useDub = when {
+                        legacyDub -> true
+                        meta?.type == "dub" -> true
+                        meta?.type == "sub" -> false
+                        else -> preferBatchDub
+                    }
+
                     val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
 
-                    var streamData = if (isDubServer) response?.dub else response?.sub
+                    var streamData = if (useDub) response?.dub else response?.sub
                     var streamInfo = streamData?.streams?.firstOrNull()
 
                     // For suzu server, fetch fresh stream URLs from the embed page
@@ -178,7 +188,7 @@ object DownloadManager {
                                         )
                                     )
                                 }
-                                val targetStreams = if (isDubServer) {
+                                val targetStreams = if (useDub) {
                                     freshStreams.filter { it.quality.equals("Dub", ignoreCase = true) }
                                 } else {
                                     freshStreams.filter { !it.quality.equals("Dub", ignoreCase = true) }

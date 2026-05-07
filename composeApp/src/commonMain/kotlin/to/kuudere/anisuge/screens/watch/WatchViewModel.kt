@@ -294,11 +294,15 @@ class WatchViewModel(
 
         val episodeNum = currState.currentEpisodeNumber
 
-        // Handle -dub suffix: "suzu-dub" -> API source "suzu", force dub section
-        val isDubServer = serverName.endsWith("-dub", ignoreCase = true)
-        val apiSource = if (isDubServer) serverName.substringBeforeLast("-dub") else serverName
-        // Determine if we should use dub: explicit -dub server, or targetLang is "dub"
-        val isDub = isDubServer || currState.targetLang == "dub"
+        val legacyDub = serverName.endsWith("-dub", ignoreCase = true)
+        val apiSource = if (legacyDub) serverName.dropLast(4) else serverName
+        val meta = serverRepository.getServerById(serverName)
+            ?: serverRepository.getServerById(apiSource)
+        val isDub = legacyDub || when (meta?.type) {
+            "sub" -> false
+            "dub" -> true
+            else -> currState.targetLang == "dub"
+        }
 
         _uiState.update { it.copy(isLoadingVideo = true, currentServer = serverName, loadingMessage = "Fetching streaming URL...") }
 
