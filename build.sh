@@ -10,8 +10,8 @@ export JAVA_HOME=/opt/jdk-17.0.13+11
 export PATH=$JAVA_HOME/bin:$PATH
 
 # Default values from libs.versions.toml or overrides
-VERSION_NAME="${1:-0.9.9}"
-BUILD_NUMBER="${2:-2}"
+VERSION_NAME="${1:-0.9.21}"
+BUILD_NUMBER="${2:-34}"
 
 echo "----------------------------------------------------"
 echo "🚀 Starting Anisurge Build Process"
