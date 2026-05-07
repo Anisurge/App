@@ -854,7 +854,8 @@ private fun MobileSettingsDetail(
                 is SettingsTab.Appearance -> AppearanceTab(
                     uiState = uiState,
                     onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
-                    onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav
+                    onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
+                    onPreferNativeAnimeTitlesChange = viewModel::setPreferNativeAnimeTitles,
                 )
                 is SettingsTab.Storage -> MobileStorageContent(
                     uiState = uiState,
@@ -918,7 +919,8 @@ private fun SettingsContent(
             is SettingsTab.Appearance -> AppearanceTab(
                 uiState = uiState,
                 onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
-                onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav
+                onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
+                onPreferNativeAnimeTitlesChange = viewModel::setPreferNativeAnimeTitles,
             )
             is SettingsTab.Storage -> StorageTab(
                 uiState = uiState,
@@ -952,6 +954,7 @@ private fun AppearanceTab(
     uiState: SettingsUiState,
     onFloatingBottomNavChange: (Boolean) -> Unit,
     onLiquidGlassBottomNavChange: (Boolean) -> Unit,
+    onPreferNativeAnimeTitlesChange: (Boolean) -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -962,6 +965,20 @@ private fun AppearanceTab(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 32.dp)
         )
+
+        SettingCard(
+            title = strings.animeTitlesDisplay,
+            description = strings.animeTitlesDisplayDescription,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            SettingToggle(
+                checked = uiState.preferNativeAnimeTitles,
+                onCheckedChange = onPreferNativeAnimeTitlesChange,
+                label = strings.showNativeAnimeTitles
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         SettingCard(
             title = strings.mobileNavigation,

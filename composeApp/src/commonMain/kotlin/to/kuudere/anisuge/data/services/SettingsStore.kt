@@ -33,6 +33,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val FLOATING_BOTTOM_NAV_KEY = booleanPreferencesKey("floating_bottom_nav")
         val LIQUID_GLASS_BOTTOM_NAV_KEY = booleanPreferencesKey("liquid_glass_bottom_nav")
         val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
+        val PREFER_NATIVE_ANIME_TITLES_KEY = booleanPreferencesKey("prefer_native_anime_titles")
 
         private val json = Json { ignoreUnknownKeys = true }
     }
@@ -51,6 +52,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val floatingBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[FLOATING_BOTTOM_NAV_KEY] ?: true }
     val liquidGlassBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[LIQUID_GLASS_BOTTOM_NAV_KEY] ?: false }
     val appLocaleFlow: Flow<String> = dataStore.data.map { it[APP_LOCALE_KEY] ?: "en" }
+    val preferNativeAnimeTitlesFlow: Flow<Boolean> = dataStore.data.map { it[PREFER_NATIVE_ANIME_TITLES_KEY] ?: false }
 
     val serverPriorityFlow: Flow<List<String>> = dataStore.data.map { preferences ->
         val jsonStr = preferences[SERVER_PRIORITY_KEY]
@@ -86,6 +88,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     suspend fun setFloatingBottomNav(enabled: Boolean) { dataStore.edit { it[FLOATING_BOTTOM_NAV_KEY] = enabled } }
     suspend fun setLiquidGlassBottomNav(enabled: Boolean) { dataStore.edit { it[LIQUID_GLASS_BOTTOM_NAV_KEY] = enabled } }
     suspend fun setAppLocale(localeCode: String) { dataStore.edit { it[APP_LOCALE_KEY] = localeCode } }
+    suspend fun setPreferNativeAnimeTitles(enabled: Boolean) { dataStore.edit { it[PREFER_NATIVE_ANIME_TITLES_KEY] = enabled } }
 
     suspend fun getOrCreateAnalyticsInstallId(): String {
         val prefs = dataStore.data.first()

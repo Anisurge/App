@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import to.kuudere.anisuge.data.models.ScheduleAnime
+import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.OfflineState
 import to.kuudere.anisuge.ui.tvFocusableClick
 import to.kuudere.anisuge.i18n.LocalAppStrings
@@ -472,7 +473,7 @@ private fun AnimeScheduleCard(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    anime.displayTitle,
+                    anime.resolveDisplayTitle(),
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,

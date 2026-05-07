@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.i18n.resolveDisplayTitle
 
 /**
  * Reusable anime card — 1:1 replica of the SvelteKit AnimeCard.svelte.
@@ -82,7 +83,7 @@ fun AnimeCard(
             }
             AsyncImage(
                 model              = url,
-                contentDescription = item.displayTitle,
+                contentDescription = item.resolveDisplayTitle(),
                 contentScale       = ContentScale.Crop,
                 modifier           = Modifier.fillMaxSize()
             )
@@ -219,7 +220,7 @@ fun AnimeCard(
                 )
                 // .title: font-size:14px; font-weight:500; line-clamp:1
                 Text(
-                    text       = item.displayTitle,
+                    text       = item.resolveDisplayTitle(),
                     color      = Color.White,
                     fontSize   = 14.sp,
                     fontWeight = FontWeight.Medium,

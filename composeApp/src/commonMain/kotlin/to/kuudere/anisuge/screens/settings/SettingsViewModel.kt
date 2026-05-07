@@ -54,6 +54,7 @@ data class SettingsUiState(
     val floatingBottomNav: Boolean = true,
     val liquidGlassBottomNav: Boolean = false,
     val appLocale: AppLocale = AppLocale.default,
+    val preferNativeAnimeTitles: Boolean = false,
 
     val notificationsEnabled: Boolean = true,
     val hasNotificationPrefsChanges: Boolean = false,
@@ -154,6 +155,11 @@ class SettingsViewModel(
         viewModelScope.launch { settingsStore.floatingBottomNavFlow.collect { v -> _uiState.update { it.copy(floatingBottomNav = v) } } }
         viewModelScope.launch { settingsStore.liquidGlassBottomNavFlow.collect { v -> _uiState.update { it.copy(liquidGlassBottomNav = v) } } }
         viewModelScope.launch { settingsStore.appLocaleFlow.collect { code -> _uiState.update { it.copy(appLocale = AppLocale.fromCode(code)) } } }
+        viewModelScope.launch {
+            settingsStore.preferNativeAnimeTitlesFlow.collect { v ->
+                _uiState.update { it.copy(preferNativeAnimeTitles = v) }
+            }
+        }
     }
 
     fun refresh() {
@@ -198,6 +204,10 @@ class SettingsViewModel(
 
     fun setAppLocale(locale: AppLocale) {
         viewModelScope.launch { settingsStore.setAppLocale(locale.code) }
+    }
+
+    fun setPreferNativeAnimeTitles(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setPreferNativeAnimeTitles(enabled) }
     }
 
     // Profile

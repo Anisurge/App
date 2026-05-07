@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
+import to.kuudere.anisuge.i18n.resolveDisplayTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -156,7 +157,7 @@ private fun ContinueWatchingGridCard(
         ) {
             AsyncImage(
                 model = item.cover,
-                contentDescription = item.displayTitle,
+                contentDescription = item.resolveDisplayTitle(),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
@@ -216,7 +217,7 @@ private fun ContinueWatchingGridCard(
 
         Spacer(Modifier.height(8.dp))
         Text(
-            item.displayTitle,
+            item.resolveDisplayTitle(),
             color = Color.White,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
