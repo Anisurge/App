@@ -30,6 +30,10 @@ expect fun PlatformBackHandler(enabled: Boolean = true, onBack: () -> Unit)
 @Composable
 expect fun SyncFullscreen(isFullscreen: Boolean)
 
+/** Desktop-only: hides/shows OS cursor (no-op on Android). */
+@Composable
+expect fun SyncCursorHidden(hidden: Boolean)
+
 /** Opens a URL in the platform's default browser */
 fun openUrl(url: String) {
     internalOpenUrl(url)

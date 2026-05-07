@@ -121,6 +121,11 @@ actual fun SyncFullscreen(isFullscreen: Boolean) {
     // Android is mostly handled by LockScreenOrientation's insets controller
 }
 
+@Composable
+actual fun SyncCursorHidden(hidden: Boolean) {
+    // No-op on Android.
+}
+
 
 
 

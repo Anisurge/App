@@ -5,8 +5,17 @@ import okio.sink
 import okio.buffer
 import java.io.File
 import java.util.UUID
+import java.awt.Cursor
+import java.awt.Toolkit
+import java.awt.image.BufferedImage
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
@@ -74,8 +83,42 @@ actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
 @Composable
 actual fun SyncFullscreen(isFullscreen: Boolean) {
     val windowState = LocalWindowState.current
-    androidx.compose.runtime.LaunchedEffect(isFullscreen) {
-        windowState.placement = if (isFullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
+    var previousPlacement by remember { mutableStateOf<WindowPlacement?>(null) }
+    var enteredFullscreenViaPlayer by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isFullscreen) {
+        if (isFullscreen) {
+            if (windowState.placement != WindowPlacement.Fullscreen) {
+                previousPlacement = windowState.placement
+                enteredFullscreenViaPlayer = true
+                windowState.placement = WindowPlacement.Fullscreen
+            }
+            return@LaunchedEffect
+        }
+
+        if (enteredFullscreenViaPlayer && windowState.placement == WindowPlacement.Fullscreen) {
+            windowState.placement = previousPlacement ?: WindowPlacement.Floating
+        }
+        enteredFullscreenViaPlayer = false
+        previousPlacement = null
+    }
+}
+
+@Composable
+actual fun SyncCursorHidden(hidden: Boolean) {
+    val window = LocalWindowScope.current.window
+    val defaultCursor = remember { Cursor.getDefaultCursor() }
+    val transparentCursor = remember {
+        val img = BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB)
+        Toolkit.getDefaultToolkit().createCustomCursor(img, java.awt.Point(0, 0), "transparent")
+    }
+
+    DisposableEffect(hidden) {
+        window.cursor = if (hidden) transparentCursor else defaultCursor
+        onDispose {
+            // Always restore when leaving the player composition.
+            window.cursor = defaultCursor
+        }
     }
 }
 
