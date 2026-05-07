@@ -47,6 +47,10 @@ class VideoPlayerState(config: VideoPlayerConfig) {
     // Availability for next/prev buttons (controlled by screen logic)
     var hasNextEpisode  by mutableStateOf(false)
     var hasPrevEpisode  by mutableStateOf(false)
+
+    /** Bumped by desktop global media keys / MPRIS; observe in watch UI to change episode. */
+    var mediaNextEpisodeCount by mutableStateOf(0)
+    var mediaPrevEpisodeCount by mutableStateOf(0)
     
     // Extracted tracks (populated by player)
     var audioTracks     by mutableStateOf<List<Pair<Int, String>>>(emptyList())
