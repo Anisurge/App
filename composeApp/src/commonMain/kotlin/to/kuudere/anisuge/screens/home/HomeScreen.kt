@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -155,8 +154,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
-import kotlin.math.absoluteValue
 import androidx.compose.ui.platform.LocalWindowInfo
+import kotlin.math.absoluteValue
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
@@ -199,6 +198,7 @@ fun HomeScreen(
     onLogout: () -> Unit = {},
     onExit: () -> Unit = {},
     onViewContinueWatchingMore: () -> Unit = {},
+    onViewLatestEpisodesMore: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
 ) {
@@ -283,6 +283,7 @@ fun HomeScreen(
                                 onLogout = { showLogoutConfirm = true },
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onWatchlistClick = { showWatchlistFor = it },
+                                onViewLatestEpisodesMore = onViewLatestEpisodesMore,
                                 onSearchLatest = {
                                     searchViewModel.onSortChange("Latest")
                                     searchViewModel.search()
@@ -340,6 +341,7 @@ fun HomeScreen(
                                 onLogout = { showLogoutConfirm = true },
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onWatchlistClick = { showWatchlistFor = it },
+                                onViewLatestEpisodesMore = onViewLatestEpisodesMore,
                                 onSearchLatest = {
                                     searchViewModel.onSortChange("Latest")
                                     searchViewModel.search()
@@ -432,6 +434,7 @@ private fun TabContent(
     onLogout: () -> Unit,
     onViewContinueWatchingMore: () -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
+    onViewLatestEpisodesMore: () -> Unit,
     onSearchLatest: () -> Unit,
     onExit: () -> Unit,
     initialSettingsTab: SettingsTab?,
@@ -473,6 +476,7 @@ private fun TabContent(
                                 onWatchlistClick = onWatchlistClick,
                                 onRefresh = { homeViewModel.refresh(force = true) },
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
+                                onViewLatestEpisodesMore = onViewLatestEpisodesMore,
                                 onViewNewOnAppMore = onSearchLatest,
                                 onExit = onExit
                             )
@@ -505,6 +509,7 @@ private fun HomeContent(
     onWatchlistClick: (AnimeItem) -> Unit,
     onRefresh: () -> Unit = {},
     onViewContinueWatchingMore: () -> Unit = {},
+    onViewLatestEpisodesMore: () -> Unit = {},
     onViewNewOnAppMore: () -> Unit = {},
     onExit: () -> Unit = {},
 ) {
@@ -541,10 +546,20 @@ private fun HomeContent(
             Spacer(Modifier.height(24.dp))
         }
 
+        // ── Latest Episodes (releases) ─────────────────────────────────
+        if (state.latestAired.isNotEmpty()) {
+            AnimeSection(
+                title = "Latest Episodes",
+                items = state.latestAired,
+                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                onViewMoreClick = onViewLatestEpisodesMore,
+            )
+        }
+
         // ── New Additions ────────────────────────────────────────────────
         if (state.newOnSite.isNotEmpty()) {
             AnimeSection(
-                title = "New Additions",
+                title = "New on App",
                 items = state.newOnSite,
                 onItemClick = { item -> onAnimeClick(item.activeSlug) },
                 onViewMoreClick = onViewNewOnAppMore,
@@ -591,6 +606,7 @@ private fun HomeContent(
         }
     }
 }
+
 
 // ── Hero Carousel ──────────────────────────────────────────────────────────
 
@@ -1074,6 +1090,9 @@ private fun FanCarousel(
     }
 }
 
+
+
+
 // ── Continue Watching Row ──────────────────────────────────────────────────
 
 @Composable
@@ -1263,6 +1282,7 @@ private fun SectionHeader(title: String, onViewMore: (() -> Unit)?) {
     }
 }
 
+
 @Composable
 private fun SpotlightTag(index: Int) {
     Row(
@@ -1327,6 +1347,7 @@ private fun stripHtmlTags(htmlContent: String): String {
     val div   = p.replace(Regex("</div>", RegexOption.IGNORE_CASE), "\n")
     return div.replace(Regex("<[^>]*>"), "").trim()
 }
+
 
 /** Profile / CDN paths from Project-R: absolute URL or path relative to API host. */
 private fun resolveProfileImageUrl(raw: String?): String? {
