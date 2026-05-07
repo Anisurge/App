@@ -3,26 +3,17 @@ package to.kuudere.anisuge.notifications
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import to.kuudere.anisuge.data.services.SettingsStore
-import to.kuudere.anisuge.platform.androidAppContext
 
 class AnisurgeMessagingService : FirebaseMessagingService() {
 
     companion object {
         private const val TAG = "AnisurgeFCM"
-
-        // FCM topics for each notification type
-        const val TOPIC_ALL = "anisurge_all"
-        const val TOPIC_NEW_EPISODE = "anisurge_new_episode"
-        const val TOPIC_DONATION = "anisurge_donation"
-        const val TOPIC_ANNOUNCEMENT = "anisurge_announcement"
-        const val TOPIC_MAINTENANCE = "anisurge_maintenance"
     }
 
     override fun onNewToken(token: String) {
         Log.d(TAG, "FCM token refreshed: ${token.take(10)}...")
         // Token is managed by FCM — no need to send it to a server
-        // since we use topics for broadcast notifications
+        // since we use topics for broadcast notifications.
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -33,7 +24,7 @@ class AnisurgeMessagingService : FirebaseMessagingService() {
         val title = data["title"] ?: message.notification?.title ?: "Anisurge"
         val body = data["body"] ?: message.notification?.body ?: return
 
-        // Check if notifications are enabled (master toggle)
+        // Check if notifications are enabled (master toggle).
         val settingsStore = to.kuudere.anisuge.AppComponent.settingsStore
         if (!settingsStore.notificationsEnabledBlocking()) {
             Log.d(TAG, "Notifications disabled, skipping")

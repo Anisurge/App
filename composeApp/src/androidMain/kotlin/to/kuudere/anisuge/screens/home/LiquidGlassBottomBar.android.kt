@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -56,6 +55,8 @@ import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
+import androidx.compose.foundation.shape.RoundedCornerShape
+import to.kuudere.anisuge.ui.tvFocusableClick
 
 internal val LocalLiquidBottomTabScale = staticCompositionLocalOf<() -> Float> { { 1f } }
 
@@ -229,7 +230,7 @@ internal fun RowScope.LiquidBottomBarIcon(
                 scaleX = animatedScale
                 scaleY = animatedScale
             }
-            .clickable { onClick() },
+            .tvFocusableClick(shape = RoundedCornerShape(16.dp), onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(

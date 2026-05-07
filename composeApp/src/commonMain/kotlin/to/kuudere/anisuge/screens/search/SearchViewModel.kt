@@ -38,6 +38,32 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
         search()
     }
 
+    /**
+     * Apply a preset search configuration in a single state update.
+     * Used for dedicated "browse" screens (e.g. New on App) without navigating to the Search tab.
+     */
+    fun applyPreset(
+        keyword: String = "",
+        selectedGenres: List<String> = emptyList(),
+        selectedSeason: String? = null,
+        selectedYear: String? = null,
+        selectedType: String? = null,
+        selectedStatus: String? = null,
+        selectedSort: String? = "Popularity",
+    ) {
+        searchJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            keyword = keyword,
+            selectedGenres = selectedGenres,
+            selectedSeason = selectedSeason,
+            selectedYear = selectedYear,
+            selectedType = selectedType,
+            selectedStatus = selectedStatus,
+            selectedSort = selectedSort,
+        )
+        search()
+    }
+
     fun onKeywordChange(keyword: String) {
         _uiState.value = _uiState.value.copy(keyword = keyword)
         searchJob?.cancel()

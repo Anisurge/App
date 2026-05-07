@@ -40,6 +40,8 @@ import to.kuudere.anisuge.screens.settings.SettingsScreen
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
 import to.kuudere.anisuge.screens.latest.LatestEpisodesScreen
 import to.kuudere.anisuge.screens.latest.LatestViewModel
+import to.kuudere.anisuge.screens.newonapp.NewOnAppScreen
+import to.kuudere.anisuge.screens.tv.TvAppShell
 import to.kuudere.anisuge.theme.AnisugTheme
 import androidx.navigation.NamedNavArgument
 import androidx.navigation.navArgument
@@ -255,30 +257,48 @@ fun App(
                 ) { backStackEntry ->
                     val downloadsArg = backStackEntry.arguments.str("downloads") == "true"
                     val requestedTab = backStackEntry.arguments.str("tab")
-                    HomeScreen(
-                        homeViewModel = homeVm,
-                        searchViewModel = searchVm,
-                        watchlistViewModel = watchlistVm,
-                        scheduleViewModel = scheduleVm,
-                        settingsViewModel = settingsVm,
-                        onAnimeClick = { animeId -> navController.navigate(Screen.Info(animeId).route) },
-                        onWatchClick = { id, lang, ep, server, resumeAt ->
-                            navController.navigate(Screen.Watch(id, ep, server, lang, resumeAtSeconds = resumeAt).route)
-                        },
-                        onWatchOffline = { id, ep, path, title ->
-                            navController.navigate(Screen.Watch(id, ep, offlinePath = path, offlineTitle = title).route)
-                        },
-                        onLogout = {
-                            navController.navigate(Screen.Auth.route) {
-                                popUpTo(Screen.Home().route) { inclusive = true }
-                            }
-                        },
-                        onExit = onAppExit,
-                        onViewContinueWatchingMore = { navController.navigate(Screen.ContinueWatching.route) },
-                        onViewLatestEpisodesMore = { navController.navigate(Screen.Latest.route) },
-                        startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
-                        startTab = requestedTab
-                    )
+                    if (isAndroidTvPlatform) {
+                        TvAppShell(
+                            homeViewModel = homeVm,
+                            searchViewModel = searchVm,
+                            watchlistViewModel = watchlistVm,
+                            onAnimeClick = { animeId -> navController.navigate(Screen.Info(animeId).route) },
+                            onWatchClick = { id, lang, ep, server, resumeAt ->
+                                navController.navigate(Screen.Watch(id, ep, server, lang, resumeAtSeconds = resumeAt).route)
+                            },
+                            onLogout = {
+                                navController.navigate(Screen.Auth.route) {
+                                    popUpTo(Screen.Home().route) { inclusive = true }
+                                }
+                            },
+                        )
+                    } else {
+                        HomeScreen(
+                            homeViewModel = homeVm,
+                            searchViewModel = searchVm,
+                            watchlistViewModel = watchlistVm,
+                            scheduleViewModel = scheduleVm,
+                            settingsViewModel = settingsVm,
+                            onAnimeClick = { animeId -> navController.navigate(Screen.Info(animeId).route) },
+                            onWatchClick = { id, lang, ep, server, resumeAt ->
+                                navController.navigate(Screen.Watch(id, ep, server, lang, resumeAtSeconds = resumeAt).route)
+                            },
+                            onWatchOffline = { id, ep, path, title ->
+                                navController.navigate(Screen.Watch(id, ep, offlinePath = path, offlineTitle = title).route)
+                            },
+                            onLogout = {
+                                navController.navigate(Screen.Auth.route) {
+                                    popUpTo(Screen.Home().route) { inclusive = true }
+                                }
+                            },
+                            onExit = onAppExit,
+                            onViewContinueWatchingMore = { navController.navigate(Screen.ContinueWatching.route) },
+                            onViewLatestEpisodesMore = { navController.navigate(Screen.Latest.route) },
+                            onViewNewOnAppMore = { navController.navigate(Screen.NewOnApp.route) },
+                            startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
+                            startTab = requestedTab
+                        )
+                    }
                 }
 
                 composable(Screen.Search.route) {
@@ -352,6 +372,14 @@ fun App(
                 composable(Screen.Latest.route) {
                     LatestEpisodesScreen(
                         viewModel = latestVm,
+                        onAnimeClick = { animeId -> navController.navigate(Screen.Info(animeId).route) },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.NewOnApp.route) {
+                    NewOnAppScreen(
+                        viewModel = searchVm,
                         onAnimeClick = { animeId -> navController.navigate(Screen.Info(animeId).route) },
                         onBack = { navController.popBackStack() }
                     )

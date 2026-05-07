@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.services.LatestService
 import to.kuudere.anisuge.utils.isNetworkError
@@ -17,6 +18,7 @@ data class LatestUiState(
     val nextCursor: String? = null,
     val hasMore: Boolean = true,
     val isOffline: Boolean = false,
+    val error: String? = null,
 )
 
 class LatestViewModel(private val latestService: LatestService) : ViewModel() {
@@ -28,20 +30,28 @@ class LatestViewModel(private val latestService: LatestService) : ViewModel() {
     }
 
     fun refresh() = viewModelScope.launch {
-        _uiState.value = _uiState.value.copy(isLoading = true, results = emptyList(), nextCursor = null)
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            results = emptyList(),
+            nextCursor = null,
+            hasMore = true,
+            isOffline = false,
+            error = null,
+        )
         loadPage(null)
     }
 
     fun loadMore() = viewModelScope.launch {
         val state = _uiState.value
         if (state.isLoadingMore || !state.hasMore) return@launch
-        _uiState.value = state.copy(isLoadingMore = true)
+        _uiState.value = state.copy(isLoadingMore = true, error = null)
         loadPage(state.nextCursor)
     }
 
     private suspend fun loadPage(cursor: String?) {
         try {
-            val response = latestService.getLatestAired(cursor = cursor)
+            // Fail fast instead of leaving the UI "stuck loading" on flaky networks.
+            val response = withTimeout(15_000) { latestService.getLatestAired(cursor = cursor) }
             if (response != null) {
                 val newItems = response.episodes
                 val currentState = _uiState.value
@@ -50,14 +60,26 @@ class LatestViewModel(private val latestService: LatestService) : ViewModel() {
                     isLoading = false,
                     isLoadingMore = false,
                     isOffline = false,
+                    error = null,
                     hasMore = response.nextCursor != null,
                     nextCursor = response.nextCursor
                 )
             } else {
-                _uiState.value = _uiState.value.copy(isLoading = false, isLoadingMore = false)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isLoadingMore = false,
+                    isOffline = false,
+                    error = "Failed to load latest episodes.",
+                )
             }
         } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(isLoading = false, isLoadingMore = false, isOffline = e.isNetworkError())
+            val offline = e.isNetworkError()
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                isLoadingMore = false,
+                isOffline = offline,
+                error = if (offline) null else (e.message ?: "Failed to load latest episodes."),
+            )
         }
     }
 }

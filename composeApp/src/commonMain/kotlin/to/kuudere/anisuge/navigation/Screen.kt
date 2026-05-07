@@ -56,6 +56,7 @@ sealed class Screen(val route: String) {
 
     data object Settings : Screen("settings")
     data object Latest : Screen("latest")
+    data object NewOnApp : Screen("new-on-app")
     data object ContinueWatching : Screen("continue-watching")
     data class Update(val nextRoute: String) : Screen("update?next=${nextRoute.replace("/", "_")}") {
         companion object {

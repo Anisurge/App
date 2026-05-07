@@ -79,6 +79,19 @@ fun LatestEpisodesScreen(
 
             if (showOffline) {
                 OfflineState(onRetry = { viewModel.refresh() }, isLoading = state.isLoading)
+            } else if (state.error != null && state.results.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(state.error!!, color = Color.White.copy(alpha = 0.7f))
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = { viewModel.refresh() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))
+                        ) {
+                            Text("Retry")
+                        }
+                    }
+                }
             } else {
                 LazyVerticalGrid(
                     columns = columns,
@@ -102,6 +115,30 @@ fun LatestEpisodesScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 CircularProgressIndicator(color = Color.White)
+                            }
+                        }
+                    } else if (state.results.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        "No episodes to show.",
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontSize = 14.sp
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Button(
+                                        onClick = { viewModel.refresh() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))
+                                    ) {
+                                        Text("Retry")
+                                    }
+                                }
                             }
                         }
                     } else {

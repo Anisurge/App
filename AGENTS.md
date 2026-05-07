@@ -17,10 +17,10 @@
 - API networking config lives in `composeApp/src/commonMain/kotlin/to/kuudere/anisuge/data/network/ApiConfig.kt`; canonical contract reference is `api.md` at the project root
 - Streaming scrape URL shape: `https://fetch.anisurge.lol/api?action=batch_scrape&anilistId={id}&episode={epi}&source={server}` — Suzu needs a proxy/player Referer wiring; AnimePahe streams are typically direct playable URLs
 - Public streaming server catalog/list used for picker/settings aligns with `https://www.anisurge.lol/api/v1/streaming/servers` (config should stay in sync with deployed site/API)
+- App update checks call `GET https://www.anisurge.lol/api/app/updates` (via `UpdateService.checkUpdate()`); the website route can source latest versions from release data
 - Backend Project-R APIs use the `anisurge.qzz.io` subdomain layout (avoid inventing unrelated hostnames)
 - Watchlist folder strings expected by API/UI are uppercase: `WATCHING`, `PLANNING`, `COMPLETED`, `PAUSED`, `DROPPED`
 - Lightweight client analytics/install pings exist to support aggregate usage on the admin dashboard (keep payloads minimal/non-identifying in code reviews)
 - Service implementations live under `composeApp/src/commonMain/kotlin/to/kuudere/anisuge/data/services/`; shared models under `data/models/`; screens and ViewModels under `screens/`
 - Builds in this repo often pass `--no-configuration-cache` when running Gradle wrapper tasks from docs/automation
 - Navigation uses Jetpack Navigation Compose with path parameters (for example `info/{animeId}`)
-- Typical API payloads use nested DTO shapes (object titles such as `{english, romaji, native}`, cover images with `{medium, large}`, etc.)
