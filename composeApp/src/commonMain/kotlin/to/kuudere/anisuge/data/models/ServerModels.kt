@@ -19,9 +19,10 @@ data class ServerInfo(
         get() = label
 }
 
+/** Default catalog matches api.md Anime Streaming: one `source` id per provider; batch_scrape returns both `sub` and `dub`. */
 val FALLBACK_SERVERS = listOf(
-    ServerInfo(id = "suzu", label = "Suzu (Sub)", type = "sub", active = true),
-    ServerInfo(id = "suzu-dub", label = "Suzu (Dub)", type = "dub", active = true),
-    ServerInfo(id = "animepahe", label = "AnimePahe (Sub)", type = "sub", active = true),
-    ServerInfo(id = "animepahe-dub", label = "AnimePahe (Dub)", type = "dub", active = true),
+    ServerInfo(id = "zen2", label = "Zen-2", type = "sub_dub", active = false),
+    ServerInfo(id = "zen", label = "Zen", type = "sub_dub", active = true),
+    ServerInfo(id = "suzu", label = "Suzu", type = "sub_dub", active = true),
+    ServerInfo(id = "animepahe", label = "AnimePahe", type = "sub_dub", active = true),
 )

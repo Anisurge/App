@@ -50,12 +50,15 @@ fun DownloadEpisodeDialog(
     infoService: InfoService,
     serverRepository: ServerRepository,
     onDismiss: () -> Unit,
-    onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?, m3u8Url: String?) -> Unit
+    onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?, m3u8Url: String?, preferBatchDub: Boolean) -> Unit
 ) {
     val strings = LocalAppStrings.current
     var selectedServer by remember { mutableStateOf("suzu") }
     var selectedSubLang by remember { mutableStateOf<String?>("English") }
-    var selectedAudioLang by remember { mutableStateOf<String?>("sub") } // 'sub' or 'dub'
+    /** HLS audio track code after playlist parse (e.g. jpn); unrelated to batch_scrape sub/dub. */
+    var selectedAudioLang by remember { mutableStateOf<String?>("sub") }
+    /** For providers with one `source` id and both `sub` / `dub` in batch_scrape JSON (api.md). */
+    var preferBatchDub by remember { mutableStateOf(false) }
     var selectedQualityIndex by remember { mutableIntStateOf(0) }
     
     val serverListState = rememberLazyListState()
@@ -106,16 +109,27 @@ fun DownloadEpisodeDialog(
     }
 
     LaunchedEffect(selectedServer) {
+        preferBatchDub = false
+    }
+
+    LaunchedEffect(selectedServer, preferBatchDub) {
         isLoadingSubs = true
         estimatedSizeBytes = 0L
         availableQualities = emptyList()
         selectedQualityIndex = 0
         try {
-            // Handle -dub suffix: "suzu-dub" -> API source "suzu", fetch dub section
-            val isDubServer = selectedServer.endsWith("-dub", ignoreCase = true)
-            val apiSource = if (isDubServer) selectedServer.substringBeforeLast("-dub") else selectedServer
+            val legacyDub = selectedServer.endsWith("-dub", ignoreCase = true)
+            val apiSource = if (legacyDub) selectedServer.dropLast(4) else selectedServer
+            val meta = serverRepository.getServerById(selectedServer)
+                ?: serverRepository.getServerById(apiSource)
+            val useDubSection = when {
+                legacyDub -> true
+                meta?.type == "dub" -> true
+                meta?.type == "sub" -> false
+                else -> preferBatchDub
+            }
             val response = infoService.getVideoStream(anilistId, episodeNumber, apiSource)
-            var streamSection = if (isDubServer) response?.dub else response?.sub
+            var streamSection = if (useDubSection) response?.dub else response?.sub
             
             // 1. Subtitles
             val subs = emptyList<String>()
@@ -148,7 +162,7 @@ fun DownloadEpisodeDialog(
                                 )
                             )
                         }
-                        val targetStreams = if (isDubServer) {
+                        val targetStreams = if (useDubSection) {
                             freshStreams.filter { it.quality.equals("Dub", ignoreCase = true) }
                         } else {
                             freshStreams.filter { !it.quality.equals("Dub", ignoreCase = true) }
@@ -230,7 +244,7 @@ fun DownloadEpisodeDialog(
         to.kuudere.anisuge.utils.RequestStoragePermission { granted ->
             shouldRequestPermission = false
             if (granted) {
-                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8)
+                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
             }
         }
     }
@@ -249,7 +263,7 @@ fun DownloadEpisodeDialog(
             // We don't block download for now because it might still work in foreground, 
             // but user won't see notification. We just try to get it.
             if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8)
+                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
             } else {
                 shouldRequestPermission = true
             }
@@ -313,6 +327,37 @@ fun DownloadEpisodeDialog(
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
+                        }
+                    }
+                }
+            }
+
+            val selectedServerInfo = availableServers.value.find { it.id == selectedServer }
+            if (selectedServerInfo?.type == "sub_dub" && !selectedServer.endsWith("-dub", ignoreCase = true)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Episode audio", color = Color.Gray, fontSize = 14.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(false to "Sub", true to "Dub").forEach { (dub, label) ->
+                            val isSel = preferBatchDub == dub
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSel) Color.White else Color(0xFF000000))
+                                    .clickable { preferBatchDub = dub }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (isSel) Color.Black else Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                 }
@@ -528,7 +573,7 @@ fun DownloadEpisodeDialog(
                 to.kuudere.anisuge.utils.RequestStoragePermission { granted ->
                     shouldRequestPermission = false
                     if (granted) {
-                        onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8)
+                        onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
                     }
                 }
             }
@@ -560,7 +605,7 @@ fun DownloadEpisodeDialog(
                             if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
                                 shouldRequestNotificationPermission = true
                             } else if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8)
+                                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
                             } else {
                                 shouldRequestPermission = true
                             }

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +36,35 @@ class ServerRepository(
         private const val CACHE_KEY_TIMESTAMP = "servers_cache_timestamp"
         private const val REFRESH_INTERVAL_MS = 30 * 60 * 1000L
         private const val CACHE_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000L
+
+        /** Default stream `source` order when the user has not saved a custom priority (matches api.md / site catalog). */
+        val DEFAULT_STREAM_SOURCE_ORDER = listOf("zen2", "zen", "suzu", "animepahe")
+
+        /**
+         * Order for the Settings servers list — same rules as [ServerRepository.getFallbackPriority]
+         * so the UI matches playback fallback order.
+         */
+        fun sortServersForSettingsDisplay(
+            servers: List<ServerInfo>,
+            savedPriority: List<String>,
+        ): List<ServerInfo> {
+            if (servers.isEmpty()) return emptyList()
+            val ids = servers.map { it.id }.toSet()
+            if (savedPriority.isNotEmpty()) {
+                val headIds = savedPriority.filter { it in ids }
+                val head = headIds.mapNotNull { id -> servers.find { it.id == id } }
+                val tail = servers.filter { it.id !in headIds }
+                return head + tail
+            }
+            val headIds = buildList {
+                for (id in DEFAULT_STREAM_SOURCE_ORDER) {
+                    if (id in ids) add(id)
+                }
+            }
+            val head = headIds.mapNotNull { id -> servers.find { it.id == id } }
+            val tail = servers.filter { it.id !in headIds.toSet() }
+            return head + tail
+        }
     }
 
     private val json = Json {
@@ -87,10 +117,9 @@ class ServerRepository(
             filtered + newServers
         } else {
             val priority = mutableListOf<String>()
-            if (currentServers.contains("suzu")) priority.add("suzu")
-            if (currentServers.contains("suzu-dub")) priority.add("suzu-dub")
-            if (currentServers.contains("animepahe")) priority.add("animepahe")
-            if (currentServers.contains("animepahe-dub")) priority.add("animepahe-dub")
+            for (id in DEFAULT_STREAM_SOURCE_ORDER) {
+                if (id in currentServers) priority.add(id)
+            }
             priority.addAll(currentServers.filter { it !in priority })
             priority
         }
@@ -121,10 +150,13 @@ class ServerRepository(
 
         _isLoading.value = true
         return try {
-            val response = httpClient.get("${AppComponent.BASE_URL}/top/anime?limit=1")
-            // New API doesn't have a /servers endpoint, so we use hardcoded servers
-            // with active status from the streaming API documentation
-            val activeServers = FALLBACK_SERVERS.filter { it.active }
+            val response = httpClient.get(AppComponent.STREAMING_SERVERS_CATALOG_URL)
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("streaming servers HTTP ${response.status}")
+            }
+            val list = response.body<List<ServerInfo>>()
+            val activeServers = list.filter { it.active }
+                .ifEmpty { FALLBACK_SERVERS.filter { it.active } }
             _servers.value = activeServers
             cacheServers(activeServers)
             true

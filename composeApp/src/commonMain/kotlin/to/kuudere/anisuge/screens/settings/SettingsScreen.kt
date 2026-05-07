@@ -114,8 +114,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 
+import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.data.models.AnimeFolderInfo
+import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.platform.AppVersion
 import to.kuudere.anisuge.platform.AppBuildNumber
 import to.kuudere.anisuge.platform.PlatformName
@@ -2329,7 +2331,19 @@ private fun ServersTab(
             "Drag and drop the servers to change the order in which they are used to find streams.",
             color = MUTED,
             fontSize = 14.sp,
-            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
+            modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+        )
+        Text(
+            "The list is loaded from the site catalog (one source id per provider; Sub and Dub share the same entry).",
+            color = MUTED,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        Text(
+            AppComponent.STREAMING_SERVERS_CATALOG_URL,
+            color = MUTED.copy(alpha = 0.85f),
+            fontSize = 11.sp,
+            modifier = Modifier.padding(bottom = 24.dp)
         )
 
         if (uiState.isLoadingServers || uiState.availableServers.isEmpty()) {
@@ -2340,43 +2354,27 @@ private fun ServersTab(
                 CircularProgressIndicator(color = Color.White)
             }
         } else {
-            // Compute sorted servers based on priority
             val serverList = remember(uiState.availableServers, uiState.serverPriority) {
-                val priority = uiState.serverPriority
-                if (priority.isEmpty()) {
-                    // Default sort: zen2, zen, then others
-                    uiState.availableServers.sortedWith(compareBy(
-                        { it.id != "zen2" },
-                        { it.id != "zen" },
-                        { it.id }
-                    ))
-                } else {
-                    // User priority
-                    uiState.availableServers.sortedBy { server ->
-                        val index = priority.indexOf(server.id)
-                        if (index == -1) Int.MAX_VALUE else index
-                    }
-                }
+                ServerRepository.sortServersForSettingsDisplay(
+                    uiState.availableServers,
+                    uiState.serverPriority,
+                )
             }
 
-            // Local mutable state for reordering
             var localServerList by remember(serverList) {
                 mutableStateOf(serverList)
             }
 
-            // Update when priority changes
-            LaunchedEffect(uiState.serverPriority) {
+            LaunchedEffect(uiState.serverPriority, uiState.availableServers) {
                 localServerList = serverList
             }
 
-            // Auto-save on reorder
             val autoSaveReorder = { newList: List<to.kuudere.anisuge.data.models.ServerInfo> ->
                 localServerList = newList
                 onReorder(newList.map { it.id })
                 onSave()
             }
 
-            // Track drag state
             var draggingItemIndex by remember { mutableStateOf<Int?>(null) }
             var dragOffset by remember { mutableStateOf(0f) }
             val itemHeightPx = 58f // card height + spacing in pixels
@@ -2553,7 +2551,19 @@ private fun MobileServersContent(
             "Drag and drop the servers to change the order in which they are used to find streams.",
             color = MUTED,
             fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 12.dp, top = 8.dp)
+            modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
+        )
+        Text(
+            "List from site catalog — one source per provider (Sub/Dub share one entry).",
+            color = MUTED,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        Text(
+            AppComponent.STREAMING_SERVERS_CATALOG_URL,
+            color = MUTED.copy(alpha = 0.85f),
+            fontSize = 10.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
         )
 
         if (uiState.isLoadingServers || uiState.availableServers.isEmpty()) {
@@ -2564,43 +2574,27 @@ private fun MobileServersContent(
                 CircularProgressIndicator(color = Color.White)
             }
         } else {
-            // Compute sorted servers based on priority
             val serverList = remember(uiState.availableServers, uiState.serverPriority) {
-                val priority = uiState.serverPriority
-                if (priority.isEmpty()) {
-                    // Default sort: zen2, zen, then others
-                    uiState.availableServers.sortedWith(compareBy(
-                        { it.id != "zen2" },
-                        { it.id != "zen" },
-                        { it.id }
-                    ))
-                } else {
-                    // User priority
-                    uiState.availableServers.sortedBy { server ->
-                        val index = priority.indexOf(server.id)
-                        if (index == -1) Int.MAX_VALUE else index
-                    }
-                }
+                ServerRepository.sortServersForSettingsDisplay(
+                    uiState.availableServers,
+                    uiState.serverPriority,
+                )
             }
 
-            // Local mutable state for reordering
             var localServerList by remember(serverList) {
                 mutableStateOf(serverList)
             }
 
-            // Update when priority changes
-            LaunchedEffect(uiState.serverPriority) {
+            LaunchedEffect(uiState.serverPriority, uiState.availableServers) {
                 localServerList = serverList
             }
 
-            // Auto-save on reorder
             val autoSaveReorder = { newList: List<to.kuudere.anisuge.data.models.ServerInfo> ->
                 localServerList = newList
                 onReorder(newList.map { it.id })
                 onSave()
             }
 
-            // Track drag state
             var draggingItemIndex by remember { mutableStateOf<Int?>(null) }
             var dragOffset by remember { mutableStateOf(0f) }
             val itemHeightPxMobile = 58f
