@@ -682,7 +682,7 @@ class WatchViewModel(
         viewModelScope.launch {
             try {
                 val current = settingsService.getSettings()
-                val baseSettings = current?.settings ?: to.kuudere.anisuge.data.models.UserSettings()
+                val baseSettings = current ?: to.kuudere.anisuge.data.models.UserSettings()
                 
                 val updated = baseSettings.copy(
                     autoPlay = state.autoPlay,

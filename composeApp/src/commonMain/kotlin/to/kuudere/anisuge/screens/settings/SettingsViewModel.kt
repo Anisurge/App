@@ -265,11 +265,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, isOffline = false) }
             try {
-                val response = settingsService.getSettings()
-                if (response?.settings != null) {
-                    originalSettings = response.settings
-                    _uiState.update { it.copy(settings = response.settings, isLoading = false, hasSettingsChanges = false, isOffline = false) }
-                    response.settings.let { s ->
+                val loaded = settingsService.getSettings()
+                if (loaded != null) {
+                    originalSettings = loaded
+                    _uiState.update { it.copy(settings = loaded, isLoading = false, hasSettingsChanges = false, isOffline = false) }
+                    loaded.let { s ->
                         settingsStore.setAutoPlay(s.autoPlay)
                         settingsStore.setAutoNext(s.autoNext)
                         settingsStore.setAutoSkipIntro(s.skipIntro)
@@ -278,7 +278,7 @@ class SettingsViewModel(
                         settingsStore.setSyncPercentage(s.syncPercentage.toInt())
                     }
                 } else {
-                    _uiState.update { it.copy(isLoading = false, errorMessage = response?.message ?: "Failed to load settings") }
+                    _uiState.update { it.copy(isLoading = false, errorMessage = "Failed to load settings") }
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, isOffline = e.isNetworkError()) }
@@ -289,8 +289,8 @@ class SettingsViewModel(
     fun saveSettings() {
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
-            val response = settingsService.updateSettings(_uiState.value.settings)
-            if (response?.settings != null) {
+            val saved = settingsService.updateSettings(_uiState.value.settings)
+            if (saved != null) {
                 originalSettings = _uiState.value.settings
                 _uiState.update { it.copy(isSaving = false, hasSettingsChanges = false, successMessage = "Settings saved successfully") }
                 _uiState.value.settings.let { s ->
@@ -302,7 +302,7 @@ class SettingsViewModel(
                     settingsStore.setSyncPercentage(s.syncPercentage.toInt())
                 }
             } else {
-                _uiState.update { it.copy(isSaving = false, errorMessage = response?.message ?: "Failed to save settings") }
+                _uiState.update { it.copy(isSaving = false, errorMessage = "Failed to save settings") }
             }
         }
     }
