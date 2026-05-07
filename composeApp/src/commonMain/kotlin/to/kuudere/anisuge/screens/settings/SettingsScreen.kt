@@ -974,7 +974,7 @@ private fun AppearanceTab(
             SettingToggle(
                 checked = uiState.preferRomajiAnimeTitles,
                 onCheckedChange = onPreferRomajiAnimeTitlesChange,
-                label = strings.showRomajiAnimeTitles
+                label = strings.animeTitlesPreferJapanese
             )
         }
 

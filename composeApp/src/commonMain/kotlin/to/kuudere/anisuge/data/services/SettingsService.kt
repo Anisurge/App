@@ -19,7 +19,6 @@ import to.kuudere.anisuge.data.models.PasswordChangeResponse
 import to.kuudere.anisuge.data.models.ProfileUpdateRequest
 import to.kuudere.anisuge.data.models.ProfileUpdateResponse
 import to.kuudere.anisuge.data.models.UserSettings
-import to.kuudere.anisuge.data.models.UserSettingsResponse
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -55,20 +54,21 @@ class SettingsService(
         }
     }
 
-    suspend fun getSettings(): UserSettingsResponse? {
+    /** API returns the settings object directly (not `{ "settings": { ... } }`). */
+    suspend fun getSettings(): UserSettings? {
         return try {
             val stored = sessionStore.get() ?: return null
             val response = httpClient.get("${AppComponent.BASE_URL}/user/settings") {
                 header("Authorization", "Bearer ${stored.token}")
             }
-            response.body<UserSettingsResponse>()
+            response.body<UserSettings>()
         } catch (e: Exception) {
             println("[SettingsService] getSettings error: ${e.message}")
             null
         }
     }
 
-    suspend fun updateSettings(settings: UserSettings): UserSettingsResponse? {
+    suspend fun updateSettings(settings: UserSettings): UserSettings? {
         return try {
             val stored = sessionStore.get() ?: return null
             val response = httpClient.patch("${AppComponent.BASE_URL}/user/settings") {
@@ -76,7 +76,7 @@ class SettingsService(
                 contentType(ContentType.Application.Json)
                 setBody(settings)
             }
-            response.body<UserSettingsResponse>()
+            response.body<UserSettings>()
         } catch (e: Exception) {
             println("[SettingsService] updateSettings error: ${e.message}")
             null
