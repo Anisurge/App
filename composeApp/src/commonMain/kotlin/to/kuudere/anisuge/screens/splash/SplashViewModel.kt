@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import to.kuudere.anisuge.data.services.AnalyticsPingService
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.services.UpdateService
@@ -22,7 +23,8 @@ sealed interface SplashDestination {
 class SplashViewModel(
     private val authService: AuthService,
     private val updateService: UpdateService,
-    private val homeService: HomeService
+    private val homeService: HomeService,
+    private val analyticsPingService: AnalyticsPingService,
 ) : ViewModel() {
     private val _destination = MutableStateFlow<SplashDestination>(SplashDestination.Waiting)
     val destination: StateFlow<SplashDestination> = _destination.asStateFlow()
@@ -31,6 +33,9 @@ class SplashViewModel(
     val status: StateFlow<String> = _status.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            runCatching { analyticsPingService.sendPingIfDue() }
+        }
         performInitialChecks()
     }
 

@@ -4,15 +4,20 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import to.kuudere.anisuge.platform.randomInstallUuid
 
 class SettingsStore(private val dataStore: DataStore<Preferences>) {
     companion object {
+        private val ANALYTICS_INSTALL_ID_KEY = stringPreferencesKey("analytics_install_id")
+        private val ANALYTICS_LAST_PING_MS_KEY = longPreferencesKey("analytics_last_ping_ms")
+
         val AUTO_PLAY_KEY = booleanPreferencesKey("auto_play")
         val AUTO_NEXT_KEY = booleanPreferencesKey("auto_next")
         val AUTO_SKIP_INTRO_KEY = booleanPreferencesKey("auto_skip_intro")
@@ -81,6 +86,21 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     suspend fun setFloatingBottomNav(enabled: Boolean) { dataStore.edit { it[FLOATING_BOTTOM_NAV_KEY] = enabled } }
     suspend fun setLiquidGlassBottomNav(enabled: Boolean) { dataStore.edit { it[LIQUID_GLASS_BOTTOM_NAV_KEY] = enabled } }
     suspend fun setAppLocale(localeCode: String) { dataStore.edit { it[APP_LOCALE_KEY] = localeCode } }
+
+    suspend fun getOrCreateAnalyticsInstallId(): String {
+        val prefs = dataStore.data.first()
+        val existing = prefs[ANALYTICS_INSTALL_ID_KEY]
+        if (!existing.isNullOrBlank()) return existing
+        val id = randomInstallUuid()
+        dataStore.edit { it[ANALYTICS_INSTALL_ID_KEY] = id }
+        return id
+    }
+
+    suspend fun getAnalyticsLastPingMs(): Long = dataStore.data.first()[ANALYTICS_LAST_PING_MS_KEY] ?: 0L
+
+    suspend fun setAnalyticsLastPingMs(epochMs: Long) {
+        dataStore.edit { it[ANALYTICS_LAST_PING_MS_KEY] = epochMs }
+    }
 
     fun notificationsEnabledBlocking(): Boolean {
         return kotlinx.coroutines.runBlocking { notificationsEnabledFlow.first() }

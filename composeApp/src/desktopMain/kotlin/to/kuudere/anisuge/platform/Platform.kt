@@ -4,6 +4,7 @@ import okio.Sink
 import okio.sink
 import okio.buffer
 import java.io.File
+import java.util.UUID
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -142,3 +143,8 @@ actual fun startNotificationListenerService() {
 actual fun stopNotificationListenerService() {
     // No-op on desktop
 }
+
+actual fun randomInstallUuid(): String = UUID.randomUUID().toString()
+
+actual fun analyticsPingOs(): String? =
+    "${System.getProperty("os.name")} ${System.getProperty("os.arch")}".trim().take(128)
