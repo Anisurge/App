@@ -6,6 +6,7 @@ import okio.buffer
 import java.io.File
 import java.util.UUID
 import java.awt.Cursor
+import java.awt.EventQueue
 import java.awt.Toolkit
 import java.awt.image.BufferedImage
 
@@ -109,15 +110,36 @@ actual fun SyncCursorHidden(hidden: Boolean) {
     val window = LocalWindowScope.current.window
     val defaultCursor = remember { Cursor.getDefaultCursor() }
     val transparentCursor = remember {
-        val img = BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB)
+        val img = BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB)
         Toolkit.getDefaultToolkit().createCustomCursor(img, java.awt.Point(0, 0), "transparent")
     }
 
     DisposableEffect(hidden) {
-        window.cursor = if (hidden) transparentCursor else defaultCursor
+        val cursor = if (hidden) transparentCursor else defaultCursor
+        EventQueue.invokeLater {
+            // Some Linux/Wayland setups require applying cursor to the whole component tree
+            // (SkiaLayer / GL canvas), not just the top-level window.
+            fun applyCursorRecursively(container: java.awt.Container) {
+                container.cursor = cursor
+                for (child in container.components) {
+                    child.cursor = cursor
+                    if (child is java.awt.Container) applyCursorRecursively(child)
+                }
+            }
+            applyCursorRecursively(window)
+        }
         onDispose {
             // Always restore when leaving the player composition.
-            window.cursor = defaultCursor
+            EventQueue.invokeLater {
+                fun applyCursorRecursively(container: java.awt.Container) {
+                    container.cursor = defaultCursor
+                    for (child in container.components) {
+                        child.cursor = defaultCursor
+                        if (child is java.awt.Container) applyCursorRecursively(child)
+                    }
+                }
+                applyCursorRecursively(window)
+            }
         }
     }
 }
