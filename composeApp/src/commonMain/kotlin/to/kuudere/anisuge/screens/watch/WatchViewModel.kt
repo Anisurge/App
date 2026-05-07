@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.isActive
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
+import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.StreamingData
 import to.kuudere.anisuge.data.models.WatchInfoResponse
@@ -223,11 +224,23 @@ class WatchViewModel(
         }
 
         if (data != null) {
+            val slug = data.anime?.animeId?.takeIf { it.isNotBlank() } ?: currentAnimeId
+            val loadedEpisodes = fetchAllEpisodes(slug)
+            val mergedEpisodes = when {
+                loadedEpisodes.isNotEmpty() -> loadedEpisodes
+                data.episodes?.isNotEmpty() == true -> data.episodes
+                else -> {
+                    val total = data.anime?.epCount ?: data.anime?.episodes
+                    synthesizeEpisodesFromCount(total)
+                }
+            }
+            val dataWithEpisodes = data.copy(episodes = mergedEpisodes.takeIf { it.isNotEmpty() })
+
             _uiState.update { state ->
                 state.copy(
                     isLoading = false,
                     loadingMessage = if (streamLoadingJob != null) null else "Switching servers...",
-                    episodeData = data,
+                    episodeData = dataWithEpisodes,
                     savedWatchPosition = data.currentTime ?: 0.0
                 )
             }
@@ -270,9 +283,26 @@ class WatchViewModel(
         }
     }
 
+    private suspend fun fetchAllEpisodes(slug: String): List<EpisodeItem> {
+        val all = mutableListOf<EpisodeItem>()
+        var offset = 0
+        val limit = 100
+        while (true) {
+            val page = infoService.getEpisodes(slug, limit = limit, offset = offset) ?: break
+            if (page.episodes.isEmpty()) break
+            all.addAll(page.episodes)
+            val total = page.total
+            if (total != null && all.size >= total) break
+            if (page.episodes.size < limit) break
+            offset += limit
+        }
+        return all
+    }
 
-
-
+    private fun synthesizeEpisodesFromCount(count: Int?): List<EpisodeItem> {
+        val n = count?.takeIf { it > 0 } ?: return emptyList()
+        return (1..n).map { EpisodeItem(number = it, id = "ep-$it") }
+    }
 
     private suspend fun loadVideoStream(serverName: String, explicitAnilistId: Int? = null) {
         if (_uiState.value.offlinePath != null) {

@@ -184,10 +184,12 @@ data class EpisodeItem(
 
 @Serializable
 data class EpisodeListResponse(
-    val episodes: List<EpisodeItem> = emptyList(),
+    @SerialName("data") val episodes: List<EpisodeItem> = emptyList(),
     val total: Int? = null,
     val limit: Int? = null,
     val offset: Int? = null,
+    val source: String? = null,
+    @SerialName("totalPages") val totalPages: Int? = null,
 )
 
 @Serializable
@@ -195,17 +197,18 @@ data class WatchInfoResponse(
     val anime: AnimeItem? = null,
     val folder: String? = null,
     val progress: WatchProgressDetail? = null,
+    /** Present when the API includes an episode list; otherwise filled client-side after fetch. */
+    val episodes: List<EpisodeItem>? = null,
 ) {
     val animeId: String? get() = anime?.animeId
     val title: AnimeTitle? get() = anime?.title
     val coverImage: CoverImage? get() = anime?.coverImage
     val bannerImage: String? get() = anime?.bannerImage
     val anilistId: Int? get() = anime?.anilistId
-    val episodes: List<EpisodeItem>? get() = null
     val currentTime: Double? get() = progress?.currentTime
     val server: String? get() = progress?.server
     val language: String? get() = progress?.language
-    val episode: Int? get() = null
+    val episode: Int? get() = progress?.episodeId?.toIntOrNull()
 }
 
 @Serializable

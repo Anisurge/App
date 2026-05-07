@@ -86,17 +86,17 @@ actual fun VideoPlayerSurface(
     }
 
     // ── Global Media Keys (Earphones/Headphones) ─────────────────────────────
+    val hasNextEpisode by rememberUpdatedState(state.hasNextEpisode)
+    val hasPrevEpisode by rememberUpdatedState(state.hasPrevEpisode)
     DisposableEffect(player) {
         if (!state.config.muted) {
             val onPlayPause = { state.pauseRequested = !state.isPaused }
             val onStop = { state.pauseRequested = true }
-            val onNext = { 
-                if (state.hasNextEpisode) {
-                    // Future view model wiring can happen here natively
-                }
+            val onNext = {
+                if (hasNextEpisode) state.mediaNextEpisodeCount++
             }
-            val onPrev = { 
-                if (state.hasPrevEpisode) { }
+            val onPrev = {
+                if (hasPrevEpisode) state.mediaPrevEpisodeCount++
             }
 
             to.kuudere.anisuge.platform.GlobalMediaKeys.register(

@@ -1116,6 +1116,24 @@ fun WatchVideoPlayer(
                 playerState.hasNextEpisode = allEps.any { it.number > current }
             }
 
+            LaunchedEffect(playerState.mediaNextEpisodeCount, uiState.offlinePath) {
+                if (playerState.mediaNextEpisodeCount == 0) return@LaunchedEffect
+                if (uiState.offlinePath != null) return@LaunchedEffect
+                if (playerState.hasNextEpisode) {
+                    val nextEp = uiState.episodeData?.episodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
+                    if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
+                }
+            }
+
+            LaunchedEffect(playerState.mediaPrevEpisodeCount, uiState.offlinePath) {
+                if (playerState.mediaPrevEpisodeCount == 0) return@LaunchedEffect
+                if (uiState.offlinePath != null) return@LaunchedEffect
+                if (playerState.hasPrevEpisode) {
+                    val prevEp = uiState.episodeData?.episodes?.filter { it.number < uiState.currentEpisodeNumber }?.maxByOrNull { it.number }
+                    if (prevEp != null) viewModel.onEpisodeSelected(prevEp.number)
+                }
+            }
+
             val episodeData = uiState.episodeData
             val currentEp = uiState.episodeData?.episodes?.find { it.number == uiState.currentEpisodeNumber }
             val animeTitle = episodeData?.title?.displayTitle?.takeIf { it.isNotBlank() }
