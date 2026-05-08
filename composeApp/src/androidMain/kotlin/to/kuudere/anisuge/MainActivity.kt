@@ -49,7 +49,9 @@ class MainActivity : ComponentActivity() {
 
         NotificationChannels.createAll(this)
         initNotificationTopics()
+        android.util.Log.d("MainActivity", "onCreate intent=${intent?.data}")
         notificationLaunch = NotificationIntentParser.parse(intent)
+        handleTrackingDeepLink(intent)
 
         setContent {
             App(
@@ -67,6 +69,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        android.util.Log.d("MainActivity", "onNewIntent data=${intent.data}")
         notificationLaunch = NotificationIntentParser.parse(intent)
         handleTrackingDeepLink(intent)
     }
