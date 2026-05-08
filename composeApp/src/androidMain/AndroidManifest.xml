@@ -48,6 +48,20 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+            <!-- MAL OAuth Callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="anisurge" android:host="mal" android:pathPrefix="/callback"/>
+            </intent-filter>
+            <!-- AniList OAuth Callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="anisurge" android:host="anilist" android:pathPrefix="/callback"/>
+            </intent-filter>
         </activity>
     </application>
 </manifest>

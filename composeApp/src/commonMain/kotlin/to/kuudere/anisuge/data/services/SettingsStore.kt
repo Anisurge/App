@@ -35,6 +35,17 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
         val PREFER_ROMAJI_ANIME_TITLES_KEY = booleanPreferencesKey("prefer_romaji_anime_titles")
 
+        // MAL tokens
+        val MAL_ACCESS_TOKEN_KEY = stringPreferencesKey("mal_access_token")
+        val MAL_REFRESH_TOKEN_KEY = stringPreferencesKey("mal_refresh_token")
+        val MAL_EXPIRES_AT_KEY = longPreferencesKey("mal_expires_at")
+        val MAL_USERNAME_KEY = stringPreferencesKey("mal_username")
+
+        // AniList tokens
+        val ANILIST_ACCESS_TOKEN_KEY = stringPreferencesKey("anilist_access_token")
+        val ANILIST_EXPIRES_AT_KEY = longPreferencesKey("anilist_expires_at")
+        val ANILIST_USERNAME_KEY = stringPreferencesKey("anilist_username")
+
         private val json = Json { ignoreUnknownKeys = true }
     }
 
@@ -107,5 +118,72 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     fun notificationsEnabledBlocking(): Boolean {
         return kotlinx.coroutines.runBlocking { notificationsEnabledFlow.first() }
+    }
+
+    // ── MAL Tokens ─────────────────────────────────────────────────────────────
+    suspend fun getMalAccessToken(): String? = dataStore.data.first()[MAL_ACCESS_TOKEN_KEY]
+    suspend fun getMalRefreshToken(): String? = dataStore.data.first()[MAL_REFRESH_TOKEN_KEY]
+    suspend fun getMalExpiresAt(): Long = dataStore.data.first()[MAL_EXPIRES_AT_KEY] ?: 0L
+    suspend fun getMalUsername(): String? = dataStore.data.first()[MAL_USERNAME_KEY]
+    suspend fun getMalIsExpired(): Boolean {
+        val expiresAt = getMalExpiresAt()
+        return expiresAt > 0 && System.currentTimeMillis() > expiresAt - 60000
+    }
+
+    suspend fun saveMalTokens(accessToken: String, refreshToken: String, expiresIn: Long) {
+        dataStore.edit {
+            it[MAL_ACCESS_TOKEN_KEY] = accessToken
+            it[MAL_REFRESH_TOKEN_KEY] = refreshToken
+            it[MAL_EXPIRES_AT_KEY] = System.currentTimeMillis() + (expiresIn * 1000)
+        }
+    }
+
+    suspend fun saveMalTokensWithRefresh(accessToken: String, refreshToken: String, expiresAt: Long) {
+        dataStore.edit {
+            it[MAL_ACCESS_TOKEN_KEY] = accessToken
+            it[MAL_REFRESH_TOKEN_KEY] = refreshToken
+            it[MAL_EXPIRES_AT_KEY] = expiresAt
+        }
+    }
+
+    suspend fun saveMalUsername(username: String) {
+        dataStore.edit { it[MAL_USERNAME_KEY] = username }
+    }
+
+    suspend fun clearMalTokens() {
+        dataStore.edit {
+            it.remove(MAL_ACCESS_TOKEN_KEY)
+            it.remove(MAL_REFRESH_TOKEN_KEY)
+            it.remove(MAL_EXPIRES_AT_KEY)
+            it.remove(MAL_USERNAME_KEY)
+        }
+    }
+
+    // ── AniList Tokens ─────────────────────────────────────────────────────────
+    suspend fun getAnilistAccessToken(): String? = dataStore.data.first()[ANILIST_ACCESS_TOKEN_KEY]
+    suspend fun getAnilistExpiresAt(): Long = dataStore.data.first()[ANILIST_EXPIRES_AT_KEY] ?: 0L
+    suspend fun getAnilistUsername(): String? = dataStore.data.first()[ANILIST_USERNAME_KEY]
+    suspend fun getAnilistIsExpired(): Boolean {
+        val expiresAt = getAnilistExpiresAt()
+        return expiresAt > 0 && System.currentTimeMillis() > expiresAt
+    }
+
+    suspend fun saveAnilistTokens(accessToken: String, expiresIn: Long) {
+        dataStore.edit {
+            it[ANILIST_ACCESS_TOKEN_KEY] = accessToken
+            it[ANILIST_EXPIRES_AT_KEY] = System.currentTimeMillis() + (expiresIn * 1000)
+        }
+    }
+
+    suspend fun saveAnilistUsername(username: String) {
+        dataStore.edit { it[ANILIST_USERNAME_KEY] = username }
+    }
+
+    suspend fun clearAnilistTokens() {
+        dataStore.edit {
+            it.remove(ANILIST_ACCESS_TOKEN_KEY)
+            it.remove(ANILIST_EXPIRES_AT_KEY)
+            it.remove(ANILIST_USERNAME_KEY)
+        }
     }
 }

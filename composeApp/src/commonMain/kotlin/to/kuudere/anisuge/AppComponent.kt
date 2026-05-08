@@ -99,4 +99,12 @@ object AppComponent {
     val analyticsPingService: to.kuudere.anisuge.data.services.AnalyticsPingService by lazy {
         to.kuudere.anisuge.data.services.AnalyticsPingService(httpClient, settingsStore, ANALYTICS_PING_URL)
     }
+
+    val trackingService: to.kuudere.anisuge.data.services.TrackingService by lazy {
+        to.kuudere.anisuge.data.services.TrackingService(httpClient, settingsStore)
+    }
+
+    val syncManager: to.kuudere.anisuge.data.services.SyncManager by lazy {
+        to.kuudere.anisuge.data.services.SyncManager(trackingService)
+    }
 }
