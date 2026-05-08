@@ -16,6 +16,7 @@ import to.kuudere.anisuge.data.services.SettingsService
 import to.kuudere.anisuge.data.services.SettingsStore
 import to.kuudere.anisuge.data.services.StorageService
 import to.kuudere.anisuge.data.services.AuthService
+import to.kuudere.anisuge.data.services.TrackingService
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.utils.isNetworkError
@@ -58,14 +59,23 @@ data class SettingsUiState(
 
     val notificationsEnabled: Boolean = true,
     val hasNotificationPrefsChanges: Boolean = false,
+
+    // Tracking
+    val malConnected: Boolean = false,
+    val malUsername: String? = null,
+    val anilistConnected: Boolean = false,
+    val anilistUsername: String? = null,
+    val isConnectingMal: Boolean = false,
+    val isConnectingAnilist: Boolean = false,
 )
 
 sealed class SettingsTab {
     data object Profile : SettingsTab()
     data object Preferences : SettingsTab()
     data object Storage : SettingsTab()
-    data object Servers : SettingsTab()
     data object Appearance : SettingsTab()
+    data object Sync : SettingsTab()
+    data object Servers : SettingsTab()
     data object Notifications : SettingsTab()
 }
 
@@ -74,6 +84,7 @@ class SettingsViewModel(
     private val settingsStore: SettingsStore,
     private val serverRepository: ServerRepository,
     private val authService: AuthService,
+    private val trackingService: TrackingService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
 
@@ -158,6 +169,26 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsStore.preferRomajiAnimeTitlesFlow.collect { v ->
                 _uiState.update { it.copy(preferRomajiAnimeTitles = v) }
+            }
+        }
+
+        // Load tracking state
+        loadTrackingState()
+    }
+
+    private fun loadTrackingState() {
+        viewModelScope.launch {
+            val malToken = settingsStore.getMalAccessToken()
+            val anilistToken = settingsStore.getAnilistAccessToken()
+            val malUsername = settingsStore.getMalUsername()
+            val anilistUsername = settingsStore.getAnilistUsername()
+            _uiState.update {
+                it.copy(
+                    malConnected = malToken != null,
+                    malUsername = malUsername,
+                    anilistConnected = anilistToken != null,
+                    anilistUsername = anilistUsername,
+                )
             }
         }
     }
@@ -421,5 +452,77 @@ class SettingsViewModel(
             }
             _uiState.update { it.copy(hasNotificationPrefsChanges = false, successMessage = "Notification preferences saved") }
         }
+    }
+
+    // ── Tracking ────────────────────────────────────────────────────────────
+
+    fun connectMal(onOpenUrl: (String) -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isConnectingMal = true) }
+            val url = trackingService.getMalLoginUrl()
+            _uiState.update { it.copy(isConnectingMal = false) }
+            if (url != null) {
+                onOpenUrl(url)
+            }
+        }
+    }
+
+    fun disconnectMal() {
+        viewModelScope.launch {
+            trackingService.disconnectMal()
+            _uiState.update { it.copy(malConnected = false, malUsername = null) }
+        }
+    }
+
+    fun refreshMalConnection() {
+        viewModelScope.launch {
+            val token = settingsStore.getMalAccessToken()
+            if (token != null) {
+                val username = try { trackingService.fetchMalUsername() } catch (_: Exception) { null }
+                if (username != null) {
+                    settingsStore.saveMalUsername(username)
+                }
+                _uiState.update { it.copy(malConnected = true, malUsername = username) }
+            } else {
+                _uiState.update { it.copy(malConnected = false, malUsername = null) }
+            }
+        }
+    }
+
+    fun connectAnilist(onOpenUrl: (String) -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isConnectingAnilist = true) }
+            val url = trackingService.getAnilistLoginUrl()
+            _uiState.update { it.copy(isConnectingAnilist = false) }
+            if (url != null) {
+                onOpenUrl(url)
+            }
+        }
+    }
+
+    fun disconnectAnilist() {
+        viewModelScope.launch {
+            trackingService.disconnectAnilist()
+            _uiState.update { it.copy(anilistConnected = false, anilistUsername = null) }
+        }
+    }
+
+    fun refreshAnilistConnection() {
+        viewModelScope.launch {
+            val token = settingsStore.getAnilistAccessToken()
+            if (token != null) {
+                val username = try { trackingService.fetchAnilistUsername() } catch (_: Exception) { null }
+                if (username != null) {
+                    settingsStore.saveAnilistUsername(username)
+                }
+                _uiState.update { it.copy(anilistConnected = true, anilistUsername = username) }
+            } else {
+                _uiState.update { it.copy(anilistConnected = false, anilistUsername = null) }
+            }
+        }
+    }
+
+    fun refreshTrackingState() {
+        loadTrackingState()
     }
 }

@@ -68,6 +68,37 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         notificationLaunch = NotificationIntentParser.parse(intent)
+        handleTrackingDeepLink(intent)
+    }
+
+    private fun handleTrackingDeepLink(intent: Intent) {
+        val data = intent.data ?: return
+        if (data.scheme != "anisurge") return
+        lifecycleScope.launch {
+            when (data.host) {
+                "mal" -> {
+                    val accessToken = data.getQueryParameter("access_token") ?: return@launch
+                    val refreshToken = data.getQueryParameter("refresh_token") ?: ""
+                    val expiresIn = data.getQueryParameter("expires_in")?.toLongOrNull() ?: 0L
+                    AppComponent.settingsStore.saveMalTokens(accessToken, refreshToken, expiresIn)
+                    // Fetch username
+                    try {
+                        val username: String? = AppComponent.trackingService.fetchMalUsername()
+                        if (username != null) AppComponent.settingsStore.saveMalUsername(username)
+                    } catch (_: Exception) {}
+                }
+                "anilist" -> {
+                    val accessToken = data.getQueryParameter("access_token") ?: return@launch
+                    val expiresIn = data.getQueryParameter("expires_in")?.toLongOrNull() ?: 0L
+                    AppComponent.settingsStore.saveAnilistTokens(accessToken, expiresIn)
+                    // Fetch username
+                    try {
+                        val username: String? = AppComponent.trackingService.fetchAnilistUsername()
+                        if (username != null) AppComponent.settingsStore.saveAnilistUsername(username)
+                    } catch (_: Exception) {}
+                }
+            }
+        }
     }
 
     private fun initNotificationTopics() {

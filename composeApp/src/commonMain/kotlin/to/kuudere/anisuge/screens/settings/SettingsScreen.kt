@@ -49,11 +49,13 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
@@ -128,7 +130,10 @@ import to.kuudere.anisuge.i18n.AppStrings
 import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.screens.settings.SettingsTab
+import to.kuudere.anisuge.platform.openUrl
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 
 // ── Colors ── Black & white theme ────────────────────────────────────────────────
 private val BG       = Color(0xFF000000)
@@ -193,6 +198,7 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Profile, strings.profile, Icons.Default.Person))
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
+        add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
         add(SettingsNavItem(SettingsTab.Storage, strings.storage, Icons.Default.Storage))
         if (!isDesktopPlatform) {
@@ -857,6 +863,13 @@ private fun MobileSettingsDetail(
                     onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
                     onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
                 )
+                is SettingsTab.Sync -> SyncTab(
+                    uiState = uiState,
+                    onConnectMal = { viewModel.connectMal { url -> openUrl(url) } },
+                    onDisconnectMal = viewModel::disconnectMal,
+                    onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
+                    onDisconnectAnilist = viewModel::disconnectAnilist,
+                )
                 is SettingsTab.Storage -> MobileStorageContent(
                     uiState = uiState,
                     onRefresh = viewModel::loadStorageInfo,
@@ -921,6 +934,13 @@ private fun SettingsContent(
                 onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                 onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
                 onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
+            )
+            is SettingsTab.Sync -> SyncTab(
+                uiState = uiState,
+                onConnectMal = { viewModel.connectMal { url -> openUrl(url) } },
+                onDisconnectMal = viewModel::disconnectMal,
+                onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
+                onDisconnectAnilist = viewModel::disconnectAnilist,
             )
             is SettingsTab.Storage -> StorageTab(
                 uiState = uiState,
@@ -1009,6 +1029,40 @@ private fun AppearanceTab(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SyncTab(
+    uiState: SettingsUiState,
+    onConnectMal: () -> Unit,
+    onDisconnectMal: () -> Unit,
+    onConnectAnilist: () -> Unit,
+    onDisconnectAnilist: () -> Unit,
+) {
+    val strings = LocalAppStrings.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            strings.sync,
+            color = TEXT,
+            fontSize = 42.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            "Sync your watch progress to MAL and AniList",
+            color = MUTED,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 32.dp)
+        )
+
+        TrackingSection(
+            uiState = uiState,
+            onConnectMal = onConnectMal,
+            onDisconnectMal = onDisconnectMal,
+            onConnectAnilist = onConnectAnilist,
+            onDisconnectAnilist = onDisconnectAnilist,
+        )
     }
 }
 
@@ -1468,9 +1522,7 @@ private fun AboutTab() {
                 .padding(16.dp)
         ) {
             Column {
-                DesktopAboutStatRow("Hostname", "kuudere.to")
-                HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 12.dp))
-                DesktopAboutStatRow("Backend", "Kuudere API")
+                DesktopAboutStatRow("Hostname", "Project.R")
                 HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 12.dp))
                 DesktopAboutStatRow("Version", AppVersion)
             }
@@ -1792,8 +1844,7 @@ private fun MobileAboutContent() {
             modifier = Modifier.padding(vertical = 16.dp)
         )
 
-        AboutStatItem("Hostname", "kuudere.to")
-        AboutStatItem("Backend", "Kuudere API")
+        AboutStatItem("Hostname", "Project.R")
         AboutStatItem("Version", AppVersion)
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -2695,7 +2746,7 @@ private fun MobileServersContent(
 @Composable
 private fun ProfileTab(
     uiState: SettingsUiState,
-    onRetry: () -> Unit = {}
+    onRetry: () -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -2828,14 +2879,136 @@ private fun ProfileTab(
                     ) {
                         ProfileDetailItem("Email", user.email ?: "Not provided")
                         ProfileDetailItem("Joined", user.joinDate?.let { it.split("T").first() } ?: user.ago ?: "Unknown")
-                        ProfileDetailItem("Timezone", "UTC") // Hardcoded from example but could be dynamic
-                            }
-                        }
                     }
-
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TrackingSection(
+    uiState: SettingsUiState,
+    onConnectMal: () -> Unit,
+    onDisconnectMal: () -> Unit,
+    onConnectAnilist: () -> Unit,
+    onDisconnectAnilist: () -> Unit,
+) {
+    // MAL Row
+    TrackingServiceRow(
+        icon = "MAL",
+        connected = uiState.malConnected,
+        username = uiState.malUsername,
+        isLoading = uiState.isConnectingMal,
+        onConnect = onConnectMal,
+        onDisconnect = onDisconnectMal,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    // AniList Row
+    TrackingServiceRow(
+        icon = "AniList",
+        connected = uiState.anilistConnected,
+        username = uiState.anilistUsername,
+        isLoading = uiState.isConnectingAnilist,
+        onConnect = onConnectAnilist,
+        onDisconnect = onDisconnectAnilist,
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TrackingServiceRow(
+    icon: String,
+    connected: Boolean,
+    username: String?,
+    isLoading: Boolean,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(BG_CARD)
+            .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+            .combinedClickable(
+                onClick = { if (!connected && !isLoading) onConnect() },
+                onLongClick = { if (connected) onDisconnect() }
+            )
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Icon circle
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(if (connected) Color(0xFF1DB954) else BG_HOVER),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = icon.take(2),
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = icon,
+                        color = TEXT,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = when {
+                            isLoading -> "Connecting..."
+                            connected -> if (username != null) "Connected as @$username" else "Connected"
+                            else -> "Tap to connect"
+                        },
+                        color = MUTED,
+                        fontSize = 12.sp
+                    )
+                    if (connected) {
+                        Text(
+                            text = "Long press to disconnect",
+                            color = Color(0xFFE50914).copy(alpha = 0.6f),
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White
+                )
+            } else if (!connected) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Connect",
+                    tint = MUTED,
+                    modifier = Modifier.size(24.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Connected",
+                    tint = Color(0xFF1DB954),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun ProfileDetailItem(label: String, value: String) {
@@ -2851,7 +3024,7 @@ private fun ProfileDetailItem(label: String, value: String) {
 @Composable
 private fun MobileProfileContent(
     uiState: SettingsUiState,
-    onRetry: () -> Unit = {}
+    onRetry: () -> Unit = {},
 ) {
     if (uiState.isOffline && uiState.userProfile == null) {
         OfflineState(
@@ -2944,10 +3117,9 @@ private fun MobileProfileContent(
                     MobileProfileInfoItem("Email", user.email ?: "Not provided")
                     HorizontalDivider(color = BORDER, modifier = Modifier.padding(horizontal = 16.dp))
                     MobileProfileInfoItem("Joined", user.joinDate?.let { it.split("T").first() } ?: user.ago ?: "Unknown")
-                    HorizontalDivider(color = BORDER, modifier = Modifier.padding(horizontal = 16.dp))
-                    MobileProfileInfoItem("Location", user.location ?: "Not provided")
                 }
             }
+
         }
     } else {
         Box(

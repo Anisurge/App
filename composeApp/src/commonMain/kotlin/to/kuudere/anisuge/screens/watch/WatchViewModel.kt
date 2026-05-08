@@ -15,6 +15,7 @@ import to.kuudere.anisuge.data.models.StreamingData
 import to.kuudere.anisuge.data.models.WatchInfoResponse
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
+import to.kuudere.anisuge.data.services.SyncManager
 import to.kuudere.anisuge.data.services.WatchlistService
 import okio.Path.Companion.toPath
 import to.kuudere.anisuge.player.VideoPlayerConfig
@@ -65,7 +66,8 @@ class WatchViewModel(
     private val watchlistService: WatchlistService,
     private val settingsStore: to.kuudere.anisuge.data.services.SettingsStore,
     private val settingsService: to.kuudere.anisuge.data.services.SettingsService,
-    private val serverRepository: ServerRepository
+    private val serverRepository: ServerRepository,
+    private val syncManager: SyncManager? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WatchUiState())
     val uiState = _uiState.asStateFlow()
@@ -613,6 +615,27 @@ class WatchViewModel(
                 server = server,
                 language = language
             )
+        }
+    }
+
+    /**
+     * Called when an episode finishes playing (watched to completion).
+     * Syncs progress to MAL/AniList if connected.
+     */
+    fun markEpisodeWatched(anilistId: Int?, malId: Int?, totalEpisodes: Int?) {
+        val episodeNumber = _uiState.value.currentEpisodeNumber
+        if (_uiState.value.didMarkWatched) return // prevent double-sync
+        _uiState.update { it.copy(didMarkWatched = true) }
+
+        syncManager?.let { mgr ->
+            viewModelScope.launch {
+                mgr.syncEpisodeComplete(
+                    malId = malId,
+                    anilistId = anilistId,
+                    episodeNumber = episodeNumber,
+                    totalEpisodes = totalEpisodes
+                )
+            }
         }
     }
 
