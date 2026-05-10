@@ -532,37 +532,91 @@ class SettingsViewModel(
 
     fun syncAllToMAL() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isSyncingMal = true) }
+            _uiState.update { it.copy(isSyncingMal = true, errorMessage = null, successMessage = null) }
             try {
+                var attempted = 0
+                var success = 0
                 val response = watchlistService.getWatchlist(limit = 100)
                 response?.results?.forEach { item ->
                     val malId = item.anime?.malId ?: return@forEach
                     val folder = item.effectiveFolder ?: return@forEach
-                    if (folder == "WATCHING" || folder == "PAUSED") {
-                        val episode = item.anime.episodes ?: 1
-                        trackingService.syncMalProgress(malId, episode, item.anime.episodes)
+                    if (folder == "WATCHING" || folder == "PAUSED" || folder == "COMPLETED") {
+                        val totalEpisodes = item.anime.epCount
+                        val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
+                            ?: if (folder == "COMPLETED") (totalEpisodes ?: 1) else 1
+                        attempted += 1
+                        if (trackingService.syncMalProgress(malId, progressEpisode, totalEpisodes)) {
+                            success += 1
+                        }
                     }
                 }
-            } catch (_: Exception) { }
-            _uiState.update { it.copy(isSyncingMal = false) }
+                val failed = attempted - success
+                _uiState.update {
+                    it.copy(
+                        isSyncingMal = false,
+                        errorMessage = when {
+                            attempted == 0 -> "No eligible MAL items to sync."
+                            failed > 0 -> "MAL sync finished: $success/$attempted succeeded."
+                            else -> null
+                        },
+                        successMessage = if (attempted > 0 && failed == 0) {
+                            "MAL sync complete: $success/$attempted succeeded."
+                        } else null,
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isSyncingMal = false,
+                        errorMessage = "MAL sync failed: ${e.message ?: "Unknown error"}",
+                    )
+                }
+            }
         }
     }
 
     fun syncAllToAniList() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isSyncingAnilist = true) }
+            _uiState.update { it.copy(isSyncingAnilist = true, errorMessage = null, successMessage = null) }
             try {
+                var attempted = 0
+                var success = 0
                 val response = watchlistService.getWatchlist(limit = 100)
                 response?.results?.forEach { item ->
                     val anilistId = item.anime?.anilistId ?: return@forEach
                     val folder = item.effectiveFolder ?: return@forEach
-                    if (folder == "WATCHING" || folder == "PAUSED") {
-                        val episode = item.anime.episodes ?: 1
-                        trackingService.syncAnilistProgress(anilistId, episode, item.anime.episodes)
+                    if (folder == "WATCHING" || folder == "PAUSED" || folder == "COMPLETED") {
+                        val totalEpisodes = item.anime.epCount
+                        val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
+                            ?: if (folder == "COMPLETED") (totalEpisodes ?: 1) else 1
+                        attempted += 1
+                        if (trackingService.syncAnilistProgress(anilistId, progressEpisode, totalEpisodes)) {
+                            success += 1
+                        }
                     }
                 }
-            } catch (_: Exception) { }
-            _uiState.update { it.copy(isSyncingAnilist = false) }
+                val failed = attempted - success
+                _uiState.update {
+                    it.copy(
+                        isSyncingAnilist = false,
+                        errorMessage = when {
+                            attempted == 0 -> "No eligible AniList items to sync."
+                            failed > 0 -> "AniList sync finished: $success/$attempted succeeded."
+                            else -> null
+                        },
+                        successMessage = if (attempted > 0 && failed == 0) {
+                            "AniList sync complete: $success/$attempted succeeded."
+                        } else null,
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isSyncingAnilist = false,
+                        errorMessage = "AniList sync failed: ${e.message ?: "Unknown error"}",
+                    )
+                }
+            }
         }
     }
 }

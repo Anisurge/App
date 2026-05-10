@@ -7,10 +7,15 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.request.patch
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import to.kuudere.anisuge.AppComponent
@@ -21,7 +26,7 @@ class TrackingService(
 ) {
     companion object {
         private const val MAL_API_BASE = "https://api.myanimelist.net/v2"
-        private const val MAL_OAUTH_TOKEN = "https://myanimelist.net/v1/oauth2/token"
+        private const val MAL_REFRESH_ENDPOINT = "https://www.anisurge.lol/api/mal/refresh"
         private const val ANILIST_GRAPHQL = "https://graphql.anilist.co"
     }
 
@@ -54,9 +59,13 @@ class TrackingService(
     suspend fun refreshMalToken(): Boolean {
         val refreshToken = settingsStore.getMalRefreshToken() ?: return false
         return try {
-            val response = httpClient.post(MAL_OAUTH_TOKEN) {
-                header("Content-Type", "application/x-www-form-urlencoded")
-                setBody("grant_type=refresh_token&refresh_token=$refreshToken")
+            val response = httpClient.post(MAL_REFRESH_ENDPOINT) {
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("refresh_token" to refreshToken))
+            }
+            if (!response.status.isSuccess()) {
+                println("[TrackingService] MAL refresh failed with HTTP ${response.status.value}")
+                return false
             }
             val body = response.body<MalTokenRefreshResponse>()
             settingsStore.saveMalTokensWithRefresh(
@@ -73,6 +82,7 @@ class TrackingService(
     // ── MAL Sync ────────────────────────────────────────────────────────────
 
     suspend fun syncMalProgress(malId: Int, episodeNumber: Int, totalEpisodes: Int?): Boolean {
+        if (malId <= 0 || episodeNumber <= 0) return false
         // Refresh token if expired
         if (settingsStore.getMalIsExpired()) {
             if (!refreshMalToken()) return false
@@ -80,13 +90,18 @@ class TrackingService(
         val token = settingsStore.getMalAccessToken() ?: return false
         val status = if (totalEpisodes != null && episodeNumber >= totalEpisodes) "completed" else "watching"
         return try {
-            httpClient.patch("$MAL_API_BASE/anime/$malId/my_list_status") {
+            val response = httpClient.patch("$MAL_API_BASE/anime/$malId/my_list_status") {
                 header("Authorization", "Bearer $token")
                 header("Content-Type", "application/x-www-form-urlencoded")
                 setBody("status=$status&num_watched_episodes=$episodeNumber")
             }
+            if (!response.status.isSuccess()) {
+                println("[TrackingService] MAL sync failed for $malId: HTTP ${response.status.value}")
+                return false
+            }
             true
         } catch (e: Exception) {
+            println("[TrackingService] MAL sync exception for $malId: ${e.message}")
             false
         }
     }
@@ -94,18 +109,50 @@ class TrackingService(
     // ── AniList Sync ────────────────────────────────────────────────────────
 
     suspend fun syncAnilistProgress(anilistId: Int, episodeNumber: Int, totalEpisodes: Int?): Boolean {
+        if (anilistId <= 0 || episodeNumber <= 0) return false
         val token = settingsStore.getAnilistAccessToken() ?: return false
         if (settingsStore.getAnilistIsExpired()) return false // No refresh, prompt relogin
         val status = if (totalEpisodes != null && episodeNumber >= totalEpisodes) "COMPLETED" else "CURRENT"
-        val query = "mutation(\$mediaId: Int, \$progress: Int, \$status: MediaListStatus) { SaveMediaListEntry(mediaId: \$mediaId, progress: \$progress, status: \$status) { id status progress } }"
+        val query = """
+            mutation(${'$'}mediaId: Int, ${'$'}progress: Int, ${'$'}status: MediaListStatus) {
+              SaveMediaListEntry(mediaId: ${'$'}mediaId, progress: ${'$'}progress, status: ${'$'}status) {
+                id
+                status
+                progress
+              }
+            }
+        """.trimIndent()
         return try {
-            httpClient.post(ANILIST_GRAPHQL) {
+            val response = httpClient.post(ANILIST_GRAPHQL) {
                 header("Authorization", "Bearer $token")
                 contentType(ContentType.Application.Json)
-                setBody("""{"query":"$query","variables":{"mediaId":$anilistId,"progress":$episodeNumber,"status":"$status"}}""")
+                setBody(
+                    buildJsonObject {
+                        put("query", query)
+                        put(
+                            "variables",
+                            buildJsonObject {
+                                put("mediaId", anilistId)
+                                put("progress", episodeNumber)
+                                put("status", status)
+                            }
+                        )
+                    }
+                )
             }
-            true
+            if (!response.status.isSuccess()) {
+                println("[TrackingService] AniList sync failed for $anilistId: HTTP ${response.status.value}")
+                return false
+            }
+            val bodyText = response.bodyAsText()
+            val json = Json.parseToJsonElement(bodyText).jsonObject
+            val hasErrors = json["errors"] != null
+            if (hasErrors) {
+                println("[TrackingService] AniList sync API errors for $anilistId: $bodyText")
+            }
+            !hasErrors
         } catch (e: Exception) {
+            println("[TrackingService] AniList sync exception for $anilistId: ${e.message}")
             false
         }
     }
