@@ -143,10 +143,19 @@ jobs:
       - name: Collect Linux Artifacts
         run: |
           mkdir -p dist
-          find composeApp/build/compose/binaries/main/deb/  -name '*.deb'      -exec cp {} dist/ \; 2>/dev/null || true
-          find composeApp/build/compose/binaries/main/rpm/  -name '*.rpm'      -exec cp {} dist/ \; 2>/dev/null || true
-          find composeApp/build/compose/binaries/main/app/  -name '*.AppImage' -exec cp {} dist/ \; 2>/dev/null || true
-          find composeApp/build/distributions/              -name '*.zip'      -exec cp {} dist/ \; 2>/dev/null || true
+          LINUX_ARCH="amd64"
+          DEB_FILE=$(find composeApp/build/compose/binaries/main/deb/ -name '*.deb' | head -n 1 || true)
+          RPM_FILE=$(find composeApp/build/compose/binaries/main/rpm/ -name '*.rpm' | head -n 1 || true)
+          APPIMAGE_FILE=$(find composeApp/build/compose/binaries/main/app/ -name '*.AppImage' | head -n 1 || true)
+          ZIP_FILE=$(find composeApp/build/distributions/ -name '*linux*portable*.zip' | head -n 1 || true)
+          if [[ -z "$ZIP_FILE" ]]; then
+            ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
+          fi
+
+          [[ -n "$DEB_FILE" ]] && cp "$DEB_FILE" "dist/Anisurge-linux-${LINUX_ARCH}.deb"
+          [[ -n "$RPM_FILE" ]] && cp "$RPM_FILE" "dist/Anisurge-linux-${LINUX_ARCH}.rpm"
+          [[ -n "$APPIMAGE_FILE" ]] && cp "$APPIMAGE_FILE" "dist/Anisurge-linux-${LINUX_ARCH}.AppImage"
+          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-linux-${LINUX_ARCH}-portable.zip"
           ls -lh dist/
 
       - name: Upload Linux Artifacts
@@ -214,8 +223,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          find composeApp/build/compose/binaries/main/msi/  -name '*.msi' -exec cp {} dist/ \;
-          find composeApp/build/distributions/               -name '*.zip' -exec cp {} dist/ \;
+          WIN_ARCH="x86_64"
+          MSI_FILE=$(find composeApp/build/compose/binaries/main/msi/ -name '*.msi' | head -n 1 || true)
+          ZIP_FILE=$(find composeApp/build/distributions/ -name '*windows*portable*.zip' | head -n 1 || true)
+          if [[ -z "$ZIP_FILE" ]]; then
+            ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
+          fi
+
+          [[ -n "$MSI_FILE" ]] && cp "$MSI_FILE" "dist/Anisurge-win-${WIN_ARCH}.msi"
+          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-win-${WIN_ARCH}-portable.zip"
+          ls -lh dist/
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
