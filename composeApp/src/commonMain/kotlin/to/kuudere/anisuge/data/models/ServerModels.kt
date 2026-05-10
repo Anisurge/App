@@ -90,6 +90,6 @@ fun orderSelectableServerIds(
 val FALLBACK_SERVERS = listOf(
     ServerInfo(id = "zen2", label = "Zen-2", type = "sub_dub", active = false),
     ServerInfo(id = "zen", label = "Zen", type = "sub_dub", active = true),
+    ServerInfo(id = "allmanga", label = "All anime", type = "sub_dub", active = true),
     ServerInfo(id = "suzu", label = "Suzu", type = "sub_dub", active = true),
-    ServerInfo(id = "animepahe", label = "AnimePahe", type = "sub_dub", active = true),
 )

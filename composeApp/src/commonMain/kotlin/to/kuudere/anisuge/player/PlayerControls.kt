@@ -70,6 +70,11 @@ fun PlayerControls(
     currentFolder: String? = null,
     isOffline: Boolean = false,
     onExit: () -> Unit = {},
+    // Sync button callbacks
+    onSyncMALClick: (() -> Unit)? = null,
+    onSyncAniListClick: (() -> Unit)? = null,
+    isSyncingMAL: Boolean = false,
+    isSyncingAniList: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val hideDelayMillis = 1500L
@@ -699,6 +704,54 @@ fun PlayerControls(
                                     }
                                     IconButton(onClick = { if (!isOffline) onCommentsClick(); recordInteraction(forceShow = false) }, modifier = Modifier.size(40.dp), enabled = !isOffline) {
                                         Icon(Icons.Default.ChatBubbleOutline, null, tint = if (isOffline) Color.Gray else Color.White, modifier = Modifier.size(22.dp))
+                                    }
+                                    // MAL Sync button
+                                    if (onSyncMALClick != null) {
+                                        IconButton(
+                                            onClick = { onSyncMALClick?.invoke(); recordInteraction(forceShow = false) },
+                                            modifier = Modifier.size(38.dp),
+                                            enabled = !isOffline && !isSyncingMAL
+                                        ) {
+                                            if (isSyncingMAL) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    color = Color.White,
+                                                    strokeWidth = 2.dp,
+                                                    progress = { 0.7f }
+                                                )
+                                            } else {
+                                                Icon(
+                                                    Icons.Default.Sync,
+                                                    "Sync to MAL",
+                                                    tint = if (isOffline) Color.Gray else Color.White,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    // AniList Sync button
+                                    if (onSyncAniListClick != null) {
+                                        IconButton(
+                                            onClick = { onSyncAniListClick?.invoke(); recordInteraction(forceShow = false) },
+                                            modifier = Modifier.size(38.dp),
+                                            enabled = !isOffline && !isSyncingAniList
+                                        ) {
+                                            if (isSyncingAniList) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(18.dp),
+                                                    color = Color.White,
+                                                    strokeWidth = 2.dp,
+                                                    progress = { 0.7f }
+                                                )
+                                            } else {
+                                                Icon(
+                                                    Icons.Default.Sync,
+                                                    "Sync to AniList",
+                                                    tint = if (isOffline) Color.Gray else Color.White,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                     if (to.kuudere.anisuge.platform.isDesktopPlatform) {
                                         IconButton(onClick = { onFullscreenToggle(); recordInteraction(forceShow = false) }, modifier = Modifier.size(40.dp)) {

@@ -14,6 +14,7 @@ import to.kuudere.anisuge.data.models.UserSettings
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.SettingsService
 import to.kuudere.anisuge.data.services.SettingsStore
+import to.kuudere.anisuge.data.services.WatchlistService
 import to.kuudere.anisuge.data.services.StorageService
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.TrackingService
@@ -67,6 +68,8 @@ data class SettingsUiState(
     val anilistUsername: String? = null,
     val isConnectingMal: Boolean = false,
     val isConnectingAnilist: Boolean = false,
+    val isSyncingMal: Boolean = false,
+    val isSyncingAnilist: Boolean = false,
 )
 
 sealed class SettingsTab {
@@ -85,6 +88,7 @@ class SettingsViewModel(
     private val serverRepository: ServerRepository,
     private val authService: AuthService,
     private val trackingService: TrackingService,
+    private val watchlistService: WatchlistService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
 
@@ -524,5 +528,41 @@ class SettingsViewModel(
 
     fun refreshTrackingState() {
         loadTrackingState()
+    }
+
+    fun syncAllToMAL() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncingMal = true) }
+            try {
+                val response = watchlistService.getWatchlist(limit = 100)
+                response?.results?.forEach { item ->
+                    val malId = item.anime?.malId ?: return@forEach
+                    val folder = item.effectiveFolder ?: return@forEach
+                    if (folder == "WATCHING" || folder == "PAUSED") {
+                        val episode = item.anime.episodes ?: 1
+                        trackingService.syncMalProgress(malId, episode, item.anime.episodes)
+                    }
+                }
+            } catch (_: Exception) { }
+            _uiState.update { it.copy(isSyncingMal = false) }
+        }
+    }
+
+    fun syncAllToAniList() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncingAnilist = true) }
+            try {
+                val response = watchlistService.getWatchlist(limit = 100)
+                response?.results?.forEach { item ->
+                    val anilistId = item.anime?.anilistId ?: return@forEach
+                    val folder = item.effectiveFolder ?: return@forEach
+                    if (folder == "WATCHING" || folder == "PAUSED") {
+                        val episode = item.anime.episodes ?: 1
+                        trackingService.syncAnilistProgress(anilistId, episode, item.anime.episodes)
+                    }
+                }
+            } catch (_: Exception) { }
+            _uiState.update { it.copy(isSyncingAnilist = false) }
+        }
     }
 }

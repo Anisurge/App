@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.isActive
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
+import to.kuudere.anisuge.data.models.asHttpHeaderMap
 import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.StreamingData
@@ -16,6 +17,7 @@ import to.kuudere.anisuge.data.models.WatchInfoResponse
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.services.SyncManager
+import to.kuudere.anisuge.data.services.TrackingService
 import to.kuudere.anisuge.data.services.WatchlistService
 import okio.Path.Companion.toPath
 import to.kuudere.anisuge.player.VideoPlayerConfig
@@ -59,6 +61,12 @@ data class WatchUiState(
     val offlinePath: String? = null,
     // Offline metadata
     val offlineTitle: String? = null,
+    // Sync state
+    val hasMalToken: Boolean = false,
+    val hasAnilistToken: Boolean = false,
+    val isSyncingMal: Boolean = false,
+    val isSyncingAnilist: Boolean = false,
+    val syncSnackbar: String? = null,
 )
     
 class WatchViewModel(
@@ -68,12 +76,14 @@ class WatchViewModel(
     private val settingsService: to.kuudere.anisuge.data.services.SettingsService,
     private val serverRepository: ServerRepository,
     private val syncManager: SyncManager? = null,
+    private val trackingService: TrackingService? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(WatchUiState())
     val uiState = _uiState.asStateFlow()
 
     private var currentAnimeId: String = ""
     private var loadJob: kotlinx.coroutines.Job? = null
+    private var pendingQualitySelection: String? = null
 
     init {
         viewModelScope.launch { settingsStore.autoPlayFlow.collect { v -> _uiState.update { it.copy(autoPlay = v) } } }
@@ -373,6 +383,7 @@ class WatchViewModel(
 
         _uiState.update { it.copy(isLoadingVideo = true, currentServer = serverName, loadingMessage = "Fetching streaming URL...") }
 
+        try {
             val response = infoService.getVideoStream(anilistId, episodeNum, apiSource)
 
             if (!coroutineContext.isActive) return
@@ -442,10 +453,7 @@ class WatchViewModel(
                         to.kuudere.anisuge.data.models.SourceData(
                             quality = it.quality, 
                             url = it.url,
-                            headers = buildMap {
-                                it.headers?.Referer?.let { r -> put("Referer", r) }
-                                it.headers?.userAgent?.let { u -> put("User-Agent", u) }
-                            }
+                            headers = it.headers.asHttpHeaderMap()
                         ) 
                     },
                     subtitles = subtitles,
@@ -453,7 +461,12 @@ class WatchViewModel(
                     outro = null,
                 )
 
-                val defaultQuality = qualities.firstOrNull()?.first ?: "Auto"
+                val requestedQuality = pendingQualitySelection
+                val defaultQuality = when {
+                    requestedQuality != null && qualities.any { it.first == requestedQuality } -> requestedQuality
+                    else -> qualities.firstOrNull()?.first ?: "Auto"
+                }
+                pendingQualitySelection = null
 
                 qualities.firstOrNull { it.first == defaultQuality }?.second?.let { streamUrl ->
                     viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
@@ -475,10 +488,45 @@ class WatchViewModel(
                 println("[WatchVM] NO STREAMS FOUND! streamSection is null or empty.")
                 _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
             }
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) {
+                println("[WatchVM] loadVideoStream cancelled for server=$serverName")
+            } else {
+                println("[WatchVM] loadVideoStream error for server=$serverName: ${e.message}")
+                e.printStackTrace()
+            }
+            _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
+        }
     }
 
     fun setQuality(quality: String) {
-        _uiState.update { it.copy(currentQuality = quality, showSettingsOverlay = false) }
+        val server = _uiState.value.currentServer
+        val shouldRefreshStream = server.equals("animepahe", ignoreCase = true) ||
+            server.equals("animepahe-dub", ignoreCase = true)
+
+        if (!shouldRefreshStream) {
+            _uiState.update { it.copy(currentQuality = quality, showSettingsOverlay = false) }
+            return
+        }
+
+        loadJob?.cancel()
+        pendingQualitySelection = quality
+        _uiState.update {
+            it.copy(
+                currentQuality = quality,
+                showSettingsOverlay = false,
+                isLoadingVideo = true,
+                loadingMessage = "Switching quality...",
+                streamingData = null,
+                availableQualities = emptyList(),
+                availableSubtitles = emptyList(),
+                currentSubtitleUrl = null,
+                currentFontsDir = null,
+            )
+        }
+        loadJob = viewModelScope.launch {
+            loadVideoStream(server)
+        }
     }
 
     fun setSubtitle(url: String?, subtitleLang: String? = null) {
@@ -636,6 +684,52 @@ class WatchViewModel(
                     totalEpisodes = totalEpisodes
                 )
             }
+        }
+    }
+
+    fun syncToMAL(malId: Int, totalEpisodes: Int?) {
+        val ts = trackingService ?: return
+        if (_uiState.value.isSyncingMal) return
+        val episode = _uiState.value.currentEpisodeNumber
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncingMal = true, syncSnackbar = null) }
+            try {
+                val success = ts.syncMalProgress(malId, episode, totalEpisodes)
+                _uiState.update { it.copy(syncSnackbar = if (success) "Synced to MAL ✓" else "MAL sync failed") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(syncSnackbar = "MAL sync failed") }
+            } finally {
+                _uiState.update { it.copy(isSyncingMal = false) }
+            }
+        }
+    }
+
+    fun syncToAniList(anilistId: Int, totalEpisodes: Int?) {
+        val ts = trackingService ?: return
+        if (_uiState.value.isSyncingAnilist) return
+        val episode = _uiState.value.currentEpisodeNumber
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSyncingAnilist = true, syncSnackbar = null) }
+            try {
+                val success = ts.syncAnilistProgress(anilistId, episode, totalEpisodes)
+                _uiState.update { it.copy(syncSnackbar = if (success) "Synced to AniList ✓" else "AniList sync failed") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(syncSnackbar = "AniList sync failed") }
+            } finally {
+                _uiState.update { it.copy(isSyncingAnilist = false) }
+            }
+        }
+    }
+
+    fun dismissSyncSnackbar() {
+        _uiState.update { it.copy(syncSnackbar = null) }
+    }
+
+    fun checkSyncTokens() {
+        viewModelScope.launch {
+            val hasMal = settingsStore.getMalAccessToken() != null
+            val hasAni = settingsStore.getAnilistAccessToken() != null
+            _uiState.update { it.copy(hasMalToken = hasMal, hasAnilistToken = hasAni) }
         }
     }
 

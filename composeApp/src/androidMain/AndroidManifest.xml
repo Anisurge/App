@@ -16,6 +16,7 @@
 
     <application
         android:name=".AnisurgeApplication"
+        android:largeHeap="true"
         android:label="${appLabel}"
         android:icon="@mipmap/ic_launcher"
         android:banner="@mipmap/ic_launcher"

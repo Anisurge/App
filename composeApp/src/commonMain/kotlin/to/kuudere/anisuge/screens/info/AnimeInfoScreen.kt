@@ -81,7 +81,11 @@ fun AnimeInfoScreen(
             episodeId = ep.id,
             episodeNumber = ep.number,
             anilistId = anilistId,
-            durationMins = state.details!!.duration ?: 24,
+            estimatedDurationSeconds = estimateDownloadDurationSeconds(ep, state.details!!.duration),
+            episodeDisplayTitle = state.details!!.title.displayTitle(preferRomajiAnimeTitles),
+            coverImage = state.details!!.image.takeIf { it.isNotBlank() }
+                ?: state.details!!.poster.takeIf { it.isNotBlank() }
+                ?: state.details!!.cover.takeIf { it.isNotBlank() },
             infoService = to.kuudere.anisuge.AppComponent.infoService,
             serverRepository = to.kuudere.anisuge.AppComponent.serverRepository,
             onDismiss = { selectedEpisodeForDownload = null },
@@ -1748,4 +1752,15 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
             }
         }
     }
+}
+
+/** Mix of minutes vs seconds across API fields — keep download size estimate in the right ballpark. */
+private fun estimateDownloadDurationSeconds(ep: EpisodeItem?, animeFallbackMinutes: Int?): Long {
+    fun coerceToSeconds(raw: Int): Long {
+        val v = raw.toLong().coerceAtLeast(1)
+        return if (v > 500) v else v * 60L
+    }
+    ep?.duration?.takeIf { it > 0 }?.let { return coerceToSeconds(it) }
+    animeFallbackMinutes?.takeIf { it > 0 }?.let { return coerceToSeconds(it) }
+    return 24L * 60L
 }

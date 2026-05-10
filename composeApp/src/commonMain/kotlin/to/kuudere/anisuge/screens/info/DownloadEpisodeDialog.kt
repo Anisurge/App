@@ -35,6 +35,7 @@ import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import to.kuudere.anisuge.data.models.expandForSelection
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
+import to.kuudere.anisuge.data.models.asHttpHeaderMap
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -47,7 +48,9 @@ fun DownloadEpisodeDialog(
     episodeId: String,
     episodeNumber: Int,
     anilistId: Int,
-    durationMins: Int,
+    estimatedDurationSeconds: Long,
+    episodeDisplayTitle: String,
+    coverImage: String?,
     infoService: InfoService,
     serverRepository: ServerRepository,
     onDismiss: () -> Unit,
@@ -77,6 +80,9 @@ fun DownloadEpisodeDialog(
     var currentHeaders by remember { mutableStateOf<Map<String, String>?>(null) }
     var shouldRequestNotificationPermission by remember { mutableStateOf(false) }
     var shouldRequestPermission by remember { mutableStateOf(false) }
+    var pendingMp4AfterStorageGrant by remember {
+        mutableStateOf<Triple<String, Map<String, String>, String>?>(null)
+    }
 
     val settingsStore = to.kuudere.anisuge.AppComponent.settingsStore
     
@@ -99,9 +105,21 @@ fun DownloadEpisodeDialog(
     val downloadTasks by to.kuudere.anisuge.utils.DownloadManager.tasks.collectAsState()
     val currentTask = downloadTasks.find { it.animeId == animeId && it.episodeNumber == episodeNumber }
 
+    val mp4QualityOptions = remember(availableQualities) {
+        availableQualities
+            .filter { isDirectProgressiveMp4Url(it.second) }
+            .sortedByDescending { (label, _, _) ->
+                Regex("(\\d{3,4})").find(label)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+            }
+    }
+    val showDirectMp4Picker = mp4QualityOptions.isNotEmpty()
+
     val catalogServers = serverRepository.servers.collectAsState()
     val selectableServers = remember(catalogServers.value) {
-        catalogServers.value.expandForSelection()
+        // Keep AnimePahe available for streaming; hide it only in the download dialog.
+        catalogServers.value
+            .expandForSelection()
+            .filterNot { it.id.equals("animepahe", ignoreCase = true) }
     }
 
     // Update selected server when repository loads
@@ -143,6 +161,7 @@ fun DownloadEpisodeDialog(
 
             // 2. Extract available qualities from streams
             val streams = streamSection?.streams ?: emptyList()
+            var qualities = emptyList<Triple<String, String, Map<String, String>>>()
 
             // For suzu server, fetch fresh stream URLs from the embed page
             if (apiSource.equals("suzu", ignoreCase = true)) {
@@ -171,70 +190,21 @@ fun DownloadEpisodeDialog(
                             freshStreams.filter { !it.quality.equals("Dub", ignoreCase = true) }
                         }
                         if (targetStreams.isNotEmpty()) {
-                            availableQualities = targetStreams.map { stream ->
-                                val hdrs = buildMap {
-                                    stream.headers?.Referer?.let { put("Referer", it) }
-                                    stream.headers?.userAgent?.let { put("User-Agent", it) }
-                                }
-                                Triple(stream.quality ?: "Auto", stream.url, hdrs)
+                            qualities = targetStreams.map { stream ->
+                                Triple(stream.quality ?: "Auto", stream.url, stream.headers.asHttpHeaderMap())
                             }
                         }
                     }
                 }
             }
 
-            // If not suzu or embed fetch failed, use batch_scrape streams directly
-            if (availableQualities.isEmpty()) {
-                availableQualities = streams.map { stream ->
-                    val hdrs = buildMap {
-                        stream.headers?.Referer?.let { put("Referer", it) }
-                        stream.headers?.userAgent?.let { put("User-Agent", it) }
-                    }
-                    Triple(stream.quality ?: "Auto", stream.url, hdrs)
+            if (qualities.isEmpty()) {
+                qualities = streams.map { stream ->
+                    Triple(stream.quality ?: "Auto", stream.url, stream.headers.asHttpHeaderMap())
                 }
             }
-            println("[DownloadDialog] server=$selectedServer qualities=${availableQualities.size} streams=${streams.size}")
-
-            // 3. Size estimation from the selected quality's M3U8
-            val selectedStream = availableQualities.getOrElse(selectedQualityIndex) { availableQualities.firstOrNull() }
-            val m3u8Url = selectedStream?.second
-            currentHeaders = selectedStream?.third
-            if (m3u8Url != null) {
-                val masterContent = to.kuudere.anisuge.AppComponent.httpClient.get(m3u8Url) {
-                    currentHeaders?.forEach { (k, v) -> header(k, v) }
-                }.bodyAsText()
-                val tracks = mutableListOf<Pair<String, String>>()
-                var maxBandwidth = 0L
-
-                masterContent.lines().forEach { line ->
-                    if (line.startsWith("#EXT-X-MEDIA:TYPE=AUDIO")) {
-                        val lang = Regex("LANGUAGE=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: "unknown"
-                        val name = Regex("NAME=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: lang
-                        tracks.add(lang to name)
-                    }
-                    if (line.startsWith("#EXT-X-STREAM-INF:")) {
-                        val bwMatch = Regex("BANDWIDTH=(\\d+)").find(line)
-                        val bw = bwMatch?.groupValues?.get(1)?.toLongOrNull() ?: 0L
-                        if (bw > maxBandwidth) maxBandwidth = bw
-                    }
-                }
-                
-                val adjustedBps = if (maxBandwidth > 0 && maxBandwidth < 100000) maxBandwidth * 1000 else maxBandwidth
-                if (adjustedBps > 0) {
-                    estimatedSizeBytes = (adjustedBps / 8) * (durationMins * 60)
-                }
-
-                availableAudioTracks = tracks.distinctBy { it.first }
-                
-                if (availableAudioTracks.isNotEmpty()) {
-                    if (selectedAudioLang == null || availableAudioTracks.none { it.first == selectedAudioLang }) {
-                        selectedAudioLang = availableAudioTracks.find { it.first == "jpn" || it.first == "ja" }?.first 
-                            ?: availableAudioTracks.first().first
-                    }
-                }
-            } else {
-                availableAudioTracks = emptyList()
-            }
+            availableQualities = qualities
+            println("[DownloadDialog] server=$selectedServer qualities=${qualities.size} streams=${streams.size}")
         } catch (e: Exception) {
             println("[DownloadDialog] Failed to fetch for $selectedServer: ${e.message}")
             e.printStackTrace()
@@ -243,12 +213,85 @@ fun DownloadEpisodeDialog(
         }
     }
 
+    LaunchedEffect(availableQualities, selectedQualityIndex, estimatedDurationSeconds) {
+        if (availableQualities.isEmpty()) {
+            estimatedSizeBytes = 0L
+            availableAudioTracks = emptyList()
+            return@LaunchedEffect
+        }
+        if (availableQualities.any { isDirectProgressiveMp4Url(it.second) }) {
+            estimatedSizeBytes = 0L
+            availableAudioTracks = emptyList()
+            return@LaunchedEffect
+        }
+        val idx = selectedQualityIndex.coerceIn(0, availableQualities.lastIndex)
+        if (idx != selectedQualityIndex) {
+            selectedQualityIndex = idx
+        }
+        val selectedStream = availableQualities[idx]
+        val m3u8Url = selectedStream.second
+        val streamHeaders = selectedStream.third
+        currentHeaders = streamHeaders
+        try {
+            val masterContent = to.kuudere.anisuge.AppComponent.httpClient.get(m3u8Url) {
+                streamHeaders.forEach { (k, v) -> header(k, v) }
+            }.bodyAsText()
+            val tracks = mutableListOf<Pair<String, String>>()
+            var maxBandwidth = 0L
+
+            masterContent.lines().forEach { line ->
+                if (line.startsWith("#EXT-X-MEDIA:TYPE=AUDIO")) {
+                    val lang = Regex("LANGUAGE=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: "unknown"
+                    val name = Regex("NAME=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: lang
+                    tracks.add(lang to name)
+                }
+                if (line.startsWith("#EXT-X-STREAM-INF:")) {
+                    val bwMatch = Regex("BANDWIDTH=(\\d+)").find(line)
+                    val bw = bwMatch?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+                    if (bw > maxBandwidth) maxBandwidth = bw
+                }
+            }
+
+            val adjustedBps = if (maxBandwidth > 0 && maxBandwidth < 100000) maxBandwidth * 1000 else maxBandwidth
+            estimatedSizeBytes = if (adjustedBps > 0) {
+                (adjustedBps / 8) * estimatedDurationSeconds
+            } else 0L
+
+            availableAudioTracks = tracks.distinctBy { it.first }
+
+            if (availableAudioTracks.isNotEmpty()) {
+                if (selectedAudioLang == null || availableAudioTracks.none { it.first == selectedAudioLang }) {
+                    selectedAudioLang = availableAudioTracks.find { it.first == "jpn" || it.first == "ja" }?.first
+                        ?: availableAudioTracks.first().first
+                }
+            }
+        } catch (_: Exception) {
+            estimatedSizeBytes = 0L
+            availableAudioTracks = emptyList()
+        }
+    }
+
     if (shouldRequestPermission) {
         to.kuudere.anisuge.utils.RequestStoragePermission { granted ->
             shouldRequestPermission = false
             if (granted) {
-                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
-            }
+                val mp4Pending = pendingMp4AfterStorageGrant
+                pendingMp4AfterStorageGrant = null
+                if (mp4Pending != null) {
+                    val (u, h, q) = mp4Pending
+                    to.kuudere.anisuge.utils.DownloadManager.startMp4Download(
+                        animeId = animeId,
+                        episodeNumber = episodeNumber,
+                        title = episodeDisplayTitle,
+                        coverImage = coverImage,
+                        mp4Url = u,
+                        headers = h,
+                        qualityLabel = q,
+                    )
+                } else {
+                    onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
+                }
+            } else pendingMp4AfterStorageGrant = null
         }
     }
 
@@ -335,43 +378,74 @@ fun DownloadEpisodeDialog(
                 }
             }
 
-            // Quality Selection
-            if (availableQualities.size > 1) {
+            // Quality — progressive MP4 (e.g. AllAnime) uses HEAD sizes + per-row download; HLS uses chips + main button
+            if (showDirectMp4Picker) {
+                DirectMp4QualityPicker(
+                    httpClient = to.kuudere.anisuge.AppComponent.httpClient,
+                    options = mp4QualityOptions,
+                    onDownloadRequested = { url, hdrs, qual ->
+                        if (to.kuudere.anisuge.utils.hasStoragePermission()) {
+                            to.kuudere.anisuge.utils.DownloadManager.startMp4Download(
+                                animeId = animeId,
+                                episodeNumber = episodeNumber,
+                                title = episodeDisplayTitle,
+                                coverImage = coverImage,
+                                mp4Url = url,
+                                headers = hdrs,
+                                qualityLabel = qual,
+                            )
+                        } else {
+                            pendingMp4AfterStorageGrant = Triple(url, hdrs, qual)
+                            shouldRequestPermission = true
+                        }
+                    },
+                )
+            } else if (availableQualities.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Quality", color = Color.Gray, fontSize = 14.sp)
-                    androidx.compose.foundation.lazy.LazyRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .draggable(
-                                orientation = Orientation.Horizontal,
-                                state = rememberDraggableState { delta ->
-                                    scope.launch { serverListState.scrollBy(-delta) }
-                                }
-                            ),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(availableQualities.size) { index ->
-                            val (label, _, _) = availableQualities[index]
-                            val isSelected = index == selectedQualityIndex
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) Color.White else Color(0xFF000000))
-                                    .clickable {
-                                        selectedQualityIndex = index
-                                        currentHeaders = availableQualities[index].third
+                    if (availableQualities.size > 1) {
+                        Text("Quality", color = Color.Gray, fontSize = 14.sp)
+                        androidx.compose.foundation.lazy.LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .draggable(
+                                    orientation = Orientation.Horizontal,
+                                    state = rememberDraggableState { delta ->
+                                        scope.launch { serverListState.scrollBy(-delta) }
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    color = if (isSelected) Color.Black else Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                ),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(availableQualities.size) { index ->
+                                val (label, _, _) = availableQualities[index]
+                                val isSelected = index == selectedQualityIndex
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) Color.White else Color(0xFF000000))
+                                        .clickable {
+                                            selectedQualityIndex = index
+                                            currentHeaders = availableQualities[index].third
+                                        }
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (isSelected) Color.Black else Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
                         }
+                    }
+                    if (selectedServer.startsWith("suzu", ignoreCase = true)) {
+                        Text(
+                            text = "Suzu quality names come from the provider (not our file-size scan). The download button shows an estimate from playlist bitrate and episode length.",
+                            color = Color.Gray.copy(alpha = 0.88f),
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp
+                        )
                     }
                 }
             }
@@ -540,16 +614,6 @@ fun DownloadEpisodeDialog(
                 animationSpec = tween(durationMillis = 400)
             )
 
-            var shouldRequestPermission by remember { mutableStateOf(false) }
-            if (shouldRequestPermission) {
-                to.kuudere.anisuge.utils.RequestStoragePermission { granted ->
-                    shouldRequestPermission = false
-                    if (granted) {
-                        onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
-                    }
-                }
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -571,67 +635,89 @@ fun DownloadEpisodeDialog(
                     }
                 }
 
-                Button(
-                    onClick = {
-                        if (currentTask == null || currentTask.status.startsWith("Failed")) {
-                            if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
-                                shouldRequestNotificationPermission = true
-                            } else if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
+                if (!showDirectMp4Picker) {
+                    Button(
+                        onClick = {
+                            if (currentTask == null || currentTask.status.startsWith("Failed")) {
+                                if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
+                                    shouldRequestNotificationPermission = true
+                                } else if (to.kuudere.anisuge.utils.hasStoragePermission()) {
+                                    onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
+                                } else {
+                                    shouldRequestPermission = true
+                                }
                             } else {
-                                shouldRequestPermission = true
+                                if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
+                                    shouldRequestNotificationPermission = true
+                                } else {
+                                    onDismiss()
+                                }
                             }
+                        },
+                        enabled = !isFinished && isPathValid && !isLoadingSubs,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isFinished) Color.White.copy(alpha = 0.4f) else Color.White,
+                            disabledContainerColor = Color.White.copy(alpha = 0.4f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (isLoadingSubs) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.Black,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                strings.preparing,
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                maxLines = 1
+                            )
                         } else {
-                            if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
-                                shouldRequestNotificationPermission = true
-                            } else {
-                                onDismiss()
-                            }
+                            val sizeText = if (estimatedSizeBytes > 0) " (~${formatFileSize(estimatedSizeBytes)})" else ""
+                            Text(
+                                text = when {
+                                    currentTask == null -> if (isPathValid) strings.startDownload(sizeText) else strings.chooseValidFolder
+                                    isFinished -> strings.downloaded
+                                    currentTask?.status?.startsWith("Failed") == true -> if (isPathValid) strings.retryDownload else strings.chooseValidFolder
+                                    else -> strings.keepDownloadingInBackground
+                                },
+                                color = if (isFinished) Color.Black.copy(alpha = 0.5f) else Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                maxLines = 1
+                            )
                         }
-                    },
-                    enabled = !isFinished && isPathValid && !isLoadingSubs,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(50.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isFinished) Color.White.copy(alpha = 0.4f) else Color.White,
-                        disabledContainerColor = Color.White.copy(alpha = 0.4f)
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    if (isLoadingSubs) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = Color.Black,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            strings.preparing,
-                            color = Color.Black,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            maxLines = 1
-                        )
-                    } else {
-                        val sizeText = if (estimatedSizeBytes > 0) " (~${formatFileSize(estimatedSizeBytes)})" else ""
-                        Text(
-                            text = when {
-                                currentTask == null -> if (isPathValid) strings.startDownload(sizeText) else strings.chooseValidFolder
-                                isFinished -> strings.downloaded
-                                currentTask?.status?.startsWith("Failed") == true -> if (isPathValid) strings.retryDownload else strings.chooseValidFolder
-                                else -> strings.keepDownloadingInBackground
-                            },
-                            color = if (isFinished) Color.Black.copy(alpha = 0.5f) else Color.Black,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            maxLines = 1
-                        )
                     }
+                } else {
+                    Spacer(Modifier.weight(1f))
                 }
             }
         }
     }
+}
+
+internal fun isDirectProgressiveMp4Url(url: String): Boolean {
+    val lower = url.lowercase().substringBefore("#")
+    val path = lower.substringBefore("?")
+    if (path.endsWith(".mp4") || ".mp4?" in lower || "/mp4/" in lower) return true
+    val host = try {
+        java.net.URI(url).host?.lowercase()
+    } catch (_: Exception) {
+        null
+    } ?: return false
+    // All anime (`allmanga`) serves progressive MP4 from Wix video CDN paths that may omit a `.mp4` suffix.
+    if (host == "video.wixstatic.com" || host.endsWith(".wixmp.com")) return true
+    // All anime can also serve direct video blobs from fast4speed without an explicit `.mp4` extension.
+    if (host == "tools.fast4speed.rsvp" || host.endsWith(".fast4speed.rsvp")) {
+        if ("/videos/" in path && !path.endsWith(".m3u8")) return true
+    }
+    return false
 }
 
 private fun formatFileSize(bytes: Long): String {

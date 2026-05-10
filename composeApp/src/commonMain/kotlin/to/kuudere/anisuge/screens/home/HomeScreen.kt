@@ -1933,15 +1933,15 @@ fun DownloadsTab(
     val sortedTasks = remember(tasks) {
         tasks.sortedWith(
             compareBy<DownloadTask> { downloadTaskPriority(it) }
-                .thenByDescending { if (it.status == "Finished") 1 else 0 }
+                .thenByDescending { if (isTaskFinishedStatus(it.status)) 1 else 0 }
                 .thenByDescending { it.progress }
                 .thenBy { it.title.lowercase() }
         )
     }
     val listState = rememberLazyListState()
 
-    val finishedCount = tasks.count { it.status == "Finished" }
-    val activeCount = tasks.count { it.status != "Finished" && !it.status.startsWith("Failed") }
+    val finishedCount = tasks.count { isTaskFinishedStatus(it.status) }
+    val activeCount = tasks.count { !isTaskFinishedStatus(it.status) && !it.status.startsWith("Failed") }
     val failedCount = tasks.count { it.status.startsWith("Failed") }
 
     if (tasks.isEmpty()) {
@@ -2092,8 +2092,12 @@ private fun downloadTaskPriority(task: DownloadTask): Int = when {
     task.status == "Fetching stream..." -> 0
     task.isPaused -> 1
     task.status.startsWith("Failed") -> 2
-    task.status == "Finished" -> 3
+    isTaskFinishedStatus(task.status) -> 3
     else -> 1
+}
+
+private fun isTaskFinishedStatus(status: String): Boolean {
+    return status == "Finished" || status.startsWith("Done")
 }
 
 @Composable
@@ -2183,13 +2187,13 @@ private fun DownloadTaskCard(
     )
 
     val accentColor = when {
-        task.status == "Finished" -> Color(0xFF48E27A)
+        isTaskFinishedStatus(task.status) -> Color(0xFF48E27A)
         task.status.startsWith("Failed") -> Color(0xFFFF6B6B)
         task.isPaused -> Color.White.copy(alpha = 0.65f)
         else -> Color.White
     }
     val statusLabel = when {
-        task.status == "Finished" -> "Ready offline"
+        isTaskFinishedStatus(task.status) -> "Ready offline"
         task.status.startsWith("Failed") -> "Needs attention"
         task.isPaused -> "Paused"
         task.status.startsWith("Downloading") -> "Downloading"
@@ -2200,7 +2204,7 @@ private fun DownloadTaskCard(
             append(task.downloadSpeed)
             if (task.eta.isNotEmpty()) append(" • ${task.eta}")
         }
-        task.status == "Finished" -> "Stored locally and ready to watch offline."
+        isTaskFinishedStatus(task.status) -> "Stored locally and ready to watch offline."
         task.status.startsWith("Failed") -> task.status
         task.isPaused -> "Resume anytime without losing progress."
         else -> task.status
@@ -2243,7 +2247,7 @@ private fun DownloadTaskCard(
             }
 
             // Metadata
-            val isActive = task.status != "Finished"
+            val isActive = !isTaskFinishedStatus(task.status)
             Column(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 verticalArrangement = if (isActive) Arrangement.SpaceBetween else Arrangement.spacedBy(5.dp),
@@ -2323,7 +2327,7 @@ private fun DownloadTaskCard(
 
         // ── Bottom action bar: 3 equal columns ────────────────────────
         Row(modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            if (task.status == "Finished") {
+            if (isTaskFinishedStatus(task.status)) {
                 // Folder button
                 CardActionCell(
                     icon = Icons.Default.Folder,

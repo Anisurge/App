@@ -127,8 +127,22 @@ fun WatchScreen(
         uiState.loadingMessage
     }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        viewModel.checkSyncTokens()
+    }
+
+    LaunchedEffect(uiState.syncSnackbar) {
+        uiState.syncSnackbar?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.dismissSyncSnackbar()
+        }
+    }
+
     Scaffold(
-        containerColor = Color.Black
+        containerColor = Color.Black,
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -1392,6 +1406,9 @@ fun WatchVideoPlayer(
 
                 // Render out our cross-platform compose player controls overlay
                 val isOffline = uiState.offlinePath != null
+                val malId = uiState.episodeData?.anime?.malId ?: uiState.episodeData?.animeId?.toIntOrNull()
+                val anilistId = uiState.episodeData?.anime?.anilistId ?: uiState.episodeData?.animeId?.toIntOrNull()
+                val totalEpisodes = uiState.episodeData?.anime?.episodes
                 PlayerControls(
                     playerState = playerState,
                     streamingData = uiState.streamingData,
@@ -1421,6 +1438,14 @@ fun WatchVideoPlayer(
                     currentFolder = uiState.episodeData?.folder,
                     isOffline = isOffline,
                     onExit = onExit,
+                    onSyncMALClick = if (uiState.hasMalToken && malId != null) {
+                        { viewModel.syncToMAL(malId, totalEpisodes) }
+                    } else null,
+                    onSyncAniListClick = if (uiState.hasAnilistToken && anilistId != null) {
+                        { viewModel.syncToAniList(anilistId, totalEpisodes) }
+                    } else null,
+                    isSyncingMAL = uiState.isSyncingMal,
+                    isSyncingAniList = uiState.isSyncingAnilist,
                     modifier = Modifier.fillMaxSize()
                 )
 

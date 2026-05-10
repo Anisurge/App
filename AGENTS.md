@@ -15,7 +15,7 @@
 - App uses Ktor HTTP client with `ignoreUnknownKeys = true` for JSON deserialization
 - Auth uses Bearer token (`Authorization: Bearer <token>`) stored in `SessionInfo(token)` via `SessionStore`; the app migrated from legacy cookie auth to Project-R with Bearer tokens
 - API networking config lives in `composeApp/src/commonMain/kotlin/to/kuudere/anisuge/data/network/ApiConfig.kt`; canonical contract reference is `api.md` at the project root
-- Streaming scrape URL shape: `https://fetch.anisurge.lol/api?action=batch_scrape&anilistId={id}&episode={epi}&source={server}` — Suzu needs a proxy/player Referer wiring; AnimePahe streams are typically direct playable URLs
+- Streaming scrape URL shape: `https://h7sxsvuavf79b1x16zcf7nz2.n92dev.us.kg/api?action=batch_scrape&anilistId={id}&episode={epi}&source={server}` — Suzu needs a proxy/player Referer wiring; AnimePahe streams are typically direct playable URLs
 - Public streaming server catalog/list used for picker/settings aligns with `https://www.anisurge.lol/api/v1/streaming/servers` (config should stay in sync with deployed site/API)
 - App update checks call `GET https://www.anisurge.lol/api/app/updates` (via `UpdateService.checkUpdate()`); the website route can source latest versions from release data
 - Backend Project-R APIs use the `anisurge.qzz.io` subdomain layout (avoid inventing unrelated hostnames)

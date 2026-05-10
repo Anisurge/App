@@ -2,9 +2,14 @@ package to.kuudere.anisuge.utils
 
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
+import io.ktor.client.request.head
 import io.ktor.client.request.header
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readBytes
+import io.ktor.http.isSuccess
+import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +50,7 @@ object DownloadManager {
     
     private val persistenceFile = "${getCacheDirectory()}/tasks.json"
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
+    private const val MP4_BUFFER_SIZE = 8 * 1024
 
     init {
         loadTasks()
@@ -77,9 +83,13 @@ object DownloadManager {
                     val loaded = json.decodeFromString<List<DownloadTask>>(content)
                     // Reset transient states
                     val sanitized = loaded.map { 
-                        if (it.status != "Finished" && !it.status.startsWith("Failed")) {
+                        val normalizedStatus = when {
+                            it.status.startsWith("Done") -> "Finished"
+                            else -> it.status
+                        }
+                        if (normalizedStatus != "Finished" && !normalizedStatus.startsWith("Failed")) {
                             it.copy(status = "Paused", isPaused = true)
-                        } else it
+                        } else it.copy(status = normalizedStatus)
                     }
                     tasks.value = sanitized
                 }
@@ -126,6 +136,64 @@ object DownloadManager {
         saveTasks()
 
         executeDownload(newTask, anilistId, server, subLang, audioLang, downloadFonts, m3u8Url, preferBatchDub)
+    }
+
+    fun startMp4Download(
+        animeId: String,
+        episodeNumber: Int,
+        title: String,
+        coverImage: String?,
+        mp4Url: String,
+        headers: Map<String, String>,
+        qualityLabel: String,
+    ) {
+        val taskId = "${animeId}_$episodeNumber"
+        val existing = tasks.value.find { it.id == taskId }
+        if (existing != null) {
+            if (existing.isPaused || existing.status.startsWith("Failed")) resumeDownload(taskId)
+            return
+        }
+
+        val newTask = DownloadTask(
+            taskId,
+            animeId,
+            title,
+            episodeNumber,
+            coverImage,
+            0f,
+            "Queued (MP4)...",
+            headers = headers,
+        )
+        tasks.update { it + newTask }
+        saveTasks()
+
+        executeMp4Download(newTask, mp4Url, qualityLabel)
+    }
+
+    private fun executeMp4Download(task: DownloadTask, mp4Url: String, qualityLabel: String) {
+        val taskId = task.id
+        val hdrs = task.headers ?: emptyMap()
+        val job = scope.launch {
+            try {
+                val currentPath = AppComponent.settingsStore.downloadPathFlow.first()
+                val baseDir = if (currentPath.isNotBlank()) currentPath else getDownloadsDirectory()
+                KmpFileSystem.createDirectories(baseDir)
+                val outputPath = "$baseDir/$taskId.mp4"
+                val probe = probeDirectMp4(mp4Url, hdrs)
+                if (!probe.isDirectMp4) {
+                    updateTask(taskId) { it.copy(status = "Failed: Not a direct MP4 stream") }
+                    return@launch
+                }
+                val downloaded = downloadDirectMp4(taskId, mp4Url, hdrs, outputPath, probe.contentLength)
+                if (!downloaded) return@launch
+                updateTask(taskId) { it.copy(status = "Finished") }
+            } catch (e: Exception) {
+                if (e !is kotlinx.coroutines.CancellationException) {
+                    updateTask(taskId) { it.copy(status = "Failed: ${e.message ?: "unknown error"}") }
+                }
+            }
+        }
+        updateTask(taskId) { it.copy(job = job) }
     }
 
     private fun executeDownload(
@@ -224,6 +292,15 @@ object DownloadManager {
                 val epDir = "$baseDir/$animeSafe/ep_${task.episodeNumber}"
                 KmpFileSystem.createDirectories(epDir)
 
+                // Some providers return a direct video file (MP4) instead of an HLS playlist.
+                val probe = probeDirectMp4(m3u8Url, currentHeaders)
+                if (probe.isDirectMp4) {
+                    val outputPath = "$baseDir/$taskId.mp4"
+                    val downloaded = downloadDirectMp4(taskId, m3u8Url, currentHeaders, outputPath, probe.contentLength)
+                    if (!downloaded) return@launch
+                    return@launch
+                }
+
                 // 2. Download Subtitles (only when we fetched from API and have a subtitles URL)
                 val subsToDownload = mutableListOf<Pair<String, String>>()
                 if (!subtitlesUrl.isNullOrBlank()) {
@@ -242,6 +319,9 @@ object DownloadManager {
 
                 // 3. Download Video & Audio
                 updateTask(taskId) { it.copy(status = "Parsing playlist...") }
+                val legacyForRemuxGuess = server.endsWith("-dub", ignoreCase = true)
+                val apiServerForRemux = if (legacyForRemuxGuess) server.dropLast(4) else server
+
                 val masterPlaylist = httpClient.get(m3u8Url) {
                     currentHeaders.forEach { (k, v) -> header(k, v) }
                 }.bodyAsText()
@@ -254,7 +334,20 @@ object DownloadManager {
                 }.bodyAsText()
 
                 val isEncrypted = videoPlaylistText.contains("#EXT-X-KEY") || masterPlaylist.contains("#EXT-X-KEY")
-                val videoSegments = if (isEncrypted) emptyList<String>() else parseSegments(videoPlaylistUrl, videoPlaylistText)
+                val fmp4LikePlaylist = videoPlaylistText.contains("#EXT-X-MAP", ignoreCase = true) ||
+                    videoPlaylistText.lines().any { line ->
+                        val l = line.trim()
+                        l.isNotEmpty() && !l.startsWith("#") &&
+                            (l.endsWith(".m4s", ignoreCase = true) ||
+                                l.endsWith(".mp4", ignoreCase = true))
+                    }
+                /** Suzu commonly serves fMP4 HLS — concatenating `.m4s` into `.ts` breaks FFmpeg; pull from playlist URL instead. */
+                val useHlsUrlRemux = !isEncrypted && (
+                    fmp4LikePlaylist || apiServerForRemux.equals("suzu", ignoreCase = true)
+                )
+
+                val videoSegments = if (isEncrypted || useHlsUrlRemux) emptyList<String>()
+                else parseSegments(videoPlaylistUrl, videoPlaylistText)
 
                 val audioSegments = if (audioPlaylistUrl != null) {
                     parseSegments(audioPlaylistUrl, httpClient.get(audioPlaylistUrl) {
@@ -262,7 +355,7 @@ object DownloadManager {
                     }.bodyAsText())
                 } else emptyList()
 
-                if (videoSegments.isEmpty() && !isEncrypted) {
+                if (videoSegments.isEmpty() && !isEncrypted && !useHlsUrlRemux) {
                     updateTask(taskId) { it.copy(status = "Failed: No video segments") }
                     return@launch
                 }
@@ -275,8 +368,8 @@ object DownloadManager {
                 var lastMeasureTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                 var bytesSinceLastMeasure = 0L
 
-                // Download Video (Skip if already using HLS passthrough for encrypted streams)
-                if (!isEncrypted) {
+                // Download Video — skip concat when FFmpeg will demux HLS from URLs (encrypted, fMP4/Suzu, …)
+                if (!isEncrypted && !useHlsUrlRemux) {
                     val videoSink = KmpFileSystem.sink(rawVideoPath).buffer()
                     try {
                     videoSegments.forEachIndexed { index, segmentUrl ->
@@ -311,12 +404,12 @@ object DownloadManager {
                     } finally {
                         videoSink.close()
                     }
-                } else {
+                } else if (isEncrypted || useHlsUrlRemux) {
                     updateTask(taskId) { it.copy(status = "Downloading Stream (HLS)...", progress = 0.5f) }
                 }
 
-                // Download Audio if separate (Skip if encrypted as HLS handles it)
-                if (audioSegments.isNotEmpty() && !isEncrypted) {
+                // Download Audio if separate (Skip if encrypted or URL remux — FFmpeg pulls alternate audio playlists)
+                if (audioSegments.isNotEmpty() && !isEncrypted && !useHlsUrlRemux) {
                     val audioSink = KmpFileSystem.sink(rawAudioPath).buffer()
                     try {
                         audioSegments.forEachIndexed { index, segmentUrl ->
@@ -342,9 +435,20 @@ object DownloadManager {
                 // 4. Muxing
                 updateTask(taskId) { it.copy(status = "Muxing into MKV...", progress = 0.99f, downloadSpeed = "", eta = "") }
                 
+                val muxVideoSource = when {
+                    isEncrypted || useHlsUrlRemux -> videoPlaylistUrl
+                    else -> rawVideoPath
+                }
+                val muxAudioSource =
+                    if (isEncrypted || useHlsUrlRemux) {
+                        audioPlaylistUrl?.takeIf { audioSegments.isNotEmpty() }
+                    } else if (audioSegments.isNotEmpty()) {
+                        rawAudioPath
+                    } else null
+
                 val muxSuccess = muxToMkv(
-                    videoPath = if (isEncrypted) videoPlaylistUrl else rawVideoPath,
-                    audioPath = if (audioSegments.isNotEmpty() && !isEncrypted) rawAudioPath else null,
+                    videoPath = muxVideoSource,
+                    audioPath = muxAudioSource,
                     subtitles = subsToDownload,
                     fonts = emptyList(),
                     metadataPath = null,
@@ -355,7 +459,7 @@ object DownloadManager {
                 if (muxSuccess) {
                     // Cleanup
                     try {
-                        if (!isEncrypted) {
+                        if (!isEncrypted && !useHlsUrlRemux) {
                             KmpFileSystem.delete(rawVideoPath)
                             if (audioSegments.isNotEmpty()) KmpFileSystem.delete(rawAudioPath)
                         }
@@ -364,7 +468,13 @@ object DownloadManager {
                     
                     updateTask(taskId) { it.copy(status = "Finished", progress = 1f, localPath = finalMkvPath) }
                 } else {
-                    updateTask(taskId) { it.copy(status = "Finished (Mux Failed)", progress = 1f, localPath = rawVideoPath) }
+                    updateTask(taskId) {
+                        it.copy(
+                            status = "Finished (Mux Failed)",
+                            progress = 1f,
+                            localPath = if (!isEncrypted && !useHlsUrlRemux) rawVideoPath else null
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
@@ -379,6 +489,122 @@ object DownloadManager {
             }
         }
         updateTask(taskId) { it.copy(job = job) }
+    }
+
+    private data class DirectMp4Probe(
+        val isDirectMp4: Boolean,
+        val contentLength: Long,
+    )
+
+    private fun urlPathEndsWithMp4(url: String): Boolean {
+        val normalized = url.substringBefore('#').substringBefore('?').lowercase()
+        return normalized.endsWith(".mp4")
+    }
+
+    private suspend fun probeDirectMp4(url: String, headers: Map<String, String>): DirectMp4Probe {
+        val byPath = urlPathEndsWithMp4(url)
+        return try {
+            val response = httpClient.head(url) {
+                headers.forEach { (k, v) -> header(k, v) }
+            }
+            val contentType = response.headers["Content-Type"]
+                ?.substringBefore(';')
+                ?.trim()
+                ?.lowercase()
+                .orEmpty()
+            val byContentType =
+                contentType == "video/mp4" || contentType == "application/octet-stream"
+            val contentLength = response.headers["Content-Length"]?.toLongOrNull()?.takeIf { it > 0L } ?: -1L
+            DirectMp4Probe(isDirectMp4 = byPath || byContentType, contentLength = contentLength)
+        } catch (_: Exception) {
+            DirectMp4Probe(isDirectMp4 = byPath, contentLength = -1L)
+        }
+    }
+
+    private suspend fun downloadDirectMp4(
+        taskId: String,
+        url: String,
+        headers: Map<String, String>,
+        outputPath: String,
+        contentLengthFromHead: Long,
+    ): Boolean {
+        updateTask(taskId) { it.copy(status = "Preparing direct MP4...", progress = 0f) }
+        return try {
+            httpClient.prepareGet(url) {
+                headers.forEach { (k, v) -> header(k, v) }
+            }.execute { response ->
+                if (!response.status.isSuccess()) {
+                    updateTask(taskId) { it.copy(status = "Failed: HTTP ${response.status.value}") }
+                    return@execute
+                }
+                val expectedLength = if (contentLengthFromHead > 0L) {
+                    contentLengthFromHead
+                } else {
+                    response.headers["Content-Length"]?.toLongOrNull()?.takeIf { it > 0L } ?: -1L
+                }
+
+                val sink = KmpFileSystem.sink(outputPath).buffer()
+                val channel = response.bodyAsChannel()
+                val buffer = ByteArray(MP4_BUFFER_SIZE)
+                var bytesDownloaded = 0L
+                var lastPercent = -1
+                var lastUiUpdateAt = 0L
+
+                try {
+                    while (true) {
+                        while (tasks.value.find { it.id == taskId }?.isPaused == true) {
+                            kotlinx.coroutines.delay(1000)
+                        }
+
+                        val read = channel.readAvailable(buffer)
+                        if (read == -1) break
+                        if (read == 0) {
+                            kotlinx.coroutines.delay(8)
+                            continue
+                        }
+
+                        sink.write(buffer, offset = 0, byteCount = read)
+                        bytesDownloaded += read
+
+                        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                        if (expectedLength > 0L) {
+                            val percent = ((bytesDownloaded * 100) / expectedLength).toInt().coerceIn(0, 100)
+                            if (percent != lastPercent && (now - lastUiUpdateAt) >= 200L) {
+                                updateTask(taskId, persist = false) {
+                                    it.copy(
+                                        progress = percent / 100f,
+                                        status = "Downloading... $percent%",
+                                    )
+                                }
+                                lastPercent = percent
+                                lastUiUpdateAt = now
+                            }
+                        } else if ((now - lastUiUpdateAt) >= 500L) {
+                            updateTask(taskId, persist = false) { it.copy(status = "Downloading...") }
+                            lastUiUpdateAt = now
+                        }
+                    }
+                } finally {
+                    sink.close()
+                }
+            }
+
+            updateTask(taskId) {
+                it.copy(
+                    progress = 1f,
+                    status = "Finished",
+                    localPath = outputPath,
+                    downloadSpeed = "",
+                    eta = "",
+                )
+            }
+            true
+        } catch (e: Exception) {
+            updateTask(taskId) {
+                it.copy(status = "Failed: ${e.message ?: "unknown error"}")
+            }
+            false
+        }
     }
 
     private fun parseAudioPlaylistUrl(baseUrl: String, content: String, targetLang: String): String? {
@@ -454,10 +680,14 @@ object DownloadManager {
     }
 
 
-    private fun updateTask(id: String, update: (DownloadTask) -> DownloadTask) {
+    private fun updateTask(
+        id: String,
+        persist: Boolean = true,
+        update: (DownloadTask) -> DownloadTask,
+    ) {
         tasks.update { list ->
             list.map { if (it.id == id) update(it) else it }
         }
-        saveTasks()
+        if (persist) saveTasks()
     }
 }
