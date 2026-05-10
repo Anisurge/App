@@ -870,7 +870,7 @@ class SettingsViewModel(
                 postId,
                 CommunityCommentCreateRequest(
                     content = text,
-                    isSpoiller = state.communityDetailCommentSpoiler,
+                    spoiler = state.communityDetailCommentSpoiler,
                 ),
             )
             if (result.isFailure) {

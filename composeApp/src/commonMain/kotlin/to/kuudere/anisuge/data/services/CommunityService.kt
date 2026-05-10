@@ -7,9 +7,13 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.CommunityCategoriesResponse
 import to.kuudere.anisuge.data.models.CommunityCreatePostRequest
@@ -30,6 +34,12 @@ class CommunityService(
     private val httpClient: HttpClient,
 ) {
     private val baseUrl = "${AppComponent.BASE_URL}/community"
+
+    /** Avoid `Authorization: Bearer Bearer …` if the stored token already included the scheme. */
+    private fun sanitizedBearerCredential(rawToken: String): String {
+        val t = rawToken.trim().removeSurrounding("\"")
+        return Regex("^Bearer\\s*(:\\s*)?", RegexOption.IGNORE_CASE).replaceFirst(t, "")
+    }
 
     suspend fun getStats(): CommunityStatsResponse? = runCatching {
         httpClient.get("$baseUrl/stats").body<CommunityStatsResponse>()
@@ -64,27 +74,72 @@ class CommunityService(
     suspend fun getPostComments(postId: String): CommentsResponse? = runCatching {
         val requestToken = sessionStore.get()?.token
         httpClient.get("$baseUrl/posts/$postId/comments") {
-            requestToken?.let { header("Authorization", "Bearer $it") }
+            requestToken?.let { header("Authorization", "Bearer ${sanitizedBearerCredential(it)}") }
         }.body<CommentsResponse>()
     }.getOrNull()
 
     suspend fun createPostComment(postId: String, payload: CommunityCommentCreateRequest): Result<PostCommentResponse> {
         val token = sessionStore.get()?.token
             ?: return Result.failure(IllegalStateException("Please log in to comment."))
-        return runCatching {
-            val response = httpClient.post("$baseUrl/posts/$postId/comments") {
-                header("Authorization", "Bearer $token")
+        val credential = sanitizedBearerCredential(token)
+
+        suspend fun postNested(): io.ktor.client.statement.HttpResponse {
+            val json = buildJsonObject {
+                put("content", payload.content)
+                put("isSpoiller", payload.spoiler)
+                payload.parentCommentId?.takeIf { it.isNotBlank() }?.let { put("parentCommentId", it) }
+            }
+            return httpClient.post("$baseUrl/posts/$postId/comments") {
+                header("Authorization", "Bearer $credential")
                 contentType(ContentType.Application.Json)
-                setBody(payload)
+                setBody(json.toString())
             }
+        }
+
+        return try {
+            val flatJson = buildJsonObject {
+                put("post", postId)
+                put("content", payload.content)
+                if (payload.spoiler) put("spoiler", true)
+                payload.parentCommentId?.takeIf { it.isNotBlank() }?.let { put("parentCommentId", it) }
+            }
+
+            var response = httpClient.post("$baseUrl/comment") {
+                header("Authorization", "Bearer $credential")
+                contentType(ContentType.Application.Json)
+                setBody(flatJson.toString())
+            }
+
             if (!response.status.isSuccess()) {
-                throw IllegalStateException("Comment failed (${response.status.value})")
+                val tryNested =
+                    response.status == HttpStatusCode.NotFound ||
+                        response.status == HttpStatusCode.MethodNotAllowed ||
+                        response.status == HttpStatusCode.BadRequest ||
+                        response.status == HttpStatusCode.Unauthorized ||
+                        response.status == HttpStatusCode.Forbidden
+                if (tryNested) {
+                    response = postNested()
+                }
             }
-            try {
-                response.body<PostCommentResponse>()
-            } catch (_: Exception) {
-                PostCommentResponse(success = true)
+
+            if (!response.status.isSuccess()) {
+                val err = response.runCatching { bodyAsText() }.getOrNull().orEmpty().trim()
+                println("[CommunityService] createPostComment status=${response.status} body=${err.take(400)}")
+                throw IllegalStateException(
+                    err.ifBlank {
+                        "Comment failed (${response.status.value}). Log out and back in if this keeps happening."
+                    }.take(240),
+                )
             }
+            Result.success(
+                try {
+                    response.body<PostCommentResponse>()
+                } catch (_: Exception) {
+                    PostCommentResponse(success = true)
+                },
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -97,16 +152,17 @@ class CommunityService(
     suspend fun getUnreadCount(): CommunityUnreadCountResponse? = runCatching {
         val requestToken = sessionStore.get()?.token
         httpClient.get("$baseUrl/unread-count") {
-            requestToken?.let { header("Authorization", "Bearer $it") }
+            requestToken?.let { header("Authorization", "Bearer ${sanitizedBearerCredential(it)}") }
         }.body<CommunityUnreadCountResponse>()
     }.getOrNull()
 
     suspend fun createPost(payload: CommunityCreatePostRequest): Result<CommunityCreatePostResponse> {
         val token = sessionStore.get()?.token
             ?: return Result.failure(IllegalStateException("Please log in to create a post."))
+        val credential = sanitizedBearerCredential(token)
         return runCatching {
             val response = httpClient.post("$baseUrl/posts") {
-                header("Authorization", "Bearer $token")
+                header("Authorization", "Bearer $credential")
                 contentType(ContentType.Application.Json)
                 setBody(payload)
             }
@@ -120,9 +176,10 @@ class CommunityService(
     suspend fun votePost(postId: String, vote: Int): Result<CommunityVoteResponse> {
         val token = sessionStore.get()?.token
             ?: return Result.failure(IllegalStateException("Please log in to vote."))
+        val credential = sanitizedBearerCredential(token)
         return runCatching {
             val response = httpClient.post("$baseUrl/posts/$postId/vote") {
-                header("Authorization", "Bearer $token")
+                header("Authorization", "Bearer $credential")
                 contentType(ContentType.Application.Json)
                 setBody(CommunityVoteRequest(vote))
             }
