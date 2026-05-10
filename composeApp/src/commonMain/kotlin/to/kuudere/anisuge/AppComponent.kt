@@ -21,7 +21,7 @@ object AppComponent {
     const val STREAMING_SERVERS_CATALOG_URL = "https://www.anisurge.lol/api/v1/streaming/servers"
     /** Anonymous install heartbeat for admin dashboard metrics (no account or PII). */
     const val ANALYTICS_PING_URL = "https://www.anisurge.lol/api/v1/app/ping"
-    const val STREAMING_URL = "https://fetch.anisurge.lol/api"
+    const val STREAMING_URL = "https://fetch.n92dev.us.kg/api"
 
     val httpClient: HttpClient by lazy {
         HttpClient {

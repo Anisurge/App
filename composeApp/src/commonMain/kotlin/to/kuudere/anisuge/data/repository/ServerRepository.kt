@@ -40,7 +40,7 @@ class ServerRepository(
         private const val CACHE_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000L
 
         /** Default stream `source` order when the user has not saved a custom priority (matches api.md / site catalog). */
-        val DEFAULT_STREAM_SOURCE_ORDER = listOf("zen2", "zen", "suzu", "animepahe")
+        val DEFAULT_STREAM_SOURCE_ORDER = listOf("zen2", "zen", "allmanga", "suzu")
 
         /**
          * Order for the Settings servers list — same rules as [ServerRepository.getFallbackPriority]

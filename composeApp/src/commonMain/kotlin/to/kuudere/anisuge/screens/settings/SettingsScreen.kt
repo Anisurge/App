@@ -869,6 +869,8 @@ private fun MobileSettingsDetail(
                     onDisconnectMal = viewModel::disconnectMal,
                     onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                     onDisconnectAnilist = viewModel::disconnectAnilist,
+                    onSyncMal = viewModel::syncAllToMAL,
+                    onSyncAnilist = viewModel::syncAllToAniList,
                 )
                 is SettingsTab.Storage -> MobileStorageContent(
                     uiState = uiState,
@@ -941,6 +943,8 @@ private fun SettingsContent(
                 onDisconnectMal = viewModel::disconnectMal,
                 onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                 onDisconnectAnilist = viewModel::disconnectAnilist,
+                onSyncMal = viewModel::syncAllToMAL,
+                onSyncAnilist = viewModel::syncAllToAniList,
             )
             is SettingsTab.Storage -> StorageTab(
                 uiState = uiState,
@@ -1039,6 +1043,8 @@ private fun SyncTab(
     onDisconnectMal: () -> Unit,
     onConnectAnilist: () -> Unit,
     onDisconnectAnilist: () -> Unit,
+    onSyncMal: () -> Unit,
+    onSyncAnilist: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1063,6 +1069,68 @@ private fun SyncTab(
             onConnectAnilist = onConnectAnilist,
             onDisconnectAnilist = onDisconnectAnilist,
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Sync Now buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // MAL Sync Now
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (uiState.malConnected) Color(0xFF2E51A1) else BG_CARD)
+                    .border(1.dp, if (uiState.malConnected) Color(0xFF2E51A1) else BORDER, RoundedCornerShape(14.dp))
+                    .clickable(enabled = uiState.malConnected && !uiState.isSyncingMal) { onSyncMal() }
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (uiState.isSyncingMal) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        "Sync All to MAL",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            // AniList Sync Now
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (uiState.anilistConnected) Color(0xFF0DB598) else BG_CARD)
+                    .border(1.dp, if (uiState.anilistConnected) Color(0xFF0DB598) else BORDER, RoundedCornerShape(14.dp))
+                    .clickable(enabled = uiState.anilistConnected && !uiState.isSyncingAnilist) { onSyncAnilist() }
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (uiState.isSyncingAnilist) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        "Sync All to AniList",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
     }
 }
 

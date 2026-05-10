@@ -40,7 +40,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -63,7 +70,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import kotlinx.coroutines.delay
 import to.kuudere.anisuge.data.models.ScheduleAnime
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.OfflineState
@@ -89,41 +95,24 @@ private fun dayOfWeek(y: Int, m: Int, d: Int): Int {
     return ((d + (13 * (am + 1)) / 5 + k + k / 4 + j / 4 - 2 * j) % 7 + 5) % 7
 }
 
-private fun todayString(): String {
-    var rem = (System.currentTimeMillis() / 86400000L).toInt()
-    var y = 1970
-    while (true) {
-        val diy = if (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) 366 else 365
-        if (rem < diy) break; rem -= diy; y++
-    }
-    val md = intArrayOf(31, if (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) 29 else 28,
-        31,30,31,30,31,31,30,31,30,31)
-    var mo = 0
-    while (mo < 12 && rem >= md[mo]) { rem -= md[mo]; mo++ }
-    return "${y}-${(mo+1).toString().padStart(2,'0')}-${(rem+1).toString().padStart(2,'0')}"
+private fun todayString(timezone: String = "UTC"): String {
+    val tz = runCatching { TimeZone.of(timezone) }.getOrElse { TimeZone.UTC }
+    return Clock.System.now().toLocalDateTime(tz).date.toString()
 }
 
-private fun formatDateHeader(dateStr: String): String {
+private fun formatDateHeader(dateStr: String, today: String): String {
     val (ys, ms, ds) = dateStr.split("-")
     val y = ys.toInt(); val m = ms.toInt(); val d = ds.toInt()
     val dow = DOW_NAMES[dayOfWeek(y, m, d)]
     val fmt = "${ms}/${ds}/${ys}"
-    val today = todayString()
-    val parts = today.split("-")
-    val ty = parts[0].toInt(); val tm = parts[1].toInt(); val td = parts[2].toInt()
-    val tomorrowD = if (td + 1 > daysInMonth(ty, tm)) 1 else td + 1
-    val tomorrowM = if (td + 1 > daysInMonth(ty, tm)) tm + 1 else tm
-    val tomorrowStr = "${ys}-${tomorrowM.toString().padStart(2,'0')}-${tomorrowD.toString().padStart(2,'0')}"
+    val tomorrowStr = runCatching {
+        LocalDate.parse(today).plus(DatePeriod(days = 1)).toString()
+    }.getOrNull()
     return when (dateStr) {
         today       -> "Today ($fmt)"
         tomorrowStr -> "Tomorrow ($fmt)"
         else        -> "$dow ($fmt)"
     }
-}
-
-private fun daysInMonth(y: Int, m: Int): Int {
-    val leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)
-    return intArrayOf(31, if (leap) 29 else 28, 31,30,31,30,31,31,30,31,30,31)[m - 1]
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -160,7 +149,12 @@ fun ScheduleScreen(
             }
 
             else -> {
+                val today = remember(state.timezone) { todayString(state.timezone) }
                 val sortedDates = remember(state.schedule) { state.schedule.keys.sorted() }
+                val visibleDates = remember(sortedDates, today) {
+                    val datesFromToday = sortedDates.filter { it >= today }
+                    if (datesFromToday.isNotEmpty()) datesFromToday else sortedDates
+                }
                 val listState = rememberLazyListState()
                 // Keys of items that have already played their enter animation
                 val animatedKeys = remember { mutableStateSetOf<String>() }
@@ -198,9 +192,9 @@ fun ScheduleScreen(
                            }
                         }
 
-                        sortedDates.forEachIndexed { dateIdx, dateStr ->
+                        visibleDates.forEachIndexed { dateIdx, dateStr ->
                             val animeList = state.schedule[dateStr] ?: return@forEachIndexed
-                            val isToday = dateStr == todayString()
+                            val isToday = dateStr == today
 
                             // ── Date header ───────────────────────────────
                             item(key = "hdr-$dateStr") {
@@ -224,7 +218,7 @@ fun ScheduleScreen(
                                                 Spacer(Modifier.width(10.dp))
                                             }
                                             Text(
-                                                formatDateHeader(dateStr),
+                                                formatDateHeader(dateStr, today),
                                                 color = Color.White,
                                                 fontSize = 18.sp,
                                                 fontWeight = FontWeight.Bold,

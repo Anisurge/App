@@ -28,7 +28,17 @@ data class StreamInfo(
 data class StreamHeaders(
     val Referer: String? = null,
     @SerialName("User-Agent") val userAgent: String? = null,
+    /** Some CDNs (e.g. Wix/static hosts for AllAnime) require `Origin`. */
+    @SerialName("Origin") val Origin: String? = null,
 )
+
+/** Headers for HTTP fetch (Referer / User-Agent / Origin). */
+fun StreamHeaders?.asHttpHeaderMap(): Map<String, String> = buildMap {
+    val h = this@asHttpHeaderMap ?: return@buildMap
+    h.Referer?.takeIf { it.isNotBlank() }?.let { put("Referer", it) }
+    h.userAgent?.takeIf { it.isNotBlank() }?.let { put("User-Agent", it) }
+    h.Origin?.takeIf { it.isNotBlank() }?.let { put("Origin", it) }
+}
 
 @Serializable
 data class SuzuEmbedStream(
