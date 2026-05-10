@@ -342,6 +342,28 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                         val backgroundImage = bannerUrl ?: episodeData?.coverImage?.bestUrl
                         val hasBanner = bannerUrl != null
                         val isInWatchlist = episodeData?.folder != null
+                        val anime = episodeData?.anime
+                        val animeDescription = stripWatchInfoHtml(anime?.description)
+                        val scoreLabel = anime?.score?.let { "${it}%" }
+                        val episodeCountLabel = anime?.epCount?.let { "$it eps" }
+                        val durationLabel = anime?.duration?.trim()?.takeIf { it.isNotBlank() }?.let {
+                            if (it.contains("min", ignoreCase = true)) it else "$it min"
+                        }
+                        val seasonLabel = buildString {
+                            anime?.season?.takeIf { it.isNotBlank() }?.let { append(it.prettyInfoLabel()) }
+                            anime?.seasonYear?.let {
+                                if (isNotEmpty()) append(" ")
+                                append(it)
+                            }
+                        }.takeIf { it.isNotBlank() }
+                        val infoChips = listOfNotNull(
+                            anime?.format?.takeIf { it.isNotBlank() }?.prettyInfoLabel(),
+                            anime?.status?.takeIf { it.isNotBlank() }?.prettyInfoLabel(),
+                            episodeCountLabel,
+                            durationLabel,
+                            seasonLabel,
+                            scoreLabel,
+                        )
                         val watchlistButtonLabel = if (isInWatchlist) {
                             episodeData?.folder?.takeIf { it.isNotBlank() && it != "Remove" }
                                 ?: "In Watchlist"
@@ -440,6 +462,102 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                         }
 
                                         Spacer(Modifier.height(16.dp))
+
+                                        if (infoChips.isNotEmpty()) {
+                                            FlowRow(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                infoChips.forEach { chip ->
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(999.dp))
+                                                            .background(Color(0xFF1C1C1C))
+                                                            .border(
+                                                                width = 1.dp,
+                                                                color = Color.White.copy(alpha = 0.15f),
+                                                                shape = RoundedCornerShape(999.dp)
+                                                            )
+                                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = chip,
+                                                            color = Color.White.copy(alpha = 0.95f),
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Spacer(Modifier.height(14.dp))
+                                        }
+
+                                        if (anime?.genres?.isNotEmpty() == true) {
+                                            Text(
+                                                text = "Genres",
+                                                color = Color.White,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            FlowRow(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                anime.genres.forEach { genre ->
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(6.dp))
+                                                            .background(Color(0xFF141414))
+                                                            .border(
+                                                                width = 1.dp,
+                                                                color = Color.White.copy(alpha = 0.10f),
+                                                                shape = RoundedCornerShape(6.dp)
+                                                            )
+                                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = genre,
+                                                            color = Color.LightGray,
+                                                            fontSize = 12.sp,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Spacer(Modifier.height(14.dp))
+                                        }
+
+                                        if (animeDescription.isNotBlank()) {
+                                            Text(
+                                                text = "Synopsis",
+                                                color = Color.White,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                            Text(
+                                                text = animeDescription,
+                                                color = Color(0xFFD3D3D3),
+                                                fontSize = 13.sp,
+                                                lineHeight = 20.sp,
+                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                            )
+                                        } else {
+                                            Text(
+                                                text = "No synopsis available.",
+                                                color = Color.Gray,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                            )
+                                        }
 
                                         Spacer(Modifier.height(20.dp))
                                     }
@@ -1723,4 +1841,33 @@ private fun formatTime(seconds: Double): String {
     val mStr = m.toString().padStart(2, '0')
     val sStr = s.toString().padStart(2, '0')
     return if (h > 0) "$hStr:$mStr:$sStr" else "$mStr:$sStr"
+}
+
+private fun String.prettyInfoLabel(): String =
+    replace('_', ' ')
+        .lowercase()
+        .split(' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { token ->
+            token.replaceFirstChar { ch ->
+                if (ch.isLowerCase()) ch.titlecase() else ch.toString()
+            }
+        }
+
+private fun stripWatchInfoHtml(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    return raw
+        .replace("<br>", "\n", ignoreCase = true)
+        .replace("<br/>", "\n", ignoreCase = true)
+        .replace("<br />", "\n", ignoreCase = true)
+        .replace(Regex("<[^>]*>"), "")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace(Regex("[ \\t]+"), " ")
+        .replace(Regex("\\n{3,}"), "\n\n")
+        .trim()
 }
