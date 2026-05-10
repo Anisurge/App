@@ -1061,6 +1061,13 @@ private fun SyncTab(
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 32.dp)
         )
+        Text(
+            "it wont work coz its stil dev\nplease give me time bruh :sob\nmy exams are going on but yea pease dont forget to donate",
+            color = Color(0xFFFFC857),
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
 
         TrackingSection(
             uiState = uiState,
