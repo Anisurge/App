@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,6 +43,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Notifications
@@ -56,6 +59,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
@@ -78,6 +82,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -114,8 +119,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 
+import to.kuudere.anisuge.data.models.Comment
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.data.models.AnimeFolderInfo
 import to.kuudere.anisuge.data.repository.ServerRepository
@@ -887,6 +895,13 @@ private fun MobileSettingsDetail(
                     onDraftFlairChange = viewModel::setCommunityDraftFlair,
                     onDraftSpoilerChange = viewModel::setCommunityDraftSpoiler,
                     onCreatePost = viewModel::createCommunityPost,
+                    onOpenPost = viewModel::openCommunityPostDetail,
+                    onDismissPostDetail = viewModel::dismissCommunityPostDetail,
+                    onCommentDraftChange = viewModel::setCommunityDetailCommentDraft,
+                    onCommentSpoilerChange = viewModel::setCommunityDetailCommentSpoiler,
+                    onSubmitComment = viewModel::submitCommunityPostComment,
+                    onImageClick = viewModel::showCommunityFullscreenImage,
+                    onDismissFullscreenImage = viewModel::dismissCommunityFullscreenImage,
                 )
                 is SettingsTab.Storage -> MobileStorageContent(
                     uiState = uiState,
@@ -976,6 +991,13 @@ private fun SettingsContent(
                 onDraftFlairChange = viewModel::setCommunityDraftFlair,
                 onDraftSpoilerChange = viewModel::setCommunityDraftSpoiler,
                 onCreatePost = viewModel::createCommunityPost,
+                onOpenPost = viewModel::openCommunityPostDetail,
+                onDismissPostDetail = viewModel::dismissCommunityPostDetail,
+                onCommentDraftChange = viewModel::setCommunityDetailCommentDraft,
+                onCommentSpoilerChange = viewModel::setCommunityDetailCommentSpoiler,
+                onSubmitComment = viewModel::submitCommunityPostComment,
+                onImageClick = viewModel::showCommunityFullscreenImage,
+                onDismissFullscreenImage = viewModel::dismissCommunityFullscreenImage,
             )
             is SettingsTab.Storage -> StorageTab(
                 uiState = uiState,
@@ -1187,9 +1209,34 @@ private fun CommunityTab(
     onDraftFlairChange: (String) -> Unit,
     onDraftSpoilerChange: (Boolean) -> Unit,
     onCreatePost: () -> Unit,
+    onOpenPost: (String) -> Unit,
+    onDismissPostDetail: () -> Unit,
+    onCommentDraftChange: (String) -> Unit,
+    onCommentSpoilerChange: (Boolean) -> Unit,
+    onSubmitComment: () -> Unit,
+    onImageClick: (String) -> Unit,
+    onDismissFullscreenImage: () -> Unit,
 ) {
     val sortOptions = listOf("hot", "new", "top", "old")
     val periodOptions = listOf("all", "weekly", "monthly")
+
+    uiState.communityFullscreenImageUrl?.let { url ->
+        CommunityFullscreenMediaDialog(imageUrl = url, onDismiss = onDismissFullscreenImage)
+    }
+
+    uiState.communityDetailPostId?.let { pid ->
+        CommunityPostDetailDialog(
+            uiState = uiState,
+            postId = pid,
+            onDismiss = onDismissPostDetail,
+            onVote = onVote,
+            onCommentDraftChange = onCommentDraftChange,
+            onCommentSpoilerChange = onCommentSpoilerChange,
+            onSubmitComment = onSubmitComment,
+            onImageClick = onImageClick,
+        )
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             "Community",
@@ -1421,11 +1468,15 @@ private fun CommunityTab(
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(BG_HOVER)
                                 .border(1.dp, BORDER, RoundedCornerShape(10.dp))
+                                .clickable { onOpenPost(post.id) }
                                 .padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(post.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            CommunityPostContent(post.content)
+                            CommunityPostContent(
+                                rawContent = post.content,
+                                onMediaClick = onImageClick,
+                            )
                             Text(
                                 "${post.category} • ${post.comments} comments • ${post.views} views • ${post.time ?: ""}",
                                 color = MUTED,
@@ -1467,11 +1518,227 @@ private fun CommunityTab(
     }
 }
 
+@Composable
+private fun CommunityFullscreenMediaDialog(
+    imageUrl: String,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+        ) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = "Fullscreen media",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommunityPostDetailDialog(
+    uiState: SettingsUiState,
+    postId: String,
+    onDismiss: () -> Unit,
+    onVote: (String, Int) -> Unit,
+    onCommentDraftChange: (String) -> Unit,
+    onCommentSpoilerChange: (Boolean) -> Unit,
+    onSubmitComment: () -> Unit,
+    onImageClick: (String) -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        val post = uiState.communityDetailPost
+        val voting = uiState.isVotingCommunityPostIds.contains(postId)
+        val loggedIn = uiState.userProfile != null
+
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color(0xFF090909),
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White,
+                        )
+                    }
+                    Column(Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text(
+                            "Post",
+                            color = TEXT,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = BORDER)
+
+                if (post == null) {
+                    Box(
+                        Modifier.weight(1f).fillMaxWidth(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (uiState.isLoadingCommunityDetail) {
+                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text("Post could not be loaded.", color = MUTED, fontSize = 14.sp)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(post.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "${post.category}${post.flair?.let { " • $it" } ?: ""} • ${post.comments} comments • ${post.views} views • ${post.time ?: ""}",
+                                    color = MUTED,
+                                    fontSize = 11.sp,
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = { onVote(postId, 1) }, enabled = !voting) {
+                                        Text("▲ ${post.votes}")
+                                    }
+                                    OutlinedButton(onClick = { onVote(postId, -1) }, enabled = !voting) { Text("▼") }
+                                    OutlinedButton(onClick = { onVote(postId, 0) }, enabled = !voting) { Text("Clear vote") }
+                                }
+                                CommunityPostContent(
+                                    rawContent = post.content,
+                                    maxBodyLines = 10_000,
+                                    previewImageCap = 10_000,
+                                    onMediaClick = onImageClick,
+                                )
+                            }
+                        }
+
+                        item {
+                            Text(
+                                "Comments (${uiState.communityDetailComments.size})",
+                                color = TEXT,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+
+                        items(uiState.communityDetailComments, key = { it.id }) { c ->
+                            CommunityCommentCard(comment = c, onMediaClick = onImageClick)
+                        }
+                    }
+                }
+
+                if (!loggedIn) {
+                    Text(
+                        "Log in to reply to this post.",
+                        color = MUTED,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                } else if (post != null) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF111111))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedTextField(
+                            value = uiState.communityDetailCommentDraft,
+                            onValueChange = onCommentDraftChange,
+                            label = { Text("Write a comment") },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 140.dp),
+                            maxLines = 5,
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = uiState.communityDetailCommentSpoiler,
+                                onCheckedChange = onCommentSpoilerChange,
+                            )
+                            Text("Spoiler", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = onSubmitComment,
+                            enabled = !uiState.isPostingCommunityComment && uiState.communityDetailCommentDraft.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (uiState.isPostingCommunityComment) {
+                                CircularProgressIndicator(
+                                    Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White,
+                                )
+                            } else {
+                                Text("Post comment")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommunityCommentCard(
+    comment: Comment,
+    onMediaClick: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(BG_HOVER)
+            .border(1.dp, BORDER, RoundedCornerShape(10.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val name = comment.authorDisplayName?.takeIf { it.isNotBlank() } ?: comment.author.orEmpty()
+        Text(name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(comment.created_at ?: "", color = MUTED, fontSize = 10.sp)
+        CommunityPostContent(
+            rawContent = comment.content,
+            maxBodyLines = 10_000,
+            previewImageCap = 10_000,
+            onMediaClick = onMediaClick,
+        )
+    }
+}
+
 private val markdownImageRegex = Regex("!\\[[^\\]]*\\]\\(([^)\\s]+)\\)")
 private val bareImageUrlRegex = Regex("""https?://\S+\.(?:png|jpe?g|gif|webp)(?:\?\S*)?""", RegexOption.IGNORE_CASE)
 
 @Composable
-private fun CommunityPostContent(rawContent: String) {
+private fun CommunityPostContent(
+    rawContent: String,
+    maxBodyLines: Int = 6,
+    previewImageCap: Int = 3,
+    onMediaClick: ((String) -> Unit)? = null,
+) {
     if (rawContent.isBlank()) return
 
     val markdownImageMatches = markdownImageRegex.findAll(rawContent).map { it.groupValues[1] }.toList()
@@ -1483,27 +1750,32 @@ private fun CommunityPostContent(rawContent: String) {
         acc.replace(url, "")
     }.trim()
 
+    val bodyUnlimited = maxBodyLines >= 1000
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (cleanedText.isNotBlank()) {
             Text(
                 cleanedText,
                 color = Color.White.copy(alpha = 0.75f),
                 fontSize = 12.sp,
-                maxLines = 6,
-                overflow = TextOverflow.Ellipsis,
+                maxLines = if (bodyUnlimited) Int.MAX_VALUE else maxBodyLines,
+                overflow = if (bodyUnlimited) TextOverflow.Visible else TextOverflow.Ellipsis,
             )
         }
 
-        imageUrls.take(3).forEach { imageUrl ->
+        val shownImages = if (previewImageCap >= 1000) imageUrls else imageUrls.take(previewImageCap)
+        shownImages.forEach { imageUrl ->
+            val base = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, BORDER, RoundedCornerShape(10.dp))
             AsyncImage(
                 model = imageUrl,
                 contentDescription = "Community media",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .border(1.dp, BORDER, RoundedCornerShape(10.dp))
+                modifier =
+                    if (onMediaClick != null) base.clickable { onMediaClick(imageUrl) } else base,
             )
         }
     }
