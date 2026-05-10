@@ -7,7 +7,7 @@
 - Prefer a strong blur overlay (around half strength) with centered "Coming Soon" text over removing or hiding unfinished features
 - The user communicates in a casual/abbreviated style — interpret intent over literal wording
 - When asked to test on device, install the app and verify via the connected Android device using adb
-- Prefer curl checks against expected API responses (per `api.md`) before renaming fields or parsers; confirm the app's actual HTTP URL when debugging streaming, downloads, or list-shaped screens
+- Prefer curl checks against expected API responses (per `api.md`) before starting API integration/parsing work; confirm the app's actual HTTP URL when debugging streaming, downloads, or list-shaped screens
 
 ## Learned Workspace Facts
 

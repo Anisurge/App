@@ -7,11 +7,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import to.kuudere.anisuge.data.models.CommunityCategory
+import to.kuudere.anisuge.data.models.CommunityCreatePostRequest
+import to.kuudere.anisuge.data.models.CommunityLeaderboardUser
+import to.kuudere.anisuge.data.models.CommunityPost
+import to.kuudere.anisuge.data.models.CommunityStatsResponse
 import to.kuudere.anisuge.data.models.DownloadStorageInfo
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.data.models.UserSettings
 import to.kuudere.anisuge.data.repository.ServerRepository
+import to.kuudere.anisuge.data.services.CommunityService
 import to.kuudere.anisuge.data.services.SettingsService
 import to.kuudere.anisuge.data.services.SettingsStore
 import to.kuudere.anisuge.data.services.WatchlistService
@@ -70,6 +78,28 @@ data class SettingsUiState(
     val isConnectingAnilist: Boolean = false,
     val isSyncingMal: Boolean = false,
     val isSyncingAnilist: Boolean = false,
+
+    // Community
+    val isLoadingCommunity: Boolean = false,
+    val isLoadingCommunityMore: Boolean = false,
+    val communityStats: CommunityStatsResponse? = null,
+    val communityCategories: List<CommunityCategory> = emptyList(),
+    val communityTrendingPosts: List<CommunityPost> = emptyList(),
+    val communityPosts: List<CommunityPost> = emptyList(),
+    val communityLeaderboard: List<CommunityLeaderboardUser> = emptyList(),
+    val communityUnreadCount: Int = 0,
+    val communitySort: String = "hot",
+    val communityCategory: String = "all",
+    val communityLeaderboardPeriod: String = "all",
+    val communityHasMore: Boolean = false,
+    val communityOffset: Int = 0,
+    val isCreatingCommunityPost: Boolean = false,
+    val isVotingCommunityPostIds: Set<String> = emptySet(),
+    val communityDraftTitle: String = "",
+    val communityDraftContent: String = "",
+    val communityDraftCategory: String = "general",
+    val communityDraftFlair: String = "Discussion",
+    val communityDraftSpoiler: Boolean = false,
 )
 
 sealed class SettingsTab {
@@ -78,6 +108,7 @@ sealed class SettingsTab {
     data object Storage : SettingsTab()
     data object Appearance : SettingsTab()
     data object Sync : SettingsTab()
+    data object Community : SettingsTab()
     data object Servers : SettingsTab()
     data object Notifications : SettingsTab()
 }
@@ -89,6 +120,7 @@ class SettingsViewModel(
     private val authService: AuthService,
     private val trackingService: TrackingService,
     private val watchlistService: WatchlistService,
+    private val communityService: CommunityService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
 
@@ -225,6 +257,7 @@ class SettingsViewModel(
             is SettingsTab.Profile -> loadUserProfile()
             is SettingsTab.Servers -> loadServerPriority()
             is SettingsTab.Notifications -> loadNotificationPreferences()
+            is SettingsTab.Community -> loadCommunityInitial()
             else -> {}
         }
     }
@@ -528,6 +561,248 @@ class SettingsViewModel(
 
     fun refreshTrackingState() {
         loadTrackingState()
+    }
+
+    // ── Community ───────────────────────────────────────────────────────────────
+
+    fun refreshCommunity() {
+        loadCommunityInitial(force = true)
+    }
+
+    fun setCommunitySort(sort: String) {
+        _uiState.update { it.copy(communitySort = sort) }
+        loadCommunityInitial(force = true)
+    }
+
+    fun setCommunityCategory(category: String) {
+        _uiState.update { it.copy(communityCategory = category) }
+        loadCommunityInitial(force = true)
+    }
+
+    fun setCommunityLeaderboardPeriod(period: String) {
+        _uiState.update { it.copy(communityLeaderboardPeriod = period) }
+        viewModelScope.launch {
+            val leaderboard = communityService.getLeaderboard(period)?.users ?: emptyList()
+            _uiState.update { it.copy(communityLeaderboard = leaderboard) }
+        }
+    }
+
+    fun setCommunityDraftTitle(value: String) {
+        _uiState.update { it.copy(communityDraftTitle = value) }
+    }
+
+    fun setCommunityDraftContent(value: String) {
+        _uiState.update { it.copy(communityDraftContent = value) }
+    }
+
+    fun setCommunityDraftCategory(value: String) {
+        _uiState.update { it.copy(communityDraftCategory = value) }
+    }
+
+    fun setCommunityDraftFlair(value: String) {
+        _uiState.update { it.copy(communityDraftFlair = value) }
+    }
+
+    fun setCommunityDraftSpoiler(value: Boolean) {
+        _uiState.update { it.copy(communityDraftSpoiler = value) }
+    }
+
+    fun loadCommunityInitial(force: Boolean = false) {
+        if (_uiState.value.isLoadingCommunity && !force) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isLoadingCommunity = true,
+                    errorMessage = null,
+                )
+            }
+
+            val sort = _uiState.value.communitySort
+            val category = _uiState.value.communityCategory
+            val period = _uiState.value.communityLeaderboardPeriod
+            try {
+                val statsDeferred = async { communityService.getStats() }
+                val categoriesDeferred = async { communityService.getCategories() }
+                val trendingDeferred = async { communityService.getTrending() }
+                val postsDeferred = async { communityService.getPosts(sort = sort, category = category, limit = 10, offset = 0) }
+                val leaderboardDeferred = async { communityService.getLeaderboard(period) }
+                val unreadDeferred = async { communityService.getUnreadCount() }
+                awaitAll(
+                    statsDeferred,
+                    categoriesDeferred,
+                    trendingDeferred,
+                    postsDeferred,
+                    leaderboardDeferred,
+                    unreadDeferred
+                )
+
+                val stats = statsDeferred.await()
+                val categories = categoriesDeferred.await()?.categories ?: emptyList()
+                val trending = trendingDeferred.await()?.posts ?: emptyList()
+                val postsResponse = postsDeferred.await()
+                val posts = postsResponse?.posts ?: emptyList()
+                val leaderboard = leaderboardDeferred.await()?.users ?: emptyList()
+                val unreadCount = unreadDeferred.await()?.unreadCount ?: 0
+                val resolvedDraftCategory = when {
+                    categories.none { it.slug == _uiState.value.communityDraftCategory } ->
+                        categories.firstOrNull()?.slug ?: _uiState.value.communityDraftCategory
+                    else -> _uiState.value.communityDraftCategory
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isLoadingCommunity = false,
+                        communityStats = stats,
+                        communityCategories = categories,
+                        communityTrendingPosts = trending,
+                        communityPosts = posts,
+                        communityLeaderboard = leaderboard,
+                        communityUnreadCount = unreadCount,
+                        communityHasMore = postsResponse?.hasMore == true,
+                        communityOffset = posts.size,
+                        communityDraftCategory = resolvedDraftCategory,
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingCommunity = false,
+                        errorMessage = "Failed to load community: ${e.message ?: "Unknown error"}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun loadMoreCommunityPosts() {
+        val state = _uiState.value
+        if (state.isLoadingCommunity || state.isLoadingCommunityMore || !state.communityHasMore) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingCommunityMore = true) }
+            try {
+                val response = communityService.getPosts(
+                    sort = state.communitySort,
+                    category = state.communityCategory,
+                    limit = 10,
+                    offset = state.communityOffset
+                )
+                val newPosts = response?.posts ?: emptyList()
+                _uiState.update {
+                    it.copy(
+                        isLoadingCommunityMore = false,
+                        communityPosts = it.communityPosts + newPosts,
+                        communityOffset = it.communityOffset + newPosts.size,
+                        communityHasMore = response?.hasMore == true,
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingCommunityMore = false,
+                        errorMessage = "Failed loading more posts: ${e.message ?: "Unknown error"}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun voteCommunityPost(postId: String, vote: Int) {
+        if (vote !in listOf(-1, 0, 1)) return
+        val current = _uiState.value
+        val existing = current.communityPosts.firstOrNull { it.id == postId } ?: return
+        val oldVote = existing.userVote
+        val newVotes = existing.votes - oldVote + vote
+
+        _uiState.update {
+            it.copy(
+                communityPosts = it.communityPosts.map { post ->
+                    if (post.id == postId) post.copy(userVote = vote, votes = newVotes) else post
+                },
+                isVotingCommunityPostIds = it.isVotingCommunityPostIds + postId
+            )
+        }
+
+        viewModelScope.launch {
+            val result = communityService.votePost(postId, vote)
+            if (result.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        communityPosts = it.communityPosts.map { post ->
+                            if (post.id == postId) post.copy(userVote = oldVote, votes = existing.votes) else post
+                        },
+                        errorMessage = result.exceptionOrNull()?.message ?: "Failed to vote post",
+                        isVotingCommunityPostIds = it.isVotingCommunityPostIds - postId
+                    )
+                }
+                return@launch
+            }
+
+            val payload = result.getOrNull()
+            _uiState.update {
+                it.copy(
+                    communityPosts = it.communityPosts.map { post ->
+                        if (post.id == postId) {
+                            post.copy(
+                                userVote = payload?.userVote ?: post.userVote,
+                                votes = payload?.votes ?: post.votes,
+                            )
+                        } else {
+                            post
+                        }
+                    },
+                    isVotingCommunityPostIds = it.isVotingCommunityPostIds - postId
+                )
+            }
+        }
+    }
+
+    fun createCommunityPost() {
+        val state = _uiState.value
+        if (state.isCreatingCommunityPost) return
+        val title = state.communityDraftTitle.trim()
+        val content = state.communityDraftContent.trim()
+        val category = state.communityDraftCategory.trim()
+        val flair = state.communityDraftFlair.trim().ifBlank { "Discussion" }
+        if (title.isBlank() || content.isBlank() || category.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Title, content and category are required.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCreatingCommunityPost = true) }
+            val result = communityService.createPost(
+                CommunityCreatePostRequest(
+                    title = title,
+                    content = content,
+                    category = category,
+                    flair = flair,
+                    images = emptyList(),
+                    spoiler = state.communityDraftSpoiler
+                )
+            )
+            if (result.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isCreatingCommunityPost = false,
+                        errorMessage = result.exceptionOrNull()?.message ?: "Failed creating post"
+                    )
+                }
+                return@launch
+            }
+
+            val created = result.getOrNull()?.post
+            _uiState.update {
+                it.copy(
+                    isCreatingCommunityPost = false,
+                    successMessage = "Community post created.",
+                    communityPosts = if (created != null) listOf(created) + it.communityPosts else it.communityPosts,
+                    communityDraftTitle = "",
+                    communityDraftContent = "",
+                    communityDraftFlair = "Discussion",
+                    communityDraftSpoiler = false,
+                )
+            }
+        }
     }
 
     fun syncAllToMAL() {

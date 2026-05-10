@@ -104,6 +104,10 @@ object AppComponent {
         to.kuudere.anisuge.data.services.TrackingService(httpClient, settingsStore)
     }
 
+    val communityService: to.kuudere.anisuge.data.services.CommunityService by lazy {
+        to.kuudere.anisuge.data.services.CommunityService(sessionStore, httpClient)
+    }
+
     val syncManager: to.kuudere.anisuge.data.services.SyncManager by lazy {
         to.kuudere.anisuge.data.services.SyncManager(trackingService)
     }
