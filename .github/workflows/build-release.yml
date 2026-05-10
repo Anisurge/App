@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+      # Semver tags without v prefix (e.g. 0.9.23)
+      - '[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
 
 jobs:
@@ -26,6 +28,8 @@ jobs:
           echo "build_num=$BUILD_NUMBER" >> $GITHUB_OUTPUT
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION_NAME="${GITHUB_REF#refs/tags/v}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION_NAME="${GITHUB_REF#refs/tags/}"
           else
             VERSION_NAME=$(grep '^app-version' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
           fi
@@ -114,6 +118,8 @@ jobs:
           echo "build_num=$BUILD_NUMBER" >> $GITHUB_OUTPUT
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION_NAME="${GITHUB_REF#refs/tags/v}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION_NAME="${GITHUB_REF#refs/tags/}"
           else
             VERSION_NAME=$(grep '^app-version' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
           fi
@@ -184,6 +190,8 @@ jobs:
           echo "build_num=$BUILD_NUMBER" >> $GITHUB_OUTPUT
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION_NAME="${GITHUB_REF#refs/tags/v}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION_NAME="${GITHUB_REF#refs/tags/}"
           else
             VERSION_NAME=$(grep '^app-version' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
           fi
