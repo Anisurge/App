@@ -90,7 +90,17 @@ fun App(
         val watchVm  = remember { WatchViewModel(AppComponent.infoService, AppComponent.watchlistService, AppComponent.settingsStore, AppComponent.settingsService, AppComponent.serverRepository, AppComponent.syncManager, AppComponent.trackingService) }
         val watchlistVm = remember { WatchlistViewModel() }
         val scheduleVm = remember { ScheduleViewModel(AppComponent.scheduleService) }
-        val settingsVm = remember { SettingsViewModel(AppComponent.settingsService, AppComponent.settingsStore, AppComponent.serverRepository, AppComponent.authService, AppComponent.trackingService, AppComponent.watchlistService) }
+        val settingsVm = remember {
+            SettingsViewModel(
+                AppComponent.settingsService,
+                AppComponent.settingsStore,
+                AppComponent.serverRepository,
+                AppComponent.authService,
+                AppComponent.trackingService,
+                AppComponent.watchlistService,
+                AppComponent.communityService,
+            )
+        }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }
         val updateVm = remember { UpdateViewModel(AppComponent.updateService) }
         val navBackStackEntry by navController.currentBackStackEntryAsState()

@@ -199,6 +199,7 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
+        add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
         add(SettingsNavItem(SettingsTab.Storage, strings.storage, Icons.Default.Storage))
         if (!isDesktopPlatform) {
@@ -872,6 +873,21 @@ private fun MobileSettingsDetail(
                     onSyncMal = viewModel::syncAllToMAL,
                     onSyncAnilist = viewModel::syncAllToAniList,
                 )
+                is SettingsTab.Community -> CommunityTab(
+                    uiState = uiState,
+                    onRefresh = viewModel::refreshCommunity,
+                    onSortChange = viewModel::setCommunitySort,
+                    onCategoryChange = viewModel::setCommunityCategory,
+                    onLeaderboardPeriodChange = viewModel::setCommunityLeaderboardPeriod,
+                    onLoadMore = viewModel::loadMoreCommunityPosts,
+                    onVote = viewModel::voteCommunityPost,
+                    onDraftTitleChange = viewModel::setCommunityDraftTitle,
+                    onDraftContentChange = viewModel::setCommunityDraftContent,
+                    onDraftCategoryChange = viewModel::setCommunityDraftCategory,
+                    onDraftFlairChange = viewModel::setCommunityDraftFlair,
+                    onDraftSpoilerChange = viewModel::setCommunityDraftSpoiler,
+                    onCreatePost = viewModel::createCommunityPost,
+                )
                 is SettingsTab.Storage -> MobileStorageContent(
                     uiState = uiState,
                     onRefresh = viewModel::loadStorageInfo,
@@ -945,6 +961,21 @@ private fun SettingsContent(
                 onDisconnectAnilist = viewModel::disconnectAnilist,
                 onSyncMal = viewModel::syncAllToMAL,
                 onSyncAnilist = viewModel::syncAllToAniList,
+            )
+            is SettingsTab.Community -> CommunityTab(
+                uiState = uiState,
+                onRefresh = viewModel::refreshCommunity,
+                onSortChange = viewModel::setCommunitySort,
+                onCategoryChange = viewModel::setCommunityCategory,
+                onLeaderboardPeriodChange = viewModel::setCommunityLeaderboardPeriod,
+                onLoadMore = viewModel::loadMoreCommunityPosts,
+                onVote = viewModel::voteCommunityPost,
+                onDraftTitleChange = viewModel::setCommunityDraftTitle,
+                onDraftContentChange = viewModel::setCommunityDraftContent,
+                onDraftCategoryChange = viewModel::setCommunityDraftCategory,
+                onDraftFlairChange = viewModel::setCommunityDraftFlair,
+                onDraftSpoilerChange = viewModel::setCommunityDraftSpoiler,
+                onCreatePost = viewModel::createCommunityPost,
             )
             is SettingsTab.Storage -> StorageTab(
                 uiState = uiState,
@@ -1137,6 +1168,343 @@ private fun SyncTab(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CommunityTab(
+    uiState: SettingsUiState,
+    onRefresh: () -> Unit,
+    onSortChange: (String) -> Unit,
+    onCategoryChange: (String) -> Unit,
+    onLeaderboardPeriodChange: (String) -> Unit,
+    onLoadMore: () -> Unit,
+    onVote: (String, Int) -> Unit,
+    onDraftTitleChange: (String) -> Unit,
+    onDraftContentChange: (String) -> Unit,
+    onDraftCategoryChange: (String) -> Unit,
+    onDraftFlairChange: (String) -> Unit,
+    onDraftSpoilerChange: (Boolean) -> Unit,
+    onCreatePost: () -> Unit,
+) {
+    val sortOptions = listOf("hot", "new", "top", "old")
+    val periodOptions = listOf("all", "weekly", "monthly")
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Community",
+            color = TEXT,
+            fontSize = 42.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            "Read posts, vote, create your own post, and track leaderboard activity.",
+            color = MUTED,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 20.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SettingCard(
+                title = "Online",
+                description = "Users online now",
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("${uiState.communityStats?.onlineCount ?: 0}", color = TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            SettingCard(
+                title = "Members",
+                description = "Community members",
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("${uiState.communityStats?.members ?: 0}", color = TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+            SettingCard(
+                title = "Unread",
+                description = "Unread community posts",
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("${uiState.communityUnreadCount}", color = TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingCard(
+            title = "Filters",
+            description = "Sort and category",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    sortOptions.forEach { option ->
+                        val selected = uiState.communitySort == option
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (selected) Color.White else BG_CARD)
+                                .border(1.dp, if (selected) Color.White else BORDER, RoundedCornerShape(999.dp))
+                                .clickable { onSortChange(option) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                option.uppercase(),
+                                color = if (selected) Color.Black else Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    OutlinedButton(onClick = onRefresh) {
+                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Refresh", maxLines = 1, softWrap = false)
+                    }
+                }
+
+                val categories = listOf("all") + uiState.communityCategories.map { it.slug }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    categories.forEach { slug ->
+                        val selected = uiState.communityCategory == slug
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (selected) Color(0xFF1F1F1F) else BG_CARD)
+                                .border(
+                                    1.dp,
+                                    if (selected) Color.White.copy(alpha = 0.38f) else BORDER,
+                                    RoundedCornerShape(999.dp)
+                                )
+                                .clickable { onCategoryChange(slug) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(slug, color = Color.White, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingCard(
+            title = "Create Post",
+            description = "Requires logged-in account",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = uiState.communityDraftTitle,
+                    onValueChange = onDraftTitleChange,
+                    label = { Text("Title") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = uiState.communityDraftContent,
+                    onValueChange = onDraftContentChange,
+                    label = { Text("Content") },
+                    modifier = Modifier.fillMaxWidth().height(120.dp),
+                    maxLines = 6,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = uiState.communityDraftCategory,
+                        onValueChange = onDraftCategoryChange,
+                        label = { Text("Category slug") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = uiState.communityDraftFlair,
+                        onValueChange = onDraftFlairChange,
+                        label = { Text("Flair") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        checked = uiState.communityDraftSpoiler,
+                        onCheckedChange = onDraftSpoilerChange,
+                    )
+                    Text("Mark as spoiler", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                }
+                Button(
+                    onClick = onCreatePost,
+                    enabled = !uiState.isCreatingCommunityPost,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (uiState.isCreatingCommunityPost) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                    } else {
+                        Text("Create Community Post")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingCard(
+            title = "Leaderboard",
+            description = "Top aura contributors",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    periodOptions.forEach { option ->
+                        val selected = uiState.communityLeaderboardPeriod == option
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (selected) Color.White else BG_CARD)
+                                .border(1.dp, if (selected) Color.White else BORDER, RoundedCornerShape(999.dp))
+                                .clickable { onLeaderboardPeriodChange(option) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                option.uppercase(),
+                                color = if (selected) Color.Black else Color.White,
+                                fontSize = 11.sp,
+                            )
+                        }
+                    }
+                }
+                if (uiState.communityLeaderboard.isEmpty()) {
+                    Text("No leaderboard data.", color = MUTED, fontSize = 13.sp)
+                } else {
+                    uiState.communityLeaderboard.take(10).forEach { user ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("#${user.rank} ${user.displayName ?: user.name}", color = Color.White, fontSize = 13.sp)
+                            Text("${user.aura} aura", color = MUTED, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        SettingCard(
+            title = "Posts",
+            description = "Community feed",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (uiState.isLoadingCommunity) {
+                    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
+                    }
+                } else if (uiState.communityPosts.isEmpty()) {
+                    Text("No posts found.", color = MUTED, fontSize = 13.sp)
+                } else {
+                    uiState.communityPosts.forEach { post ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BG_HOVER)
+                                .border(1.dp, BORDER, RoundedCornerShape(10.dp))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(post.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            CommunityPostContent(post.content)
+                            Text(
+                                "${post.category} • ${post.comments} comments • ${post.views} views • ${post.time ?: ""}",
+                                color = MUTED,
+                                fontSize = 11.sp,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                val voting = uiState.isVotingCommunityPostIds.contains(post.id)
+                                OutlinedButton(
+                                    onClick = { onVote(post.id, 1) },
+                                    enabled = !voting,
+                                ) { Text("▲ ${post.votes}") }
+                                OutlinedButton(
+                                    onClick = { onVote(post.id, -1) },
+                                    enabled = !voting,
+                                ) { Text("▼") }
+                                OutlinedButton(
+                                    onClick = { onVote(post.id, 0) },
+                                    enabled = !voting,
+                                ) { Text("Clear vote") }
+                            }
+                        }
+                    }
+                }
+                if (uiState.communityHasMore) {
+                    Button(
+                        onClick = onLoadMore,
+                        enabled = !uiState.isLoadingCommunityMore,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (uiState.isLoadingCommunityMore) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                        } else {
+                            Text("Load More")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val markdownImageRegex = Regex("!\\[[^\\]]*\\]\\(([^)\\s]+)\\)")
+private val bareImageUrlRegex = Regex("""https?://\S+\.(?:png|jpe?g|gif|webp)(?:\?\S*)?""", RegexOption.IGNORE_CASE)
+
+@Composable
+private fun CommunityPostContent(rawContent: String) {
+    if (rawContent.isBlank()) return
+
+    val markdownImageMatches = markdownImageRegex.findAll(rawContent).map { it.groupValues[1] }.toList()
+    val bareImageMatches = bareImageUrlRegex.findAll(rawContent).map { it.value }.toList()
+    val imageUrls = (markdownImageMatches + bareImageMatches).distinct()
+
+    val textWithoutMarkdownImages = markdownImageRegex.replace(rawContent, "")
+    val cleanedText = imageUrls.fold(textWithoutMarkdownImages) { acc, url ->
+        acc.replace(url, "")
+    }.trim()
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (cleanedText.isNotBlank()) {
+            Text(
+                cleanedText,
+                color = Color.White.copy(alpha = 0.75f),
+                fontSize = 12.sp,
+                maxLines = 6,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        imageUrls.take(3).forEach { imageUrl ->
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = "Community media",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, BORDER, RoundedCornerShape(10.dp))
+            )
         }
     }
 }
