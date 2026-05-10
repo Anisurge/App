@@ -329,6 +329,15 @@ private fun TvLayout(
                             Text(watchText, color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                     }
+                    watchedProgressSummary(anime)?.let { summary ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = summary,
+                            color = Color.White.copy(alpha = 0.72f),
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                        )
+                    }
                 }
             }
         }
@@ -367,6 +376,8 @@ private fun TvLayout(
                 ) {
                     items(state.episodes.sortedBy { it.number }) { ep ->
                         val title = ep.title ?: ep.titles?.filterNotNull()?.firstOrNull()
+                        val watchedEp = anime.watchProgress?.episode
+                        val progressSecs = anime.watchProgress?.currentTime
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -381,12 +392,27 @@ private fun TvLayout(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "EP ${ep.number}",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = "EP ${ep.number}",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                        )
+                                        when {
+                                            watchedEp != null && ep.number < watchedEp -> {
+                                                ProgressBadge("WATCHED")
+                                            }
+                                            watchedEp != null && ep.number == watchedEp -> {
+                                                ProgressBadge(
+                                                    if ((progressSecs ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED",
+                                                )
+                                            }
+                                        }
+                                    }
                                     if (!title.isNullOrBlank()) {
                                         Text(
                                             text = title,
@@ -564,6 +590,15 @@ private fun MobileLayout(
                              Text(watchText, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                          }
                      }
+                    watchedProgressSummary(anime)?.let { summary ->
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = summary,
+                            color = Color.White.copy(alpha = 0.72f),
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                        )
+                    }
                  }
              }
 
@@ -610,7 +645,13 @@ private fun MobileLayout(
 
              if (showEpisodes) {
                  Box(Modifier.padding(horizontal = 16.dp)) {
-                     EpisodeListSection(state, onWatchEpisode, onDownloadEpisode)
+                    EpisodeListSection(
+                        state = state,
+                        onWatchEpisode = onWatchEpisode,
+                        onDownloadEpisode = onDownloadEpisode,
+                        watchedEpisode = anime.watchProgress?.episode,
+                        currentProgressSeconds = anime.watchProgress?.currentTime,
+                    )
                  }
              } else {
                  Column(Modifier.padding(horizontal = 16.dp)) {
@@ -935,6 +976,16 @@ private fun DesktopLayout(
                         }
                     }
                 }
+
+                watchedProgressSummary(anime)?.let { summary ->
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = summary,
+                        color = Color.White.copy(alpha = 0.78f),
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                    )
+                }
             } // End Column
             
             // Cover Image on the right side
@@ -1237,6 +1288,8 @@ private fun DesktopLayout(
                             DesktopEpisodeCard(
                                 episode = episode,
                                 thumbnail = anime.image ?: anime.poster ?: anime.cover,
+                                watchedEpisode = anime.watchProgress?.episode,
+                                currentProgressSeconds = anime.watchProgress?.currentTime,
                                 modifier = Modifier.animateItem(),
                                 onClick = { onWatchEpisode(episode.number) },
                                 onDownloadClick = { onDownloadEpisode(episode) }
@@ -1278,7 +1331,15 @@ private fun DesktopLayout(
 }
 
 @Composable
-private fun DesktopEpisodeCard(episode: EpisodeItem, thumbnail: String?, modifier: Modifier = Modifier, onClick: () -> Unit, onDownloadClick: () -> Unit = {}) {
+private fun DesktopEpisodeCard(
+    episode: EpisodeItem,
+    thumbnail: String?,
+    watchedEpisode: Int? = null,
+    currentProgressSeconds: Double? = null,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    onDownloadClick: () -> Unit = {},
+) {
     Box(
         modifier = modifier
             .width(300.dp)
@@ -1356,6 +1417,19 @@ private fun DesktopEpisodeCard(episode: EpisodeItem, thumbnail: String?, modifie
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("EPISODE ${episode.number}", color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    when {
+                        watchedEpisode != null && episode.number < watchedEpisode -> {
+                            Text("WATCHED", color = Color(0xFF66BB6A), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        }
+                        watchedEpisode != null && episode.number == watchedEpisode -> {
+                            Text(
+                                if ((currentProgressSeconds ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED",
+                                color = Color(0xFFFFD54F),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                     if (episode.filler == true) {
                         Text("FILLER", color = Color(0xFFFF9800), fontSize = 8.sp, fontWeight = FontWeight.Bold)
                     }
@@ -1437,7 +1511,9 @@ private fun WatchlistDropdownIcon(
 private fun EpisodeListSection(
     state: AnimeInfoUiState,
     onWatchEpisode: (Int) -> Unit,
-    onDownloadEpisode: (to.kuudere.anisuge.data.models.EpisodeItem) -> Unit
+    onDownloadEpisode: (to.kuudere.anisuge.data.models.EpisodeItem) -> Unit,
+    watchedEpisode: Int? = null,
+    currentProgressSeconds: Double? = null,
 ) {
     if (state.isLoadingEpisodes) {
         Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
@@ -1611,6 +1687,8 @@ private fun EpisodeListSection(
                 EpisodeItemRow(
                     episode = episode,
                     thumbnail = state.details?.image ?: state.details?.poster ?: state.details?.cover,
+                    watchedEpisode = watchedEpisode,
+                    currentProgressSeconds = currentProgressSeconds,
                     onClick = { onWatchEpisode(episode.number) },
                     onDownloadClick = { onDownloadEpisode(episode) }
                 )
@@ -1620,7 +1698,14 @@ private fun EpisodeListSection(
 }
 
 @Composable
-private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: () -> Unit, onDownloadClick: () -> Unit = {}) {
+private fun EpisodeItemRow(
+    episode: EpisodeItem,
+    thumbnail: String?,
+    watchedEpisode: Int? = null,
+    currentProgressSeconds: Double? = null,
+    onClick: () -> Unit,
+    onDownloadClick: () -> Unit = {},
+) {
     // Modernized card style for episode item
     Box(
         modifier = Modifier
@@ -1708,6 +1793,14 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
+                        when {
+                            watchedEpisode != null && episode.number < watchedEpisode -> {
+                                ProgressBadge("WATCHED")
+                            }
+                            watchedEpisode != null && episode.number == watchedEpisode -> {
+                                ProgressBadge(if ((currentProgressSeconds ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED")
+                            }
+                        }
                         if (episode.filler == true) {
                             Text(
                                 text = "FILLER",
@@ -1751,6 +1844,50 @@ private fun EpisodeItemRow(episode: EpisodeItem, thumbnail: String?, onClick: ()
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ProgressBadge(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color.White.copy(alpha = 0.10f))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = text,
+            color = Color.White.copy(alpha = 0.88f),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+private fun watchedProgressSummary(anime: AnimeDetails): String? {
+    val episode = anime.watchProgress?.episode ?: return null
+    if (episode <= 0) return null
+    val currentTime = anime.watchProgress?.currentTime
+    val fullyWatchedUntil = (episode - 1).coerceAtLeast(0)
+    val fullyWatchedPart = if (fullyWatchedUntil > 0) "Watched EP 1-$fullyWatchedUntil" else null
+    val currentPart = if ((currentTime ?: 0.0) > 0.0) {
+        "Now at EP $episode • ${formatProgressTime(currentTime ?: 0.0)}"
+    } else {
+        "Last opened EP $episode"
+    }
+    return listOfNotNull(fullyWatchedPart, currentPart).joinToString("\n").ifBlank { null }
+}
+
+private fun formatProgressTime(seconds: Double): String {
+    val total = seconds.toInt().coerceAtLeast(0)
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val s = total % 60
+    return if (h > 0) {
+        "${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}"
+    } else {
+        "${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}"
     }
 }
 

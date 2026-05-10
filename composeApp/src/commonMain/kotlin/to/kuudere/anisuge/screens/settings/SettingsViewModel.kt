@@ -536,18 +536,21 @@ class SettingsViewModel(
             try {
                 var attempted = 0
                 var success = 0
+                var missingIds = 0
                 val response = watchlistService.getWatchlist(limit = 100)
                 response?.results?.forEach { item ->
-                    val malId = item.anime?.malId ?: return@forEach
-                    val folder = item.effectiveFolder ?: return@forEach
-                    if (folder == "WATCHING" || folder == "PAUSED" || folder == "COMPLETED") {
-                        val totalEpisodes = item.anime.epCount
-                        val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
-                            ?: if (folder == "COMPLETED") (totalEpisodes ?: 1) else 1
-                        attempted += 1
-                        if (trackingService.syncMalProgress(malId, progressEpisode, totalEpisodes)) {
-                            success += 1
-                        }
+                    val malId = item.anime.malId
+                    if (malId == null || malId <= 0) {
+                        missingIds += 1
+                        return@forEach
+                    }
+                    val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
+                    val totalEpisodes = item.anime.epCount
+                    val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
+                        ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
+                    attempted += 1
+                    if (trackingService.syncMalProgress(malId, progressEpisode, totalEpisodes)) {
+                        success += 1
                     }
                 }
                 val failed = attempted - success
@@ -555,7 +558,7 @@ class SettingsViewModel(
                     it.copy(
                         isSyncingMal = false,
                         errorMessage = when {
-                            attempted == 0 -> "No eligible MAL items to sync."
+                            attempted == 0 -> "No eligible MAL item to sync (missing MAL IDs on watchlist entries: $missingIds)."
                             failed > 0 -> "MAL sync finished: $success/$attempted succeeded."
                             else -> null
                         },
@@ -581,18 +584,21 @@ class SettingsViewModel(
             try {
                 var attempted = 0
                 var success = 0
+                var missingIds = 0
                 val response = watchlistService.getWatchlist(limit = 100)
                 response?.results?.forEach { item ->
-                    val anilistId = item.anime?.anilistId ?: return@forEach
-                    val folder = item.effectiveFolder ?: return@forEach
-                    if (folder == "WATCHING" || folder == "PAUSED" || folder == "COMPLETED") {
-                        val totalEpisodes = item.anime.epCount
-                        val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
-                            ?: if (folder == "COMPLETED") (totalEpisodes ?: 1) else 1
-                        attempted += 1
-                        if (trackingService.syncAnilistProgress(anilistId, progressEpisode, totalEpisodes)) {
-                            success += 1
-                        }
+                    val anilistId = item.anime.anilistId
+                    if (anilistId == null || anilistId <= 0) {
+                        missingIds += 1
+                        return@forEach
+                    }
+                    val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
+                    val totalEpisodes = item.anime.epCount
+                    val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
+                        ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
+                    attempted += 1
+                    if (trackingService.syncAnilistProgress(anilistId, progressEpisode, totalEpisodes)) {
+                        success += 1
                     }
                 }
                 val failed = attempted - success
@@ -600,7 +606,7 @@ class SettingsViewModel(
                     it.copy(
                         isSyncingAnilist = false,
                         errorMessage = when {
-                            attempted == 0 -> "No eligible AniList items to sync."
+                            attempted == 0 -> "No eligible AniList item to sync (missing AniList IDs on watchlist entries: $missingIds)."
                             failed > 0 -> "AniList sync finished: $success/$attempted succeeded."
                             else -> null
                         },
