@@ -373,7 +373,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
             Text(
                 text = when (mode) {
                     AuthMode.LOGIN -> "Sign in to continue watching"
-                    AuthMode.REGISTER -> "Join our streaming platform"
+                    AuthMode.REGISTER -> "Create your account on reanime.to, then sign in here"
                     AuthMode.FORGOT_PASSWORD -> "Enter your email or username to reset your password"
                     AuthMode.RESET_PASSWORD -> "Enter your new password"
                 },
@@ -387,21 +387,8 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
 
     Spacer(Modifier.height(28.dp))
 
-    // REGISTER mode fields
-    if (state.mode == AuthMode.REGISTER) {
-        AnisugTextField(
-            value = state.displayName,
-            onValueChange = viewModel::onDisplayNameChange,
-            label = "Username",
-            placeholder = "Enter your Username",
-            imeAction = ImeAction.Next,
-            onImeAction = { /* Focus next */ },
-        )
-        Spacer(Modifier.height(16.dp))
-    }
-
-    // Identifier field (email or username) — shown in LOGIN, REGISTER, FORGOT_PASSWORD
-    if (state.mode != AuthMode.RESET_PASSWORD) {
+    // Identifier field (email or username) — shown in LOGIN and FORGOT_PASSWORD
+    if (state.mode == AuthMode.LOGIN || state.mode == AuthMode.FORGOT_PASSWORD) {
         AnisugTextField(
             value = state.identifier,
             onValueChange = viewModel::onIdentifierChange,
@@ -434,7 +421,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
     }
 
     // Password field
-    if (state.mode == AuthMode.LOGIN || state.mode == AuthMode.REGISTER || state.mode == AuthMode.RESET_PASSWORD) {
+    if (state.mode == AuthMode.LOGIN || state.mode == AuthMode.RESET_PASSWORD) {
         AnisugTextField(
             value = state.password,
             onValueChange = viewModel::onPasswordChange,
@@ -484,42 +471,40 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
         }
     }
 
-    // Register helper - show website link for account creation
+    // Register helper - website-only account creation
     if (state.mode == AuthMode.REGISTER) {
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "Having trouble registering?",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Normal,
-            )
-            Spacer(Modifier.height(4.dp))
-            TextButton(
-                onClick = { uriHandler.openUri("https://kuudere.to") },
-                contentPadding = PaddingValues(0.dp)
-            ) {
-                Text(
-                    text = "Create account at kuudere",
-                    color = Color(0xFF64B5F6),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Then use the same credentials here",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 11.sp,
+                text = "Create your account at",
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
             )
             Spacer(Modifier.height(8.dp))
+            Text(
+                text = "https://reanime.to",
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Then use the same account in this app.",
+                color = Color.White.copy(alpha = 0.65f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Normal,
+            )
+            Spacer(Modifier.height(16.dp))
         }
     }
 
     Spacer(Modifier.height(8.dp))
 
     Button(
-        onClick = viewModel::submit,
+        onClick = {
+            if (state.mode == AuthMode.REGISTER) uriHandler.openUri("https://reanime.to")
+            else viewModel.submit()
+        },
         enabled = !state.isLoading,
         modifier = Modifier.fillMaxWidth().height(48.dp),
         shape = RoundedCornerShape(8.dp),
@@ -536,7 +521,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
             Text(
                 text = when (state.mode) {
                     AuthMode.LOGIN -> "Sign in"
-                    AuthMode.REGISTER -> "Create account"
+                    AuthMode.REGISTER -> "Open reanime.to"
                     AuthMode.FORGOT_PASSWORD -> "Send Reset Code"
                     AuthMode.RESET_PASSWORD -> "Reset Password"
                 },
