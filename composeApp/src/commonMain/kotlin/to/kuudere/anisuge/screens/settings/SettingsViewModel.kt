@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import to.kuudere.anisuge.data.models.Comment
 import to.kuudere.anisuge.data.models.CommunityCategory
+import to.kuudere.anisuge.data.models.CommunityCommentCreateRequest
 import to.kuudere.anisuge.data.models.CommunityCreatePostRequest
 import to.kuudere.anisuge.data.models.CommunityLeaderboardUser
 import to.kuudere.anisuge.data.models.CommunityPost
@@ -100,6 +102,16 @@ data class SettingsUiState(
     val communityDraftCategory: String = "general",
     val communityDraftFlair: String = "Discussion",
     val communityDraftSpoiler: Boolean = false,
+    /** Open full-screen community post detail (post id or null when closed). */
+    val communityDetailPostId: String? = null,
+    val communityDetailPost: CommunityPost? = null,
+    val communityDetailComments: List<Comment> = emptyList(),
+    val isLoadingCommunityDetail: Boolean = false,
+    val communityDetailCommentDraft: String = "",
+    val communityDetailCommentSpoiler: Boolean = false,
+    val isPostingCommunityComment: Boolean = false,
+    /** Full-screen image/GIF viewer URL overlay. */
+    val communityFullscreenImageUrl: String? = null,
 )
 
 sealed class SettingsTab {
@@ -709,16 +721,24 @@ class SettingsViewModel(
     fun voteCommunityPost(postId: String, vote: Int) {
         if (vote !in listOf(-1, 0, 1)) return
         val current = _uiState.value
-        val existing = current.communityPosts.firstOrNull { it.id == postId } ?: return
+        val existing =
+            current.communityPosts.firstOrNull { it.id == postId }
+                ?: current.communityDetailPost?.takeIf { it.id == postId }
+                ?: return
         val oldVote = existing.userVote
         val newVotes = existing.votes - oldVote + vote
 
         _uiState.update {
+            val updatedDetail =
+                if (it.communityDetailPost?.id == postId) {
+                    it.communityDetailPost.copy(userVote = vote, votes = newVotes)
+                } else it.communityDetailPost
             it.copy(
                 communityPosts = it.communityPosts.map { post ->
                     if (post.id == postId) post.copy(userVote = vote, votes = newVotes) else post
                 },
-                isVotingCommunityPostIds = it.isVotingCommunityPostIds + postId
+                communityDetailPost = updatedDetail,
+                isVotingCommunityPostIds = it.isVotingCommunityPostIds + postId,
             )
         }
 
@@ -726,12 +746,17 @@ class SettingsViewModel(
             val result = communityService.votePost(postId, vote)
             if (result.isFailure) {
                 _uiState.update {
+                    val revertedDetail =
+                        if (it.communityDetailPost?.id == postId) {
+                            it.communityDetailPost.copy(userVote = oldVote, votes = existing.votes)
+                        } else it.communityDetailPost
                     it.copy(
                         communityPosts = it.communityPosts.map { post ->
                             if (post.id == postId) post.copy(userVote = oldVote, votes = existing.votes) else post
                         },
+                        communityDetailPost = revertedDetail,
                         errorMessage = result.exceptionOrNull()?.message ?: "Failed to vote post",
-                        isVotingCommunityPostIds = it.isVotingCommunityPostIds - postId
+                        isVotingCommunityPostIds = it.isVotingCommunityPostIds - postId,
                     )
                 }
                 return@launch
@@ -739,6 +764,15 @@ class SettingsViewModel(
 
             val payload = result.getOrNull()
             _uiState.update {
+                val detail = it.communityDetailPost
+                val mergedDetailPost = if (detail?.id == postId) {
+                    detail.copy(
+                        userVote = payload?.userVote ?: detail.userVote,
+                        votes = payload?.votes ?: detail.votes,
+                    )
+                } else {
+                    detail
+                }
                 it.copy(
                     communityPosts = it.communityPosts.map { post ->
                         if (post.id == postId) {
@@ -750,7 +784,121 @@ class SettingsViewModel(
                             post
                         }
                     },
-                    isVotingCommunityPostIds = it.isVotingCommunityPostIds - postId
+                    communityDetailPost = mergedDetailPost,
+                    isVotingCommunityPostIds = it.isVotingCommunityPostIds - postId,
+                )
+            }
+        }
+    }
+
+    fun openCommunityPostDetail(postId: String) {
+        val snapshot = _uiState.value.communityPosts.firstOrNull { it.id == postId }
+        _uiState.update {
+            it.copy(
+                communityDetailPostId = postId,
+                communityDetailPost = snapshot,
+                communityDetailComments = emptyList(),
+                communityDetailCommentDraft = "",
+                communityDetailCommentSpoiler = false,
+                isLoadingCommunityDetail = true,
+                errorMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val fresh = communityService.getPost(postId)?.post
+                val comments = communityService.getPostComments(postId)?.comments ?: emptyList()
+                _uiState.update { st ->
+                    st.copy(
+                        communityDetailPost = fresh ?: st.communityDetailPost,
+                        communityDetailComments = comments,
+                        isLoadingCommunityDetail = false,
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingCommunityDetail = false,
+                        errorMessage = e.message ?: "Failed to load post",
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissCommunityPostDetail() {
+        _uiState.update {
+            it.copy(
+                communityDetailPostId = null,
+                communityDetailPost = null,
+                communityDetailComments = emptyList(),
+                communityDetailCommentDraft = "",
+                communityDetailCommentSpoiler = false,
+                isLoadingCommunityDetail = false,
+            )
+        }
+    }
+
+    fun setCommunityDetailCommentDraft(value: String) {
+        _uiState.update { it.copy(communityDetailCommentDraft = value) }
+    }
+
+    fun setCommunityDetailCommentSpoiler(value: Boolean) {
+        _uiState.update { it.copy(communityDetailCommentSpoiler = value) }
+    }
+
+    fun showCommunityFullscreenImage(url: String) {
+        if (url.isNotBlank()) _uiState.update { it.copy(communityFullscreenImageUrl = url) }
+    }
+
+    fun dismissCommunityFullscreenImage() {
+        _uiState.update { it.copy(communityFullscreenImageUrl = null) }
+    }
+
+    fun submitCommunityPostComment() {
+        val state = _uiState.value
+        val postId = state.communityDetailPostId ?: return
+        val text = state.communityDetailCommentDraft.trim()
+        if (text.isBlank() || state.isPostingCommunityComment) return
+        if (state.userProfile == null) {
+            _uiState.update { it.copy(errorMessage = "Log in to comment.") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isPostingCommunityComment = true, errorMessage = null) }
+            val result = communityService.createPostComment(
+                postId,
+                CommunityCommentCreateRequest(
+                    content = text,
+                    isSpoiller = state.communityDetailCommentSpoiler,
+                ),
+            )
+            if (result.isFailure) {
+                _uiState.update {
+                    it.copy(
+                        isPostingCommunityComment = false,
+                        errorMessage = result.exceptionOrNull()?.message ?: "Failed to post comment",
+                    )
+                }
+                return@launch
+            }
+            val freshPost = communityService.getPost(postId)?.post
+            val comments = communityService.getPostComments(postId)?.comments ?: emptyList()
+            _uiState.update { st ->
+                st.copy(
+                    isPostingCommunityComment = false,
+                    communityDetailComments = comments,
+                    communityDetailPost = freshPost ?: st.communityDetailPost,
+                    communityDetailCommentDraft = "",
+                    communityDetailCommentSpoiler = false,
+                    communityPosts = st.communityPosts.map { post ->
+                        if (post.id == postId) {
+                            post.copy(comments = freshPost?.comments ?: post.comments + 1)
+                        } else {
+                            post
+                        }
+                    },
+                    successMessage = "Comment posted.",
                 )
             }
         }

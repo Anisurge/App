@@ -21,6 +21,9 @@ import to.kuudere.anisuge.data.models.CommunityStatsResponse
 import to.kuudere.anisuge.data.models.CommunityUnreadCountResponse
 import to.kuudere.anisuge.data.models.CommunityVoteRequest
 import to.kuudere.anisuge.data.models.CommunityVoteResponse
+import to.kuudere.anisuge.data.models.CommentsResponse
+import to.kuudere.anisuge.data.models.CommunityCommentCreateRequest
+import to.kuudere.anisuge.data.models.PostCommentResponse
 
 class CommunityService(
     private val sessionStore: SessionStore,
@@ -57,6 +60,33 @@ class CommunityService(
     suspend fun getPost(id: String): CommunitySinglePostResponse? = runCatching {
         httpClient.get("$baseUrl/posts/$id").body<CommunitySinglePostResponse>()
     }.getOrNull()
+
+    suspend fun getPostComments(postId: String): CommentsResponse? = runCatching {
+        val requestToken = sessionStore.get()?.token
+        httpClient.get("$baseUrl/posts/$postId/comments") {
+            requestToken?.let { header("Authorization", "Bearer $it") }
+        }.body<CommentsResponse>()
+    }.getOrNull()
+
+    suspend fun createPostComment(postId: String, payload: CommunityCommentCreateRequest): Result<PostCommentResponse> {
+        val token = sessionStore.get()?.token
+            ?: return Result.failure(IllegalStateException("Please log in to comment."))
+        return runCatching {
+            val response = httpClient.post("$baseUrl/posts/$postId/comments") {
+                header("Authorization", "Bearer $token")
+                contentType(ContentType.Application.Json)
+                setBody(payload)
+            }
+            if (!response.status.isSuccess()) {
+                throw IllegalStateException("Comment failed (${response.status.value})")
+            }
+            try {
+                response.body<PostCommentResponse>()
+            } catch (_: Exception) {
+                PostCommentResponse(success = true)
+            }
+        }
+    }
 
     suspend fun getLeaderboard(period: String = "all"): CommunityLeaderboardResponse? = runCatching {
         httpClient.get("$baseUrl/leaderboard/users") {

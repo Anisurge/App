@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 data class Comment(
     val id: String,
     val author: String? = null,
+    @SerialName("author_display_name") val authorDisplayName: String? = null,
     val authorId: String? = null,
     val authorPfp: String? = null,
     val authorVerified: Boolean = false,
@@ -17,6 +18,7 @@ data class Comment(
     val likes: Int = 0,
     val dislikes: Int = 0,
     val isLiked: Boolean = false,
+    @SerialName("isUnliked") val isUnliked: Boolean = false,
     val isDisliked: Boolean = false,
     @SerialName("likeState") val likeState: String? = null,
     val reply_count: Int = 0,

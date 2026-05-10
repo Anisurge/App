@@ -113,3 +113,11 @@ data class CommunityLeaderboardUser(
 data class CommunityUnreadCountResponse(
     @SerialName("unread_count") val unreadCount: Int = 0,
 )
+
+/** Body for POST /community/posts/{id}/comments — field names aligned with anime comment payloads. */
+@Serializable
+data class CommunityCommentCreateRequest(
+    val content: String,
+    @SerialName("isSpoiller") val isSpoiller: Boolean = false,
+    @SerialName("parentCommentId") val parentCommentId: String? = null,
+)
