@@ -49,6 +49,7 @@ import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
@@ -113,9 +114,10 @@ private fun LiquidTabsSurface(
     content: @Composable RowScope.() -> Unit
 ) {
     val accentColor = Color.White
-    val containerColor = Color(0xFFDDE6F3).copy(alpha = 0.26f)
-    val edgeLightColor = Color(0xFFF8FBFF).copy(alpha = 0.22f)
-    val highlightColor = Color(0xFFEAF2FF).copy(alpha = 0.22f)
+    // Less saturated, more transparent — let the backdrop come through
+    val containerColor = Color(0xFFDDE6F3).copy(alpha = 0.10f)
+    val edgeLightColor = Color(0xFFF8FBFF).copy(alpha = 0.14f)
+    val highlightColor = Color(0xFFEAF2FF).copy(alpha = 0.14f)
     val tabsBackdrop = rememberLayerBackdrop()
 
     BoxWithConstraints(
@@ -146,11 +148,13 @@ private fun LiquidTabsSurface(
                     shape = { Capsule() },
                     effects = {
                         vibrancy()
-                        blur(18.dp.toPx())
-                        lens(34.dp.toPx(), 30.dp.toPx())
+                        colorControls(brightness = 0.02f, contrast = 1.08f, saturation = 1.30f)
+                        blur(10.dp.toPx())
+                        lens(48.dp.toPx(), 28.dp.toPx())
                     },
-                    shadow = { Shadow(alpha = 0.20f, radius = 26.dp) },
-                    innerShadow = { InnerShadow(radius = 16.dp, alpha = 0.22f) },
+                    highlight = { Highlight.Default.copy(alpha = 0.85f) },
+                    shadow = { Shadow(alpha = 0.38f, radius = 34.dp) },
+                    innerShadow = { InnerShadow(radius = 22.dp, alpha = 0.32f) },
                     onDrawSurface = {
                         drawRect(containerColor)
                         drawRect(edgeLightColor)
@@ -187,16 +191,16 @@ private fun LiquidTabsSurface(
                     backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
                     shape = { Capsule() },
                     effects = {
-                        blur(10.dp.toPx())
-                        lens(18.dp.toPx(), 20.dp.toPx(), chromaticAberration = true)
+                        colorControls(brightness = 0.06f, contrast = 1.10f, saturation = 1.20f)
+                        blur(5.dp.toPx())
+                        lens(30.dp.toPx(), 24.dp.toPx(), chromaticAberration = true)
                     },
-                    highlight = { Highlight.Default.copy(alpha = 0.68f) },
-                    shadow = { Shadow(alpha = 0.24f, radius = 20.dp) },
-                    innerShadow = { InnerShadow(radius = 12.dp, alpha = 0.20f) },
+                    highlight = { Highlight.Default.copy(alpha = 0.95f) },
+                    shadow = { Shadow(alpha = 0.36f, radius = 26.dp) },
+                    innerShadow = { InnerShadow(radius = 16.dp, alpha = 0.38f) },
                     onDrawSurface = {
                         drawRect(highlightColor)
-                        drawRect(Color.White.copy(alpha = 0.10f))
-                        drawRect(Color.Black.copy(alpha = 0.03f))
+                        drawRect(Color.White.copy(alpha = 0.16f))
                     }
                 )
                 .height(56.dp)
