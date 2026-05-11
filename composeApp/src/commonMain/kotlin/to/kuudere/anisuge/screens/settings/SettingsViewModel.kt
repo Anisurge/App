@@ -72,6 +72,7 @@ data class SettingsUiState(
     val subtitleSize: Int = 100,
     val floatingBottomNav: Boolean = true,
     val liquidGlassBottomNav: Boolean = false,
+    val expandedHeroCarousel: Boolean = false,
     val appLocale: AppLocale = AppLocale.default,
     val preferRomajiAnimeTitles: Boolean = false,
 
@@ -230,6 +231,7 @@ class SettingsViewModel(
         viewModelScope.launch { settingsStore.subtitleSizeFlow.collect { v -> _uiState.update { it.copy(subtitleSize = v) } } }
         viewModelScope.launch { settingsStore.floatingBottomNavFlow.collect { v -> _uiState.update { it.copy(floatingBottomNav = v) } } }
         viewModelScope.launch { settingsStore.liquidGlassBottomNavFlow.collect { v -> _uiState.update { it.copy(liquidGlassBottomNav = v) } } }
+        viewModelScope.launch { settingsStore.expandedHeroCarouselFlow.collect { v -> _uiState.update { it.copy(expandedHeroCarousel = v) } } }
         viewModelScope.launch { settingsStore.appLocaleFlow.collect { code -> _uiState.update { it.copy(appLocale = AppLocale.fromCode(code)) } } }
         viewModelScope.launch {
             settingsStore.preferRomajiAnimeTitlesFlow.collect { v ->
@@ -297,6 +299,10 @@ class SettingsViewModel(
 
     fun setLiquidGlassBottomNav(enabled: Boolean) {
         viewModelScope.launch { settingsStore.setLiquidGlassBottomNav(enabled) }
+    }
+
+    fun setExpandedHeroCarousel(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setExpandedHeroCarousel(enabled) }
     }
 
     fun setAppLocale(locale: AppLocale) {

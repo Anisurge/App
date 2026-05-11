@@ -878,6 +878,7 @@ private fun MobileSettingsDetail(
                     uiState = uiState,
                     onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                     onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
+                    onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                     onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
                 )
                 is SettingsTab.Sync -> SyncTab(
@@ -1044,6 +1045,7 @@ private fun AppearanceTab(
     uiState: SettingsUiState,
     onFloatingBottomNavChange: (Boolean) -> Unit,
     onLiquidGlassBottomNavChange: (Boolean) -> Unit,
+    onExpandedHeroCarouselChange: (Boolean) -> Unit,
     onPreferRomajiAnimeTitlesChange: (Boolean) -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -1065,6 +1067,20 @@ private fun AppearanceTab(
                 checked = uiState.preferRomajiAnimeTitles,
                 onCheckedChange = onPreferRomajiAnimeTitlesChange,
                 label = strings.animeTitlesPreferJapanese
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SettingCard(
+            title = "Home Screen",
+            description = "Customize how the home screen looks on mobile.",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            SettingToggle(
+                checked = uiState.expandedHeroCarousel,
+                onCheckedChange = onExpandedHeroCarouselChange,
+                label = strings.expandedHeroCarousel
             )
         }
 
