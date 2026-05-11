@@ -978,6 +978,7 @@ private fun SettingsContent(
                 uiState = uiState,
                 onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                 onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
+                onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                 onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
             )
             is SettingsTab.Sync -> SyncTab(
