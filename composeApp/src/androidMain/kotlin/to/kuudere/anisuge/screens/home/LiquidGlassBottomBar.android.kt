@@ -7,35 +7,23 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Bookmarks
@@ -43,40 +31,42 @@ import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
-import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.colorControls
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
-import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.shadow.InnerShadow
-import com.kyant.backdrop.shadow.Shadow
-import com.kyant.shapes.Capsule
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeChild
 import to.kuudere.anisuge.ui.tvFocusableClick
-
-internal val LocalLiquidBottomTabScale = staticCompositionLocalOf<() -> Float> { { 1f } }
 
 @Composable
 actual fun LiquidGlassBottomBar(
     selectedTab: AnisugTab,
     onTabSelect: (AnisugTab) -> Unit,
+    hazeState: HazeState,
     modifier: Modifier
 ) {
     val tabs = remember {
         listOf(
             BottomNavItem(AnisugTab.Calendar, Icons.Outlined.CalendarToday),
-            BottomNavItem(AnisugTab.Home, Icons.Outlined.Home),
-            BottomNavItem(AnisugTab.Search, Icons.Default.Search),
-            BottomNavItem(AnisugTab.Bookmarks, Icons.Outlined.Bookmarks),
+            BottomNavItem(AnisugTab.Home,     Icons.Outlined.Home),
+            BottomNavItem(AnisugTab.Search,   Icons.Default.Search),
+            BottomNavItem(AnisugTab.Bookmarks,Icons.Outlined.Bookmarks),
             BottomNavItem(AnisugTab.Settings, Icons.Outlined.Settings)
         )
     }
-    val backdrop = rememberLayerBackdrop()
     val selectedIndex = tabs.indexOfFirst { it.tab == selectedTab }.coerceAtLeast(0)
 
     Box(
@@ -86,16 +76,16 @@ actual fun LiquidGlassBottomBar(
             .padding(horizontal = 20.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        LiquidTabsSurface(
+        BlurPillSurface(
             selectedIndex = selectedIndex,
             tabCount = tabs.size,
-            backdrop = backdrop,
+            hazeState = hazeState,
             modifier = Modifier
                 .fillMaxWidth()
                 .widthIn(max = 420.dp)
         ) {
             tabs.forEachIndexed { index, item ->
-                LiquidBottomBarIcon(
+                BlurNavIcon(
                     icon = item.icon,
                     isSelected = index == selectedIndex,
                     onClick = { onTabSelect(item.tab) }
@@ -106,33 +96,30 @@ actual fun LiquidGlassBottomBar(
 }
 
 @Composable
-private fun LiquidTabsSurface(
+private fun BlurPillSurface(
     selectedIndex: Int,
     tabCount: Int,
-    backdrop: Backdrop,
+    hazeState: HazeState,
     modifier: Modifier = Modifier,
-    content: @Composable RowScope.() -> Unit
+    content: @Composable RowScope.() -> Unit,
 ) {
-    val accentColor = Color.White
-    // Less saturated, more transparent — let the backdrop come through
-    val containerColor = Color(0xFFDDE6F3).copy(alpha = 0.10f)
-    val edgeLightColor = Color(0xFFF8FBFF).copy(alpha = 0.14f)
-    val highlightColor = Color(0xFFEAF2FF).copy(alpha = 0.14f)
-    val tabsBackdrop = rememberLayerBackdrop()
+    val navShape = RoundedCornerShape(30.dp)
+    val pillShape = RoundedCornerShape(22.dp)
+
+    val transition = updateTransition(targetState = selectedIndex, label = "blurNav")
+    val density = LocalDensity.current
 
     BoxWithConstraints(
         modifier = modifier,
         contentAlignment = Alignment.CenterStart
     ) {
-        val density = LocalDensity.current
         val tabWidth = with(density) {
             (constraints.maxWidth.toFloat() - 8.dp.toPx()) / tabCount
         }
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
-        val transition = updateTransition(targetState = selectedIndex, label = "liquidBottomBar")
         val animatedIndex by transition.animateFloat(
             transitionSpec = { spring(dampingRatio = 0.78f, stiffness = 520f) },
-            label = "liquidBottomBarIndex"
+            label = "blurNavIndex"
         ) { it.toFloat() }
         val selectedOffsetPx by remember(animatedIndex, tabWidth, isLtr) {
             derivedStateOf {
@@ -140,108 +127,71 @@ private fun LiquidTabsSurface(
             }
         }
         val selectedOffsetDp = with(density) { selectedOffsetPx.toDp() }
+        val pillWidthDp = with(density) { tabWidth.toDp() }
 
+        // ── Outer pill container with 20% blur ─────────────────────────
         Row(
-            Modifier
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { Capsule() },
-                    effects = {
-                        vibrancy()
-                        colorControls(brightness = 0.02f, contrast = 1.08f, saturation = 1.30f)
-                        blur(10.dp.toPx())
-                        lens(48.dp.toPx(), 28.dp.toPx())
-                    },
-                    highlight = { Highlight.Default.copy(alpha = 0.85f) },
-                    shadow = { Shadow(alpha = 0.38f, radius = 34.dp) },
-                    innerShadow = { InnerShadow(radius = 22.dp, alpha = 0.32f) },
-                    onDrawSurface = {
-                        drawRect(containerColor)
-                        drawRect(edgeLightColor)
-                    }
-                )
+            modifier = Modifier
                 .height(64.dp)
                 .fillMaxWidth()
-                .padding(4.dp),
+                .clip(navShape)
+                .hazeChild(
+                    state = hazeState,
+                    style = HazeStyle(
+                        tints = listOf(HazeTint(Color.Black.copy(alpha = 0.20f))),
+                        blurRadius = 20.dp,
+                        noiseFactor = 0.04f,
+                    )
+                )
+                .background(Color(0xFF141414).copy(alpha = 0.55f))
+                .border(1.dp, Color.White.copy(alpha = 0.10f), navShape)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             content = content
         )
 
-        CompositionLocalProvider(
-            LocalLiquidBottomTabScale provides { if (selectedIndex >= 0) 1.08f else 1f }
-        ) {
-            Row(
-                Modifier
-                    .clearAndSetSemantics { }
-                    .layerBackdrop(tabsBackdrop)
-                    .height(56.dp)
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp)
-                    .graphicsLayer { colorFilter = ColorFilter.tint(accentColor) },
-                verticalAlignment = Alignment.CenterVertically,
-                content = content
-            )
-        }
-
+        // ── Sliding active indicator pill ───────────────────────────────
         Box(
-            Modifier
+            modifier = Modifier
                 .padding(horizontal = 4.dp)
                 .offset(x = selectedOffsetDp)
-                .drawBackdrop(
-                    backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
-                    shape = { Capsule() },
-                    effects = {
-                        colorControls(brightness = 0.06f, contrast = 1.10f, saturation = 1.20f)
-                        blur(5.dp.toPx())
-                        lens(30.dp.toPx(), 24.dp.toPx(), chromaticAberration = true)
-                    },
-                    highlight = { Highlight.Default.copy(alpha = 0.95f) },
-                    shadow = { Shadow(alpha = 0.36f, radius = 26.dp) },
-                    innerShadow = { InnerShadow(radius = 16.dp, alpha = 0.38f) },
-                    onDrawSurface = {
-                        drawRect(highlightColor)
-                        drawRect(Color.White.copy(alpha = 0.16f))
-                    }
-                )
                 .height(56.dp)
-                .fillMaxWidth(1f / tabCount)
+                .then(Modifier.fillMaxWidth(1f / tabCount))
+                .clip(pillShape)
+                .background(Color.White.copy(alpha = 0.12f))
+                .border(1.dp, Color.White.copy(alpha = 0.18f), pillShape)
         )
     }
 }
 
 @Composable
-internal fun RowScope.LiquidBottomBarIcon(
+internal fun RowScope.BlurNavIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
     val animatedTint by animateColorAsState(
-        targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.62f),
-        animationSpec = tween(durationMillis = 220)
+        targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.48f),
+        animationSpec = tween(durationMillis = 200)
     )
-    val scaleProvider = LocalLiquidBottomTabScale.current
-    val targetScale = if (isSelected) scaleProvider() else 1f
     val animatedScale by animateFloatAsState(
-        targetValue = targetScale,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
+        targetValue = if (isSelected) 1.12f else 1f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
     )
 
     Box(
         modifier = Modifier
             .weight(1f)
             .height(56.dp)
-            .graphicsLayer {
-                scaleX = animatedScale
-                scaleY = animatedScale
-            }
-            .tvFocusableClick(shape = RoundedCornerShape(16.dp), onClick = onClick),
+            .graphicsLayer { scaleX = animatedScale; scaleY = animatedScale }
+            .tvFocusableClick(shape = RoundedCornerShape(22.dp), onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = animatedTint,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(22.dp)
         )
     }
 }
