@@ -1772,6 +1772,7 @@ private fun AnisugBottomBar(
         LiquidGlassBottomBar(
             selectedTab = selectedTab,
             onTabSelect = onTabSelect,
+            hazeState = hazeState,
             modifier = modifier
         )
         return
