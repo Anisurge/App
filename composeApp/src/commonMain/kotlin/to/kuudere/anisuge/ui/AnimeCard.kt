@@ -6,6 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.hoverable
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
@@ -72,7 +74,7 @@ fun AnimeCard(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(3f / 4f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFF0C0C0C))
         ) {
             // main-image
@@ -136,6 +138,21 @@ fun AnimeCard(
                     )
                 }
             }
+
+            // Bottom gradient for badge readability
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.4f)
+                    .align(Alignment.BottomCenter)
+                    .drawWithCache {
+                        val gradient = Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            1f to Color.Black.copy(alpha = 0.55f)
+                        )
+                        onDrawBehind { drawRect(gradient) }
+                    }
+            )
 
             // ── .episode-badges ──────────────────────────────────────────────
             // bottom:8px; left:8px; gap:4px;
