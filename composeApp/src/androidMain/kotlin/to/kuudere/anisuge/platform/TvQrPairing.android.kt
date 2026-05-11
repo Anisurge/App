@@ -202,7 +202,28 @@ actual fun TvPairingQrCode(
 @Composable
 actual fun TvQrPairingAction(
     modifier: Modifier,
+    enabled: Boolean,
 ) {
+    val interactive = enabled && ENABLE_TV_QR_PAIRING_FROM_PHONE
+    if (!interactive) {
+        Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Button(
+                onClick = { },
+                enabled = false,
+                colors = ButtonDefaults.buttonColors(
+                    disabledContainerColor = Color.White.copy(alpha = 0.22f),
+                    disabledContentColor = Color.Black.copy(alpha = 0.45f),
+                ),
+            ) {
+                Text("Scan TV QR", fontWeight = FontWeight.SemiBold)
+            }
+        }
+        return
+    }
+
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }

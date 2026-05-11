@@ -208,7 +208,8 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
-        add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
+        // Community — not ready yet
+        // add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
         add(SettingsNavItem(SettingsTab.Storage, strings.storage, Icons.Default.Storage))
         if (!isDesktopPlatform) {
@@ -672,41 +673,47 @@ private fun MobileSettingsList(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
                     .background(BG_CARD)
-                    .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+                    .border(1.dp, BORDER, RoundedCornerShape(14.dp)),
             ) {
                 Column(
                     modifier = Modifier
                         .padding(16.dp)
-                        .blur(20.dp)
+                        .blur(18.dp),
                 ) {
                     Text(
                         "Connect to Android TV",
                         color = TEXT,
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         "Scan the QR shown on your TV to sign in there.",
                         color = MUTED,
                         fontSize = 13.sp,
-                        lineHeight = 18.sp
+                        lineHeight = 18.sp,
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     TvQrPairingAction()
                 }
-                // Overlay with Coming Soon text
+                // Blocks all touches (blur alone does not); "Coming Soon" on top.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0xFF0D0D0D).copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center
+                        .zIndex(1f)
+                        .background(Color(0xFF0D0D0D).copy(alpha = 0.52f))
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() },
+                            onClick = {},
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         "Coming Soon",
                         color = Color.White,
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }
@@ -881,28 +888,32 @@ private fun MobileSettingsDetail(
                     onDisconnectAnilist = viewModel::disconnectAnilist,
                     onWatchHistorySync = viewModel::startWatchHistorySync,
                 )
-                is SettingsTab.Community -> CommunityTab(
-                    uiState = uiState,
-                    onRefresh = viewModel::refreshCommunity,
-                    onSortChange = viewModel::setCommunitySort,
-                    onCategoryChange = viewModel::setCommunityCategory,
-                    onLeaderboardPeriodChange = viewModel::setCommunityLeaderboardPeriod,
-                    onLoadMore = viewModel::loadMoreCommunityPosts,
-                    onVote = viewModel::voteCommunityPost,
-                    onDraftTitleChange = viewModel::setCommunityDraftTitle,
-                    onDraftContentChange = viewModel::setCommunityDraftContent,
-                    onDraftCategoryChange = viewModel::setCommunityDraftCategory,
-                    onDraftFlairChange = viewModel::setCommunityDraftFlair,
-                    onDraftSpoilerChange = viewModel::setCommunityDraftSpoiler,
-                    onCreatePost = viewModel::createCommunityPost,
-                    onOpenPost = viewModel::openCommunityPostDetail,
-                    onDismissPostDetail = viewModel::dismissCommunityPostDetail,
-                    onCommentDraftChange = viewModel::setCommunityDetailCommentDraft,
-                    onCommentSpoilerChange = viewModel::setCommunityDetailCommentSpoiler,
-                    onSubmitComment = viewModel::submitCommunityPostComment,
-                    onImageClick = viewModel::showCommunityFullscreenImage,
-                    onDismissFullscreenImage = viewModel::dismissCommunityFullscreenImage,
-                )
+                is SettingsTab.Community -> {
+                    // Community tab hidden — not yet ready (restore CommunityTab when shipping)
+                    Box(Modifier.fillMaxSize())
+                    /* CommunityTab(
+                        uiState = uiState,
+                        onRefresh = viewModel::refreshCommunity,
+                        onSortChange = viewModel::setCommunitySort,
+                        onCategoryChange = viewModel::setCommunityCategory,
+                        onLeaderboardPeriodChange = viewModel::setCommunityLeaderboardPeriod,
+                        onLoadMore = viewModel::loadMoreCommunityPosts,
+                        onVote = viewModel::voteCommunityPost,
+                        onDraftTitleChange = viewModel::setCommunityDraftTitle,
+                        onDraftContentChange = viewModel::setCommunityDraftContent,
+                        onDraftCategoryChange = viewModel::setCommunityDraftCategory,
+                        onDraftFlairChange = viewModel::setCommunityDraftFlair,
+                        onDraftSpoilerChange = viewModel::setCommunityDraftSpoiler,
+                        onCreatePost = viewModel::createCommunityPost,
+                        onOpenPost = viewModel::openCommunityPostDetail,
+                        onDismissPostDetail = viewModel::dismissCommunityPostDetail,
+                        onCommentDraftChange = viewModel::setCommunityDetailCommentDraft,
+                        onCommentSpoilerChange = viewModel::setCommunityDetailCommentSpoiler,
+                        onSubmitComment = viewModel::submitCommunityPostComment,
+                        onImageClick = viewModel::showCommunityFullscreenImage,
+                        onDismissFullscreenImage = viewModel::dismissCommunityFullscreenImage,
+                    ) */
+                }
                 is SettingsTab.Storage -> MobileStorageContent(
                     uiState = uiState,
                     onRefresh = viewModel::loadStorageInfo,
@@ -976,28 +987,31 @@ private fun SettingsContent(
                 onDisconnectAnilist = viewModel::disconnectAnilist,
                 onWatchHistorySync = viewModel::startWatchHistorySync,
             )
-            is SettingsTab.Community -> CommunityTab(
-                uiState = uiState,
-                onRefresh = viewModel::refreshCommunity,
-                onSortChange = viewModel::setCommunitySort,
-                onCategoryChange = viewModel::setCommunityCategory,
-                onLeaderboardPeriodChange = viewModel::setCommunityLeaderboardPeriod,
-                onLoadMore = viewModel::loadMoreCommunityPosts,
-                onVote = viewModel::voteCommunityPost,
-                onDraftTitleChange = viewModel::setCommunityDraftTitle,
-                onDraftContentChange = viewModel::setCommunityDraftContent,
-                onDraftCategoryChange = viewModel::setCommunityDraftCategory,
-                onDraftFlairChange = viewModel::setCommunityDraftFlair,
-                onDraftSpoilerChange = viewModel::setCommunityDraftSpoiler,
-                onCreatePost = viewModel::createCommunityPost,
-                onOpenPost = viewModel::openCommunityPostDetail,
-                onDismissPostDetail = viewModel::dismissCommunityPostDetail,
-                onCommentDraftChange = viewModel::setCommunityDetailCommentDraft,
-                onCommentSpoilerChange = viewModel::setCommunityDetailCommentSpoiler,
-                onSubmitComment = viewModel::submitCommunityPostComment,
-                onImageClick = viewModel::showCommunityFullscreenImage,
-                onDismissFullscreenImage = viewModel::dismissCommunityFullscreenImage,
-            )
+            is SettingsTab.Community -> {
+                Box(Modifier.fillMaxSize())
+                /* CommunityTab(
+                    uiState = uiState,
+                    onRefresh = viewModel::refreshCommunity,
+                    onSortChange = viewModel::setCommunitySort,
+                    onCategoryChange = viewModel::setCommunityCategory,
+                    onLeaderboardPeriodChange = viewModel::setCommunityLeaderboardPeriod,
+                    onLoadMore = viewModel::loadMoreCommunityPosts,
+                    onVote = viewModel::voteCommunityPost,
+                    onDraftTitleChange = viewModel::setCommunityDraftTitle,
+                    onDraftContentChange = viewModel::setCommunityDraftContent,
+                    onDraftCategoryChange = viewModel::setCommunityDraftCategory,
+                    onDraftFlairChange = viewModel::setCommunityDraftFlair,
+                    onDraftSpoilerChange = viewModel::setCommunityDraftSpoiler,
+                    onCreatePost = viewModel::createCommunityPost,
+                    onOpenPost = viewModel::openCommunityPostDetail,
+                    onDismissPostDetail = viewModel::dismissCommunityPostDetail,
+                    onCommentDraftChange = viewModel::setCommunityDetailCommentDraft,
+                    onCommentSpoilerChange = viewModel::setCommunityDetailCommentSpoiler,
+                    onSubmitComment = viewModel::submitCommunityPostComment,
+                    onImageClick = viewModel::showCommunityFullscreenImage,
+                    onDismissFullscreenImage = viewModel::dismissCommunityFullscreenImage,
+                ) */
+            }
             is SettingsTab.Storage -> StorageTab(
                 uiState = uiState,
                 onRefresh = viewModel::loadStorageInfo,
