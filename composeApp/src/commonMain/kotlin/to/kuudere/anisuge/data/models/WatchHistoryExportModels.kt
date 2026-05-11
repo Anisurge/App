@@ -15,6 +15,7 @@ data class ReanimeExportLibrary(
 
 @Serializable
 data class ReanimeExportItem(
+    val name: String? = null,
     @SerialName("mal_id") val mal_id: Int? = null,
     val malId: Int? = null,
     val watchListType: Int? = null,

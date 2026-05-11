@@ -879,8 +879,6 @@ private fun MobileSettingsDetail(
                     onDisconnectMal = viewModel::disconnectMal,
                     onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                     onDisconnectAnilist = viewModel::disconnectAnilist,
-                    onSyncMal = viewModel::syncAllToMAL,
-                    onSyncAnilist = viewModel::syncAllToAniList,
                     onWatchHistorySync = viewModel::startWatchHistorySync,
                 )
                 is SettingsTab.Community -> CommunityTab(
@@ -976,8 +974,6 @@ private fun SettingsContent(
                 onDisconnectMal = viewModel::disconnectMal,
                 onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                 onDisconnectAnilist = viewModel::disconnectAnilist,
-                onSyncMal = viewModel::syncAllToMAL,
-                onSyncAnilist = viewModel::syncAllToAniList,
                 onWatchHistorySync = viewModel::startWatchHistorySync,
             )
             is SettingsTab.Community -> CommunityTab(
@@ -1099,8 +1095,6 @@ private fun SyncTab(
     onDisconnectMal: () -> Unit,
     onConnectAnilist: () -> Unit,
     onDisconnectAnilist: () -> Unit,
-    onSyncMal: () -> Unit,
-    onSyncAnilist: () -> Unit,
     onWatchHistorySync: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -1113,17 +1107,10 @@ private fun SyncTab(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            "Sync your watch progress to MAL and AniList",
+            "Link MAL and/or AniList, then use Sync library to update your connected accounts.",
             color = MUTED,
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 32.dp)
-        )
-        Text(
-            "it wont work coz its stil dev\nplease give me time bruh :sob\nmy exams are going on but yea pease dont forget to donate",
-            color = Color(0xFFFFC857),
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
         )
 
         TrackingSection(
@@ -1136,114 +1123,47 @@ private fun SyncTab(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Sync Now buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // MAL Sync Now
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (uiState.malConnected) Color(0xFF2E51A1) else BG_CARD)
-                    .border(1.dp, if (uiState.malConnected) Color(0xFF2E51A1) else BORDER, RoundedCornerShape(14.dp))
-                    .clickable(enabled = uiState.malConnected && !uiState.isSyncingMal) { onSyncMal() }
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (uiState.isSyncingMal) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        "Sync All to MAL",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            // AniList Sync Now
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (uiState.anilistConnected) Color(0xFF0DB598) else BG_CARD)
-                    .border(1.dp, if (uiState.anilistConnected) Color(0xFF0DB598) else BORDER, RoundedCornerShape(14.dp))
-                    .clickable(enabled = uiState.anilistConnected && !uiState.isSyncingAnilist) { onSyncAnilist() }
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (uiState.isSyncingAnilist) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        "Sync All to AniList",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        val watchHistoryEnabled = uiState.userProfile != null &&
-            (uiState.malConnected || uiState.anilistConnected) &&
-            !uiState.isWatchHistorySyncing &&
-            !uiState.isSyncingMal &&
-            !uiState.isSyncingAnilist &&
-            !uiState.isOffline
+        val anyTrackingLinked = uiState.malConnected || uiState.anilistConnected
+        val showLibraryImportCard =
+            uiState.userProfile != null && (anyTrackingLinked || uiState.isWatchHistorySyncing)
+        val syncLibraryEnabled =
+            anyTrackingLinked &&
+                !uiState.isWatchHistorySyncing &&
+                !uiState.isSyncingMal &&
+                !uiState.isSyncingAnilist &&
+                !uiState.isOffline
 
         if (uiState.userProfile != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Watch history import",
-                color = TEXT,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                "One-time bulk sync of list status and dates from your AniSurge account to MAL / AniList.",
-                color = MUTED,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (watchHistoryEnabled) Color(0xFF6C4AB6) else BG_CARD)
-                    .border(
-                        1.dp,
-                        if (watchHistoryEnabled) Color(0xFF6C4AB6) else BORDER,
-                        RoundedCornerShape(14.dp)
-                    )
-                    .clickable(enabled = watchHistoryEnabled) { onWatchHistorySync() }
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (uiState.isWatchHistorySyncing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        "Sync Watch History",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+            if (showLibraryImportCard) {
+                val cardHighlighted = anyTrackingLinked || uiState.isWatchHistorySyncing
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (cardHighlighted) Color(0xFF6C4AB6) else BG_CARD)
+                        .border(
+                            1.dp,
+                            if (cardHighlighted) Color(0xFF6C4AB6) else BORDER,
+                            RoundedCornerShape(14.dp)
+                        )
+                        .clickable(enabled = syncLibraryEnabled) { onWatchHistorySync() }
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (uiState.isWatchHistorySyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            "Sync library",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
 
@@ -1277,6 +1197,22 @@ private fun SyncTab(
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
+
+                uiState.watchHistoryDetail?.trim()?.takeIf { it.isNotEmpty() }?.let { detail ->
+                    Text(
+                        detail,
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                Text(
+                    "Large libraries can take a while. You can leave this screen — sync continues in the background (check the notification).",
+                    color = MUTED,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
 
                 Row(
                     modifier = Modifier

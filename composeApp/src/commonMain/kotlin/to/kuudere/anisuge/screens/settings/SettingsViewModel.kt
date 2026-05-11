@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import to.kuudere.anisuge.data.models.Comment
@@ -29,10 +30,14 @@ import to.kuudere.anisuge.data.services.WatchlistService
 import to.kuudere.anisuge.data.services.StorageService
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.TrackingService
+import to.kuudere.anisuge.data.services.WatchHistorySyncProgress
 import to.kuudere.anisuge.data.services.WatchHistorySyncService
 import to.kuudere.anisuge.data.models.SessionCheckResult
-import to.kuudere.anisuge.i18n.AppLocale
+import to.kuudere.anisuge.data.models.WatchlistEntry
+import to.kuudere.anisuge.platform.clearSyncProgressNotification
+import to.kuudere.anisuge.platform.updateSyncProgressNotification
 import to.kuudere.anisuge.utils.isNetworkError
+import to.kuudere.anisuge.i18n.AppLocale
 
 data class SettingsUiState(
     val isLoading: Boolean = false,
@@ -83,10 +88,12 @@ data class SettingsUiState(
     val isSyncingMal: Boolean = false,
     val isSyncingAnilist: Boolean = false,
 
-    /** One-time bulk sync from reanime export to MAL / AniList. */
+    /** Bulk sync from account export to linked MAL / AniList. */
     val isWatchHistorySyncing: Boolean = false,
     val watchHistoryCurrent: Int = 0,
     val watchHistoryTotal: Int = 0,
+    /** SSE message or current anime title during import. */
+    val watchHistoryDetail: String? = null,
     val watchHistoryMalDone: Boolean = false,
     val watchHistoryAnilistDone: Boolean = false,
 
@@ -963,29 +970,83 @@ class SettingsViewModel(
         }
     }
 
+    /** Walks every page of the server watchlist (not just the first 100). */
+    private suspend fun loadAllWatchlistEntries(): List<WatchlistEntry> {
+        val all = mutableListOf<WatchlistEntry>()
+        var offset = 0
+        val pageSize = 100
+        while (true) {
+            val response = watchlistService.getWatchlist(
+                limit = pageSize,
+                offset = offset,
+                sort = "last_updated",
+            ) ?: return all
+            if (response.results.isEmpty()) break
+            all.addAll(response.results)
+            if (response.results.size < pageSize) break
+            if (response.total > 0 && all.size >= response.total) break
+            offset += response.results.size
+        }
+        return all
+    }
+
+    private fun formatLibraryImportNotificationBody(prog: WatchHistorySyncProgress): String =
+        buildString {
+            prog.detail?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                append(it)
+                append("\n")
+            }
+            when {
+                prog.total > 0 -> append("${prog.current} / ${prog.total}")
+                prog.current > 0 -> append("Working…")
+                else -> append("Preparing import…")
+            }
+        }
+
     fun syncAllToMAL() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             _uiState.update { it.copy(isSyncingMal = true, errorMessage = null, successMessage = null) }
             try {
-                var attempted = 0
-                var success = 0
-                var missingIds = 0
-                val response = watchlistService.getWatchlist(limit = 100)
-                response?.results?.forEach { item ->
-                    val malId = item.anime.malId
-                    if (malId == null || malId <= 0) {
-                        missingIds += 1
-                        return@forEach
+                if (settingsStore.getMalIsExpired()) {
+                    if (!trackingService.refreshMalToken()) {
+                        _uiState.update {
+                            it.copy(
+                                isSyncingMal = false,
+                                errorMessage = "MAL session expired — reconnect MAL in Tracking.",
+                            )
+                        }
+                        return@launch
                     }
+                }
+                val results = loadAllWatchlistEntries()
+                val eligible = results.filter { (it.anime.malId ?: 0) > 0 }
+                val missingIds = results.size - eligible.size
+                updateSyncProgressNotification(
+                    title = "Syncing to MyAnimeList",
+                    statusText = "Pushing episode progress for ${eligible.size} entries.\n0 / ${maxOf(1, eligible.size)}",
+                    progressCurrent = 0,
+                    progressMax = maxOf(1, eligible.size),
+                )
+                var success = 0
+                eligible.forEachIndexed { index, item ->
+                    val malId = item.anime.malId!!
                     val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
                     val totalEpisodes = item.anime.epCount
                     val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
                         ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
-                    attempted += 1
+                    val step = index + 1
+                    updateSyncProgressNotification(
+                        title = "Syncing to MyAnimeList",
+                        statusText = "${item.anime.displayTitle}\n$step / ${eligible.size}",
+                        progressCurrent = step,
+                        progressMax = eligible.size,
+                    )
                     if (trackingService.syncMalProgress(malId, progressEpisode, totalEpisodes)) {
                         success += 1
                     }
+                    if (step % 10 == 0) delay(50L)
                 }
+                val attempted = eligible.size
                 val failed = attempted - success
                 _uiState.update {
                     it.copy(
@@ -1007,33 +1068,45 @@ class SettingsViewModel(
                         errorMessage = "MAL sync failed: ${e.message ?: "Unknown error"}",
                     )
                 }
+            } finally {
+                clearSyncProgressNotification()
             }
         }
     }
 
     fun syncAllToAniList() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) {
             _uiState.update { it.copy(isSyncingAnilist = true, errorMessage = null, successMessage = null) }
             try {
-                var attempted = 0
+                val results = loadAllWatchlistEntries()
+                val eligible = results.filter { (it.anime.anilistId ?: 0) > 0 }
+                val missingIds = results.size - eligible.size
+                updateSyncProgressNotification(
+                    title = "Syncing to AniList",
+                    statusText = "Pushing episode progress for ${eligible.size} entries.\n0 / ${maxOf(1, eligible.size)}",
+                    progressCurrent = 0,
+                    progressMax = maxOf(1, eligible.size),
+                )
                 var success = 0
-                var missingIds = 0
-                val response = watchlistService.getWatchlist(limit = 100)
-                response?.results?.forEach { item ->
-                    val anilistId = item.anime.anilistId
-                    if (anilistId == null || anilistId <= 0) {
-                        missingIds += 1
-                        return@forEach
-                    }
+                eligible.forEachIndexed { index, item ->
+                    val anilistId = item.anime.anilistId!!
                     val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
                     val totalEpisodes = item.anime.epCount
                     val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
                         ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
-                    attempted += 1
+                    val step = index + 1
+                    updateSyncProgressNotification(
+                        title = "Syncing to AniList",
+                        statusText = "${item.anime.displayTitle}\n$step / ${eligible.size}",
+                        progressCurrent = step,
+                        progressMax = eligible.size,
+                    )
                     if (trackingService.syncAnilistProgress(anilistId, progressEpisode, totalEpisodes)) {
                         success += 1
                     }
+                    delay(120L)
                 }
+                val attempted = eligible.size
                 val failed = attempted - success
                 _uiState.update {
                     it.copy(
@@ -1055,6 +1128,8 @@ class SettingsViewModel(
                         errorMessage = "AniList sync failed: ${e.message ?: "Unknown error"}",
                     )
                 }
+            } finally {
+                clearSyncProgressNotification()
             }
         }
     }
@@ -1067,7 +1142,9 @@ class SettingsViewModel(
             return
         }
         if (!snap.malConnected && !snap.anilistConnected) {
-            _uiState.update { it.copy(errorMessage = "Connect MAL and/or AniList first.") }
+            _uiState.update {
+                it.copy(errorMessage = "Connect MAL or AniList to sync your library.")
+            }
             return
         }
         if (snap.isOffline) {
@@ -1077,66 +1154,86 @@ class SettingsViewModel(
         val malOn = snap.malConnected
         val alOn = snap.anilistConnected
         viewModelScope.launch(Dispatchers.Default) {
-            _uiState.update {
-                it.copy(
-                    isWatchHistorySyncing = true,
-                    watchHistoryCurrent = 0,
-                    watchHistoryTotal = 0,
-                    watchHistoryMalDone = false,
-                    watchHistoryAnilistDone = false,
-                    errorMessage = null,
-                    successMessage = null,
-                )
-            }
-            val result = watchHistorySyncService.sync { prog ->
-                _uiState.update { st ->
-                    st.copy(
-                        watchHistoryCurrent = prog.current,
-                        watchHistoryTotal = prog.total,
-                        watchHistoryMalDone = prog.malServiceDone,
-                        watchHistoryAnilistDone = prog.anilistServiceDone,
+            try {
+                _uiState.update {
+                    it.copy(
+                        isWatchHistorySyncing = true,
+                        watchHistoryCurrent = 0,
+                        watchHistoryTotal = 0,
+                        watchHistoryDetail = null,
+                        watchHistoryMalDone = false,
+                        watchHistoryAnilistDone = false,
+                        errorMessage = null,
+                        successMessage = null,
                     )
                 }
-            }
-            result.fold(
-                onSuccess = { outcome ->
-                    val parts = buildList {
-                        if (malOn && outcome.malSynced > 0) add("${outcome.malSynced} entries synced to MAL")
-                        if (alOn && outcome.anilistSynced > 0) add("${outcome.anilistSynced} entries synced to AniList")
+                updateSyncProgressNotification(
+                    title = "Sync library",
+                    statusText = "Preparing…\nLarge libraries can take several minutes.",
+                    progressCurrent = 0,
+                    progressMax = 0,
+                )
+                val result = watchHistorySyncService.sync { prog ->
+                    _uiState.update { st ->
+                        st.copy(
+                            watchHistoryCurrent = prog.current,
+                            watchHistoryTotal = prog.total,
+                            watchHistoryMalDone = prog.malServiceDone,
+                            watchHistoryAnilistDone = prog.anilistServiceDone,
+                            watchHistoryDetail = prog.detail,
+                        )
                     }
-                    val message = when {
-                        parts.isNotEmpty() -> "Sync complete — ${parts.joinToString(", ")}"
-                        outcome.totalEntries == 0 -> "Sync complete — no entries in export."
-                        else -> buildString {
-                            append("Sync complete — ")
-                            append(
-                                buildList {
-                                    if (malOn) add("MAL: ${outcome.malSynced} ok, ${outcome.malFailed} failed")
-                                    if (alOn) add("AniList: ${outcome.anilistSynced} ok, ${outcome.anilistFailed} failed")
-                                }.joinToString("; ")
+                    updateSyncProgressNotification(
+                        title = "Sync library",
+                        statusText = formatLibraryImportNotificationBody(prog),
+                        progressCurrent = prog.current,
+                        progressMax = prog.total,
+                    )
+                }
+                result.fold(
+                    onSuccess = { outcome ->
+                        val parts = buildList {
+                            if (malOn && outcome.malSynced > 0) add("${outcome.malSynced} entries synced to MAL")
+                            if (alOn && outcome.anilistSynced > 0) add("${outcome.anilistSynced} entries synced to AniList")
+                        }
+                        val message = when {
+                            parts.isNotEmpty() -> "Sync complete — ${parts.joinToString(", ")}"
+                            outcome.totalEntries == 0 -> "Sync complete — no entries in export."
+                            else -> buildString {
+                                append("Sync complete — ")
+                                append(
+                                    buildList {
+                                        if (malOn) add("MAL: ${outcome.malSynced} ok, ${outcome.malFailed} failed")
+                                        if (alOn) add("AniList: ${outcome.anilistSynced} ok, ${outcome.anilistFailed} failed")
+                                    }.joinToString("; ")
+                                )
+                            }
+                        }
+                        _uiState.update {
+                            it.copy(
+                                isWatchHistorySyncing = false,
+                                successMessage = message,
+                                watchHistoryMalDone = malOn,
+                                watchHistoryAnilistDone = alOn,
+                                watchHistoryDetail = null,
                             )
                         }
-                    }
-                    _uiState.update {
-                        it.copy(
-                            isWatchHistorySyncing = false,
-                            successMessage = message,
-                            watchHistoryMalDone = malOn,
-                            watchHistoryAnilistDone = alOn,
-                        )
-                    }
-                },
-                onFailure = { e ->
-                    _uiState.update {
-                        it.copy(
-                            isWatchHistorySyncing = false,
-                            errorMessage = e.message ?: "Watch history sync failed",
-                            watchHistoryMalDone = false,
-                            watchHistoryAnilistDone = false,
-                        )
-                    }
-                },
-            )
+                    },
+                    onFailure = { e ->
+                        _uiState.update {
+                            it.copy(
+                                isWatchHistorySyncing = false,
+                                errorMessage = e.message ?: "Watch history sync failed",
+                                watchHistoryMalDone = false,
+                                watchHistoryAnilistDone = false,
+                                watchHistoryDetail = null,
+                            )
+                        }
+                    },
+                )
+            } finally {
+                clearSyncProgressNotification()
+            }
         }
     }
 }
