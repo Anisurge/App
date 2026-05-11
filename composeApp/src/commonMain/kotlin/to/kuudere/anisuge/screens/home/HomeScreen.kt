@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.Bookmark
 import to.kuudere.anisuge.ui.WatchlistBottomSheet
 import to.kuudere.anisuge.AppComponent
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -1745,8 +1746,17 @@ private fun MobileTopBar(
                 }
             }
         }
-        // Subtle separator
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))
+        // Gradient bottom separator
+        Box(
+            Modifier.fillMaxWidth().height(1.dp).background(
+                Brush.horizontalGradient(
+                    0f to Color.Transparent,
+                    0.2f to Color.White.copy(alpha = 0.07f),
+                    0.8f to Color.White.copy(alpha = 0.07f),
+                    1f to Color.Transparent
+                )
+            )
+        )
     }
 }
 
@@ -1823,7 +1833,6 @@ private fun AnisugBottomBar(
             BottomBarIcon(
                 Icons.Outlined.Home,
                 isSelected = selectedTab == AnisugTab.Home,
-                selectedTint = Color.White,
                 liquidGlass = liquidGlass,
                 onClick = { onTabSelect(AnisugTab.Home) }
             )
@@ -1859,119 +1868,137 @@ private fun NormalAnisugBottomBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF0D0D0D))
+            .background(Color(0xFF080808))
             .hazeChild(
                 state = hazeState,
                 style = HazeStyle(
-                    tints = listOf(HazeTint(Color.Black.copy(alpha = 0.6f))),
+                    tints = listOf(HazeTint(Color.Black.copy(alpha = 0.62f))),
                     blurRadius = 40.dp,
-                    noiseFactor = 0.1f
+                    noiseFactor = 0.08f
                 )
             )
             .pointerInput(Unit) { /* Consume clicks to prevent pass-through */ }
             .windowInsetsPadding(WindowInsets.navigationBars)
     ) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))
+        // Gradient top divider — fades in from edges
+        Box(
+            Modifier.fillMaxWidth().height(1.dp).background(
+                Brush.horizontalGradient(
+                    0f to Color.Transparent,
+                    0.15f to Color.White.copy(alpha = 0.08f),
+                    0.85f to Color.White.copy(alpha = 0.08f),
+                    1f to Color.Transparent
+                )
+            )
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .height(60.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BottomBarIcon(
-                Icons.Outlined.CalendarToday,
-                isSelected = selectedTab == AnisugTab.Calendar,
-                onClick = { onTabSelect(AnisugTab.Calendar) }
-            )
-            BottomBarIcon(
-                Icons.Outlined.Home,
-                isSelected = selectedTab == AnisugTab.Home,
-                selectedTint = Color.White,
-                onClick = { onTabSelect(AnisugTab.Home) }
-            )
-            BottomBarIcon(
-                Icons.Default.Search,
-                isSelected = selectedTab == AnisugTab.Search,
-                onClick = { onTabSelect(AnisugTab.Search) }
-            )
-            BottomBarIcon(
-                Icons.Outlined.Bookmarks,
-                isSelected = selectedTab == AnisugTab.Bookmarks,
-                onClick = { onTabSelect(AnisugTab.Bookmarks) }
-            )
-            BottomBarIcon(
-                Icons.Outlined.Settings,
-                isSelected = selectedTab == AnisugTab.Settings,
-                onClick = { onTabSelect(AnisugTab.Settings) }
-            )
+            BottomNavItem(Icons.Outlined.CalendarToday, "Schedule", selectedTab == AnisugTab.Calendar) { onTabSelect(AnisugTab.Calendar) }
+            BottomNavItem(Icons.Outlined.Home, "Home", selectedTab == AnisugTab.Home) { onTabSelect(AnisugTab.Home) }
+            BottomNavItem(Icons.Default.Search, "Search", selectedTab == AnisugTab.Search) { onTabSelect(AnisugTab.Search) }
+            BottomNavItem(Icons.Outlined.Bookmarks, "Watchlist", selectedTab == AnisugTab.Bookmarks) { onTabSelect(AnisugTab.Bookmarks) }
+            BottomNavItem(Icons.Outlined.Settings, "Settings", selectedTab == AnisugTab.Settings) { onTabSelect(AnisugTab.Settings) }
         }
     }
 }
 
 @Composable
-private fun BottomBarIcon(
-    icon: androidx.compose.ui.graphics.vector.ImageVector, 
+private fun RowScope.BottomNavItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
     isSelected: Boolean,
-    selectedTint: Color = Color.White,
-    defaultTint: Color = Color.Gray.copy(alpha = 0.4f),
+    onClick: () -> Unit,
+) {
+    val tint by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFFBF80FF) else Color.White.copy(alpha = 0.38f),
+        animationSpec = tween(220)
+    )
+    val bgColor by animateColorAsState(
+        targetValue = if (isSelected) Color(0xFFBF80FF).copy(alpha = 0.13f) else Color.Transparent,
+        animationSpec = tween(220)
+    )
+
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(14.dp))
+            .background(bgColor)
+            .tvFocusableClick(shape = RoundedCornerShape(14.dp), onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(3.dp))
+        Text(
+            text = label,
+            color = tint,
+            fontSize = 10.sp,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            letterSpacing = 0.sp
+        )
+    }
+}
+
+@Composable
+private fun BottomBarIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    selectedTint: Color = Color(0xFFBF80FF),
+    defaultTint: Color = Color.White.copy(alpha = 0.38f),
     liquidGlass: Boolean = false,
     onClick: () -> Unit = {}
 ) {
     val animatedTint by animateColorAsState(
         targetValue = when {
+            isSelected && liquidGlass -> Color.White
             isSelected -> selectedTint
             liquidGlass -> Color.White.copy(alpha = 0.72f)
             else -> defaultTint
         },
-        animationSpec = tween(durationMillis = 200)
+        animationSpec = tween(durationMillis = 220)
     )
     val animatedBg by animateColorAsState(
         targetValue = when {
             isSelected && liquidGlass -> Color.Black.copy(alpha = 0.08f)
-            isSelected -> Color.White.copy(alpha = 0.07f)
+            isSelected -> Color(0xFFBF80FF).copy(alpha = 0.13f)
             else -> Color.Transparent
         },
-        animationSpec = tween(durationMillis = 200)
+        animationSpec = tween(durationMillis = 220)
     )
-    
+
     Box(
         modifier = Modifier
             .size(48.dp)
-            .clip(RoundedCornerShape(if (liquidGlass) 18.dp else 12.dp))
+            .clip(RoundedCornerShape(if (liquidGlass) 18.dp else 14.dp))
             .background(animatedBg)
             .then(
                 if (isSelected && liquidGlass) {
-                    Modifier
-                        .drawWithCache {
-                            val corner = CornerRadius(18.dp.toPx(), 18.dp.toPx())
-                            onDrawWithContent {
-                                drawRoundRect(
-                                    color = Color.Black.copy(alpha = 0.10f),
-                                    cornerRadius = corner
-                                )
-                                drawContent()
-                            }
+                    Modifier.drawWithCache {
+                        val corner = CornerRadius(18.dp.toPx(), 18.dp.toPx())
+                        onDrawWithContent {
+                            drawRoundRect(color = Color.Black.copy(alpha = 0.10f), cornerRadius = corner)
+                            drawContent()
                         }
-                } else {
-                    Modifier
-                }
+                    }
+                } else Modifier
             )
             .tvFocusableClick(
-                shape = RoundedCornerShape(if (liquidGlass) 18.dp else 12.dp),
+                shape = RoundedCornerShape(if (liquidGlass) 18.dp else 14.dp),
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, contentDescription = null, tint = animatedTint, modifier = Modifier.size(24.dp))
-            if (isSelected) {
-                Spacer(Modifier.height(4.dp))
-                Box(
-                    Modifier.size(4.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.6f))
-                )
-            }
-        }
+        Icon(icon, contentDescription = null, tint = animatedTint, modifier = Modifier.size(22.dp))
     }
 }
 
