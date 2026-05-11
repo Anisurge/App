@@ -36,6 +36,8 @@ data class WatchHistorySyncProgress(
     val total: Int,
     val malServiceDone: Boolean,
     val anilistServiceDone: Boolean,
+    /** SSE message, anime title, etc. */
+    val detail: String? = null,
 )
 
 data class WatchHistorySyncOutcome(
@@ -119,6 +121,7 @@ class WatchHistorySyncService(
                     total = 0,
                     malServiceDone = !wantMal,
                     anilistServiceDone = !wantAl,
+                    detail = null,
                 )
             )
             return Result.success(WatchHistorySyncOutcome(0, 0, 0, 0, 0))
@@ -143,6 +146,8 @@ class WatchHistorySyncService(
                     total = total,
                     malServiceDone = false,
                     anilistServiceDone = false,
+                    detail = entry.title?.takeIf { it.isNotBlank() }
+                        ?: "MAL id ${entry.malId}",
                 )
             )
 
@@ -180,6 +185,7 @@ class WatchHistorySyncService(
                 total = total,
                 malServiceDone = wantMal,
                 anilistServiceDone = wantAl,
+                detail = null,
             )
         )
 
@@ -223,12 +229,19 @@ class WatchHistorySyncService(
                         val total = root["total"]?.jsonPrimitive?.intOrNull
                             ?: root["total"]?.jsonPrimitive?.content?.toIntOrNull()
                             ?: 0
+                        val message = root["message"]?.jsonPrimitive?.content
+                        val details = root["details"]?.jsonPrimitive?.content
+                        val detail = listOfNotNull(message, details)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" · ")
+                            .ifBlank { null }
                         onExportProgress(
                             WatchHistorySyncProgress(
                                 current = current,
                                 total = total,
                                 malServiceDone = false,
                                 anilistServiceDone = false,
+                                detail = detail,
                             )
                         )
                     }
@@ -285,11 +298,14 @@ class WatchHistorySyncService(
                 val mal = item.mal_id ?: item.malId ?: 0
                 if (mal <= 0) continue
                 val wlt = item.watchListType?.takeIf { it in 1..5 } ?: bucketType
+                val prev = out[mal]
+                val title = item.name?.takeIf { it.isNotBlank() } ?: prev?.title
                 out[mal] = NormalizedWatchEntry(
                     malId = mal,
                     watchListType = wlt,
                     startedAt = exportDateElementToYmdString(item.started_at),
                     completedAt = exportDateElementToYmdString(item.completed_at),
+                    title = title,
                 )
             }
         }
@@ -306,6 +322,7 @@ class WatchHistorySyncService(
         val watchListType: Int,
         val startedAt: String?,
         val completedAt: String?,
+        val title: String? = null,
     ) {
         val malStatus: String
             get() = when (watchListType) {

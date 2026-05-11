@@ -182,6 +182,17 @@ actual fun clearDownloadNotification() {
     // No-op for desktop
 }
 
+actual fun updateSyncProgressNotification(
+    title: String,
+    statusText: String,
+    progressCurrent: Int,
+    progressMax: Int,
+) {
+}
+
+actual fun clearSyncProgressNotification() {
+}
+
 actual fun persistFolderPermission(path: String) {
     // No-op for desktop
 }

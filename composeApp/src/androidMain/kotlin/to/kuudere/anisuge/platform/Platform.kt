@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
+import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
@@ -23,6 +24,8 @@ import androidx.core.app.NotificationCompat
 import to.kuudere.anisuge.MainActivity
 import to.kuudere.anisuge.R
 import to.kuudere.anisuge.services.DownloadService
+import to.kuudere.anisuge.services.SyncService
+import to.kuudere.anisuge.utils.hasNotificationPermission
 import android.provider.DocumentsContract
 import java.util.UUID
 
@@ -363,6 +366,97 @@ actual fun clearDownloadNotification() {
         androidAppContext.stopService(Intent(androidAppContext, DownloadService::class.java))
     } catch (e: Exception) {
         e.printStackTrace()
+    }
+}
+
+private const val SYNC_CHANNEL_ID = "anisurge_sync"
+private const val SYNC_NOTIF_ID = 1004
+
+actual fun updateSyncProgressNotification(
+    title: String,
+    statusText: String,
+    progressCurrent: Int,
+    progressMax: Int,
+) {
+    if (!hasNotificationPermission()) return
+
+    val manager = androidAppContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (manager.getNotificationChannel(SYNC_CHANNEL_ID) == null) {
+            val channel = NotificationChannel(
+                SYNC_CHANNEL_ID,
+                "Library sync",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = "Progress when syncing your list to MAL or AniList"
+                setSound(null, null)
+                enableVibration(false)
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    try {
+        val syncIntent = Intent(androidAppContext, SyncService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            androidAppContext.startForegroundService(syncIntent)
+        } else {
+            androidAppContext.startService(syncIntent)
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+
+    val bigBody = buildString {
+        append(statusText.trim())
+        append("\n\n")
+        append("This may take a while. You can leave this screen — sync continues in the background.")
+    }
+
+    val intent = Intent(androidAppContext, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+    val pendingIntent = PendingIntent.getActivity(
+        androidAppContext,
+        SYNC_NOTIF_ID,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0,
+    )
+
+    val shortSummary = statusText.lineSequence().firstOrNull { it.isNotBlank() }?.take(200)
+        ?: statusText.take(200)
+
+    val builder = NotificationCompat.Builder(androidAppContext, SYNC_CHANNEL_ID)
+        .setSmallIcon(R.mipmap.ic_launcher_foreground)
+        .setContentTitle(title)
+        .setContentText(shortSummary)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(bigBody))
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setAutoCancel(false)
+        .setContentIntent(pendingIntent)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+
+    if (progressMax > 0) {
+        val cur = progressCurrent.coerceIn(0, progressMax)
+        builder.setProgress(progressMax, cur, false)
+    } else {
+        builder.setProgress(0, 0, true)
+    }
+
+    manager.notify(SYNC_NOTIF_ID, builder.build())
+}
+
+actual fun clearSyncProgressNotification() {
+    val manager = androidAppContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    manager.cancel(SYNC_NOTIF_ID)
+    try {
+        androidAppContext.stopService(Intent(androidAppContext, SyncService::class.java))
+    } catch (_: Exception) {
     }
 }
 

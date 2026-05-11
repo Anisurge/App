@@ -11,14 +11,13 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.jsonObject
-import to.kuudere.anisuge.AppComponent
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 class TrackingService(
     private val httpClient: HttpClient,
@@ -28,6 +27,7 @@ class TrackingService(
         private const val MAL_API_BASE = "https://api.myanimelist.net/v2"
         private const val MAL_REFRESH_ENDPOINT = "https://www.anisurge.lol/api/mal/refresh"
         private const val ANILIST_GRAPHQL = "https://graphql.anilist.co"
+        private val anilistJson = Json { ignoreUnknownKeys = true }
     }
 
     // ── Login URLs ──────────────────────────────────────────────────────────
@@ -108,6 +108,31 @@ class TrackingService(
 
     // ── AniList Sync ────────────────────────────────────────────────────────
 
+    /** Public AniList GraphQL: map a MAL anime id → AniList media id (no auth). */
+    suspend fun lookupAnilistIdFromMal(malId: Int): Int? {
+        if (malId <= 0) return null
+        val query = """
+            query (${'$'}malId: Int) { Media(idMal: ${'$'}malId, type: ANIME) { id } }
+        """.trimIndent()
+        return try {
+            val response = httpClient.post(ANILIST_GRAPHQL) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    buildJsonObject {
+                        put("query", query)
+                        put("variables", buildJsonObject { put("malId", malId) })
+                    }
+                )
+            }
+            if (!response.status.isSuccess()) return null
+            val parsed = anilistJson.parseToJsonElement(response.bodyAsText()).jsonObject
+            if (parsed["errors"] != null) return null
+            parsed["data"]?.jsonObject?.get("Media")?.jsonObject?.get("id")?.jsonPrimitive?.content?.toIntOrNull()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun syncAnilistProgress(anilistId: Int, episodeNumber: Int, totalEpisodes: Int?): Boolean {
         if (anilistId <= 0 || episodeNumber <= 0) return false
         val token = settingsStore.getAnilistAccessToken() ?: return false
@@ -145,8 +170,8 @@ class TrackingService(
                 return false
             }
             val bodyText = response.bodyAsText()
-            val json = Json.parseToJsonElement(bodyText).jsonObject
-            val hasErrors = json["errors"] != null
+            val envelope = anilistJson.parseToJsonElement(bodyText).jsonObject
+            val hasErrors = envelope["errors"] != null
             if (hasErrors) {
                 println("[TrackingService] AniList sync API errors for $anilistId: $bodyText")
             }

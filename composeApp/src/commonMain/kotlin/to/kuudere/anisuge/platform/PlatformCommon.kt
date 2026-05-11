@@ -56,6 +56,21 @@ expect fun updateDownloadNotification(
 /** Clears the download notification when all tasks are finished or cancelled */
 expect fun clearDownloadNotification()
 
+/**
+ * Ongoing system notification while list sync runs (Android).
+ * [progressMax] 0 = indeterminate progress; else shows a determinate bar.
+ * [statusText] is shown as the main body (current title, counts, server messages).
+ */
+expect fun updateSyncProgressNotification(
+    title: String,
+    statusText: String,
+    progressCurrent: Int,
+    progressMax: Int,
+)
+
+/** Dismisses the sync notification and stops the sync foreground session (Android). */
+expect fun clearSyncProgressNotification()
+
 /** Bridge for file operations that handles URIs on Android and standard paths elsewhere. */
 expect object KmpFileSystem {
     fun exists(path: String): Boolean
