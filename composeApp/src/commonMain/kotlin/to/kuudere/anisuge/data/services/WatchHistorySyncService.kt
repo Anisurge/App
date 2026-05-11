@@ -18,11 +18,15 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import to.kuudere.anisuge.data.models.ReanimeExportItem
 import to.kuudere.anisuge.data.models.ReanimeExportLibrary
@@ -102,7 +106,7 @@ class WatchHistorySyncService(
         }
 
         val library = try {
-            fetchExportJson(session.token)
+            fetchExportJson(session.token, onProgress)
         } catch (e: Exception) {
             return Result.failure(e)
         }
@@ -190,7 +194,10 @@ class WatchHistorySyncService(
         )
     }
 
-    private suspend fun fetchExportJson(sessionToken: String): ReanimeExportLibrary {
+    private suspend fun fetchExportJson(
+        sessionToken: String,
+        onExportProgress: (WatchHistorySyncProgress) -> Unit,
+    ): ReanimeExportLibrary {
         var lastData: ReanimeExportLibrary? = null
         httpClient.prepareGet(EXPORT_URL) {
             header("Cookie", "project_r_token=$sessionToken")
@@ -208,18 +215,67 @@ class WatchHistorySyncService(
                 if (payload.isEmpty()) continue
                 val root = json.parseToJsonElement(payload).jsonObject
                 val phase = root["phase"]?.jsonPrimitive?.content
-                if (phase != "data") continue
-                val jsonField = root["json"] ?: continue
-                lastData = when (val j = jsonField) {
-                    is JsonPrimitive ->
-                        if (!j.isString) null
-                        else json.decodeFromString<ReanimeExportLibrary>(j.content)
-                    is JsonObject -> json.decodeFromJsonElement(ReanimeExportLibrary.serializer(), j)
-                    else -> null
+                when (phase) {
+                    "starting", "syncing" -> {
+                        val current = root["current"]?.jsonPrimitive?.intOrNull
+                            ?: root["current"]?.jsonPrimitive?.content?.toIntOrNull()
+                            ?: 0
+                        val total = root["total"]?.jsonPrimitive?.intOrNull
+                            ?: root["total"]?.jsonPrimitive?.content?.toIntOrNull()
+                            ?: 0
+                        onExportProgress(
+                            WatchHistorySyncProgress(
+                                current = current,
+                                total = total,
+                                malServiceDone = false,
+                                anilistServiceDone = false,
+                            )
+                        )
+                    }
+                    "data" -> {
+                        val jsonField = root["json"] ?: continue
+                        lastData = when (val j = jsonField) {
+                            is JsonPrimitive ->
+                                if (!j.isString) null
+                                else json.decodeFromString<ReanimeExportLibrary>(j.content)
+                            is JsonObject ->
+                                json.decodeFromJsonElement(ReanimeExportLibrary.serializer(), j)
+                            else -> null
+                        }
+                    }
+                    else -> { /* completed, etc. */ }
                 }
             }
         }
         return lastData ?: throw Exception("No export data in stream")
+    }
+
+    /** API may send ISO strings, epoch numbers, `null`, or `{ year, month, day }`. */
+    private fun exportDateElementToYmdString(el: JsonElement?): String? {
+        if (el == null) return null
+        if (el is JsonNull) return null
+        return when (el) {
+            is JsonPrimitive -> when {
+                el.isString -> toYmd(el.content)
+                el.longOrNull != null -> toYmd(el.longOrNull.toString())
+                else -> null
+            }
+            is JsonObject -> {
+                val y = el["year"]?.jsonPrimitive?.intOrNull
+                    ?: el["year"]?.jsonPrimitive?.content?.toIntOrNull()
+                    ?: return null
+                val m = el["month"]?.jsonPrimitive?.intOrNull
+                    ?: el["month"]?.jsonPrimitive?.content?.toIntOrNull()
+                    ?: return null
+                val d = el["day"]?.jsonPrimitive?.intOrNull
+                    ?: el["day"]?.jsonPrimitive?.content?.toIntOrNull()
+                    ?: return null
+                val mo = m.toString().padStart(2, '0')
+                val da = d.toString().padStart(2, '0')
+                "$y-$mo-$da"
+            }
+            else -> null
+        }
     }
 
     private fun flattenExport(lib: ReanimeExportLibrary): List<NormalizedWatchEntry> {
@@ -232,8 +288,8 @@ class WatchHistorySyncService(
                 out[mal] = NormalizedWatchEntry(
                     malId = mal,
                     watchListType = wlt,
-                    startedAt = item.started_at,
-                    completedAt = item.completed_at,
+                    startedAt = exportDateElementToYmdString(item.started_at),
+                    completedAt = exportDateElementToYmdString(item.completed_at),
                 )
             }
         }

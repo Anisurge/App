@@ -2,6 +2,7 @@ package to.kuudere.anisuge.data.models
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class ReanimeExportLibrary(
@@ -17,6 +18,7 @@ data class ReanimeExportItem(
     @SerialName("mal_id") val mal_id: Int? = null,
     val malId: Int? = null,
     val watchListType: Int? = null,
-    @SerialName("started_at") val started_at: String? = null,
-    @SerialName("completed_at") val completed_at: String? = null,
+    /** ISO string, epoch number, or `{ "year", "month", "day" }` from API. */
+    @SerialName("started_at") val started_at: JsonElement? = null,
+    @SerialName("completed_at") val completed_at: JsonElement? = null,
 )
