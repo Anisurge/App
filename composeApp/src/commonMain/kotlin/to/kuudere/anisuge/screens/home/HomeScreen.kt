@@ -5,6 +5,7 @@ import to.kuudere.anisuge.ui.OfflineState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
@@ -1865,6 +1866,17 @@ private fun NormalAnisugBottomBar(
     hazeState: HazeState,
     modifier: Modifier = Modifier
 ) {
+    val tabs = remember {
+        listOf(
+            Triple(AnisugTab.Calendar, Icons.Outlined.CalendarToday, "Schedule"),
+            Triple(AnisugTab.Home,     Icons.Outlined.Home,           "Home"),
+            Triple(AnisugTab.Search,   Icons.Default.Search,          "Search"),
+            Triple(AnisugTab.Bookmarks,Icons.Outlined.Bookmarks,      "Watchlist"),
+            Triple(AnisugTab.Settings, Icons.Outlined.Settings,       "Settings"),
+        )
+    }
+    val selectedIndex = tabs.indexOfFirst { it.first == selectedTab }.coerceAtLeast(0)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -1880,7 +1892,7 @@ private fun NormalAnisugBottomBar(
             .pointerInput(Unit) { /* Consume clicks to prevent pass-through */ }
             .windowInsetsPadding(WindowInsets.navigationBars)
     ) {
-        // Gradient top divider — fades in from edges
+        // Gradient top divider
         Box(
             Modifier.fillMaxWidth().height(1.dp).background(
                 Brush.horizontalGradient(
@@ -1891,19 +1903,64 @@ private fun NormalAnisugBottomBar(
                 )
             )
         )
-        Row(
-            modifier = Modifier
+
+        BoxWithConstraints(
+            Modifier
                 .fillMaxWidth()
+                .height(60.dp)
                 .padding(horizontal = 8.dp, vertical = 4.dp)
-                .height(60.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
         ) {
-            BottomNavItem(Icons.Outlined.CalendarToday, "Schedule", selectedTab == AnisugTab.Calendar) { onTabSelect(AnisugTab.Calendar) }
-            BottomNavItem(Icons.Outlined.Home, "Home", selectedTab == AnisugTab.Home) { onTabSelect(AnisugTab.Home) }
-            BottomNavItem(Icons.Default.Search, "Search", selectedTab == AnisugTab.Search) { onTabSelect(AnisugTab.Search) }
-            BottomNavItem(Icons.Outlined.Bookmarks, "Watchlist", selectedTab == AnisugTab.Bookmarks) { onTabSelect(AnisugTab.Bookmarks) }
-            BottomNavItem(Icons.Outlined.Settings, "Settings", selectedTab == AnisugTab.Settings) { onTabSelect(AnisugTab.Settings) }
+            val density = LocalDensity.current
+            val tabCount = tabs.size
+            val tabWidthPx = constraints.maxWidth.toFloat() / tabCount
+
+            // Two springs with different stiffness on the same target.
+            // Fast spring "leads", slow spring "trails" → the gap between
+            // them drives the stretch/squish of the liquid blob.
+            val fastIndex by animateFloatAsState(
+                targetValue = selectedIndex.toFloat(),
+                animationSpec = spring(dampingRatio = 0.78f, stiffness = 700f),
+                label = "navFast"
+            )
+            val slowIndex by animateFloatAsState(
+                targetValue = selectedIndex.toFloat(),
+                animationSpec = spring(dampingRatio = 0.72f, stiffness = 240f),
+                label = "navSlow"
+            )
+
+            // Clamp stretch so it never looks ridiculous on long jumps
+            val stretch = (fastIndex - slowIndex).absoluteValue.coerceIn(0f, 0.5f)
+            val widthFactor = 1f + stretch * 0.55f   // up to ~27% wider during travel
+
+            // Center of blob follows the slow (bouncy) index
+            val blobCenter = (slowIndex + 0.5f) * tabWidthPx
+            val blobWidthPx = tabWidthPx * widthFactor
+            val blobLeftPx = blobCenter - blobWidthPx / 2f
+
+            val blobLeft  = with(density) { blobLeftPx.toDp() }
+            val blobWidth = with(density) { blobWidthPx.toDp() }
+
+            // ── Liquid indicator blob ────────────────────────────────────
+            Box(
+                Modifier
+                    .offset(x = blobLeft)
+                    .width(blobWidth)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFFBF80FF).copy(alpha = 0.15f))
+            )
+
+            // ── Tab items rendered on top ────────────────────────────────
+            Row(Modifier.fillMaxSize()) {
+                tabs.forEach { (tab, icon, label) ->
+                    BottomNavItem(
+                        icon = icon,
+                        label = label,
+                        isSelected = selectedTab == tab,
+                        onClick = { onTabSelect(tab) }
+                    )
+                }
+            }
         }
     }
 }
@@ -1919,9 +1976,11 @@ private fun RowScope.BottomNavItem(
         targetValue = if (isSelected) Color(0xFFBF80FF) else Color.White.copy(alpha = 0.38f),
         animationSpec = tween(220)
     )
-    val bgColor by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFFBF80FF).copy(alpha = 0.13f) else Color.Transparent,
-        animationSpec = tween(220)
+    // Icon scales up slightly on selection
+    val iconScale by animateFloatAsState(
+        targetValue = if (isSelected) 1.10f else 1f,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 420f),
+        label = "iconScale"
     )
 
     Column(
@@ -1929,13 +1988,19 @@ private fun RowScope.BottomNavItem(
             .weight(1f)
             .fillMaxHeight()
             .clip(RoundedCornerShape(14.dp))
-            .background(bgColor)
             .tvFocusableClick(shape = RoundedCornerShape(14.dp), onClick = onClick)
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier
+                .size(22.dp)
+                .graphicsLayer { scaleX = iconScale; scaleY = iconScale }
+        )
         Spacer(Modifier.height(3.dp))
         Text(
             text = label,
