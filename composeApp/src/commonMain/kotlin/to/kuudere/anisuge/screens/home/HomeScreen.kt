@@ -944,155 +944,208 @@ private fun FanCarousel(
         }
     }
 
-    Column(
-        Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        val windowSize = LocalWindowInfo.current.containerSize
-        val density = LocalDensity.current
-        val screenWidthDp = with(density) { windowSize.width.toDp() }
+    val density = LocalDensity.current
+    val windowSize = LocalWindowInfo.current.containerSize
+    val screenHeightDp = with(density) { windowSize.height.toDp() }
+    val heroHeight = screenHeightDp * 0.60f
 
-        // Card sizing — poster at ~45% of screen width so sides are visible
-        val cardWidth = screenWidthDp * 0.45f
-        val cardHeight = cardWidth * 1.5f
-        val hPadding = max(0.dp, (screenWidthDp - cardWidth) / 2)
-
+    Column(Modifier.fillMaxWidth()) {
         HorizontalPager(
             state = pagerState,
-            contentPadding = PaddingValues(horizontal = hPadding),
-            pageSpacing = 12.dp,
-            modifier = Modifier.fillMaxWidth().height(cardHeight)
+            modifier = Modifier.fillMaxWidth().height(heroHeight)
         ) { fakePage ->
             val pageOffset = (
                 (pagerState.currentPage - fakePage) + pagerState.currentPageOffsetFraction
             ).absoluteValue
-
-            val scale = 1f - (pageOffset.coerceIn(0f, 1f) * 0.15f)
-            val alpha = 1f - (pageOffset.coerceIn(0f, 1f) * 0.4f)
-
+            val contentAlpha = (1f - pageOffset * 1.8f).coerceIn(0f, 1f)
             val item = items[realIndex(fakePage)]
+            val heroUrl = item.bannerUrl?.takeIf { it.isNotBlank() }
+                ?: if (item.imageUrl.startsWith("http")) item.imageUrl
+                   else "https://api.reanime.to/img/poster/${item.imageUrl}"
 
             Box(
                 Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        this.alpha = alpha
-                    }
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable {
-                        if (fakePage == pagerState.currentPage) onAnimeClick(item)
-                    }
+                    .clickable { if (pageOffset < 0.5f) onAnimeClick(item) }
             ) {
                 AsyncImage(
-                    model = if (item.imageUrl.startsWith("http")) item.imageUrl
-                            else "https://api.reanime.to/img/poster/${item.imageUrl}",
+                    model = heroUrl,
                     contentDescription = item.resolveDisplayTitle(),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
+
+                // Gradient overlay: transparent top → dark bottom
+                Box(
+                    Modifier.fillMaxSize().drawWithCache {
+                        val gradient = Brush.verticalGradient(
+                            0.0f to Color.Black.copy(alpha = 0.08f),
+                            0.28f to Color.Transparent,
+                            0.58f to Color.Black.copy(alpha = 0.42f),
+                            0.82f to Color.Black.copy(alpha = 0.80f),
+                            1.0f to Color(0xFF000000)
+                        )
+                        onDrawBehind { drawRect(gradient) }
+                    }
+                )
+
+                // Episode count badge — top start
+                val subCount = item.subbed.let { if (it > 0) it else item.epCount ?: 0 }
+                if (subCount > 0) {
+                    Row(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(top = 16.dp, start = 16.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Layers, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(12.dp))
+                        Text("EP $subCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                // Bottom info overlay — fades in/out with page
+                Column(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 18.dp)
+                        .graphicsLayer { alpha = contentAlpha }
+                ) {
+                    // Type + score chips
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (!item.type.isNullOrBlank()) {
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(Color.White.copy(alpha = 0.18f))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Text(item.type!!, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        if ((item.score ?: 0) > 0) {
+                            Row(
+                                Modifier
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(Color(0xFFfbbf24).copy(alpha = 0.18f))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(Icons.Default.Star, null, tint = Color(0xFFfbbf24), modifier = Modifier.size(11.dp))
+                                Text(String.format("%.1f", item.score?.toDouble() ?: 0.0), color = Color(0xFFfbbf24), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // Title
+                    Text(
+                        text = item.resolveDisplayTitle(),
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 28.sp
+                    )
+
+                    // Genres
+                    val genresStr = item.genres?.take(3)?.joinToString(" • ") ?: ""
+                    if (genresStr.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = genresStr,
+                            color = Color.White.copy(alpha = 0.60f),
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Action buttons
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = { onWatchClick(item, "sub", 1) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Watch Now", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, letterSpacing = 0.3.sp)
+                        }
+
+                        Box(
+                            Modifier
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                                .clickable { onAnimeClick(item) }
+                                .padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(Icons.Outlined.Info, null, tint = Color.White, modifier = Modifier.size(17.dp))
+                                Text("Details", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+
+                        Box(
+                            Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                                .clickable { onWatchlistClick(item) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Outlined.BookmarkBorder, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
             }
         }
 
-        Spacer(Modifier.height(20.dp))
-
-        val activeItem = items[realIndex(pagerState.currentPage)]
-
-        // Title
-        Text(
-            text = activeItem.resolveDisplayTitle(),
-            color = Color.White,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
-        )
-
-        Spacer(Modifier.height(6.dp))
-
-        // Meta (e.g., TV • Action, Drama, Supernatural)
-        val type = activeItem.type ?: "TV"
-        val genresStr = activeItem.genres?.joinToString(", ") ?: ""
-        val metaText = if (genresStr.isNotEmpty()) "$type  •  $genresStr" else type
-
-        Text(
-            text = metaText,
-            color = Color.Gray,
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
-        )
-
-        Spacer(Modifier.height(20.dp))
-
-        // Actions Row — fixed-width side columns for alignment
+        // Page indicator — pill dots
+        Spacer(Modifier.height(14.dp))
+        val activeReal = realIndex(pagerState.currentPage)
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // "Detail"
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .width(56.dp)
-                    .clickable { onAnimeClick(activeItem) }
-                    .padding(vertical = 4.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.Info,
-                    contentDescription = "Detail",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
+            for (i in items.indices) {
+                val isActive = activeReal == i
+                val dotWidth by animateDpAsState(if (isActive) 20.dp else 5.dp, tween(250))
+                val dotColor by animateColorAsState(
+                    if (isActive) Color.White else Color.White.copy(alpha = 0.28f),
+                    tween(250)
                 )
-                Spacer(Modifier.height(4.dp))
-                Text("Detail", color = Color.White, fontSize = 11.sp)
-            }
-
-            // "WATCH NOW" button — fills the center
-            Button(
-                onClick = { onWatchClick(activeItem, "sub", 1) },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor = Color.Black
-                ),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp).height(46.dp)
-            ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "WATCH NOW",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 14.sp,
-                    letterSpacing = 0.5.sp
+                Box(
+                    Modifier
+                        .width(dotWidth)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(dotColor)
                 )
-            }
-
-            // "Add List"
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .width(56.dp)
-                    .clickable { onWatchlistClick(activeItem) }
-                    .padding(vertical = 4.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.BookmarkBorder,
-                    contentDescription = "Add List",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(Modifier.height(4.dp))
-                Text("Add List", color = Color.White, fontSize = 11.sp)
+                if (i < items.size - 1) Spacer(Modifier.width(4.dp))
             }
         }
-
-        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -1130,7 +1183,7 @@ private fun ContinueWatchingRow(
 
             Column(
                 Modifier
-                    .width(260.dp)
+                    .width(190.dp)
                     .hoverable(inter)
                     .clickable { onWatchClick(animeId, lang, item.displayEpisode, server, item.progress) }
             ) {
@@ -1275,14 +1328,36 @@ private fun AnimeSection(
 @Composable
 private fun SectionHeader(title: String, onViewMore: (() -> Unit)?) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 0.dp).padding(bottom = 12.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier
+                    .width(3.dp)
+                    .height(20.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFFBF80FF))
+            )
+            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
         if (onViewMore != null) {
-            TextButton(onClick = onViewMore) {
-                Text("View more >", color = Color.Gray, fontSize = 14.sp)
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { onViewMore() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text("See all", color = Color(0xFFBF80FF), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = Color(0xFFBF80FF),
+                    modifier = Modifier.size(14.dp)
+                )
             }
         }
     }
