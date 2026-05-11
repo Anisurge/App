@@ -32,6 +32,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val NOTIFICATIONS_ANNOUNCEMENT_KEY = booleanPreferencesKey("notifications_announcement")
         val FLOATING_BOTTOM_NAV_KEY = booleanPreferencesKey("floating_bottom_nav")
         val LIQUID_GLASS_BOTTOM_NAV_KEY = booleanPreferencesKey("liquid_glass_bottom_nav")
+        val EXPANDED_HERO_CAROUSEL_KEY = booleanPreferencesKey("expanded_hero_carousel")
         val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
         val PREFER_ROMAJI_ANIME_TITLES_KEY = booleanPreferencesKey("prefer_romaji_anime_titles")
 
@@ -62,6 +63,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val notificationsAnnouncementFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] ?: true }
     val floatingBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[FLOATING_BOTTOM_NAV_KEY] ?: true }
     val liquidGlassBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[LIQUID_GLASS_BOTTOM_NAV_KEY] ?: false }
+    val expandedHeroCarouselFlow: Flow<Boolean> = dataStore.data.map { it[EXPANDED_HERO_CAROUSEL_KEY] ?: false }
     val appLocaleFlow: Flow<String> = dataStore.data.map { it[APP_LOCALE_KEY] ?: "en" }
     val preferRomajiAnimeTitlesFlow: Flow<Boolean> = dataStore.data.map { it[PREFER_ROMAJI_ANIME_TITLES_KEY] ?: false }
 
@@ -98,6 +100,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     suspend fun setNotificationsAnnouncement(enabled: Boolean) { dataStore.edit { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] = enabled } }
     suspend fun setFloatingBottomNav(enabled: Boolean) { dataStore.edit { it[FLOATING_BOTTOM_NAV_KEY] = enabled } }
     suspend fun setLiquidGlassBottomNav(enabled: Boolean) { dataStore.edit { it[LIQUID_GLASS_BOTTOM_NAV_KEY] = enabled } }
+    suspend fun setExpandedHeroCarousel(enabled: Boolean) { dataStore.edit { it[EXPANDED_HERO_CAROUSEL_KEY] = enabled } }
     suspend fun setAppLocale(localeCode: String) { dataStore.edit { it[APP_LOCALE_KEY] = localeCode } }
     suspend fun setPreferRomajiAnimeTitles(enabled: Boolean) { dataStore.edit { it[PREFER_ROMAJI_ANIME_TITLES_KEY] = enabled } }
 

@@ -476,11 +476,13 @@ private fun TabContent(
                                 }
                             }
                         else -> {
+                            val settingsState by settingsViewModel.uiState.collectAsState()
                             HomeContent(
                                 homeState,
                                 onAnimeClick,
                                 onWatchClick,
                                 onWatchlistClick = onWatchlistClick,
+                                expandedHeroCarousel = settingsState.expandedHeroCarousel,
                                 onRefresh = { homeViewModel.refresh(force = true) },
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onViewLatestEpisodesMore = onViewLatestEpisodesMore,
@@ -514,6 +516,7 @@ private fun HomeContent(
     onAnimeClick: (String) -> Unit,
     onWatchClick: (String, String, Int, String?, Double?) -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
+    expandedHeroCarousel: Boolean = false,
     onRefresh: () -> Unit = {},
     onViewContinueWatchingMore: () -> Unit = {},
     onViewLatestEpisodesMore: () -> Unit = {},
@@ -531,7 +534,8 @@ private fun HomeContent(
                     items = state.latestAired,
                     onAnimeClick = { onAnimeClick(it.activeSlug) },
                     onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null, null) },
-                    onWatchlistClick = onWatchlistClick
+                    onWatchlistClick = onWatchlistClick,
+                    expandedCarousel = expandedHeroCarousel
                 )
             }
 
@@ -623,6 +627,7 @@ private fun HeroCarousel(
     onAnimeClick: (AnimeItem) -> Unit,
     onWatchClick: (AnimeItem, String, Int) -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
+    expandedCarousel: Boolean = false,
 ) {
     var currentIndex by remember { mutableStateOf(0) }
     val item = items[currentIndex]
@@ -645,15 +650,25 @@ private fun HeroCarousel(
         val descLines = if (isLargeDevice) 4 else 3
 
         if (!isDesktop) {
-            // ── Small screen: Fan stack carousel ────────────────────────
-            FanCarousel(
-                items = items,
-                currentIndex = currentIndex,
-                onIndexChange = { currentIndex = it },
-                onWatchClick = onWatchClick,
-                onAnimeClick = onAnimeClick,
-                onWatchlistClick = onWatchlistClick,
-            )
+            if (expandedCarousel) {
+                HeroCarouselExpanded(
+                    items = items,
+                    currentIndex = currentIndex,
+                    onIndexChange = { currentIndex = it },
+                    onWatchClick = onWatchClick,
+                    onAnimeClick = onAnimeClick,
+                    onWatchlistClick = onWatchlistClick,
+                )
+            } else {
+                FanCarousel(
+                    items = items,
+                    currentIndex = currentIndex,
+                    onIndexChange = { currentIndex = it },
+                    onWatchClick = onWatchClick,
+                    onAnimeClick = onAnimeClick,
+                    onWatchlistClick = onWatchlistClick,
+                )
+            }
         } else {
             // ── Desktop: full-bleed hero ─────────────────────────────────
             val bgColor = Color(0xFF000000)
@@ -902,12 +917,13 @@ private fun HeroCarousel(
     }
 }
 
-// ── Small screens carousel (OnStream style) ───────────────────────────────
+// ── Small screens carousel ────────────────────────────────────────────────
 
 private const val FAKE_PAGE_COUNT = 10_000  // large enough for "infinite" circular scroll
 
+// Expanded full-bleed hero (toggled via Settings → Appearance)
 @Composable
-private fun FanCarousel(
+private fun HeroCarouselExpanded(
     items: List<AnimeItem>,
     currentIndex: Int,
     onIndexChange: (Int) -> Unit,
@@ -1152,6 +1168,153 @@ private fun FanCarousel(
 
 
 
+
+// ── Default fan/poster carousel ───────────────────────────────────────────
+
+@Composable
+private fun FanCarousel(
+    items: List<AnimeItem>,
+    currentIndex: Int,
+    onIndexChange: (Int) -> Unit,
+    onWatchClick: (AnimeItem, String, Int) -> Unit,
+    onAnimeClick: (AnimeItem) -> Unit,
+    onWatchlistClick: (AnimeItem) -> Unit,
+) {
+    if (items.isEmpty()) return
+
+    val startPage = (FAKE_PAGE_COUNT / 2) - ((FAKE_PAGE_COUNT / 2) % items.size) + currentIndex
+    val pagerState = rememberPagerState(
+        initialPage = startPage,
+        pageCount = { FAKE_PAGE_COUNT }
+    )
+
+    fun realIndex(fakePage: Int): Int = ((fakePage % items.size) + items.size) % items.size
+
+    androidx.compose.runtime.LaunchedEffect(pagerState.currentPage) {
+        val real = realIndex(pagerState.currentPage)
+        if (real != currentIndex) onIndexChange(real)
+    }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            delay(4000)
+            if (!pagerState.isScrollInProgress && items.isNotEmpty()) {
+                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+            }
+        }
+    }
+
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        val windowSize = LocalWindowInfo.current.containerSize
+        val density = LocalDensity.current
+        val screenWidthDp = with(density) { windowSize.width.toDp() }
+
+        val cardWidth = screenWidthDp * 0.45f
+        val cardHeight = cardWidth * 1.5f
+        val hPadding = max(0.dp, (screenWidthDp - cardWidth) / 2)
+
+        HorizontalPager(
+            state = pagerState,
+            contentPadding = PaddingValues(horizontal = hPadding),
+            pageSpacing = 12.dp,
+            modifier = Modifier.fillMaxWidth().height(cardHeight)
+        ) { fakePage ->
+            val pageOffset = (
+                (pagerState.currentPage - fakePage) + pagerState.currentPageOffsetFraction
+            ).absoluteValue
+            val scale = 1f - (pageOffset.coerceIn(0f, 1f) * 0.15f)
+            val alpha = 1f - (pageOffset.coerceIn(0f, 1f) * 0.4f)
+            val item = items[realIndex(fakePage)]
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { if (fakePage == pagerState.currentPage) onAnimeClick(item) }
+            ) {
+                AsyncImage(
+                    model = if (item.imageUrl.startsWith("http")) item.imageUrl
+                            else "https://api.reanime.to/img/poster/${item.imageUrl}",
+                    contentDescription = item.resolveDisplayTitle(),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        val activeItem = items[realIndex(pagerState.currentPage)]
+
+        Text(
+            text = activeItem.resolveDisplayTitle(),
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        val type = activeItem.type ?: "TV"
+        val genresStr = activeItem.genres?.joinToString(", ") ?: ""
+        val metaText = if (genresStr.isNotEmpty()) "$type  •  $genresStr" else type
+
+        Text(
+            text = metaText,
+            color = Color.Gray,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
+        )
+
+        Spacer(Modifier.height(20.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(56.dp).clickable { onAnimeClick(activeItem) }.padding(vertical = 4.dp)
+            ) {
+                Icon(Icons.Outlined.Info, contentDescription = "Detail", tint = Color.White, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.height(4.dp))
+                Text("Detail", color = Color.White, fontSize = 11.sp)
+            }
+
+            Button(
+                onClick = { onWatchClick(activeItem, "sub", 1) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp).height(46.dp)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("WATCH NOW", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, letterSpacing = 0.5.sp)
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(56.dp).clickable { onWatchlistClick(activeItem) }.padding(vertical = 4.dp)
+            ) {
+                Icon(Icons.Outlined.BookmarkBorder, contentDescription = "Add List", tint = Color.White, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.height(4.dp))
+                Text("Add List", color = Color.White, fontSize = 11.sp)
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+    }
+}
 
 // ── Continue Watching Row ──────────────────────────────────────────────────
 
