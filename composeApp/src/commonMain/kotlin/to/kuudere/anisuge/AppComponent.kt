@@ -104,6 +104,20 @@ object AppComponent {
         to.kuudere.anisuge.data.services.TrackingService(httpClient, settingsStore)
     }
 
+    val malAnilistIdCache: to.kuudere.anisuge.data.services.MalAnilistIdCache by lazy {
+        to.kuudere.anisuge.data.services.MalAnilistIdCache(dataStore)
+    }
+
+    val watchHistorySyncService: to.kuudere.anisuge.data.services.WatchHistorySyncService by lazy {
+        to.kuudere.anisuge.data.services.WatchHistorySyncService(
+            httpClient,
+            sessionStore,
+            settingsStore,
+            malAnilistIdCache,
+            trackingService,
+        )
+    }
+
     val communityService: to.kuudere.anisuge.data.services.CommunityService by lazy {
         to.kuudere.anisuge.data.services.CommunityService(sessionStore, httpClient)
     }
