@@ -99,6 +99,7 @@ fun App(
                 AppComponent.trackingService,
                 AppComponent.watchlistService,
                 AppComponent.communityService,
+                AppComponent.watchHistorySyncService,
             )
         }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }

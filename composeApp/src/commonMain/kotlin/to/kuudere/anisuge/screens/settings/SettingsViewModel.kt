@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import to.kuudere.anisuge.data.models.Comment
 import to.kuudere.anisuge.data.models.CommunityCategory
 import to.kuudere.anisuge.data.models.CommunityCommentCreateRequest
@@ -28,6 +29,7 @@ import to.kuudere.anisuge.data.services.WatchlistService
 import to.kuudere.anisuge.data.services.StorageService
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.TrackingService
+import to.kuudere.anisuge.data.services.WatchHistorySyncService
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.utils.isNetworkError
@@ -81,6 +83,13 @@ data class SettingsUiState(
     val isSyncingMal: Boolean = false,
     val isSyncingAnilist: Boolean = false,
 
+    /** One-time bulk sync from reanime export to MAL / AniList. */
+    val isWatchHistorySyncing: Boolean = false,
+    val watchHistoryCurrent: Int = 0,
+    val watchHistoryTotal: Int = 0,
+    val watchHistoryMalDone: Boolean = false,
+    val watchHistoryAnilistDone: Boolean = false,
+
     // Community
     val isLoadingCommunity: Boolean = false,
     val isLoadingCommunityMore: Boolean = false,
@@ -133,6 +142,7 @@ class SettingsViewModel(
     private val trackingService: TrackingService,
     private val watchlistService: WatchlistService,
     private val communityService: CommunityService,
+    private val watchHistorySyncService: WatchHistorySyncService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
 
@@ -1046,6 +1056,87 @@ class SettingsViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun startWatchHistorySync() {
+        if (_uiState.value.isWatchHistorySyncing) return
+        val snap = _uiState.value
+        if (snap.userProfile == null) {
+            _uiState.update { it.copy(errorMessage = "Sign in to sync watch history from your account.") }
+            return
+        }
+        if (!snap.malConnected && !snap.anilistConnected) {
+            _uiState.update { it.copy(errorMessage = "Connect MAL and/or AniList first.") }
+            return
+        }
+        if (snap.isOffline) {
+            _uiState.update { it.copy(errorMessage = "You are offline.") }
+            return
+        }
+        val malOn = snap.malConnected
+        val alOn = snap.anilistConnected
+        viewModelScope.launch(Dispatchers.Default) {
+            _uiState.update {
+                it.copy(
+                    isWatchHistorySyncing = true,
+                    watchHistoryCurrent = 0,
+                    watchHistoryTotal = 0,
+                    watchHistoryMalDone = false,
+                    watchHistoryAnilistDone = false,
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+            val result = watchHistorySyncService.sync { prog ->
+                _uiState.update { st ->
+                    st.copy(
+                        watchHistoryCurrent = prog.current,
+                        watchHistoryTotal = prog.total,
+                        watchHistoryMalDone = prog.malServiceDone,
+                        watchHistoryAnilistDone = prog.anilistServiceDone,
+                    )
+                }
+            }
+            result.fold(
+                onSuccess = { outcome ->
+                    val parts = buildList {
+                        if (malOn && outcome.malSynced > 0) add("${outcome.malSynced} entries synced to MAL")
+                        if (alOn && outcome.anilistSynced > 0) add("${outcome.anilistSynced} entries synced to AniList")
+                    }
+                    val message = when {
+                        parts.isNotEmpty() -> "Sync complete — ${parts.joinToString(", ")}"
+                        outcome.totalEntries == 0 -> "Sync complete — no entries in export."
+                        else -> buildString {
+                            append("Sync complete — ")
+                            append(
+                                buildList {
+                                    if (malOn) add("MAL: ${outcome.malSynced} ok, ${outcome.malFailed} failed")
+                                    if (alOn) add("AniList: ${outcome.anilistSynced} ok, ${outcome.anilistFailed} failed")
+                                }.joinToString("; ")
+                            )
+                        }
+                    }
+                    _uiState.update {
+                        it.copy(
+                            isWatchHistorySyncing = false,
+                            successMessage = message,
+                            watchHistoryMalDone = malOn,
+                            watchHistoryAnilistDone = alOn,
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isWatchHistorySyncing = false,
+                            errorMessage = e.message ?: "Watch history sync failed",
+                            watchHistoryMalDone = false,
+                            watchHistoryAnilistDone = false,
+                        )
+                    }
+                },
+            )
         }
     }
 }

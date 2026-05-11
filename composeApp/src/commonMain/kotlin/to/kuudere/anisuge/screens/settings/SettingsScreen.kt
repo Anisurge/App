@@ -71,6 +71,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -880,6 +881,7 @@ private fun MobileSettingsDetail(
                     onDisconnectAnilist = viewModel::disconnectAnilist,
                     onSyncMal = viewModel::syncAllToMAL,
                     onSyncAnilist = viewModel::syncAllToAniList,
+                    onWatchHistorySync = viewModel::startWatchHistorySync,
                 )
                 is SettingsTab.Community -> CommunityTab(
                     uiState = uiState,
@@ -976,6 +978,7 @@ private fun SettingsContent(
                 onDisconnectAnilist = viewModel::disconnectAnilist,
                 onSyncMal = viewModel::syncAllToMAL,
                 onSyncAnilist = viewModel::syncAllToAniList,
+                onWatchHistorySync = viewModel::startWatchHistorySync,
             )
             is SettingsTab.Community -> CommunityTab(
                 uiState = uiState,
@@ -1098,6 +1101,7 @@ private fun SyncTab(
     onDisconnectAnilist: () -> Unit,
     onSyncMal: () -> Unit,
     onSyncAnilist: () -> Unit,
+    onWatchHistorySync: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1188,6 +1192,122 @@ private fun SyncTab(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
                     )
+                }
+            }
+        }
+
+        val watchHistoryEnabled = uiState.userProfile != null &&
+            (uiState.malConnected || uiState.anilistConnected) &&
+            !uiState.isWatchHistorySyncing &&
+            !uiState.isSyncingMal &&
+            !uiState.isSyncingAnilist &&
+            !uiState.isOffline
+
+        if (uiState.userProfile != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Watch history import",
+                color = TEXT,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "One-time bulk sync of list status and dates from your AniSurge account to MAL / AniList.",
+                color = MUTED,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (watchHistoryEnabled) Color(0xFF6C4AB6) else BG_CARD)
+                    .border(
+                        1.dp,
+                        if (watchHistoryEnabled) Color(0xFF6C4AB6) else BORDER,
+                        RoundedCornerShape(14.dp)
+                    )
+                    .clickable(enabled = watchHistoryEnabled) { onWatchHistorySync() }
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (uiState.isWatchHistorySyncing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        "Sync Watch History",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            if (uiState.isWatchHistorySyncing) {
+                Spacer(modifier = Modifier.height(12.dp))
+                if (uiState.watchHistoryTotal > 0) {
+                    val p =
+                        (uiState.watchHistoryCurrent.toFloat() / uiState.watchHistoryTotal.toFloat()).coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { p },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF6C4AB6),
+                        trackColor = Color.White.copy(alpha = 0.08f),
+                    )
+                    Text(
+                        "Syncing ${uiState.watchHistoryCurrent} / ${uiState.watchHistoryTotal} entries...",
+                        color = MUTED,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF6C4AB6),
+                        trackColor = Color.White.copy(alpha = 0.08f),
+                    )
+                    Text(
+                        "Fetching library export…",
+                        color = MUTED,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (uiState.malConnected) {
+                        val malLabel = when {
+                            uiState.watchHistoryMalDone -> "✓"
+                            uiState.isWatchHistorySyncing -> "…"
+                            else -> ""
+                        }
+                        Text(
+                            text = "MAL $malLabel",
+                            color = if (uiState.watchHistoryMalDone) Color(0xFF4ADE80) else MUTED,
+                            fontSize = 13.sp,
+                        )
+                    }
+                    if (uiState.anilistConnected) {
+                        val alLabel = when {
+                            uiState.watchHistoryAnilistDone -> "✓"
+                            uiState.isWatchHistorySyncing -> "…"
+                            else -> ""
+                        }
+                        Text(
+                            text = "AniList $alLabel",
+                            color = if (uiState.watchHistoryAnilistDone) Color(0xFF4ADE80) else MUTED,
+                            fontSize = 13.sp,
+                        )
+                    }
                 }
             }
         }
