@@ -114,12 +114,26 @@ data class CommunityUnreadCountResponse(
     @SerialName("unread_count") val unreadCount: Int = 0,
 )
 
-/**
- * Payload for POST /community/comment — mirrors anime `POST /anime/comment` (resource key in JSON, not nested path).
- * Nested [/community/posts/{id}/comments](POST) fallback may use backend typo field `isSpoiller`.
- */
+/** UI / VM payload for posting on a community thread. */
 @Serializable
 data class CommunityCommentCreateRequest(
+    val content: String,
+    val spoiler: Boolean = false,
+    @SerialName("parentCommentId") val parentCommentId: String? = null,
+)
+
+/** Wire body for `POST /community/posts/{id}/comments` (matches list payloads: `isSpoiller`). */
+@Serializable
+data class CommunityNestedCommentRequest(
+    val content: String,
+    val isSpoiller: Boolean = false,
+    @SerialName("parentCommentId") val parentCommentId: String? = null,
+)
+
+/** Wire body for `POST /community/comment` (post id + optional `spoiler`). */
+@Serializable
+data class CommunityFlatCommentRequest(
+    val post: String,
     val content: String,
     val spoiler: Boolean = false,
     @SerialName("parentCommentId") val parentCommentId: String? = null,

@@ -12,10 +12,10 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.CommunityCategoriesResponse
+import to.kuudere.anisuge.data.models.CommunityFlatCommentRequest
+import to.kuudere.anisuge.data.models.CommunityNestedCommentRequest
 import to.kuudere.anisuge.data.models.CommunityCreatePostRequest
 import to.kuudere.anisuge.data.models.CommunityCreatePostResponse
 import to.kuudere.anisuge.data.models.CommunityLeaderboardResponse
@@ -29,10 +29,19 @@ import to.kuudere.anisuge.data.models.CommentsResponse
 import to.kuudere.anisuge.data.models.CommunityCommentCreateRequest
 import to.kuudere.anisuge.data.models.PostCommentResponse
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
 class CommunityService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
+    private companion object {
+        private val ErrorBodyJson = Json { ignoreUnknownKeys = true }
+    }
+
     private val baseUrl = "${AppComponent.BASE_URL}/community"
 
     /** Avoid `Authorization: Bearer Bearer …` if the stored token already included the scheme. */
@@ -83,53 +92,45 @@ class CommunityService(
             ?: return Result.failure(IllegalStateException("Please log in to comment."))
         val credential = sanitizedBearerCredential(token)
 
-        suspend fun postNested(): io.ktor.client.statement.HttpResponse {
-            val json = buildJsonObject {
-                put("content", payload.content)
-                put("isSpoiller", payload.spoiler)
-                payload.parentCommentId?.takeIf { it.isNotBlank() }?.let { put("parentCommentId", it) }
-            }
-            return httpClient.post("$baseUrl/posts/$postId/comments") {
-                header("Authorization", "Bearer $credential")
-                contentType(ContentType.Application.Json)
-                setBody(json.toString())
-            }
-        }
+        val nestedBody = CommunityNestedCommentRequest(
+            content = payload.content,
+            isSpoiller = payload.spoiler,
+            parentCommentId = payload.parentCommentId?.takeIf { it.isNotBlank() },
+        )
+        val flatBody = CommunityFlatCommentRequest(
+            post = postId,
+            content = payload.content,
+            spoiler = payload.spoiler,
+            parentCommentId = payload.parentCommentId?.takeIf { it.isNotBlank() },
+        )
 
         return try {
-            val flatJson = buildJsonObject {
-                put("post", postId)
-                put("content", payload.content)
-                if (payload.spoiler) put("spoiler", true)
-                payload.parentCommentId?.takeIf { it.isNotBlank() }?.let { put("parentCommentId", it) }
-            }
-
-            var response = httpClient.post("$baseUrl/comment") {
+            // Prefer REST shape (same tree as GET .../posts/{id}/comments). Use kotlinx objects so the JSON
+            // plugin emits real application/json objects (buildJsonObject.toString() can mis-serialize).
+            var response = httpClient.post("$baseUrl/posts/$postId/comments") {
                 header("Authorization", "Bearer $credential")
                 contentType(ContentType.Application.Json)
-                setBody(flatJson.toString())
+                setBody(nestedBody)
             }
 
             if (!response.status.isSuccess()) {
-                val tryNested =
+                val tryFlat =
                     response.status == HttpStatusCode.NotFound ||
-                        response.status == HttpStatusCode.MethodNotAllowed ||
-                        response.status == HttpStatusCode.BadRequest ||
-                        response.status == HttpStatusCode.Unauthorized ||
-                        response.status == HttpStatusCode.Forbidden
-                if (tryNested) {
-                    response = postNested()
+                        response.status == HttpStatusCode.MethodNotAllowed
+                if (tryFlat) {
+                    response = httpClient.post("$baseUrl/comment") {
+                        header("Authorization", "Bearer $credential")
+                        contentType(ContentType.Application.Json)
+                        setBody(flatBody)
+                    }
                 }
             }
 
             if (!response.status.isSuccess()) {
                 val err = response.runCatching { bodyAsText() }.getOrNull().orEmpty().trim()
                 println("[CommunityService] createPostComment status=${response.status} body=${err.take(400)}")
-                throw IllegalStateException(
-                    err.ifBlank {
-                        "Comment failed (${response.status.value}). Log out and back in if this keeps happening."
-                    }.take(240),
-                )
+                val message = formatCommunityError(err, response.status)
+                throw IllegalStateException(message)
             }
             Result.success(
                 try {
@@ -140,6 +141,27 @@ class CommunityService(
             )
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /** Parses `{"error":"..."}` when present; maps 401 to a clearer session hint. */
+    private fun formatCommunityError(rawBody: String, status: HttpStatusCode): String {
+        val fromJson = runCatching {
+            val o = ErrorBodyJson.parseToJsonElement(rawBody).jsonObject
+            o["error"]?.jsonPrimitive?.contentOrNull ?: o["message"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
+        val base = fromJson?.takeIf { it.isNotBlank() } ?: rawBody
+        val detail = base.ifBlank { "Request failed (${status.value})" }.take(220)
+        return when (status) {
+            HttpStatusCode.Unauthorized ->
+                if (detail.contains("unauthorised", ignoreCase = true) ||
+                    detail.contains("unauthorized", ignoreCase = true)
+                ) {
+                    "Not signed in or session expired — sign out and sign in again, then retry. ($detail)"
+                } else {
+                    detail
+                }
+            else -> detail
         }
     }
 
