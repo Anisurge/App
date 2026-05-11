@@ -28,4 +28,5 @@ actual fun TvPairingQrCode(
 @Composable
 actual fun TvQrPairingAction(
     modifier: Modifier,
+    enabled: Boolean,
 ) = Unit

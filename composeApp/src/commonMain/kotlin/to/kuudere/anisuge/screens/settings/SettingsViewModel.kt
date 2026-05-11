@@ -286,7 +286,7 @@ class SettingsViewModel(
             is SettingsTab.Profile -> loadUserProfile()
             is SettingsTab.Servers -> loadServerPriority()
             is SettingsTab.Notifications -> loadNotificationPreferences()
-            is SettingsTab.Community -> loadCommunityInitial()
+            // is SettingsTab.Community -> loadCommunityInitial()
             else -> {}
         }
     }
