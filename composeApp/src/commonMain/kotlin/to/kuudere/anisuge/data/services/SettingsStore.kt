@@ -130,14 +130,14 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     suspend fun getMalUsername(): String? = dataStore.data.first()[MAL_USERNAME_KEY]
     suspend fun getMalIsExpired(): Boolean {
         val expiresAt = getMalExpiresAt()
-        return expiresAt > 0 && System.currentTimeMillis() > expiresAt - 60000
+        return expiresAt > 0 && to.kuudere.anisuge.utils.currentTimeMillis() > expiresAt - 60000
     }
 
     suspend fun saveMalTokens(accessToken: String, refreshToken: String, expiresIn: Long) {
         dataStore.edit {
             it[MAL_ACCESS_TOKEN_KEY] = accessToken
             it[MAL_REFRESH_TOKEN_KEY] = refreshToken
-            it[MAL_EXPIRES_AT_KEY] = System.currentTimeMillis() + (expiresIn * 1000)
+            it[MAL_EXPIRES_AT_KEY] = to.kuudere.anisuge.utils.currentTimeMillis() + (expiresIn * 1000)
         }
     }
 
@@ -168,13 +168,13 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     suspend fun getAnilistUsername(): String? = dataStore.data.first()[ANILIST_USERNAME_KEY]
     suspend fun getAnilistIsExpired(): Boolean {
         val expiresAt = getAnilistExpiresAt()
-        return expiresAt > 0 && System.currentTimeMillis() > expiresAt
+        return expiresAt > 0 && to.kuudere.anisuge.utils.currentTimeMillis() > expiresAt
     }
 
     suspend fun saveAnilistTokens(accessToken: String, expiresIn: Long) {
         dataStore.edit {
             it[ANILIST_ACCESS_TOKEN_KEY] = accessToken
-            it[ANILIST_EXPIRES_AT_KEY] = System.currentTimeMillis() + (expiresIn * 1000)
+            it[ANILIST_EXPIRES_AT_KEY] = to.kuudere.anisuge.utils.currentTimeMillis() + (expiresIn * 1000)
         }
     }
 

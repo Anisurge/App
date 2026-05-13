@@ -158,7 +158,7 @@ class ServerRepository(
             val preferences = dataStore.data.first()
             val cachedJson = preferences[stringPreferencesKey(CACHE_KEY_SERVERS)]
             val cacheTimestamp = preferences[longPreferencesKey(CACHE_KEY_TIMESTAMP)] ?: 0L
-            val now = System.currentTimeMillis()
+            val now = to.kuudere.anisuge.utils.currentTimeMillis()
 
             if (cachedJson != null && (now - cacheTimestamp) < CACHE_VALIDITY_MS) {
                 val cachedServers = json.decodeFromString<List<ServerInfo>>(cachedJson)
@@ -177,7 +177,7 @@ class ServerRepository(
         try {
             dataStore.edit { preferences ->
                 preferences[stringPreferencesKey(CACHE_KEY_SERVERS)] = json.encodeToString(servers)
-                preferences[longPreferencesKey(CACHE_KEY_TIMESTAMP)] = System.currentTimeMillis()
+                preferences[longPreferencesKey(CACHE_KEY_TIMESTAMP)] = to.kuudere.anisuge.utils.currentTimeMillis()
             }
         } catch (e: Exception) {
             // Silently fail caching

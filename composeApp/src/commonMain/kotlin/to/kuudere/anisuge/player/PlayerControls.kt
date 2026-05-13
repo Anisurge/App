@@ -878,17 +878,7 @@ private fun DoubleTapSeekOverlay(
     }
 }
 
-private fun formatDuration(seconds: Double): String {
-    val totalSeconds = seconds.toLong().coerceAtLeast(0)
-    val h = totalSeconds / 3600
-    val m = (totalSeconds % 3600) / 60
-    val s = totalSeconds % 60
-    return if (h > 0) {
-        "%d:%02d:%02d".format(h, m, s)
-    } else {
-        "%02d:%02d".format(m, s)
-    }
-}
+private fun formatDuration(seconds: Double): String = to.kuudere.anisuge.utils.formatDuration(seconds)
 
 private fun getCCIcon(): ImageVector {
     return ImageVector.Builder(

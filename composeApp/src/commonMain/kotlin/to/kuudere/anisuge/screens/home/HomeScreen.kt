@@ -162,6 +162,8 @@ import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.utils.DownloadManager
 import to.kuudere.anisuge.utils.DownloadTask
+import to.kuudere.anisuge.utils.formatFloat
+import to.kuudere.anisuge.utils.padTwo
 import to.kuudere.anisuge.platform.DraggableWindowArea
 import to.kuudere.anisuge.platform.WindowManagementButtons
 import to.kuudere.anisuge.screens.search.SearchScreen
@@ -1058,7 +1060,7 @@ private fun HeroCarouselExpanded(
                                 horizontalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Icon(Icons.Default.Star, null, tint = Color(0xFFfbbf24), modifier = Modifier.size(11.dp))
-                                Text(String.format("%.1f", item.score?.toDouble() ?: 0.0), color = Color(0xFFfbbf24), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(formatFloat(item.score?.toDouble() ?: 0.0, 1), color = Color(0xFFfbbf24), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -2176,9 +2178,9 @@ private fun formatDuration(seconds: Double): String {
     return if (mins >= 60) {
         val hrs = mins / 60
         val remainingMins = mins % 60
-        "%d:%02d:%02d".format(hrs, remainingMins, secs)
+        "$hrs:${padTwo(remainingMins)}:${padTwo(secs)}"
     } else {
-        "%d:%02d".format(mins, secs)
+        "${padTwo(mins)}:${padTwo(secs)}"
     }
 }
 

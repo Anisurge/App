@@ -6,13 +6,16 @@ import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import okio.buffer
+import java.io.File
 import to.kuudere.anisuge.data.models.AnimeFolderInfo
 import to.kuudere.anisuge.data.models.DownloadStorageInfo
 import to.kuudere.anisuge.data.models.StorageCategory
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.utils.DownloadManager
 import to.kuudere.anisuge.utils.getDownloadsDirectory
-import java.io.File
+import to.kuudere.anisuge.utils.formatFileSize
+import to.kuudere.anisuge.utils.formatFileSizeCompact
+import to.kuudere.anisuge.utils.formatFloat
 
 expect fun getFontCacheDirectory(): String
 expect fun getSettingsDirectory(): String
@@ -22,7 +25,7 @@ expect fun getFreeDiskSpace(): Long
 class StorageService {
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun getStorageInfo(): StorageInfo = withContext(Dispatchers.IO) {
+    suspend fun getStorageInfo(): StorageInfo = withContext(Dispatchers.Default) {
         val downloadsDir = getDownloadsDirectory()
         val fontCacheDir = getFontCacheDirectory()
         val settingsDir = getSettingsDirectory()
@@ -43,7 +46,7 @@ class StorageService {
         )
     }
 
-    suspend fun getDownloadStorageInfo(): DownloadStorageInfo = withContext(Dispatchers.IO) {
+    suspend fun getDownloadStorageInfo(): DownloadStorageInfo = withContext(Dispatchers.Default) {
         val downloadsDir = getDownloadsDirectory()
         val basePath = downloadsDir.toPath()
 
@@ -141,7 +144,7 @@ class StorageService {
         )
     }
 
-    suspend fun clearFontCache(): Boolean = withContext(Dispatchers.IO) {
+    suspend fun clearFontCache(): Boolean = withContext(Dispatchers.Default) {
         try {
             val fontDir = File(getFontCacheDirectory())
             if (fontDir.exists()) {
@@ -153,7 +156,7 @@ class StorageService {
         }
     }
 
-    suspend fun deleteAnimeDownloads(animeId: String): Boolean = withContext(Dispatchers.IO) {
+    suspend fun deleteAnimeDownloads(animeId: String): Boolean = withContext(Dispatchers.Default) {
         try {
             val downloadsDir = getDownloadsDirectory()
             val safeId = animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
@@ -174,7 +177,7 @@ class StorageService {
         }
     }
 
-    suspend fun deleteEpisodeDownload(animeId: String, episodeNumber: Int): Boolean = withContext(Dispatchers.IO) {
+    suspend fun deleteEpisodeDownload(animeId: String, episodeNumber: Int): Boolean = withContext(Dispatchers.Default) {
         try {
             val downloadsDir = getDownloadsDirectory()
             val safeId = animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
@@ -195,18 +198,18 @@ class StorageService {
 
     fun formatBytes(bytes: Long): String {
         return when {
-            bytes >= 1024 * 1024 * 1024 -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-            bytes >= 1024 * 1024 -> String.format("%.2f MB", bytes / (1024.0 * 1024.0))
-            bytes >= 1024 -> String.format("%.2f KB", bytes / 1024.0)
+            bytes >= 1024 * 1024 * 1024 -> "${formatFloat(bytes / (1024.0 * 1024.0 * 1024.0), 2)} GB"
+            bytes >= 1024 * 1024 -> "${formatFloat(bytes / (1024.0 * 1024.0), 2)} MB"
+            bytes >= 1024 -> "${formatFloat(bytes / 1024.0, 2)} KB"
             else -> "$bytes B"
         }
     }
 
     fun formatBytesCompact(bytes: Long): String {
         return when {
-            bytes >= 1024 * 1024 * 1024 -> String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-            bytes >= 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
-            bytes >= 1024 -> String.format("%.1f KB", bytes / 1024.0)
+            bytes >= 1024 * 1024 * 1024 -> "${formatFloat(bytes / (1024.0 * 1024.0 * 1024.0), 1)} GB"
+            bytes >= 1024 * 1024 -> "${formatFloat(bytes / (1024.0 * 1024.0), 1)} MB"
+            bytes >= 1024 -> "${formatFloat(bytes / 1024.0, 1)} KB"
             else -> "$bytes B"
         }
     }

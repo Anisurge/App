@@ -192,7 +192,7 @@ fun CommentsSection(
             val res = commentService.postComment(animeId, episodeNumber, rootText)
             println("[CommentsSection] postRoot response: $res")
             if (res?.success == true) {
-                val id = res.data?.commentId ?: res.data?.id ?: System.currentTimeMillis().toString()
+                val id = res.data?.commentId ?: res.data?.id ?: to.kuudere.anisuge.utils.currentTimeMillis().toString()
                 println("[CommentsSection] postRoot success! Assigning ID: $id")
                 comments = listOf(CommentUiModel(
                     data = Comment(
@@ -235,7 +235,7 @@ fun CommentsSection(
         scope.launch {
             val res = commentService.postComment(animeId, episodeNumber, parent.replyText, parent.data.id)
             if (res?.success == true) {
-                val id = res.data?.commentId ?: res.data?.id ?: System.currentTimeMillis().toString()
+                val id = res.data?.commentId ?: res.data?.id ?: to.kuudere.anisuge.utils.currentTimeMillis().toString()
                 updateComment(parent.data.id) { c ->
                     c.copy(
                         replies = c.replies + CommentUiModel(
@@ -1232,10 +1232,19 @@ private fun applyMarkdown(text: String, marker: String): String {
 // ── Relative timestamp ────────────────────────────────────────────────────────
 
 fun formatRelTime(isoDate: String): String = try {
-    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
-    fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
-    val date = fmt.parse(isoDate.substringBefore(".").replace("Z", "")) ?: return ""
-    val s = (System.currentTimeMillis() - date.time) / 1000
+    val clean = isoDate.substringBefore(".").replace("Z", "")
+    val parts = clean.split("T")
+    val dateParts = parts[0].split("-").map { it.toInt() }
+    val timeParts = parts.getOrNull(1)?.split(":")?.map { it.toInt() } ?: listOf(0, 0, 0)
+    val year = dateParts[0]; val month = dateParts[1]; val day = dateParts[2]
+    val hour = timeParts.getOrElse(0) { 0 }
+    val minute = timeParts.getOrElse(1) { 0 }
+    val second = timeParts.getOrElse(2) { 0 }
+    // Approximate epoch seconds (good enough for relative time)
+    val daysSinceEpoch = (year - 1970) * 365 + (month - 1) * 30 + (day - 1)
+    val epochSec = daysSinceEpoch * 86400L + hour * 3600L + minute * 60L + second
+    val nowSec = kotlinx.datetime.Clock.System.now().epochSeconds
+    val s = (nowSec - epochSec).coerceAtLeast(0)
     when {
         s < 60      -> "${s}s ago"
         s < 3600    -> "${s / 60}m ago"

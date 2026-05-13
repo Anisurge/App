@@ -41,6 +41,10 @@ BUILD_TASKS=":composeApp:assembleRelease packageDeb packageRpm packageAppImage c
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
     BUILD_TASKS="$BUILD_TASKS packageMsi packageExe"
 fi
+# macOS DMG on macOS hosts
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    BUILD_TASKS="$BUILD_TASKS packageDmg"
+fi
 
 ./gradlew $BUILD_TASKS --no-daemon \
     -PappVersion="$VERSION_NAME" \
@@ -96,6 +100,16 @@ if [ -d "$DIST_DIR" ]; then
     find "$DIST_DIR" -name "*.zip" -exec echo "   - {}" \;
 else
     echo "   - (Not found)"
+fi
+
+echo ""
+echo "🍎 macOS Installers:"
+DMG_DIR="$SCRIPT_DIR/composeApp/build/compose/binaries/main/dmg"
+DMG_FILE=$( [ -d "$DMG_DIR" ] && find "$DMG_DIR" -name "*.dmg" 2>/dev/null || echo "" )
+if [[ -n "$DMG_FILE" ]]; then
+    echo "   - DMG: $DMG_FILE"
+else
+    echo "   - (Note: macOS DMG builds must be run on a macOS machine or via GitHub Actions)"
 fi
 
 echo ""
