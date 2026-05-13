@@ -134,14 +134,15 @@ class HomeViewModel(
 
     private fun handleHomeLoadError(e: Exception) {
         val isNetworkError = generateSequence(e as Throwable) { it.cause }.any { cause ->
-            cause is java.net.UnknownHostException
-                || cause is java.net.ConnectException
-                || cause is java.net.SocketTimeoutException
-                || cause is java.net.NoRouteToHostException
-                || cause.message?.contains("Unable to resolve host", ignoreCase = true) == true
-                || cause.message?.contains("Failed to connect", ignoreCase = true) == true
-                || cause.message?.contains("timeout", ignoreCase = true) == true
-                || cause.message?.contains("Network is unreachable", ignoreCase = true) == true
+            val msg = cause.message ?: ""
+            msg.contains("UnknownHostException", ignoreCase = true)
+                || msg.contains("ConnectException", ignoreCase = true)
+                || msg.contains("SocketTimeoutException", ignoreCase = true)
+                || msg.contains("NoRouteToHostException", ignoreCase = true)
+                || msg.contains("Unable to resolve host", ignoreCase = true)
+                || msg.contains("Failed to connect", ignoreCase = true)
+                || msg.contains("timeout", ignoreCase = true)
+                || msg.contains("Network is unreachable", ignoreCase = true)
         }
         _uiState.update { it.copy(isLoading = false, isOffline = isNetworkError, error = if (isNetworkError) null else e.message) }
     }

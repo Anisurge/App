@@ -213,6 +213,17 @@ actual object KmpFileSystem {
         if (!f.exists()) f.mkdirs()
     }
 
+    actual fun source(path: String): okio.Source {
+        if (path.startsWith("content://")) {
+            val doc = getDocumentFromPath(path)
+            val uri = doc?.uri ?: throw java.io.IOException("Could not open $path")
+            val pfd = androidAppContext.contentResolver.openFileDescriptor(uri, "r")
+                ?: throw java.io.IOException("Failed to open file descriptor for $path")
+            return android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd).source()
+        }
+        return java.io.File(path).source()
+    }
+
     actual fun sink(path: String, append: Boolean): Sink {
         if (path.startsWith("content://")) {
             val doc = getOrCreateDocumentFromPath(path, isDirectory = false)
@@ -244,6 +255,14 @@ actual object KmpFileSystem {
             return
         }
         java.io.File(path).writeBytes(data)
+    }
+
+    actual fun listDir(path: String): List<String> {
+        if (path.startsWith("content://")) {
+            val doc = getDocumentFromPath(path)
+            return doc?.listFiles()?.map { it.name ?: "" } ?: emptyList()
+        }
+        return java.io.File(path).listFiles()?.map { it.name } ?: emptyList()
     }
 
     private fun getDocumentFromPath(path: String): DocumentFile? {

@@ -1,7 +1,9 @@
 package to.kuudere.anisuge.platform
 import to.kuudere.anisuge.BuildConfig
 import okio.Sink
+import okio.Source
 import okio.sink
+import okio.source
 import okio.buffer
 import java.io.File
 import java.util.UUID
@@ -203,12 +205,17 @@ actual object KmpFileSystem {
         val f = File(path)
         if (!f.exists()) f.mkdirs()
     }
+    actual fun source(path: String): okio.Source = File(path).source()
     actual fun sink(path: String, append: Boolean): Sink = File(path).sink(append)
     actual fun delete(path: String, mustExist: Boolean) {
         File(path).delete()
     }
     actual fun write(path: String, data: ByteArray) {
         File(path).writeBytes(data)
+    }
+
+    actual fun listDir(path: String): List<String> {
+        return File(path).listFiles()?.map { it.name } ?: emptyList()
     }
 }
 

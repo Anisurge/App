@@ -76,8 +76,10 @@ expect object KmpFileSystem {
     fun exists(path: String): Boolean
     fun createDirectories(path: String, mustCreate: Boolean = false)
     fun sink(path: String, append: Boolean = false): Sink
+    fun source(path: String): okio.Source
     fun delete(path: String, mustExist: Boolean = false)
     fun write(path: String, data: ByteArray)
+    fun listDir(path: String): List<String>
 }
 
 /** Converts a raw technical path into a human-friendly display string. */
@@ -113,13 +115,6 @@ fun formatDisplayPath(path: String): String {
         }
     }
     
-    // Linux/macOS common paths (standard paths)
-    val home = System.getProperty("user.home") ?: ""
-    if (home.isNotBlank() && display.startsWith(home)) {
-        display = display.replace(home + "/Downloads", "Downloads")
-        display = display.replace(home, "Home")
-    }
-
     return display.trim('/').replace("/", " > ")
 }
 

@@ -70,9 +70,9 @@ class AnimeInfoViewModel(
                 _uiState.update { it.copy(isLoading = false, error = "Failed to load anime details.") }
             }
             } catch (e: Exception) {
-                System.err.println("[AnimeInfoVM] loadAnimeInfo error: ${e.javaClass.simpleName}: ${e.message}")
-                e.printStackTrace(System.err)
-                _uiState.update { it.copy(isLoading = false, error = "Error: ${e.javaClass.simpleName}: ${e.message}") }
+                println("[AnimeInfoVM] loadAnimeInfo error: ${(e::class.simpleName ?: "Exception")}: ${e.message}")
+                e.printStackTrace()
+                _uiState.update { it.copy(isLoading = false, error = "Error: ${(e::class.simpleName ?: "Exception")}: ${e.message}") }
             }
         }
     }

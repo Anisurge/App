@@ -50,6 +50,18 @@ val windowsVersion = numericVersion.split(".").let {
 // Linux RPM version (no dashes, dots only)
 val linuxVersion = appVersionName.replace("-", ".")
 
+// macOS DMG version: jpackage requires MAJOR > 0, so remap 0.x.y → 1.x.y
+val macosVersion = numericVersion.split(".").let {
+    val major = it[0].toIntOrNull() ?: 0
+    val adjustedMajor = if (major == 0) 1 else major
+    when (it.size) {
+        1 -> "$adjustedMajor.0.0"
+        2 -> "$adjustedMajor.${it[1]}.0"
+        3 -> "$adjustedMajor.${it[1]}.${it[2]}"
+        else -> "$adjustedMajor.${it[1]}.${it[2]}"
+    }
+}
+
 // nav 2.9.0 → savedstate 1.3.6 → compose.ui:1.10.1 → skiko-awt:0.9.37.4 (JVM JAR)
 // compose.desktop.currentOs:1.8.0 pins skiko-awt-runtime-linux-x64:0.8.18 (native .so)
 // The 0.8.18 .so lacks glFlush() → UnsatisfiedLinkError at runtime.
@@ -77,7 +89,11 @@ plugins {
 kotlin {
     androidTarget()
     jvm("desktop")
-    
+    // iOS targets are prepared but require commonMain JVM refactoring first.
+    // See iosMain/ stubs and .github/workflows/build-release.yml for CI setup.
+    // iosArm64()
+    // iosSimulatorArm64()
+
     jvmToolchain(21)
 
     sourceSets {
@@ -372,7 +388,7 @@ compose.desktop {
         )
 
         nativeDistributions {
-            targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage, TargetFormat.Msi, TargetFormat.Exe)
+            targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg)
             packageName = "Anisurge"
             packageVersion = appVersionName
             description = "Anisurge — Multi-Platform Edition"
@@ -403,6 +419,13 @@ compose.desktop {
                 // Note: Signing is now handled via project properties in the CI workflow
                 // by passing -Pcompose.desktop.signing.sign=true etc.
                 // This avoids DSL compilation issues.
+            }
+
+            macOS {
+                iconFile.set(project.file("src/desktopMain/resources/logo.icns"))
+                packageVersion = macosVersion
+                bundleID = "to.kuudere.anisuge"
+                // Unsigned build — no signing configuration
             }
         }
     }

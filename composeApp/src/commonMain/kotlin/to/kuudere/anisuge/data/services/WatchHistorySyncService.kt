@@ -72,17 +72,17 @@ class WatchHistorySyncService(
     private var lastAnilistAt = 0L
 
     private suspend fun waitMal() {
-        val now = System.currentTimeMillis()
+        val now = to.kuudere.anisuge.utils.currentTimeMillis()
         val wait = lastMalAt + MAL_DELAY_MS - now
         if (wait > 0) delay(wait)
-        lastMalAt = System.currentTimeMillis()
+        lastMalAt = to.kuudere.anisuge.utils.currentTimeMillis()
     }
 
     private suspend fun waitAnilist() {
-        val now = System.currentTimeMillis()
+        val now = to.kuudere.anisuge.utils.currentTimeMillis()
         val wait = lastAnilistAt + ANILIST_DELAY_MS - now
         if (wait > 0) delay(wait)
-        lastAnilistAt = System.currentTimeMillis()
+        lastAnilistAt = to.kuudere.anisuge.utils.currentTimeMillis()
     }
 
     suspend fun sync(

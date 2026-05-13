@@ -71,7 +71,7 @@ class TrackingService(
             settingsStore.saveMalTokensWithRefresh(
                 accessToken = body.access_token,
                 refreshToken = body.refresh_token ?: refreshToken,
-                expiresAt = System.currentTimeMillis() + (body.expires_in * 1000)
+                expiresAt = to.kuudere.anisuge.utils.currentTimeMillis() + (body.expires_in * 1000)
             )
             true
         } catch (e: Exception) {

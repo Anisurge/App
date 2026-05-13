@@ -20,6 +20,7 @@ import to.kuudere.anisuge.data.services.SyncManager
 import to.kuudere.anisuge.data.services.TrackingService
 import to.kuudere.anisuge.data.services.WatchlistService
 import okio.Path.Companion.toPath
+import to.kuudere.anisuge.platform.KmpFileSystem
 import to.kuudere.anisuge.player.VideoPlayerConfig
 import to.kuudere.anisuge.player.VideoPlayerState
 
@@ -151,34 +152,25 @@ class WatchViewModel(
             return
         }
 
-        // Normalize path separators to the system default
-        val normalizedPath = path.replace('/', java.io.File.separatorChar).replace('\\', java.io.File.separatorChar)
+        // Normalize path separators to forward slash (okio standard)
+        val normalizedPath = path.replace('\\', '/')
 
         // Check for local subs/fonts in same dir
-        val dir = try { 
-            val file = java.io.File(normalizedPath)
-            file.parent
-        } catch(e: Exception) { 
-            null 
-        }
+        val dir = normalizedPath.substringBeforeLast('/', "")
         val subs = mutableListOf<to.kuudere.anisuge.data.models.SubtitleData>()
 
-        if (dir != null) {
+        if (dir.isNotBlank()) {
             try {
-                val dirPath = dir.toPath()
-                if (okio.FileSystem.SYSTEM.exists(dirPath)) {
-                    val files = okio.FileSystem.SYSTEM.list(dirPath)
-                    files.forEach { file ->
-                        val name = file.name
-                        if (name.startsWith("subtitle") && (name.endsWith(".ass") || name.endsWith(".vtt") || name.endsWith(".srt"))) {
-                            val label = name.substringAfter("subtitle_", "").substringBeforeLast(".").ifEmpty { "Default" }
-                            val fileUrl = "file://${file.toString()}"
-                            subs.add(to.kuudere.anisuge.data.models.SubtitleData(
-                                languageName = label,
-                                url = fileUrl,
-                                format = name.substringAfterLast(".")
-                            ))
-                        }
+                val entries = KmpFileSystem.listDir(dir)
+                entries.forEach { name ->
+                    if (name.startsWith("subtitle") && (name.endsWith(".ass") || name.endsWith(".vtt") || name.endsWith(".srt"))) {
+                        val label = name.substringAfter("subtitle_", "").substringBeforeLast(".").ifEmpty { "Default" }
+                        val fileUrl = "file://$dir/$name"
+                        subs.add(to.kuudere.anisuge.data.models.SubtitleData(
+                            languageName = label,
+                            url = fileUrl,
+                            format = name.substringAfterLast(".")
+                        ))
                     }
                 }
             } catch (e: Exception) {
@@ -399,8 +391,8 @@ class WatchViewModel(
                     val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
                     if (embedStreams != null && embedStreams.isNotEmpty()) {
                         val referer = try {
-                            val uri = java.net.URI(embedUrl)
-                            "${uri.scheme}://${uri.host}"
+                            val schemeHost = embedUrl.substringBefore("://", "") + "://" + embedUrl.substringAfter("://").substringBefore("/")
+                            if (schemeHost.contains("://")) schemeHost else "https://senshi.live"
                         } catch (_: Exception) {
                             "https://senshi.live"
                         }

@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okio.buffer
+import okio.FileSystem
+import okio.Path.Companion.toPath
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.platform.KmpFileSystem
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
@@ -44,7 +46,7 @@ data class DownloadTask(
 
 object DownloadManager {
     val tasks = MutableStateFlow<List<DownloadTask>>(emptyList())
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(Dispatchers.Default)
     private val httpClient = AppComponent.httpClient
     private val infoService = AppComponent.infoService
     
@@ -79,7 +81,7 @@ object DownloadManager {
             try {
                 if (KmpFileSystem.exists(persistenceFile)) {
                     // JSON files are always small, use standard read
-                    val content = java.io.File(persistenceFile).readText()
+                    val content: String = KmpFileSystem.source(persistenceFile).buffer().use { it.readUtf8() }
                     val loaded = json.decodeFromString<List<DownloadTask>>(content)
                     // Reset transient states
                     val sanitized = loaded.map { 
@@ -103,7 +105,7 @@ object DownloadManager {
         scope.launch {
             try {
                 val content = json.encodeToString(tasks.value)
-                KmpFileSystem.write(persistenceFile, content.toByteArray())
+                KmpFileSystem.write(persistenceFile, content.encodeToByteArray())
             } catch (e: Exception) {
                 println("Failed to save tasks: ${e.message}")
             }
@@ -242,8 +244,8 @@ object DownloadManager {
                             val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
                             if (embedStreams != null && embedStreams.isNotEmpty()) {
                                 val referer = try {
-                                    val uri = java.net.URI(embedUrl)
-                                    "${uri.scheme}://${uri.host}"
+                                    val schemeHost = embedUrl.substringBefore("://", "") + "://" + embedUrl.substringAfter("://").substringBefore("/")
+                                    if (schemeHost.contains("://")) schemeHost else "https://senshi.live"
                                 } catch (_: Exception) {
                                     "https://senshi.live"
                                 }
@@ -646,17 +648,17 @@ object DownloadManager {
 
     private fun formatSpeed(bytesPerSec: Double): String {
         return when {
-            bytesPerSec >= 1024 * 1024 -> String.format("%.1f MB/s", bytesPerSec / (1024 * 1024))
-            bytesPerSec >= 1024 -> String.format("%.1f KB/s", bytesPerSec / 1024)
-            else -> String.format("%.0f B/s", bytesPerSec)
+            bytesPerSec >= 1024 * 1024 -> "${formatFloat(bytesPerSec / (1024 * 1024), 1)} MB/s"
+            bytesPerSec >= 1024 -> "${formatFloat(bytesPerSec / 1024, 1)} KB/s"
+            else -> "${formatFloat(bytesPerSec, 0)} B/s"
         }
     }
 
     private fun formatEta(seconds: Int): String {
         return when {
-            seconds >= 3600 -> String.format("%dh %dm left", seconds / 3600, (seconds % 3600) / 60)
-            seconds >= 60 -> String.format("%dm %ds left", seconds / 60, seconds % 60)
-            else -> String.format("%ds left", seconds)
+            seconds >= 3600 -> "${seconds / 3600}h ${(seconds % 3600) / 60}m left"
+            seconds >= 60 -> "${seconds / 60}m ${seconds % 60}s left"
+            else -> "${seconds}s left"
         }
     }
 

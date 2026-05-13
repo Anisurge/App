@@ -1,5 +1,6 @@
 package to.kuudere.anisuge.screens.info
 
+import to.kuudere.anisuge.utils.formatFloat
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -553,7 +554,7 @@ private fun MobileLayout(
                          }
                          if (ratingValue > 0.0) {
                              Spacer(Modifier.width(4.dp))
-                             Text(String.format("%.1f", ratingValue * 2.0), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                             Text(formatFloat(ratingValue * 2.0, 1), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                          }
                      }
                      Spacer(Modifier.height(8.dp))

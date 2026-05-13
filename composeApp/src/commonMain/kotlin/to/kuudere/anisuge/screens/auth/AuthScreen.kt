@@ -689,7 +689,7 @@ private fun AnimeCarousel() {
             .width(150.dp)
             .fillMaxHeight()
             .graphicsLayer {
-                rotationZ = Math.toDegrees(0.12).toFloat()
+                rotationZ = kotlin.math.atan(0.12).toFloat()
             }
     ) {
         // large number of elements to simulate infinite scrolling

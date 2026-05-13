@@ -3,6 +3,9 @@ package to.kuudere.anisuge.screens.info
 import io.github.vinceglb.filekit.dialogs.compose.rememberDirectoryPickerLauncher
 import io.github.vinceglb.filekit.absolutePath
 
+import to.kuudere.anisuge.utils.formatFloat
+import to.kuudere.anisuge.utils.urlHost
+import to.kuudere.anisuge.utils.urlSchemeHost
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -170,8 +173,8 @@ fun DownloadEpisodeDialog(
                     val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
                     if (embedStreams != null && embedStreams.isNotEmpty()) {
                         val referer = try {
-                            val uri = java.net.URI(embedUrl)
-                            "${uri.scheme}://${uri.host}"
+                            val schemeHost = urlSchemeHost(embedUrl)
+                            "${schemeHost}"
                         } catch (_: Exception) {
                             "https://senshi.live"
                         }
@@ -707,23 +710,23 @@ internal fun isDirectProgressiveMp4Url(url: String): Boolean {
     val path = lower.substringBefore("?")
     if (path.endsWith(".mp4") || ".mp4?" in lower || "/mp4/" in lower) return true
     val host = try {
-        java.net.URI(url).host?.lowercase()
+        urlHost(url)?.lowercase()
     } catch (_: Exception) {
         null
     } ?: return false
     // All anime (`allmanga`) serves progressive MP4 from Wix video CDN paths that may omit a `.mp4` suffix.
-    if (host == "video.wixstatic.com" || host.endsWith(".wixmp.com")) return true
+    if (host == "video.wixstatic.com" || (host.length >= 8 && host.substring(host.length - 8) == ".wixmp.com")) return true
     // All anime can also serve direct video blobs from fast4speed without an explicit `.mp4` extension.
-    if (host == "tools.fast4speed.rsvp" || host.endsWith(".fast4speed.rsvp")) {
-        if ("/videos/" in path && !path.endsWith(".m3u8")) return true
+    if (host == "tools.fast4speed.rsvp" || (host.length >= 16 && host.substring(host.length - 16) == ".fast4speed.rsvp")) {
+        if ("/videos/" in path && (path.length < 5 || path.substring(path.length - 5).lowercase() != ".m3u8")) return true
     }
     return false
 }
 
 private fun formatFileSize(bytes: Long): String {
     return when {
-        bytes >= 1024 * 1024 * 1024 -> String.format("%.1f GB", bytes.toDouble() / (1024 * 1024 * 1024))
-        bytes >= 1024 * 1024 -> String.format("%.0f MB", bytes.toDouble() / (1024 * 1024))
-        else -> String.format("%.0f KB", bytes.toDouble() / 1024)
+        bytes >= 1024 * 1024 * 1024 -> "${formatFloat(bytes.toDouble() / (1024 * 1024 * 1024), 1)} GB"
+        bytes >= 1024 * 1024 -> "${formatFloat(bytes.toDouble() / (1024 * 1024), 0)} MB"
+        else -> "${formatFloat(bytes.toDouble() / 1024, 0)} KB"
     }
 }

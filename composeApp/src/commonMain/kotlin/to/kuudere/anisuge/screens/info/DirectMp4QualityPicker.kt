@@ -30,13 +30,14 @@ import io.ktor.client.request.header
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import to.kuudere.anisuge.utils.formatFloat
 
 internal fun formatBytesOneDecimalPreferredUnit(bytes: Long): String =
     when {
         bytes <= 0L -> "—"
-        bytes >= 1024L * 1024 * 1024 -> String.format("%.1f GB", bytes.toDouble() / (1024 * 1024 * 1024))
-        bytes >= 1024L * 1024 -> String.format("%.1f MB", bytes.toDouble() / (1024 * 1024))
-        else -> String.format("%.0f KB", bytes.toDouble() / 1024)
+        bytes >= 1024L * 1024 * 1024 -> "${formatFloat(bytes.toDouble() / (1024 * 1024 * 1024), 1)} GB"
+        bytes >= 1024L * 1024 -> "${formatFloat(bytes.toDouble() / (1024 * 1024), 1)} MB"
+        else -> "${formatFloat(bytes.toDouble() / 1024, 0)} KB"
     }
 
 /** Progressive MP4 options: concurrent HEAD for size, Download triggers [onDownloadRequested]. */
@@ -58,7 +59,7 @@ fun DirectMp4QualityPicker(
             loadingByQuality[q] = true
         }
         // Sequential HEAD avoids piling buffers on OkHttp / reduces OOM risk on tight heaps.
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             options.forEach { (qualityLabel, url, hdrs) ->
                 val display: String =
                     try {

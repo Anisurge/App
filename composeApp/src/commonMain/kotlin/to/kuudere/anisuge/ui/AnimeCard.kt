@@ -131,7 +131,10 @@ fun AnimeCard(
                         modifier = Modifier.size(12.dp)  // .material-icons { font-size: 12px }
                     )
                     Text(
-                        text = String.format("%.1f", item.score?.toDouble() ?: 0.0),
+                        text = (item.score?.toDouble() ?: 0.0).let { d ->
+                            val i = d.toInt()
+                            if (d == i.toDouble()) "$i.0" else "${(d * 10).toInt() / 10.0}"
+                        },
                         color = Color.White,
                         fontSize = 10.sp,                // font-size: 10px
                         fontWeight = FontWeight.SemiBold  // font-weight: 600
