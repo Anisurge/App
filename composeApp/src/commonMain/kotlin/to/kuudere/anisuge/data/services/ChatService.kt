@@ -4,14 +4,15 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.URLBuilder
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
-import io.ktor.http.path
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.channels.awaitClose
@@ -37,7 +38,7 @@ class ChatService(
         const val GLOBAL_ROOM_SLUG = "global"
     }
 
-    private fun wsUrl(roomSlug: String, token: String): String {
+    private fun wsUrl(roomSlug: String): String {
         val httpBase = AnisurgeApi.v1Base.trimEnd('/')
         val wsBase = when {
             httpBase.startsWith("https://") -> httpBase.replaceFirst("https://", "wss://")
@@ -46,7 +47,6 @@ class ChatService(
         }
         return URLBuilder("$wsBase/chat/ws").apply {
             parameters.append("room", roomSlug)
-            parameters.append("token", token)
         }.buildString()
     }
 
@@ -113,9 +113,14 @@ class ChatService(
             return@callbackFlow
         }
 
-        val url = wsUrl(roomSlug, token)
+        val url = wsUrl(roomSlug)
         try {
-            httpClient.webSocket(urlString = url) {
+            httpClient.webSocket(
+                urlString = url,
+                request = {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                },
+            ) {
                 trySend(ChatLiveEvent.Connected)
                 try {
                     for (frame in incoming) {
