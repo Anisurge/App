@@ -11,7 +11,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.Serializable
-import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 import to.kuudere.anisuge.data.models.WatchlistResponse
 import to.kuudere.anisuge.data.models.WatchlistUpdateResponse
 
@@ -34,8 +34,8 @@ class WatchlistService(
         minScore: Int? = null,
     ): WatchlistResponse? {
         val stored = sessionStore.get() ?: return null
-        val response = httpClient.get("${AppComponent.BASE_URL}/watchlist") {
-            header("Authorization", "Bearer ${stored.token}")
+        val response = httpClient.get("${AnisurgeApi.v1Base}/watchlist") {
+            applyAnisurgeAuth(stored)
             parameter("limit", limit)
             if (offset > 0) parameter("offset", offset)
             folder?.let { parameter("folder", it) }
@@ -62,8 +62,8 @@ class WatchlistService(
     suspend fun updateStatus(animeId: String, folder: String, notes: String? = null): WatchlistUpdateResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
-            val response = httpClient.post("${AppComponent.BASE_URL}/watchlist") {
-                header("Authorization", "Bearer ${stored.token}")
+            val response = httpClient.post("${AnisurgeApi.v1Base}/watchlist") {
+                applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
                 setBody(UpdateWatchlistRequest(animeId, folder, notes))
             }
@@ -79,8 +79,8 @@ class WatchlistService(
     suspend fun removeFromWatchlist(animeId: String): Boolean {
         return try {
             val stored = sessionStore.get() ?: return false
-            val response = httpClient.delete("${AppComponent.BASE_URL}/watchlist/$animeId") {
-                header("Authorization", "Bearer ${stored.token}")
+            val response = httpClient.delete("${AnisurgeApi.v1Base}/watchlist/$animeId") {
+                applyAnisurgeAuth(stored)
             }
             response.status.value in 200..299
         } catch (e: Exception) {

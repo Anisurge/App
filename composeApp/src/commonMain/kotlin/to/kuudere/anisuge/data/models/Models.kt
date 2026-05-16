@@ -4,7 +4,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SessionInfo(
+    /** Project-R session token (project_r_ prefix). */
     val token: String,
+    /** Anisurge BFF JWT for versioned API routes. */
+    val anisurgeToken: String? = null,
 )
 
 @Serializable

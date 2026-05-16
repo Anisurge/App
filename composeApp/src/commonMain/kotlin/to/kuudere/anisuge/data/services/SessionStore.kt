@@ -14,7 +14,7 @@ import to.kuudere.anisuge.data.models.SessionInfo
 class SessionStore(private val dataStore: DataStore<Preferences>) {
     companion object {
         private val SESSION_KEY = stringPreferencesKey("session_info")
-        private const val TOKEN_PREFIX = "project_r_"
+        private const val PROJECT_R_PREFIX = "project_r_"
         private val json = Json { ignoreUnknownKeys = true }
     }
 
@@ -45,6 +45,16 @@ class SessionStore(private val dataStore: DataStore<Preferences>) {
     }
 
     fun isValid(session: SessionInfo): Boolean {
-        return session.token.isNotBlank() && session.token.startsWith(TOKEN_PREFIX)
+        return session.token.isNotBlank() &&
+            session.token.startsWith(PROJECT_R_PREFIX) &&
+            !session.anisurgeToken.isNullOrBlank()
+    }
+
+    fun hasProjectRToken(session: SessionInfo): Boolean {
+        return session.token.isNotBlank() && session.token.startsWith(PROJECT_R_PREFIX)
+    }
+
+    fun needsAnisurgeSync(session: SessionInfo): Boolean {
+        return hasProjectRToken(session) && session.anisurgeToken.isNullOrBlank()
     }
 }

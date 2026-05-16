@@ -342,7 +342,6 @@ private fun MobileAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
 private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boolean) {
     val passwordFocus = remember { FocusRequester() }
     val otpFocus = remember { FocusRequester() }
-    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
     Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
         AnimatedContent(
@@ -373,7 +372,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
             Text(
                 text = when (mode) {
                     AuthMode.LOGIN -> "Sign in to continue watching"
-                    AuthMode.REGISTER -> "Create your account on reanime.to, then sign in here"
+                    AuthMode.REGISTER -> "Create your Anisurge account"
                     AuthMode.FORGOT_PASSWORD -> "Enter your email or username to reset your password"
                     AuthMode.RESET_PASSWORD -> "Enter your new password"
                 },
@@ -386,6 +385,29 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
     }
 
     Spacer(Modifier.height(28.dp))
+
+    // Register: username
+    if (state.mode == AuthMode.REGISTER) {
+        AnisugTextField(
+            value = state.displayName,
+            onValueChange = viewModel::onDisplayNameChange,
+            label = "Username",
+            placeholder = "3–10 letters or numbers",
+            keyboardType = KeyboardType.Text,
+            imeAction = ImeAction.Next,
+        )
+        Spacer(Modifier.height(16.dp))
+        AnisugTextField(
+            value = state.identifier,
+            onValueChange = viewModel::onIdentifierChange,
+            label = "Email",
+            placeholder = "Enter your email address",
+            keyboardType = KeyboardType.Email,
+            imeAction = ImeAction.Next,
+            onImeAction = { passwordFocus.requestFocus() },
+        )
+        Spacer(Modifier.height(16.dp))
+    }
 
     // Identifier field (email or username) — shown in LOGIN and FORGOT_PASSWORD
     if (state.mode == AuthMode.LOGIN || state.mode == AuthMode.FORGOT_PASSWORD) {
@@ -421,7 +443,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
     }
 
     // Password field
-    if (state.mode == AuthMode.LOGIN || state.mode == AuthMode.RESET_PASSWORD) {
+    if (state.mode == AuthMode.LOGIN || state.mode == AuthMode.REGISTER || state.mode == AuthMode.RESET_PASSWORD) {
         AnisugTextField(
             value = state.password,
             onValueChange = viewModel::onPasswordChange,
@@ -429,20 +451,29 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
             placeholder = "Enter your password",
             isPassword = true,
             keyboardType = KeyboardType.Password,
-            imeAction = if (state.mode == AuthMode.RESET_PASSWORD) ImeAction.Next else ImeAction.Done,
-            onImeAction = { if (state.mode == AuthMode.RESET_PASSWORD) { /* focus confirm */ } else viewModel.submit() },
+            imeAction = when (state.mode) {
+                AuthMode.RESET_PASSWORD, AuthMode.REGISTER -> ImeAction.Next
+                else -> ImeAction.Done
+            },
+            onImeAction = {
+                when (state.mode) {
+                    AuthMode.LOGIN -> viewModel.submit()
+                    AuthMode.REGISTER -> { /* confirm field */ }
+                    else -> { /* focus confirm */ }
+                }
+            },
             focusRequester = passwordFocus,
         )
         Spacer(Modifier.height(16.dp))
     }
 
     // Confirm Password field
-    if (state.mode == AuthMode.RESET_PASSWORD) {
+    if (state.mode == AuthMode.REGISTER || state.mode == AuthMode.RESET_PASSWORD) {
         AnisugTextField(
             value = state.confirmPassword,
             onValueChange = viewModel::onConfirmPasswordChange,
             label = "Confirm Password",
-            placeholder = "Confirm your new password",
+            placeholder = if (state.mode == AuthMode.REGISTER) "Confirm your password" else "Confirm your new password",
             isPassword = true,
             keyboardType = KeyboardType.Password,
             imeAction = ImeAction.Done,
@@ -471,40 +502,10 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
         }
     }
 
-    // Register helper - website-only account creation
-    if (state.mode == AuthMode.REGISTER) {
-        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "Create your account at",
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Normal,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "https://reanime.to",
-                color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = "Then use the same account in this app.",
-                color = Color.White.copy(alpha = 0.65f),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Normal,
-            )
-            Spacer(Modifier.height(16.dp))
-        }
-    }
-
     Spacer(Modifier.height(8.dp))
 
     Button(
-        onClick = {
-            if (state.mode == AuthMode.REGISTER) uriHandler.openUri("https://reanime.to")
-            else viewModel.submit()
-        },
+        onClick = { viewModel.submit() },
         enabled = !state.isLoading,
         modifier = Modifier.fillMaxWidth().height(48.dp),
         shape = RoundedCornerShape(8.dp),
@@ -521,7 +522,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
             Text(
                 text = when (state.mode) {
                     AuthMode.LOGIN -> "Sign in"
-                    AuthMode.REGISTER -> "Open reanime.to"
+                    AuthMode.REGISTER -> "Create account"
                     AuthMode.FORGOT_PASSWORD -> "Send Reset Code"
                     AuthMode.RESET_PASSWORD -> "Reset Password"
                 },

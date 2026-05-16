@@ -2,7 +2,6 @@ package to.kuudere.anisuge.data.services
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -13,16 +12,20 @@ import io.ktor.http.contentType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.buildJsonObject
 import to.kuudere.anisuge.AppComponent
-import to.kuudere.anisuge.data.models.AuthResponse
 import to.kuudere.anisuge.data.models.BasicApiResponse
-import to.kuudere.anisuge.data.models.CurrentUserResponse
+import to.kuudere.anisuge.data.models.BffAuthResponse
+import to.kuudere.anisuge.data.models.BffErrorResponse
+import to.kuudere.anisuge.data.models.BffMeResponse
 import to.kuudere.anisuge.data.models.ForgotPasswordRequest
 import to.kuudere.anisuge.data.models.LoginRequest
 import to.kuudere.anisuge.data.models.RegisterRequest
 import to.kuudere.anisuge.data.models.ResetPasswordRequest
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.models.SessionInfo
+import to.kuudere.anisuge.data.models.toUserProfile
+import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 
 class AuthService(
     private val sessionStore: SessionStore,
@@ -31,52 +34,49 @@ class AuthService(
     private val _authState = MutableStateFlow<SessionCheckResult>(SessionCheckResult.NoSession)
     val authState: StateFlow<SessionCheckResult> = _authState.asStateFlow()
 
-    private suspend fun authHeader(): String? = sessionStore.get()?.token
-
     suspend fun login(identifier: String, password: String): SessionInfo {
-        val response = httpClient.post("${AppComponent.BASE_URL}/auth/login") {
+        val response = httpClient.post("${AnisurgeApi.v1Base}/auth/login") {
             contentType(ContentType.Application.Json)
             setBody(LoginRequest(identifier, password))
         }
         if (response.status != HttpStatusCode.OK) {
-            val errorBody = try { response.body<AuthResponse>() } catch (e: Exception) { null }
-            throw Exception(errorBody?.message ?: "Login failed (${response.status})")
+            val err = try { response.body<BffErrorResponse>() } catch (_: Exception) { null }
+            throw Exception(err?.displayMessage() ?: "Login failed (${response.status})")
         }
-        val body: AuthResponse = response.body()
-        val token = body.token
-            ?: throw Exception(body.message ?: "No token returned")
-        val session = SessionInfo(token).also { sessionStore.save(it) }
-        _authState.value = SessionCheckResult.Valid(session, body.user)
-        return session
+        return handleAuthResponse(response.status, response.body())
     }
 
     suspend fun register(username: String, email: String, password: String): SessionInfo {
-        val response = httpClient.post("${AppComponent.BASE_URL}/auth/signup") {
+        val response = httpClient.post("${AnisurgeApi.v1Base}/auth/signup") {
             contentType(ContentType.Application.Json)
             setBody(RegisterRequest(username, email, password))
         }
-        if (response.status != HttpStatusCode.Created && response.status != HttpStatusCode.OK) {
-            val errorBody = try { response.body<AuthResponse>() } catch (e: Exception) { null }
-            throw Exception(errorBody?.message ?: "Registration failed (${response.status})")
+        val ok = response.status == HttpStatusCode.OK || response.status == HttpStatusCode.Created
+        if (!ok) {
+            val err = try { response.body<BffErrorResponse>() } catch (_: Exception) { null }
+            throw Exception(err?.displayMessage() ?: "Registration failed (${response.status})")
         }
-        val body: AuthResponse = response.body()
-        val token = body.token
-            ?: throw Exception(body.message ?: "No token returned")
-        val session = SessionInfo(token).also { sessionStore.save(it) }
-        _authState.value = SessionCheckResult.Valid(session, body.user)
-        return session
+        return handleAuthResponse(response.status, response.body())
     }
 
     suspend fun savePairedSession(session: SessionInfo) {
-        if (!sessionStore.isValid(session)) {
+        if (!sessionStore.hasProjectRToken(session)) {
             throw Exception("Invalid paired session")
         }
-        sessionStore.save(session)
-        _authState.value = SessionCheckResult.Valid(session)
+        val upgraded = if (sessionStore.needsAnisurgeSync(session)) {
+            when (val synced = syncSession(session.token)) {
+                is SessionCheckResult.Valid -> synced.session
+                else -> throw Exception("Failed to sync TV session")
+            }
+        } else {
+            session
+        }
+        sessionStore.save(upgraded)
+        _authState.value = SessionCheckResult.Valid(upgraded)
     }
 
     suspend fun forgotPassword(identifier: String): String {
-        val response = httpClient.post("${AppComponent.BASE_URL}/auth/forgot-password") {
+        val response = httpClient.post("${AppComponent.PROJECT_R_BASE_URL}/auth/forgot-password") {
             contentType(ContentType.Application.Json)
             setBody(ForgotPasswordRequest(identifier))
         }
@@ -85,7 +85,7 @@ class AuthService(
     }
 
     suspend fun resetPassword(identifier: String, otp: String, newPassword: String): String {
-        val response = httpClient.post("${AppComponent.BASE_URL}/auth/reset-password") {
+        val response = httpClient.post("${AppComponent.PROJECT_R_BASE_URL}/auth/reset-password") {
             contentType(ContentType.Application.Json)
             setBody(ResetPasswordRequest(identifier, otp, newPassword))
         }
@@ -97,39 +97,44 @@ class AuthService(
     }
 
     suspend fun checkSession(): SessionCheckResult {
-        val stored = sessionStore.get()
+        var stored = sessionStore.get()
         if (stored == null) {
             _authState.value = SessionCheckResult.NoSession
             return SessionCheckResult.NoSession
         }
+
+        if (sessionStore.needsAnisurgeSync(stored)) {
+            return try {
+                when (val synced = syncSession(stored.token)) {
+                    is SessionCheckResult.Valid -> {
+                        stored = synced.session
+                        fetchMe(stored)
+                    }
+                    is SessionCheckResult.Expired -> SessionCheckResult.Expired.also {
+                        _authState.value = it
+                    }
+                    else -> SessionCheckResult.NetworkError.also { _authState.value = it }
+                }
+            } catch (e: Exception) {
+                println("[AuthService] legacy sync failed: ${e.message}")
+                SessionCheckResult.Expired.also { _authState.value = it }
+            }
+        }
+
         if (!sessionStore.isValid(stored)) {
             _authState.value = SessionCheckResult.Expired
             return SessionCheckResult.Expired
         }
 
-        return try {
-            val response = httpClient.get("${AppComponent.BASE_URL}/user") {
-                header("Authorization", "Bearer ${stored.token}")
-            }
-            if (response.status == HttpStatusCode.OK) {
-                val body: CurrentUserResponse = response.body()
-                SessionCheckResult.Valid(stored, body.user).also { _authState.value = it }
-            } else if (response.status == HttpStatusCode.Unauthorized) {
-                SessionCheckResult.Expired.also { _authState.value = it }
-            } else {
-                SessionCheckResult.NetworkError.also { _authState.value = it }
-            }
-        } catch (e: Exception) {
-            SessionCheckResult.NetworkError.also { _authState.value = it }
-        }
+        return fetchMe(stored)
     }
 
     suspend fun logout() {
         try {
             val stored = sessionStore.get()
-            if (stored != null) {
-                httpClient.post("${AppComponent.BASE_URL}/auth/logout") {
-                    header("Authorization", "Bearer ${stored.token}")
+            if (stored != null && !stored.anisurgeToken.isNullOrBlank()) {
+                httpClient.post("${AnisurgeApi.v1Base}/auth/logout") {
+                    applyAnisurgeAuth(stored)
                 }
             }
         } catch (e: Exception) {
@@ -138,5 +143,64 @@ class AuthService(
             sessionStore.clear()
             _authState.value = SessionCheckResult.NoSession
         }
+    }
+
+    private suspend fun syncSession(projectRToken: String): SessionCheckResult {
+        val response = httpClient.post("${AnisurgeApi.v1Base}/auth/sync") {
+            header("Authorization", "Bearer $projectRToken")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {})
+        }
+        if (response.status != HttpStatusCode.OK) {
+            val err = try { response.body<BffErrorResponse>() } catch (_: Exception) { null }
+            throw Exception(err?.displayMessage() ?: "Sync failed (${response.status})")
+        }
+        val body: BffAuthResponse = response.body()
+        val session = sessionFromBff(body)
+        sessionStore.save(session)
+        val user = body.user?.toUserProfile()
+        return SessionCheckResult.Valid(session, user).also { _authState.value = it }
+    }
+
+    private suspend fun fetchMe(stored: SessionInfo): SessionCheckResult {
+        return try {
+            val response = httpClient.get("${AnisurgeApi.v1Base}/me") {
+                applyAnisurgeAuth(stored)
+            }
+            if (response.status == HttpStatusCode.OK) {
+                val body: BffMeResponse = response.body()
+                SessionCheckResult.Valid(stored, body.user.toUserProfile()).also {
+                    _authState.value = it
+                }
+            } else if (response.status == HttpStatusCode.Unauthorized) {
+                SessionCheckResult.Expired.also { _authState.value = it }
+            } else {
+                SessionCheckResult.NetworkError.also { _authState.value = it }
+            }
+        } catch (e: Exception) {
+            println("[AuthService] checkSession error: ${e.message}")
+            SessionCheckResult.NetworkError.also { _authState.value = it }
+        }
+    }
+
+    private suspend fun handleAuthResponse(
+        status: HttpStatusCode,
+        body: BffAuthResponse,
+    ): SessionInfo {
+        if (status != HttpStatusCode.OK && status != HttpStatusCode.Created) {
+            throw Exception("Authentication failed ($status)")
+        }
+        val session = sessionFromBff(body)
+        sessionStore.save(session)
+        val user = body.user?.toUserProfile()
+        _authState.value = SessionCheckResult.Valid(session, user)
+        return session
+    }
+
+    private fun sessionFromBff(body: BffAuthResponse): SessionInfo {
+        if (body.projectRToken.isBlank() || body.anisurgeToken.isBlank()) {
+            throw Exception("No token returned")
+        }
+        return SessionInfo(token = body.projectRToken, anisurgeToken = body.anisurgeToken)
     }
 }

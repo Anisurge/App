@@ -13,6 +13,7 @@ import io.ktor.http.contentType
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import to.kuudere.anisuge.data.models.EpisodeListResponse
@@ -27,7 +28,7 @@ class InfoService(
     suspend fun getAnimeDetails(slug: String): AnimeDetails? {
         return try {
             val stored = sessionStore.get()
-            val response = httpClient.get("${AppComponent.BASE_URL}/anime/$slug") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/anime/$slug") {
                 parameter("include_episodes", "true")
                 if (stored != null) header("Authorization", "Bearer ${stored.token}")
             }
@@ -47,7 +48,7 @@ class InfoService(
         recap: Boolean = true,
     ): EpisodeListResponse? {
         return try {
-            val response = httpClient.get("${AppComponent.BASE_URL}/anime/$slug/episodes") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/anime/$slug/episodes") {
                 parameter("limit", limit)
                 if (offset > 0) parameter("offset", offset)
                 parameter("filler", filler)
@@ -68,7 +69,7 @@ class InfoService(
     ): WatchInfoResponse? {
         return try {
             val stored = sessionStore.get()
-            val response = httpClient.get("${AppComponent.BASE_URL}/watch/$slug") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/watch/$slug") {
                 if (stored != null) header("Authorization", "Bearer ${stored.token}")
                 ep?.let { parameter("ep", it) }
                 nid?.let { parameter("nid", it) }
@@ -83,7 +84,7 @@ class InfoService(
 
     suspend fun getRecommendations(slug: String): RecommendationsResponse? {
         return try {
-            val response = httpClient.get("${AppComponent.BASE_URL}/anime/$slug/recommendations")
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/anime/$slug/recommendations")
             response.body<RecommendationsResponse>()
         } catch (e: Exception) {
             println("[InfoService] getRecommendations error: ${e.message}")
@@ -144,8 +145,8 @@ class InfoService(
                 put("server", server)
                 put("language", language)
             }
-            val response = httpClient.post("${AppComponent.BASE_URL}/watch/progress") {
-                header("Authorization", "Bearer ${stored.token}")
+            val response = httpClient.post("${AnisurgeApi.v1Base}/watch/progress") {
+                applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
                 setBody(payload.toString())
             }
