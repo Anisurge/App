@@ -27,6 +27,8 @@ import to.kuudere.anisuge.screens.splash.SplashDestination
 import to.kuudere.anisuge.screens.home.HomeScreen
 import to.kuudere.anisuge.screens.home.HomeViewModel
 import to.kuudere.anisuge.screens.home.ContinueWatchingScreen
+import to.kuudere.anisuge.screens.chat.LiveChatScreen
+import to.kuudere.anisuge.screens.chat.LiveChatViewModel
 import to.kuudere.anisuge.screens.search.SearchScreen
 import to.kuudere.anisuge.screens.search.SearchViewModel
 import to.kuudere.anisuge.screens.search.KUUDERE_GENRES
@@ -111,6 +113,9 @@ fun App(
         }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }
         val updateVm = remember { UpdateViewModel(AppComponent.updateService) }
+        val liveChatVm = remember {
+            LiveChatViewModel(AppComponent.chatService, AppComponent.authService)
+        }
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
         val updateState by updateVm.state.collectAsState()
@@ -313,6 +318,7 @@ fun App(
                             onViewContinueWatchingMore = { navController.navigate(Screen.ContinueWatching.route) },
                             onViewLatestEpisodesMore = { navController.navigate(Screen.Latest.route) },
                             onViewNewOnAppMore = { navController.navigate(Screen.NewOnApp.route) },
+                            onLiveChatClick = { navController.navigate(Screen.LiveChat.route) },
                             startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
                             startTab = requestedTab
                         )
@@ -410,6 +416,18 @@ fun App(
                             navController.navigate(Screen.Watch(id, ep, server, lang, resumeAtSeconds = resumeAt).route)
                         },
                         onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(Screen.LiveChat.route) {
+                    LiveChatScreen(
+                        viewModel = liveChatVm,
+                        onBack = { navController.popBackStack() },
+                        onSignIn = {
+                            navController.navigate(Screen.Auth.route) {
+                                popUpTo(Screen.Home().route) { inclusive = false }
+                            }
+                        },
                     )
                 }
 
