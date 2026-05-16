@@ -5,6 +5,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.data.repository.ServerRepository
@@ -42,7 +43,12 @@ object AppComponent {
                 connectTimeoutMillis = 30000
                 socketTimeoutMillis  = 60000
             }
+            install(WebSockets)
         }
+    }
+
+    val chatService: to.kuudere.anisuge.data.services.ChatService by lazy {
+        to.kuudere.anisuge.data.services.ChatService(sessionStore, httpClient)
     }
 
     val dataStore: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> by lazy {

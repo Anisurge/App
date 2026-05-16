@@ -77,6 +77,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -205,6 +206,7 @@ fun HomeScreen(
     onViewContinueWatchingMore: () -> Unit = {},
     onViewLatestEpisodesMore: () -> Unit = {},
     onViewNewOnAppMore: () -> Unit = {},
+    onLiveChatClick: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
 ) {
@@ -369,6 +371,7 @@ fun HomeScreen(
                             prevTabIndex = AnisugTab.entries.indexOf(currentTab)
                             currentTab = AnisugTab.Downloads
                         },
+                        onLiveChatClick = onLiveChatClick,
                         hazeState = hazeState,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
@@ -1838,6 +1841,7 @@ private fun DonateButton(onClick: () -> Unit) {
 private fun MobileTopBar(
     avatarUrl: String?,
     onDownloadClick: () -> Unit,
+    onLiveChatClick: () -> Unit,
     hazeState: HazeState,
     modifier: Modifier = Modifier
 ) {
@@ -1871,7 +1875,17 @@ private fun MobileTopBar(
             )
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Download icon button
+                IconButton(
+                    onClick = onLiveChatClick,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChatBubbleOutline,
+                        contentDescription = "Live chat",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
                 IconButton(
                     onClick = onDownloadClick,
                     modifier = Modifier.size(36.dp)
