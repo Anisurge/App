@@ -15,6 +15,7 @@ import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.models.UserProfile
 import to.kuudere.anisuge.data.services.AuthService
 import kotlinx.coroutines.flow.update
+import to.kuudere.anisuge.data.services.SessionStore
 import to.kuudere.anisuge.data.services.WatchlistService
 
 data class HomeUiState(
@@ -34,6 +35,7 @@ class HomeViewModel(
     private val homeService: HomeService,
     private val authService: AuthService,
     private val watchlistService: WatchlistService,
+    private val sessionStore: SessionStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var homeDataJob: Job? = null
@@ -91,18 +93,30 @@ class HomeViewModel(
     }
 
     private fun fetchPersonalizedData() {
-        scope.launch {
-            try {
-                val continueWatching = homeService.fetchContinueWatching()
-                _uiState.update { it.copy(continueWatching = continueWatching) }
-            } catch (e: Exception) {
-                println("[HomeVM] Failed to fetch personalized data: ${e.message}")
-            }
-        }
+        scope.launch { loadContinueWatching() }
     }
 
     fun refreshContinueWatching() {
         fetchPersonalizedData()
+    }
+
+    private suspend fun loadContinueWatching() {
+        val session = sessionStore.get() ?: return
+        if (sessionStore.needsAnisurgeSync(session)) {
+            when (authService.checkSession()) {
+                is SessionCheckResult.Valid -> Unit
+                else -> return
+            }
+        } else if (authService.authState.value !is SessionCheckResult.Valid) {
+            return
+        }
+
+        try {
+            val continueWatching = homeService.fetchContinueWatching()
+            _uiState.update { it.copy(continueWatching = continueWatching) }
+        } catch (e: Exception) {
+            println("[HomeVM] Failed to fetch continue watching: ${e.message}")
+        }
     }
 
     fun refresh(force: Boolean = false) {
@@ -125,7 +139,10 @@ class HomeViewModel(
                     }
                 } ?: _uiState.update { it.copy(isLoading = false) }
 
-                authCheck.await()
+                val authResult = authCheck.await()
+                if ((authResult as? SessionCheckResult.Valid)?.user != null) {
+                    loadContinueWatching()
+                }
             } catch (e: Exception) {
                 handleHomeLoadError(e)
             }

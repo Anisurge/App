@@ -84,7 +84,14 @@ fun App(
             )
         }
         val authVm   = remember { AuthViewModel(AppComponent.authService) }
-        val homeVm   = remember { HomeViewModel(AppComponent.homeService, AppComponent.authService, AppComponent.watchlistService) }
+        val homeVm   = remember {
+            HomeViewModel(
+                AppComponent.homeService,
+                AppComponent.authService,
+                AppComponent.watchlistService,
+                AppComponent.sessionStore,
+            )
+        }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }
         val infoVm   = remember { AnimeInfoViewModel(AppComponent.infoService, AppComponent.watchlistService) }
         val watchVm  = remember { WatchViewModel(AppComponent.infoService, AppComponent.watchlistService, AppComponent.settingsStore, AppComponent.settingsService, AppComponent.serverRepository, AppComponent.syncManager, AppComponent.trackingService) }

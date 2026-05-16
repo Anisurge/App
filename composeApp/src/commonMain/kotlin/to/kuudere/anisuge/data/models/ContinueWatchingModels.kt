@@ -39,10 +39,14 @@ data class ContinueWatchingItem(
     @SerialName("lastUpdated") val updatedAt: String? = null,
     /** Set when API includes a numeric episode; otherwise use [displayEpisode] (from [episodeId]). */
     val episode: Int = 0,
+    /** Episode still image when BFF enriches progress rows (preferred over series poster). */
+    @SerialName("episodeThumbnail") val episodeThumbnail: String = "",
+    @SerialName("episode_thumbnail") val episodeThumbnailAlt: String = "",
 ) {
     val effectiveAnimeId: String get() = animeIdStr.ifBlank { anime.animeId }
     val displayTitle: String get() = anime.displayTitle
-    val imageUrl: String get() = anime.imageUrl
+    val imageUrl: String get() =
+        episodeThumbnail.ifBlank { episodeThumbnailAlt }.ifBlank { anime.imageUrl }
     val bannerUrl: String? get() = anime.bannerUrl
     val animeId: String get() = effectiveAnimeId
     val cover: String get() = imageUrl
