@@ -6,6 +6,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.data.models.ContinueWatchingResponse
 import to.kuudere.anisuge.data.models.HomeData
@@ -24,7 +25,7 @@ class HomeService(
 
         return try {
             val stored = sessionStore.get()
-            val response = httpClient.get("${AppComponent.BASE_URL}/home") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/home") {
                 lang?.let { parameter("lang", it) }
                 if (stored != null) header("Authorization", "Bearer ${stored.token}")
             }
@@ -43,8 +44,8 @@ class HomeService(
     ): List<ContinueWatchingItem> {
         val stored = sessionStore.get() ?: return emptyList()
         return try {
-            val response = httpClient.get("${AppComponent.BASE_URL}/watch/continue") {
-                header("Authorization", "Bearer ${stored.token}")
+            val response = httpClient.get("${AnisurgeApi.v1Base}/watch/continue") {
+                applyAnisurgeAuth(stored)
                 parameter("limit", limit)
                 if (offset > 0) parameter("offset", offset)
             }
@@ -62,7 +63,7 @@ class HomeService(
         cursor: String? = null
     ): LatestAiredResponse? {
         return try {
-            val response = httpClient.get("${AppComponent.BASE_URL}/home/latest-aired") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/home/latest-aired") {
                 lang?.let { parameter("lang", it) }
                 parameter("limit", limit)
                 cursor?.let { parameter("cursor", it) }

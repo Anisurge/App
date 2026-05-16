@@ -16,7 +16,12 @@ import to.kuudere.anisuge.data.services.HomeService
 import to.kuudere.anisuge.data.services.SearchService
 
 object AppComponent {
-    const val BASE_URL = "https://api.reanime.to/api/v1"
+    /** Project-R catalog, social, notifications, settings writes. */
+    const val PROJECT_R_BASE_URL = "https://api.reanime.to/api/v1"
+    @Deprecated("Use PROJECT_R_BASE_URL", ReplaceWith("PROJECT_R_BASE_URL"))
+    const val BASE_URL = PROJECT_R_BASE_URL
+    /** Anisurge BFF — auth, signup, profile mirror, watchlist, continue, progress. */
+    const val ANISURGE_API_URL = "https://db-anisurge.n92dev.us.kg"
     /** Public catalog for batch_scrape source ids (Next site); not the Project-R API host. */
     const val STREAMING_SERVERS_CATALOG_URL = "https://www.anisurge.lol/api/v1/streaming/servers"
     /** Anonymous install heartbeat for admin dashboard metrics (no account or PII). */

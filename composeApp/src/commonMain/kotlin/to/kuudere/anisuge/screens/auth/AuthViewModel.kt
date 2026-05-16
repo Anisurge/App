@@ -139,10 +139,19 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
                         _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
                     }
                     AuthMode.REGISTER -> {
-                        if (state.identifier.isBlank() || state.password.isBlank() || state.displayName.isBlank()) {
+                        if (state.displayName.isBlank() || state.identifier.isBlank() ||
+                            state.password.isBlank() || state.confirmPassword.isBlank()
+                        ) {
                             throw Exception("Please fill in all fields")
                         }
-                        authService.register(state.displayName, state.identifier, state.password)
+                        val username = state.displayName.trim()
+                        if (!username.matches(Regex("^[a-zA-Z0-9]{3,10}$"))) {
+                            throw Exception("Username must be 3–10 letters or numbers")
+                        }
+                        if (state.password != state.confirmPassword) {
+                            throw Exception("Passwords do not match")
+                        }
+                        authService.register(username, state.identifier.trim(), state.password)
                         _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
                     }
                     AuthMode.FORGOT_PASSWORD -> {
