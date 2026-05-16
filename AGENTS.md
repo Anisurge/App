@@ -8,19 +8,21 @@
 - The user communicates in a casual/abbreviated style — interpret intent over literal wording
 - When asked to test on device, install the app and verify via the connected Android device using adb
 - Prefer curl checks against expected API responses (per `api.md`) before starting API integration/parsing work; confirm the app's actual HTTP URL when debugging streaming, downloads, or list-shaped screens
+- Account registration is website-first: the Register flow directs users to **https://reanime.to** to create an account, then they sign in inside the app with the same credentials
+- For Anisurge-owned backend data, prefer self-hosted **raw PostgreSQL** (not Mongo or Scylla for that layer); run Postgres **separately** from the API container so DB stays up when the API restarts
+- Do not store user passwords in the Anisurge BFF/Postgres — mirror Project-R auth and link rows via `external_user_id` only
 
 ## Learned Workspace Facts
 
 - This is a Kotlin Multiplatform (KMP) Compose app called "anisuge" under package `to.kuudere.anisuge`
 - App uses Ktor HTTP client with `ignoreUnknownKeys = true` for JSON deserialization
 - Auth uses Bearer token (`Authorization: Bearer <token>`) stored in `SessionInfo(token)` via `SessionStore`; the app migrated from legacy cookie auth to Project-R with Bearer tokens
-- API networking config lives in `composeApp/src/commonMain/kotlin/to/kuudere/anisuge/data/network/ApiConfig.kt`; canonical contract reference is `api.md` at the project root
-- Streaming scrape URL shape: `https://fetch.n92dev.us.kg/api?action=batch_scrape&anilistId={id}&episode={epi}&source={server}` — Suzu needs a proxy/player Referer wiring; AnimePahe streams are typically direct playable URLs
-- Public streaming server catalog/list used for picker/settings aligns with `https://www.anisurge.lol/api/v1/streaming/servers` (config should stay in sync with deployed site/API)
-- App update checks call `GET https://www.anisurge.lol/api/app/updates` (via `UpdateService.checkUpdate()`); the website route can source latest versions from release data
-- Backend Project-R APIs use the `anisurge.qzz.io` subdomain layout (avoid inventing unrelated hostnames)
+- REST and streaming entry points are defined in `composeApp/src/commonMain/kotlin/to/kuudere/anisuge/AppComponent.kt` (`BASE_URL` is `https://api.reanime.to/api/v1`, `STREAMING_URL` for batch scrape); canonical HTTP contract reference is `api.md` at the project root
+- Home screen rows load from `GET {BASE_URL}/home` (`latest_aired`, `new_on_site`, `upcoming`); the paginated latest list uses `GET {BASE_URL}/home/latest-aired`
+- Streaming batch scrape calls `AppComponent.STREAMING_URL` with `action=batch_scrape&anilistId={id}&episode={epi}&source={server}` — Suzu needs a proxy/player Referer wiring; AnimePahe streams are typically direct playable URLs
+- Public Anisurge site APIs: streaming server catalog at `https://www.anisurge.lol/api/v1/streaming/servers`; app update checks at `GET https://www.anisurge.lol/api/app/updates` (via `UpdateService.checkUpdate()`)
 - Watchlist folder strings expected by API/UI are uppercase: `WATCHING`, `PLANNING`, `COMPLETED`, `PAUSED`, `DROPPED`
-- Lightweight client analytics/install pings exist to support aggregate usage on the admin dashboard (keep payloads minimal/non-identifying in code reviews)
-- Service implementations live under `composeApp/src/commonMain/kotlin/to/kuudere/anisuge/data/services/`; shared models under `data/models/`; screens and ViewModels under `screens/`
-- Builds in this repo often pass `--no-configuration-cache` when running Gradle wrapper tasks from docs/automation
-- Navigation uses Jetpack Navigation Compose with path parameters (for example `info/{animeId}`)
+- Friend's anime backend (Project-R at `api.reanime.to`) uses ScyllaDB at scale; Anisurge's own layer links users with `external_user_id` (Project-R user id) in Postgres
+- `services/anisurge-api/` is a Bun + Hono + Drizzle **BFF** (Docker runs the API only; Postgres is external); intended as a **separate git repo** from the main App monorepo
+- On login/sync the BFF upserts full Project-R profile/settings, stores Discord/AniList/MAL integration tokens server-side, pulls watchlist + continue watching into Postgres, and on writes defaults to forwarding to ReAnime (`forwardToReanime`) so both sides stay in sync
+- App code layout: services under `data/services/`, models under `data/models/`, screens/ViewModels under `screens/`; Navigation Compose path params (e.g. `info/{animeId}`); Gradle tasks from docs/automation often use `--no-configuration-cache`
