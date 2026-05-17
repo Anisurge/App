@@ -62,7 +62,7 @@ import anisurge.composeapp.generated.resources.chat_bg
 import org.jetbrains.compose.resources.painterResource
 import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.ui.ChatUsernameLabel
-import to.kuudere.anisuge.ui.ProfileAvatar
+import to.kuudere.anisuge.ui.ChatDecoratedAvatar
 import to.kuudere.anisuge.ui.chatAccentColor
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -199,7 +199,7 @@ fun LiveChatScreen(
                         modifier = Modifier.padding(horizontal = 32.dp),
                     ) {
                         Text(
-                            "Sign in to join live chat",
+                            "Sign in to join community chat",
                             color = Color.White,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -402,9 +402,12 @@ private fun ChatMessageRow(
         verticalAlignment = Alignment.Bottom,
     ) {
         if (!isMine) {
-            ProfileAvatar(
-                url = message.avatarUrl,
-                modifier = Modifier.size(36.dp).then(profileClick),
+            ChatDecoratedAvatar(
+                avatarUrl = message.avatarUrl,
+                frameUrl = message.avatarFrameUrl,
+                outerFrameUrl = message.avatarOuterUrl,
+                modifier = profileClick,
+                avatarSize = 36.dp,
                 contentDescription = message.username,
             )
             Spacer(Modifier.size(8.dp))
@@ -457,9 +460,12 @@ private fun ChatMessageRow(
 
         if (isMine) {
             Spacer(Modifier.size(8.dp))
-            ProfileAvatar(
-                url = message.avatarUrl,
-                modifier = Modifier.size(36.dp).then(profileClick),
+            ChatDecoratedAvatar(
+                avatarUrl = message.avatarUrl,
+                frameUrl = message.avatarFrameUrl,
+                outerFrameUrl = message.avatarOuterUrl,
+                modifier = profileClick,
+                avatarSize = 36.dp,
                 contentDescription = message.username,
             )
         }

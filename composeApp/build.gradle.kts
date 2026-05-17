@@ -134,6 +134,7 @@ kotlin {
         }
 
         androidMain.dependencies {
+            implementation(libs.apng.core)
             implementation(libs.coil.gif)
             implementation(libs.androidx.activity.compose)
             implementation("androidx.fragment:fragment:1.8.9")
@@ -160,6 +161,7 @@ kotlin {
         }
 
         desktopMain.dependencies {
+            implementation(libs.apng.core)
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
             // CIO engine for desktop HTTP

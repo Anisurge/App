@@ -13,7 +13,6 @@ import anisurge.composeapp.generated.resources.logo
 import org.jetbrains.compose.resources.painterResource
 import to.kuudere.anisuge.platform.DiscordRichPresenceManager
 
-
 fun main() = application {
     System.setProperty("compose.interop.blending", "true")
     CrashReporter.init(

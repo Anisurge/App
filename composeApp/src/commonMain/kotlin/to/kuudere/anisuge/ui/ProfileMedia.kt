@@ -33,3 +33,11 @@ fun isProfileGifUrl(url: String): Boolean {
     val path = url.substringBefore('?').lowercase()
     return path.endsWith(".gif")
 }
+
+fun isProfileApngUrl(url: String): Boolean {
+    val path = url.substringBefore('?').lowercase()
+    return path.endsWith(".apng")
+}
+
+fun isAnimatedProfileOverlayUrl(url: String): Boolean =
+    isProfileGifUrl(url) || isProfileApngUrl(url)

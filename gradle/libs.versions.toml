@@ -15,6 +15,7 @@ kotlinx-serialization = "1.8.0"
 ktor = "3.1.1"
 datastore = "1.1.1"
 coil = "3.1.0"
+apng = "1.0.1"
 navigationCompose = "2.9.0"
 jna = "5.14.0"
 kotlinx-datetime = "0.6.1"
@@ -68,6 +69,7 @@ datastore-preferences-core = { module = "androidx.datastore:datastore-preference
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-gif = { module = "io.coil-kt.coil3:coil-gif", version.ref = "coil" }
 coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
+apng-core = { module = "io.github.lugf027:apng-core", version.ref = "apng" }
 # Navigation
 navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
 # JNA for WID mapping

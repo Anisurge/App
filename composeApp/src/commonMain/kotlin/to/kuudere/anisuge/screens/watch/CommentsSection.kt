@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.ui.ProfileAvatar
 import to.kuudere.anisuge.data.models.Comment
 
 // ── Colour palette — mirrors Kuudere's zinc/black dark theme ─────────────────
@@ -421,17 +422,10 @@ fun CommentsSection(
 
                     // Input area
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                        // Avatar
-                        Box(
-                            Modifier.size(32.dp).clip(CircleShape).background(BgCard),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (userPfp != null) {
-                                AsyncImage(userPfp, null, Modifier.fillMaxSize().clip(CircleShape))
-                            } else {
-                                Icon(Icons.Default.Person, null, tint = TextMuted, modifier = Modifier.size(18.dp))
-                            }
-                        }
+                        ProfileAvatar(
+                            url = userPfp,
+                            modifier = Modifier.size(32.dp),
+                        )
 
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             // Use InteractionSource to reliably detect focus on the TextField
@@ -737,10 +731,10 @@ private fun CommentItem(
         }.padding(bottom = 4.dp)) {
             // Left column (Avatar + Thread line)
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(avatarSize)) {
-                Box(Modifier.size(avatarSize).clip(CircleShape).background(BgCard), contentAlignment = Alignment.Center) {
-                    if (c.authorPfp != null) AsyncImage(c.authorPfp, null, Modifier.fillMaxSize().clip(CircleShape))
-                    else Icon(Icons.Default.Person, null, tint = TextMuted, modifier = Modifier.size(if (depth == 0) 18.dp else 14.dp))
-                }
+                ProfileAvatar(
+                    url = c.authorPfp,
+                    modifier = Modifier.size(avatarSize),
+                )
             }
 
             Spacer(Modifier.width(12.dp))
@@ -1040,13 +1034,10 @@ private fun ReplyEditor(
     onCancel: () -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(24.dp).clip(CircleShape).background(BgCard), contentAlignment = Alignment.Center) {
-            if (userPfp != null) {
-                AsyncImage(userPfp, null, Modifier.fillMaxSize().clip(CircleShape))
-            } else {
-                Icon(Icons.Default.Person, null, tint = TextMuted, modifier = Modifier.size(12.dp))
-            }
-        }
+        ProfileAvatar(
+            url = userPfp,
+            modifier = Modifier.size(24.dp),
+        )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             var showPreview by remember { mutableStateOf(false) }
             var imageDialog by remember { mutableStateOf(false) }

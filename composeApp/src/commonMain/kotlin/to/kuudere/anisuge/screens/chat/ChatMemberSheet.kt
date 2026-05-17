@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.sp
 import to.kuudere.anisuge.data.models.ChatMemberProfile
 import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.ui.ChatUsernameLabel
-import to.kuudere.anisuge.ui.ProfileAvatar
+import to.kuudere.anisuge.ui.ChatDecoratedAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,9 +45,11 @@ fun ChatMemberSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            ProfileAvatar(
-                url = member.avatarUrl,
-                modifier = Modifier.size(96.dp),
+            ChatDecoratedAvatar(
+                avatarUrl = member.avatarUrl,
+                frameUrl = member.avatarFrameUrl,
+                outerFrameUrl = member.avatarOuterUrl,
+                avatarSize = 72.dp,
                 contentDescription = member.username,
             )
 

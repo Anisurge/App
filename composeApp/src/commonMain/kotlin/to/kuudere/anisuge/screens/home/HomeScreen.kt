@@ -173,6 +173,8 @@ import to.kuudere.anisuge.screens.watchlist.WatchlistScreen
 import to.kuudere.anisuge.screens.watchlist.WatchlistViewModel
 import to.kuudere.anisuge.screens.schedule.ScheduleScreen
 import to.kuudere.anisuge.screens.schedule.ScheduleViewModel
+import to.kuudere.anisuge.screens.chat.LiveChatScreen
+import to.kuudere.anisuge.screens.chat.LiveChatViewModel
 import to.kuudere.anisuge.screens.settings.SettingsScreen
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
 import to.kuudere.anisuge.ui.ConfirmDialog
@@ -181,6 +183,7 @@ import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import androidx.compose.runtime.SideEffect
+import to.kuudere.anisuge.ui.ProfileAvatar
 import to.kuudere.anisuge.ui.tvFocusableClick
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -207,7 +210,9 @@ fun HomeScreen(
     onViewContinueWatchingMore: () -> Unit = {},
     onViewLatestEpisodesMore: () -> Unit = {},
     onViewNewOnAppMore: () -> Unit = {},
+    liveChatViewModel: LiveChatViewModel,
     onLiveChatClick: () -> Unit = {},
+    onLiveChatSignIn: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
     onHomeBackActionChange: ((() -> Boolean)?) -> Unit = {},
@@ -232,6 +237,7 @@ fun HomeScreen(
     var prevTabIndex by remember { mutableStateOf(0) }
     var showWatchlistFor by remember { mutableStateOf<AnimeItem?>(null) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    var showDesktopLiveChat by rememberSaveable { mutableStateOf(false) }
     val hazeState = remember { HazeState() }
     
     // Function to switch tabs with history tracking
@@ -256,7 +262,8 @@ fun HomeScreen(
     }
 
     val interceptsAppExitBack =
-        settingsState.mobileSettingsDetailTab != null ||
+        showDesktopLiveChat ||
+            settingsState.mobileSettingsDetailTab != null ||
             settingsState.showProfileAccount ||
             currentTab != AnisugTab.Home
 
@@ -265,6 +272,10 @@ fun HomeScreen(
             if (interceptsAppExitBack) {
                 {
                     when {
+                        showDesktopLiveChat -> {
+                            showDesktopLiveChat = false
+                            true
+                        }
                         settingsViewModel.handleSettingsBack() -> true
                         currentTab != AnisugTab.Home -> {
                             currentTab = AnisugTab.entries.getOrElse(prevTabIndex) { AnisugTab.Home }
@@ -288,8 +299,11 @@ fun HomeScreen(
                     avatarUrl = homeState.userProfile?.effectiveAvatar,
                     selectedTab = currentTab,
                     isLoggingOut = homeState.isLoggingOut,
-                    onTabSelect = switchTab,
-                    onLiveChatClick = onLiveChatClick,
+                    onTabSelect = { tab, nested ->
+                        showDesktopLiveChat = false
+                        switchTab(tab, nested)
+                    },
+                    onLiveChatClick = { showDesktopLiveChat = true },
                     onLogout = {
                         showLogoutConfirm = true
                     },
@@ -300,43 +314,51 @@ fun HomeScreen(
             if (isDesktop) {
                 Column(Modifier.weight(1f).fillMaxHeight()) {
                     Box(Modifier.weight(1f).fillMaxWidth()) {
-                        AnimatedContent(
-                            targetState = currentTab,
-                            transitionSpec = {
-                                val toIndex = AnisugTab.entries.indexOf(targetState)
-                                val fromIndex = AnisugTab.entries.indexOf(initialState)
-                                val goingDown = toIndex > fromIndex
-                                val slideOffset = { size: Int -> if (goingDown) size / 6 else -(size / 6) }
-                                val slideOutOffset = { size: Int -> if (goingDown) -(size / 6) else size / 6 }
-                                (slideInVertically(tween(300)) { slideOffset(it) } + fadeIn(tween(300)))
-                                    .togetherWith(slideOutVertically(tween(300)) { slideOutOffset(it) } + fadeOut(tween(200)))
-                            }
-                        ) { tab ->
-                            TabContent(
-                                tab = tab,
-                                homeState = homeState,
-                                homeViewModel = homeViewModel,
-                                searchViewModel = searchViewModel,
-                                watchlistViewModel = watchlistViewModel,
-                                scheduleViewModel = scheduleViewModel,
-                                settingsViewModel = settingsViewModel,
-                                onAnimeClick = onAnimeClick,
-                                onWatchClick = onWatchClick,
-                                onWatchOffline = onWatchOffline,
-                                onLogout = { showLogoutConfirm = true },
-                                onViewContinueWatchingMore = onViewContinueWatchingMore,
-                                onWatchlistClick = { showWatchlistFor = it },
-                                onViewLatestEpisodesMore = onViewLatestEpisodesMore,
-                                onViewNewOnAppMore = onViewNewOnAppMore,
-                                onSearchLatest = {
-                                    searchViewModel.onSortChange("Latest")
-                                    searchViewModel.search()
-                                    prevTabIndex = AnisugTab.entries.indexOf(currentTab)
-                                    currentTab = AnisugTab.Search
-                                },
-                                onExit = onExit,
-                                initialSettingsTab = initialSettingsTab
+                        if (showDesktopLiveChat) {
+                            LiveChatScreen(
+                                viewModel = liveChatViewModel,
+                                onBack = { showDesktopLiveChat = false },
+                                onSignIn = onLiveChatSignIn,
                             )
+                        } else {
+                            AnimatedContent(
+                                targetState = currentTab,
+                                transitionSpec = {
+                                    val toIndex = AnisugTab.entries.indexOf(targetState)
+                                    val fromIndex = AnisugTab.entries.indexOf(initialState)
+                                    val goingDown = toIndex > fromIndex
+                                    val slideOffset = { size: Int -> if (goingDown) size / 6 else -(size / 6) }
+                                    val slideOutOffset = { size: Int -> if (goingDown) -(size / 6) else size / 6 }
+                                    (slideInVertically(tween(300)) { slideOffset(it) } + fadeIn(tween(300)))
+                                        .togetherWith(slideOutVertically(tween(300)) { slideOutOffset(it) } + fadeOut(tween(200)))
+                                }
+                            ) { tab ->
+                                TabContent(
+                                    tab = tab,
+                                    homeState = homeState,
+                                    homeViewModel = homeViewModel,
+                                    searchViewModel = searchViewModel,
+                                    watchlistViewModel = watchlistViewModel,
+                                    scheduleViewModel = scheduleViewModel,
+                                    settingsViewModel = settingsViewModel,
+                                    onAnimeClick = onAnimeClick,
+                                    onWatchClick = onWatchClick,
+                                    onWatchOffline = onWatchOffline,
+                                    onLogout = { showLogoutConfirm = true },
+                                    onViewContinueWatchingMore = onViewContinueWatchingMore,
+                                    onWatchlistClick = { showWatchlistFor = it },
+                                    onViewLatestEpisodesMore = onViewLatestEpisodesMore,
+                                    onViewNewOnAppMore = onViewNewOnAppMore,
+                                    onSearchLatest = {
+                                        searchViewModel.onSortChange("Latest")
+                                        searchViewModel.search()
+                                        prevTabIndex = AnisugTab.entries.indexOf(currentTab)
+                                        currentTab = AnisugTab.Search
+                                    },
+                                    onExit = onExit,
+                                    initialSettingsTab = initialSettingsTab
+                                )
+                            }
                         }
                     }
                 }
@@ -1668,7 +1690,6 @@ private fun AnisugSidebar(
     onLogout: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
-    val fullAvatarUrl = resolveProfileImageUrl(avatarUrl)
 
     DraggableWindowArea(
         modifier = Modifier
@@ -1684,31 +1705,12 @@ private fun AnisugSidebar(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Spacer(Modifier.height(32.dp))
-                // User Avatar / Logo
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.1f))
-                        .clickable { onTabSelect(AnisugTab.Settings, SettingsTab.Profile) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (fullAvatarUrl != null) {
-                        AsyncImage(
-                            model = fullAvatarUrl,
-                            contentDescription = strings.userAvatar,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.Movie,
-                            contentDescription = strings.logo,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
+                ProfileAvatar(
+                    url = avatarUrl,
+                    avatarSize = 36.dp,
+                    modifier = Modifier.clickable { onTabSelect(AnisugTab.Settings, SettingsTab.Profile) },
+                    contentDescription = strings.userAvatar,
+                )
                 Spacer(Modifier.height(48.dp))
                 
                 // Icons
@@ -1921,7 +1923,7 @@ private fun MobileTopBar(
                 ) {
                     Icon(
                         imageVector = Icons.Default.ChatBubbleOutline,
-                        contentDescription = "Live chat",
+                        contentDescription = "Community chat",
                         tint = Color.White,
                         modifier = Modifier.size(24.dp),
                     )
@@ -1938,31 +1940,11 @@ private fun MobileTopBar(
                     )
                 }
 
-                val fullAvatarUrl = resolveProfileImageUrl(avatarUrl)
-                // User avatar right
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1F1F1F)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (fullAvatarUrl != null) {
-                        AsyncImage(
-                            model = fullAvatarUrl,
-                            contentDescription = "Profile",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize().clip(CircleShape)
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Outlined.Person,
-                            contentDescription = "Profile",
-                            tint = Color.Gray,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+                ProfileAvatar(
+                    url = avatarUrl,
+                    avatarSize = 36.dp,
+                    contentDescription = "Profile",
+                )
             }
         }
         // Gradient bottom separator
