@@ -3,6 +3,7 @@ package to.kuudere.anisuge.screens.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,6 +51,28 @@ class LiveChatViewModel(
 
     private var wsJob: Job? = null
     private var loadOlderJob: Job? = null
+    private var reconnectJob: Job? = null
+    private var screenActive = false
+    private var hasInitialized = false
+
+    /** Called when the chat screen enters composition (including return from back stack). */
+    fun onScreenVisible() {
+        screenActive = true
+        if (!hasInitialized || _uiState.value.needsAuth) {
+            start()
+        } else {
+            resumeSession()
+        }
+    }
+
+    /** Called when leaving the chat screen — tear down WS so we can reconnect cleanly on return. */
+    fun onScreenHidden() {
+        screenActive = false
+        reconnectJob?.cancel()
+        reconnectJob = null
+        wsJob?.cancel()
+        wsJob = null
+    }
 
     fun start() {
         viewModelScope.launch {
@@ -106,7 +129,62 @@ class LiveChatViewModel(
                 )
             }
 
+            hasInitialized = true
             connectWebSocket()
+        }
+    }
+
+    private fun resumeSession() {
+        viewModelScope.launch {
+            reconnectJob?.cancel()
+            _uiState.update {
+                it.copy(
+                    error = null,
+                    connectionState = LiveChatConnectionState.Connecting,
+                )
+            }
+            when (val auth = authService.checkSession()) {
+                is SessionCheckResult.Valid -> {
+                    val profile = auth.user
+                    _uiState.update {
+                        it.copy(
+                            needsAuth = false,
+                            currentUserId = profile?.effectiveId,
+                            currentUserAvatar = profile?.effectiveAvatar,
+                            currentUsername = profile?.displayName
+                                ?: profile?.username,
+                        )
+                    }
+                }
+                else -> {
+                    _uiState.update {
+                        it.copy(
+                            needsAuth = true,
+                            connectionState = LiveChatConnectionState.Disconnected,
+                        )
+                    }
+                    return@launch
+                }
+            }
+            refreshRoomAndHistory()
+            connectWebSocket()
+        }
+    }
+
+    private suspend fun refreshRoomAndHistory() {
+        val room = chatService.fetchRoom()
+        val history = chatService.fetchHistory(limit = 50)
+        _uiState.update { state ->
+            state.copy(
+                roomName = room?.name ?: state.roomName,
+                onlineCount = room?.onlineCount ?: state.onlineCount,
+                messages = if (history != null) {
+                    mergeMessages(state.messages, history.messages)
+                } else {
+                    state.messages
+                },
+                hasMoreOlder = history?.hasMore ?: state.hasMoreOlder,
+            )
         }
     }
 
@@ -186,15 +264,37 @@ class LiveChatViewModel(
     }
 
     fun refresh() {
+        reconnectJob?.cancel()
         wsJob?.cancel()
         loadOlderJob?.cancel()
         start()
     }
 
     override fun onCleared() {
+        screenActive = false
+        reconnectJob?.cancel()
         wsJob?.cancel()
         loadOlderJob?.cancel()
         super.onCleared()
+    }
+
+    private fun scheduleReconnect() {
+        if (!screenActive || _uiState.value.needsAuth) return
+        reconnectJob?.cancel()
+        reconnectJob = viewModelScope.launch {
+            delay(1_500)
+            if (!screenActive || _uiState.value.needsAuth) return@launch
+            val state = _uiState.value.connectionState
+            if (state != LiveChatConnectionState.Connected) {
+                _uiState.update {
+                    it.copy(
+                        connectionState = LiveChatConnectionState.Connecting,
+                        error = null,
+                    )
+                }
+                connectWebSocket()
+            }
+        }
     }
 
     private fun connectWebSocket() {
@@ -203,14 +303,19 @@ class LiveChatViewModel(
             chatService.connectLive().collect { event ->
                 when (event) {
                     is ChatLiveEvent.Connected -> {
+                        reconnectJob?.cancel()
                         _uiState.update {
-                            it.copy(connectionState = LiveChatConnectionState.Connected)
+                            it.copy(
+                                connectionState = LiveChatConnectionState.Connected,
+                                error = null,
+                            )
                         }
                     }
                     is ChatLiveEvent.Disconnected -> {
                         _uiState.update {
                             it.copy(connectionState = LiveChatConnectionState.Disconnected)
                         }
+                        scheduleReconnect()
                     }
                     is ChatLiveEvent.Error -> {
                         _uiState.update {
@@ -219,12 +324,14 @@ class LiveChatViewModel(
                                 error = event.message,
                             )
                         }
+                        scheduleReconnect()
                     }
                     is ChatLiveEvent.Message -> {
                         _uiState.update { state ->
                             state.copy(
                                 messages = mergeMessages(state.messages, listOf(event.message)),
                                 error = null,
+                                connectionState = LiveChatConnectionState.Connected,
                             )
                         }
                     }
