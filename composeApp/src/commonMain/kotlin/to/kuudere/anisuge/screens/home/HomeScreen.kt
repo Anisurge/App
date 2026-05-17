@@ -1599,12 +1599,11 @@ private fun stripHtmlTags(htmlContent: String): String {
 }
 
 
-/** Profile / CDN paths from Project-R: absolute URL or path relative to API host. */
-private fun resolveProfileImageUrl(raw: String?): String? {
-    if (raw.isNullOrBlank()) return null
-    if (raw.startsWith("http", ignoreCase = true)) return raw
-    return "https://api.reanime.to${if (raw.startsWith("/")) raw else "/$raw"}"
-}
+/** Profile / CDN paths: BFF media URLs or Project-R relative paths. */
+private fun resolveProfileImageUrl(raw: String?): String? =
+    to.kuudere.anisuge.ui.resolveProfileMediaUrl(raw)
+        ?: raw?.takeIf { it.isNotBlank() && !it.startsWith("http", ignoreCase = true) }
+            ?.let { "https://api.reanime.to${if (it.startsWith("/")) it else "/$it"}" }
 
 @Composable
 private fun SmallBadge(text: String, color: Color = Color.White) {

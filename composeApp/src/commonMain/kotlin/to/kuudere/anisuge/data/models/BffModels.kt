@@ -56,13 +56,14 @@ data class BffPublicUser(
 
 fun BffPublicUser.toUserProfile(): UserProfile {
     val ago = (profileExtra?.get("ago") as? JsonPrimitive)?.contentOrNull
+    val resolvedAvatar = customPfpUrl?.takeIf { it.isNotBlank() } ?: avatarUrl
     return UserProfile(
         id = externalUserId,
         userId = externalUserId,
         username = username,
         email = email,
-        pfp = avatarUrl,
-        avatar = avatarUrl,
+        pfp = resolvedAvatar,
+        avatar = resolvedAvatar,
         displayName = displayName,
         bio = bio,
         website = website,

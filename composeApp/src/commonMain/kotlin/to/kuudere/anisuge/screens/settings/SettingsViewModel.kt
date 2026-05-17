@@ -49,6 +49,8 @@ data class SettingsUiState(
     val hasSettingsChanges: Boolean = false,
 
     val userProfile: to.kuudere.anisuge.data.models.UserProfile? = null,
+    /** True when Anisurge BFF session is valid (independent of profile fetch). */
+    val isSignedIn: Boolean = false,
     val isLoadingProfile: Boolean = false,
 
     val currentPassword: String = "",
@@ -86,6 +88,10 @@ data class SettingsUiState(
     val anilistUsername: String? = null,
     val isConnectingMal: Boolean = false,
     val isConnectingAnilist: Boolean = false,
+    val isUploadingPfp: Boolean = false,
+    val showProfileAccount: Boolean = false,
+    val usernameDraft: String = "",
+    val isSavingUsername: Boolean = false,
     val isSyncingMal: Boolean = false,
     val isSyncingAnilist: Boolean = false,
 
@@ -151,6 +157,8 @@ class SettingsViewModel(
     private val watchlistService: WatchlistService,
     private val communityService: CommunityService,
     private val watchHistorySyncService: WatchHistorySyncService,
+    private val integrationsSyncService: to.kuudere.anisuge.data.services.IntegrationsSyncService,
+    private val bffMeService: to.kuudere.anisuge.data.services.BffMeService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
 
@@ -163,10 +171,17 @@ class SettingsViewModel(
         viewModelScope.launch {
             authService.authState.collect { result ->
                 if (result is SessionCheckResult.Valid) {
-                    _uiState.update { it.copy(userProfile = result.user, isLoadingProfile = false) }
+                    _uiState.update {
+                        it.copy(
+                            isSignedIn = true,
+                            userProfile = result.user ?: it.userProfile,
+                            isLoadingProfile = false,
+                        )
+                    }
                     loadSettings()
+                    loadTrackingState()
                 } else if (result is SessionCheckResult.NoSession || result is SessionCheckResult.Expired) {
-                    _uiState.update { it.copy(userProfile = null) }
+                    _uiState.update { it.copy(userProfile = null, isSignedIn = false) }
                 }
             }
         }
@@ -245,6 +260,9 @@ class SettingsViewModel(
 
     private fun loadTrackingState() {
         viewModelScope.launch {
+            if (authService.authState.value is SessionCheckResult.Valid) {
+                integrationsSyncService.restoreFromServer()
+            }
             val malToken = settingsStore.getMalAccessToken()
             val anilistToken = settingsStore.getAnilistAccessToken()
             val malUsername = settingsStore.getMalUsername()
@@ -265,6 +283,7 @@ class SettingsViewModel(
             _uiState.update { it.copy(isLoadingProfile = true, isLoading = true) }
             val result = authService.checkSession()
             if (result is SessionCheckResult.Valid) {
+                _uiState.update { it.copy(isSignedIn = true) }
                 loadUserProfile()
             }
             _uiState.update { it.copy(isLoadingProfile = false, isLoading = false) }
@@ -286,6 +305,12 @@ class SettingsViewModel(
     fun onTabSelected(tab: SettingsTab) {
         when (tab) {
             is SettingsTab.Profile -> loadUserProfile()
+            is SettingsTab.Sync -> {
+                loadTrackingState()
+                if (_uiState.value.userProfile == null && authService.authState.value is SessionCheckResult.Valid) {
+                    loadUserProfile()
+                }
+            }
             is SettingsTab.Servers -> loadServerPriority()
             is SettingsTab.Notifications -> loadNotificationPreferences()
             // is SettingsTab.Community -> loadCommunityInitial()
@@ -317,16 +342,71 @@ class SettingsViewModel(
     fun loadUserProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingProfile = true, isOffline = false) }
-            try {
-                val response = settingsService.getUserProfile()
-                if (response?.user != null) {
-                    _uiState.update { it.copy(userProfile = response.user, isLoadingProfile = false, isOffline = false) }
-                } else {
-                    _uiState.update { it.copy(isLoadingProfile = false, errorMessage = "Failed to load user profile") }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoadingProfile = false, isOffline = e.isNetworkError()) }
-            }
+            bffMeService.fetchMe().fold(
+                onSuccess = { profile ->
+                    _uiState.update {
+                        it.copy(
+                            userProfile = profile,
+                            isLoadingProfile = false,
+                            isOffline = false,
+                            usernameDraft = if (it.showProfileAccount) it.usernameDraft else profile.username.orEmpty(),
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingProfile = false,
+                            isOffline = e.isNetworkError(),
+                            errorMessage = if (e.isNetworkError()) null else (e.message ?: "Failed to load user profile"),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun openProfileAccount() {
+        val username = _uiState.value.userProfile?.username.orEmpty()
+        _uiState.update { it.copy(showProfileAccount = true, usernameDraft = username) }
+    }
+
+    fun closeProfileAccount() {
+        _uiState.update { it.copy(showProfileAccount = false) }
+    }
+
+    fun setUsernameDraft(value: String) {
+        _uiState.update { it.copy(usernameDraft = value) }
+    }
+
+    fun saveUsername() {
+        val draft = _uiState.value.usernameDraft.trim()
+        if (draft.length < 3) {
+            _uiState.update { it.copy(errorMessage = "Username must be at least 3 characters") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingUsername = true, errorMessage = null) }
+            bffMeService.updateUsername(draft).fold(
+                onSuccess = { profile ->
+                    _uiState.update {
+                        it.copy(
+                            isSavingUsername = false,
+                            userProfile = profile,
+                            usernameDraft = profile.username.orEmpty(),
+                            successMessage = "Username updated",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isSavingUsername = false,
+                            errorMessage = e.message ?: "Failed to update username",
+                        )
+                    }
+                },
+            )
         }
     }
 
@@ -596,6 +676,32 @@ class SettingsViewModel(
 
     fun refreshTrackingState() {
         loadTrackingState()
+    }
+
+    fun onCustomPfpPicked(pick: to.kuudere.anisuge.platform.ChatImagePick?) {
+        if (pick == null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUploadingPfp = true, errorMessage = null) }
+            bffMeService.uploadCustomPfp(pick).fold(
+                onSuccess = { profile ->
+                    _uiState.update {
+                        it.copy(
+                            isUploadingPfp = false,
+                            userProfile = profile,
+                            successMessage = "Profile picture updated",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isUploadingPfp = false,
+                            errorMessage = e.message ?: "Failed to upload profile picture",
+                        )
+                    }
+                },
+            )
+        }
     }
 
     // ── Community ───────────────────────────────────────────────────────────────

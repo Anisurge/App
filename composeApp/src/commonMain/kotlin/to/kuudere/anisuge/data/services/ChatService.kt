@@ -8,6 +8,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.URLBuilder
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
+import to.kuudere.anisuge.data.models.BffErrorResponse
 import to.kuudere.anisuge.data.models.ChatLiveEvent
 import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.data.models.ChatMessagesResponse
@@ -50,13 +52,22 @@ class ChatService(
         }.buildString()
     }
 
+    private suspend fun parseError(response: io.ktor.client.statement.HttpResponse): String {
+        return runCatching {
+            json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+        }.getOrElse { "Request failed (${response.status.value})" }
+    }
+
     suspend fun fetchRoom(roomSlug: String = GLOBAL_ROOM_SLUG): ChatRoomResponse? {
         val stored = sessionStore.get() ?: return null
         return try {
             val response = httpClient.get("${AnisurgeApi.v1Base}/chat/rooms/$roomSlug") {
                 applyAnisurgeAuth(stored)
             }
-            if (response.status.isSuccess()) response.body() else null
+            if (response.status.isSuccess()) response.body() else {
+                println("[ChatService] fetchRoom HTTP ${response.status.value}: ${parseError(response)}")
+                null
+            }
         } catch (e: Exception) {
             println("[ChatService] fetchRoom error: ${e.message}")
             null
@@ -75,7 +86,12 @@ class ChatService(
                 parameter("limit", limit)
                 before?.let { parameter("before", it) }
             }
-            if (response.status.isSuccess()) response.body() else null
+            if (response.status.isSuccess()) {
+                response.body()
+            } else {
+                println("[ChatService] fetchHistory HTTP ${response.status.value}: ${parseError(response)}")
+                null
+            }
         } catch (e: Exception) {
             println("[ChatService] fetchHistory error: ${e.message}")
             null
@@ -87,16 +103,20 @@ class ChatService(
         roomSlug: String = GLOBAL_ROOM_SLUG,
     ): Result<ChatMessage> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        val trimmed = body.trim()
+        if (trimmed.isEmpty()) {
+            return Result.failure(IllegalArgumentException("Message cannot be empty"))
+        }
         return try {
             val response = httpClient.post("${AnisurgeApi.v1Base}/chat/rooms/$roomSlug/messages") {
                 applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
-                setBody(ChatPostMessageRequest(body.trim()))
+                setBody(ChatPostMessageRequest(trimmed))
             }
             if (response.status.isSuccess()) {
                 Result.success(response.body())
             } else {
-                Result.failure(Exception("Send failed (${response.status})"))
+                Result.failure(Exception(parseError(response)))
             }
         } catch (e: Exception) {
             println("[ChatService] postMessage error: ${e.message}")

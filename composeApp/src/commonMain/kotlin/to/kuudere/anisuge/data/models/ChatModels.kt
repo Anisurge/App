@@ -10,6 +10,14 @@ data class ChatRoomResponse(
     @SerialName("onlineCount") val onlineCount: Int = 0,
 )
 
+/** Premium gradient username (Discord-style); rendered when `isPremium` and colors are set. */
+@Serializable
+data class ChatNameStyle(
+    @SerialName("gradientStart") val gradientStart: String = "",
+    @SerialName("gradientEnd") val gradientEnd: String = "",
+    val animated: Boolean = false,
+)
+
 @Serializable
 data class ChatMessage(
     val id: String = "",
@@ -18,7 +26,30 @@ data class ChatMessage(
     @SerialName("userId") val userId: String = "",
     val username: String = "",
     @SerialName("avatarUrl") val avatarUrl: String? = null,
+    @SerialName("userColor") val userColor: String? = null,
     @SerialName("createdAt") val createdAt: String = "",
+    @SerialName("joinedAt") val joinedAt: String? = null,
+    @SerialName("isPremium") val isPremium: Boolean = false,
+    @SerialName("nameStyle") val nameStyle: ChatNameStyle? = null,
+) {
+    fun toMemberProfile(): ChatMemberProfile = ChatMemberProfile(
+        userId = userId,
+        username = username.ifBlank { "User" },
+        avatarUrl = avatarUrl,
+        joinedAt = joinedAt,
+        isPremium = isPremium,
+        nameStyle = nameStyle,
+    )
+}
+
+/** Shown when tapping a chat avatar or username. */
+data class ChatMemberProfile(
+    val userId: String,
+    val username: String,
+    val avatarUrl: String?,
+    val joinedAt: String?,
+    val isPremium: Boolean,
+    val nameStyle: ChatNameStyle?,
 )
 
 @Serializable

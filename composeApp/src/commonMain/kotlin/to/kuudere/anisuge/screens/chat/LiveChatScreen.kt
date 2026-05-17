@@ -1,6 +1,9 @@
 package to.kuudere.anisuge.screens.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,17 +39,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import to.kuudere.anisuge.data.models.ChatMessage
+import to.kuudere.anisuge.ui.ChatUsernameLabel
+import to.kuudere.anisuge.ui.ProfileAvatar
+import to.kuudere.anisuge.ui.chatAccentColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,20 +67,69 @@ fun LiveChatScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    var didInitialScroll by remember { mutableStateOf(false) }
+    var messageCountBeforeOlder by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(Unit) {
         viewModel.start()
     }
 
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) {
-            val lastIndex = state.messages.lastIndex
-            val nearBottom = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-                ?.let { it >= lastIndex - 2 } ?: true
-            if (nearBottom) {
-                listState.animateScrollToItem(lastIndex)
-            }
+    LaunchedEffect(state.isLoading, state.messages.size) {
+        if (!state.isLoading && state.messages.isNotEmpty() && !didInitialScroll) {
+            listState.scrollToItem(state.messages.lastIndex)
+            didInitialScroll = true
         }
+    }
+
+    LaunchedEffect(state.messages.lastOrNull()?.id) {
+        if (!didInitialScroll || state.messages.isEmpty()) return@LaunchedEffect
+        val lastIndex = state.messages.lastIndex
+        val nearBottom = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+            ?.let { it >= lastIndex - 1 } ?: true
+        if (nearBottom) {
+            listState.animateScrollToItem(lastIndex)
+        }
+    }
+
+    LaunchedEffect(state.isLoadingOlder) {
+        if (state.isLoadingOlder) {
+            messageCountBeforeOlder = state.messages.size
+        }
+    }
+
+    LaunchedEffect(state.isLoadingOlder, state.messages.size) {
+        if (!state.isLoadingOlder && messageCountBeforeOlder > 0) {
+            val added = state.messages.size - messageCountBeforeOlder
+            if (added > 0) {
+                listState.scrollToItem(
+                    listState.firstVisibleItemIndex + added,
+                    listState.firstVisibleItemScrollOffset,
+                )
+            }
+            messageCountBeforeOlder = 0
+        }
+    }
+
+    LaunchedEffect(didInitialScroll, state.hasMoreOlder, state.isLoadingOlder) {
+        if (!didInitialScroll) return@LaunchedEffect
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .filter { index ->
+                !state.isLoadingOlder &&
+                    state.hasMoreOlder &&
+                    index <= 1 &&
+                    state.messages.isNotEmpty()
+            }
+            .collect {
+                viewModel.loadOlderMessages()
+            }
+    }
+
+    state.selectedMember?.let { member ->
+        ChatMemberSheet(
+            member = member,
+            onDismiss = viewModel::dismissMemberProfile,
+        )
     }
 
     Scaffold(
@@ -171,6 +230,31 @@ fun LiveChatScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
+                        if (state.isLoadingOlder || state.hasMoreOlder) {
+                            item(key = "load-older-header") {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (state.isLoadingOlder) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(22.dp),
+                                            color = Color.White.copy(alpha = 0.6f),
+                                            strokeWidth = 2.dp,
+                                        )
+                                    } else {
+                                        Text(
+                                            "Scroll up for older messages",
+                                            color = Color.White.copy(alpha = 0.4f),
+                                            fontSize = 12.sp,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         if (state.messages.isEmpty()) {
                             item {
                                 Box(
@@ -189,6 +273,7 @@ fun LiveChatScreen(
                                 ChatMessageRow(
                                     message = message,
                                     isMine = message.userId == state.currentUserId,
+                                    onProfileClick = { viewModel.showMemberProfile(message) },
                                 )
                             }
                         }
@@ -255,20 +340,26 @@ fun LiveChatScreen(
 private fun ChatMessageRow(
     message: ChatMessage,
     isMine: Boolean,
+    onProfileClick: () -> Unit,
 ) {
+    val bubbleColor = if (isMine) Color(0xFF8B1520) else Color(0xFF1E1E1E)
+    val accent = chatAccentColor(message.userId, isMine)
+    val profileClick = Modifier.clickable(
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+        onClick = onProfileClick,
+    )
+
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom,
     ) {
         if (!isMine) {
-            AsyncImage(
-                model = message.avatarUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF222222)),
-                contentScale = ContentScale.Crop,
+            ProfileAvatar(
+                url = message.avatarUrl,
+                modifier = Modifier.size(36.dp).then(profileClick),
+                contentDescription = message.username,
             )
             Spacer(Modifier.size(8.dp))
         }
@@ -277,16 +368,14 @@ private fun ChatMessageRow(
             modifier = Modifier.widthIn(max = 280.dp),
             horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
         ) {
-            if (!isMine) {
-                Text(
-                    message.username,
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-            }
+            ChatUsernameLabel(
+                message = message,
+                isMine = isMine,
+                modifier = profileClick,
+                fontSize = 11.sp,
+                fontWeight = if (isMine) FontWeight.Normal else FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(4.dp))
             Box(
                 Modifier
                     .clip(
@@ -297,7 +386,18 @@ private fun ChatMessageRow(
                             bottomEnd = if (isMine) 4.dp else 12.dp,
                         ),
                     )
-                    .background(if (isMine) Color(0xFF8B1520) else Color(0xFF1E1E1E))
+                    .background(bubbleColor)
+                    .then(
+                        if (!isMine) {
+                            Modifier.border(
+                                1.dp,
+                                accent.copy(alpha = 0.55f),
+                                RoundedCornerShape(12.dp),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 Text(
@@ -307,6 +407,15 @@ private fun ChatMessageRow(
                     lineHeight = 20.sp,
                 )
             }
+        }
+
+        if (isMine) {
+            Spacer(Modifier.size(8.dp))
+            ProfileAvatar(
+                url = message.avatarUrl,
+                modifier = Modifier.size(36.dp).then(profileClick),
+                contentDescription = message.username,
+            )
         }
     }
 }
