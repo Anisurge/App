@@ -134,6 +134,7 @@ kotlin {
         }
 
         androidMain.dependencies {
+            implementation(libs.coil.gif)
             implementation(libs.androidx.activity.compose)
             implementation("androidx.fragment:fragment:1.8.9")
             implementation(libs.backdrop)
