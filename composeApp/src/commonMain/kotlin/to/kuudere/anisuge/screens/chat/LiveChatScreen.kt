@@ -6,11 +6,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -178,11 +181,22 @@ fun LiveChatScreen(
                         .padding(padding),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 32.dp),
+                    ) {
                         Text(
                             "Sign in to join live chat",
                             color = Color.White,
                             fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Use your Anisurge account. If you were already signed in, sign out and sign in again to refresh chat access.",
+                            color = Color.White.copy(alpha = 0.65f),
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
                         )
                         Spacer(Modifier.height(16.dp))
                         Button(onClick = onSignIn) {
@@ -202,12 +216,19 @@ fun LiveChatScreen(
                 }
             }
             else -> {
-                Column(
+                BoxWithConstraints(
                     Modifier
                         .fillMaxSize()
                         .padding(padding)
                         .imePadding(),
                 ) {
+                    val chatWidth = if (maxWidth > 720.dp) 720.dp else maxWidth
+                    Column(
+                        Modifier
+                            .width(chatWidth)
+                            .fillMaxHeight()
+                            .align(Alignment.Center),
+                    ) {
                     if (state.error != null) {
                         Text(
                             state.error ?: "",
@@ -329,6 +350,7 @@ fun LiveChatScreen(
                                 )
                             }
                         }
+                    }
                     }
                 }
             }

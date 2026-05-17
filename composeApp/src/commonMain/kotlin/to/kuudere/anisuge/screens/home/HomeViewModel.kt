@@ -139,9 +139,12 @@ class HomeViewModel(
                     }
                 } ?: _uiState.update { it.copy(isLoading = false) }
 
-                val authResult = authCheck.await()
-                if ((authResult as? SessionCheckResult.Valid)?.user != null) {
-                    loadContinueWatching()
+                when (val authResult = authCheck.await()) {
+                    is SessionCheckResult.Valid -> {
+                        _uiState.update { it.copy(userProfile = authResult.user) }
+                        loadContinueWatching()
+                    }
+                    else -> Unit
                 }
             } catch (e: Exception) {
                 handleHomeLoadError(e)
