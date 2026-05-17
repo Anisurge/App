@@ -127,6 +127,7 @@ fun App(
         val uriHandler = LocalUriHandler.current
         
         var showExitConfirm by remember { mutableStateOf(false) }
+        var homeBackAction by remember { mutableStateOf<(() -> Boolean)?>(null) }
         var pendingNotificationLaunch by remember { mutableStateOf<NotificationLaunch?>(null) }
         var notificationDialog by remember { mutableStateOf<NotificationLaunch?>(null) }
         
@@ -135,8 +136,10 @@ fun App(
         val isAtRoot = currentRoute != null && 
             (currentRoute.startsWith("home") || currentRoute == Screen.Auth.route)
         
-        PlatformBackHandler(enabled = isAtRoot && !showExitConfirm) {
-            showExitConfirm = true
+        val onHomeRoute = currentRoute?.startsWith("home") == true
+        PlatformBackHandler(enabled = onHomeRoute && !showExitConfirm) {
+            if (homeBackAction?.invoke() == true) return@PlatformBackHandler
+            if (isAtRoot) showExitConfirm = true
         }
 
         LaunchedEffect(notificationLaunch?.id) {
@@ -322,7 +325,8 @@ fun App(
                             onViewNewOnAppMore = { navController.navigate(Screen.NewOnApp.route) },
                             onLiveChatClick = { navController.navigate(Screen.LiveChat.route) },
                             startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
-                            startTab = requestedTab
+                            startTab = requestedTab,
+                            onHomeBackActionChange = { homeBackAction = it },
                         )
                     }
                 }

@@ -382,6 +382,29 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                 fontWeight = FontWeight.W400,
             )
         }
+        if (state.mode == AuthMode.LOGIN || state.mode == AuthMode.REGISTER) {
+            Spacer(Modifier.height(10.dp))
+            AnimatedContent(
+                targetState = state.mode,
+                transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
+                label = "auth_reanime_note",
+            ) { mode ->
+                Text(
+                    text = when (mode) {
+                        AuthMode.LOGIN ->
+                            "You can sign in with the same email or username and password you use on reanime.to."
+                        AuthMode.REGISTER ->
+                            "Already have a reanime.to account? Sign in with those details — no need to create a new one."
+                        else -> ""
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF6B6B6B),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    fontWeight = FontWeight.W400,
+                )
+            }
+        }
     }
 
     Spacer(Modifier.height(28.dp))

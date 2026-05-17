@@ -90,6 +90,8 @@ data class SettingsUiState(
     val isConnectingAnilist: Boolean = false,
     val isUploadingPfp: Boolean = false,
     val showProfileAccount: Boolean = false,
+    /** Mobile settings drill-in (Sync, Preferences, etc.); cleared on back. */
+    val mobileSettingsDetailTab: SettingsTab? = null,
     val usernameDraft: String = "",
     val isSavingUsername: Boolean = false,
     val isSyncingMal: Boolean = false,
@@ -373,6 +375,30 @@ class SettingsViewModel(
 
     fun closeProfileAccount() {
         _uiState.update { it.copy(showProfileAccount = false) }
+    }
+
+    fun openMobileSettingsDetail(tab: SettingsTab) {
+        _uiState.update { it.copy(mobileSettingsDetailTab = tab) }
+    }
+
+    fun closeMobileSettingsDetail() {
+        _uiState.update { it.copy(mobileSettingsDetailTab = null) }
+    }
+
+    /** Handles profile account overlay or mobile settings detail; returns true if consumed. */
+    fun handleSettingsBack(): Boolean {
+        val state = _uiState.value
+        return when {
+            state.showProfileAccount -> {
+                closeProfileAccount()
+                true
+            }
+            state.mobileSettingsDetailTab != null -> {
+                closeMobileSettingsDetail()
+                true
+            }
+            else -> false
+        }
     }
 
     fun setUsernameDraft(value: String) {

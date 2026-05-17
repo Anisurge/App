@@ -180,6 +180,7 @@ import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.platform.isDesktopPlatform
+import androidx.compose.runtime.SideEffect
 import to.kuudere.anisuge.ui.tvFocusableClick
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -209,6 +210,7 @@ fun HomeScreen(
     onLiveChatClick: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
+    onHomeBackActionChange: ((() -> Boolean)?) -> Unit = {},
 ) {
     val strings = LocalAppStrings.current
     val homeState by homeViewModel.uiState.collectAsState()
@@ -244,6 +246,38 @@ fun HomeScreen(
         // but we can still trigger a global sync here if needed.
     }
 
+    LaunchedEffect(currentTab) {
+        if (currentTab != AnisugTab.Settings) {
+            settingsViewModel.closeMobileSettingsDetail()
+            if (settingsState.showProfileAccount) {
+                settingsViewModel.closeProfileAccount()
+            }
+        }
+    }
+
+    val interceptsAppExitBack =
+        settingsState.mobileSettingsDetailTab != null ||
+            settingsState.showProfileAccount ||
+            currentTab != AnisugTab.Home
+
+    SideEffect {
+        onHomeBackActionChange(
+            if (interceptsAppExitBack) {
+                {
+                    when {
+                        settingsViewModel.handleSettingsBack() -> true
+                        currentTab != AnisugTab.Home -> {
+                            currentTab = AnisugTab.entries.getOrElse(prevTabIndex) { AnisugTab.Home }
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            } else {
+                null
+            },
+        )
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF000000))) {
         val isDesktop = maxWidth >= 800.dp

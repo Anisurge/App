@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -122,7 +123,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import anisurge.composeapp.generated.resources.Res
+import anisurge.composeapp.generated.resources.ic_discord
+import anisurge.composeapp.generated.resources.ic_telegram
 import coil3.compose.AsyncImage
+import org.jetbrains.compose.resources.painterResource
+import androidx.compose.ui.graphics.painter.Painter
 
 import to.kuudere.anisuge.data.models.Comment
 import to.kuudere.anisuge.data.models.StorageInfo
@@ -152,12 +158,99 @@ private val BORDER   = Color.White.copy(alpha = 0.08f)
 private val MUTED    = Color.White.copy(alpha = 0.5f)
 private val TEXT     = Color.White
 
+private const val ANISURGE_DISCORD_URL = "https://discord.gg/yR4T2dbeCx"
+private const val ANISURGE_TELEGRAM_URL = "https://t.me/anisurge"
+
 // ── Data ────────────────────────────────────────────────────────────────────────
 data class SettingsNavItem(
     val tab: SettingsTab,
     val label: String,
     val icon: ImageVector
 )
+
+@Composable
+private fun SupportAndGiveawaysSection(modifier: Modifier = Modifier) {
+    val uriHandler = LocalUriHandler.current
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(BG_CARD)
+            .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+            .padding(16.dp),
+    ) {
+        Text(
+            "Support & Giveaways",
+            color = TEXT,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Join our community for updates, support, and giveaways.",
+            color = MUTED,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+        )
+        Spacer(Modifier.height(12.dp))
+        SupportBrandLinkRow(
+            icon = painterResource(Res.drawable.ic_discord),
+            label = "Discord",
+            contentDescription = "Discord",
+            onClick = { uriHandler.openUri(ANISURGE_DISCORD_URL) },
+        )
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 4.dp),
+            thickness = 1.dp,
+            color = BORDER,
+        )
+        SupportBrandLinkRow(
+            icon = painterResource(Res.drawable.ic_telegram),
+            label = "Telegram",
+            contentDescription = "Telegram",
+            onClick = { uriHandler.openUri(ANISURGE_TELEGRAM_URL) },
+        )
+    }
+}
+
+@Composable
+private fun SupportBrandLinkRow(
+    icon: Painter,
+    label: String,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painter = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(
+                label,
+                color = TEXT,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MUTED,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
 
 // ── Main Screen ─────────────────────────────────────────────────────────────────
 @Composable
@@ -282,18 +375,8 @@ fun SettingsScreen(
                 }
             } else {
                 // Mobile: List menu with navigation to detail screens
-                var showDetail by remember { mutableStateOf<SettingsTab?>(null) }
                 val showProfileAccount = uiState.showProfileAccount
-
-                to.kuudere.anisuge.platform.PlatformBackHandler(
-                    enabled = showDetail != null || showProfileAccount,
-                ) {
-                    if (showProfileAccount) {
-                        viewModel.closeProfileAccount()
-                    } else {
-                        showDetail = null
-                    }
-                }
+                val showDetail = uiState.mobileSettingsDetailTab
 
                 AnimatedContent(
                     targetState = when {
@@ -316,7 +399,7 @@ fun SettingsScreen(
                             tab = showDetail!!,
                             navItems = navItems,
                             uiState = uiState,
-                            onBack = { showDetail = null },
+                            onBack = { viewModel.closeMobileSettingsDetail() },
                             onLogout = onLogout,
                             viewModel = viewModel,
                         )
@@ -328,7 +411,7 @@ fun SettingsScreen(
                             onRetry = { viewModel.refresh() },
                             onProfileClick = { viewModel.openProfileAccount() },
                             onItemClick = {
-                                showDetail = it
+                                viewModel.openMobileSettingsDetail(it)
                                 viewModel.onTabSelected(it)
                             },
                         )
@@ -399,6 +482,11 @@ private fun Sidebar(
 
         // Nav Items
         navItems.forEach { item ->
+            if (item.tab == SettingsTab.Notifications) {
+                SupportAndGiveawaysSection(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
             val isSelected = selectedTab == item.tab
             val bgColor by animateColorAsState(
                 targetValue = if (isSelected) BG_CARD else Color.Transparent,
@@ -610,6 +698,11 @@ private fun MobileSettingsList(
 
         // Menu Items
         navItems.forEach { item ->
+            if (item.tab == SettingsTab.Notifications) {
+                Spacer(modifier = Modifier.height(8.dp))
+                SupportAndGiveawaysSection()
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             MobileSettingsItem(
                 icon = item.icon,
                 label = item.label,

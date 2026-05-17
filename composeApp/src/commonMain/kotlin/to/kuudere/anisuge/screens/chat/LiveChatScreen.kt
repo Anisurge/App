@@ -1,19 +1,18 @@
 package to.kuudere.anisuge.screens.chat
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -52,11 +51,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import anisurge.composeapp.generated.resources.Res
+import anisurge.composeapp.generated.resources.chat_bg
+import org.jetbrains.compose.resources.painterResource
 import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.ui.ChatUsernameLabel
 import to.kuudere.anisuge.ui.ProfileAvatar
@@ -138,7 +141,11 @@ fun LiveChatScreen(
         )
     }
 
-    Scaffold(
+    Box(Modifier.fillMaxSize()) {
+        LiveChatBackground()
+
+        Scaffold(
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
                 title = {
@@ -171,10 +178,13 @@ fun LiveChatScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Black.copy(alpha = 0.55f),
+                    scrolledContainerColor = Color.Black.copy(alpha = 0.72f),
+                ),
             )
         },
-        containerColor = Color.Black,
+        containerColor = Color.Transparent,
     ) { padding ->
         when {
             state.needsAuth -> {
@@ -219,19 +229,12 @@ fun LiveChatScreen(
                 }
             }
             else -> {
-                BoxWithConstraints(
+                Column(
                     Modifier
                         .fillMaxSize()
                         .padding(padding)
                         .imePadding(),
                 ) {
-                    val chatWidth = if (maxWidth > 720.dp) 720.dp else maxWidth
-                    Column(
-                        Modifier
-                            .width(chatWidth)
-                            .fillMaxHeight()
-                            .align(Alignment.Center),
-                    ) {
                     if (state.error != null) {
                         Text(
                             state.error ?: "",
@@ -306,6 +309,7 @@ fun LiveChatScreen(
                     Row(
                         Modifier
                             .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.45f))
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -354,10 +358,27 @@ fun LiveChatScreen(
                             }
                         }
                     }
-                    }
                 }
             }
         }
+    }
+    }
+}
+
+@Composable
+private fun LiveChatBackground() {
+    Box(Modifier.fillMaxSize()) {
+        Image(
+            painter = painterResource(Res.drawable.chat_bg),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f)),
+        )
     }
 }
 
