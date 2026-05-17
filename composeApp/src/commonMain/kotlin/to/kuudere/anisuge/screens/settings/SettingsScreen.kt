@@ -3620,29 +3620,11 @@ private fun ProfileSummaryCard(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val avatarUrl = user.effectiveAvatar
-            if (avatarUrl != null) {
-                to.kuudere.anisuge.ui.ProfileAvatar(
-                    url = avatarUrl,
-                    modifier = Modifier.size(64.dp),
-                    contentDescription = user.displayName,
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(BG_HOVER),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        tint = MUTED,
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-            }
+            to.kuudere.anisuge.ui.ProfileAvatar(
+                url = user.effectiveAvatar,
+                avatarSize = 64.dp,
+                contentDescription = user.displayName,
+            )
 
             Spacer(modifier = Modifier.width(16.dp))
 
@@ -3718,25 +3700,12 @@ private fun ProfileAccountSection(
         ProfileDetailItem("Email", user.email ?: "Not provided")
 
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-            val avatarUrl = user.effectiveAvatar
             Box(contentAlignment = Alignment.Center) {
-                if (avatarUrl != null) {
-                    to.kuudere.anisuge.ui.ProfileAvatar(
-                        url = avatarUrl,
-                        modifier = Modifier.size(96.dp),
-                        contentDescription = user.displayName,
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(CircleShape)
-                            .background(BG_HOVER),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Default.Person, null, tint = MUTED, modifier = Modifier.size(44.dp))
-                    }
-                }
+                to.kuudere.anisuge.ui.ProfileAvatar(
+                    url = user.effectiveAvatar,
+                    avatarSize = 96.dp,
+                    contentDescription = user.displayName,
+                )
                 if (uiState.isUploadingPfp) {
                     Box(
                         Modifier
@@ -4111,31 +4080,11 @@ private fun MobileProfileContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                val avatarUrl = user.effectiveAvatar
-                if (avatarUrl != null) {
-                    to.kuudere.anisuge.ui.ProfileAvatar(
-                        url = avatarUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(120.dp)
-                            .border(3.dp, BORDER, CircleShape),
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
-                            .background(BG_HOVER),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = MUTED,
-                            modifier = Modifier.size(60.dp)
-                        )
-                    }
-                }
+                to.kuudere.anisuge.ui.ProfileAvatar(
+                    url = user?.effectiveAvatar,
+                    avatarSize = 120.dp,
+                    contentDescription = null,
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 

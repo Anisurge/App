@@ -15,6 +15,7 @@ import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.ChatService
+import to.kuudere.anisuge.navigation.Screen
 
 enum class LiveChatConnectionState {
     Connecting,
@@ -30,7 +31,7 @@ data class LiveChatUiState(
     val draft: String = "",
     val isSending: Boolean = false,
     val onlineCount: Int = 0,
-    val roomName: String = "Live Chat",
+    val roomName: String = Screen.LiveChat.displayName,
     val connectionState: LiveChatConnectionState = LiveChatConnectionState.Connecting,
     val error: String? = null,
     val currentUserId: String? = null,
@@ -117,7 +118,7 @@ class LiveChatViewModel(
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    roomName = room?.name ?: "Live Chat",
+                    roomName = room?.name ?: Screen.LiveChat.displayName,
                     onlineCount = room?.onlineCount ?: 0,
                     messages = history?.messages ?: emptyList(),
                     hasMoreOlder = history?.hasMore == true,

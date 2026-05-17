@@ -323,7 +323,13 @@ fun App(
                             onViewContinueWatchingMore = { navController.navigate(Screen.ContinueWatching.route) },
                             onViewLatestEpisodesMore = { navController.navigate(Screen.Latest.route) },
                             onViewNewOnAppMore = { navController.navigate(Screen.NewOnApp.route) },
+                            liveChatViewModel = liveChatVm,
                             onLiveChatClick = { navController.navigate(Screen.LiveChat.route) },
+                            onLiveChatSignIn = {
+                                navController.navigate(Screen.Auth.route) {
+                                    popUpTo(Screen.Home().route) { inclusive = false }
+                                }
+                            },
                             startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
                             startTab = requestedTab,
                             onHomeBackActionChange = { homeBackAction = it },
