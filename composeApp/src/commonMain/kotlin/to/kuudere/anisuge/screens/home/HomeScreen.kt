@@ -255,6 +255,7 @@ fun HomeScreen(
                     selectedTab = currentTab,
                     isLoggingOut = homeState.isLoggingOut,
                     onTabSelect = switchTab,
+                    onLiveChatClick = onLiveChatClick,
                     onLogout = {
                         showLogoutConfirm = true
                     },
@@ -1629,6 +1630,7 @@ private fun AnisugSidebar(
     selectedTab: AnisugTab,
     isLoggingOut: Boolean,
     onTabSelect: (AnisugTab, SettingsTab?) -> Unit,
+    onLiveChatClick: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -1701,6 +1703,11 @@ private fun AnisugSidebar(
                     Icons.Outlined.Download, 
                     isSelected = selectedTab == AnisugTab.Downloads,
                     onClick = { onTabSelect(AnisugTab.Downloads, null) }
+                )
+                SidebarIcon(
+                    Icons.Default.ChatBubbleOutline,
+                    isSelected = false,
+                    onClick = onLiveChatClick,
                 )
                 SidebarIcon(
                     Icons.Outlined.Settings, 
