@@ -22,6 +22,7 @@ import kotlinx.serialization.json.put
 class TrackingService(
     private val httpClient: HttpClient,
     private val settingsStore: SettingsStore,
+    private val integrationsSyncService: IntegrationsSyncService,
 ) {
     companion object {
         private const val MAL_API_BASE = "https://api.myanimelist.net/v2"
@@ -73,6 +74,7 @@ class TrackingService(
                 refreshToken = body.refresh_token ?: refreshToken,
                 expiresAt = to.kuudere.anisuge.utils.currentTimeMillis() + (body.expires_in * 1000)
             )
+            integrationsSyncService.pushFromLocal()
             true
         } catch (e: Exception) {
             false
@@ -219,10 +221,12 @@ class TrackingService(
 
     suspend fun disconnectMal() {
         settingsStore.clearMalTokens()
+        integrationsSyncService.clearMalOnServer()
     }
 
     suspend fun disconnectAnilist() {
         settingsStore.clearAnilistTokens()
+        integrationsSyncService.clearAnilistOnServer()
     }
 }
 

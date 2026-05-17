@@ -30,6 +30,7 @@ import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 class AuthService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
+    private val integrationsSyncService: IntegrationsSyncService,
 ) {
     private val _authState = MutableStateFlow<SessionCheckResult>(SessionCheckResult.NoSession)
     val authState: StateFlow<SessionCheckResult> = _authState.asStateFlow()
@@ -158,6 +159,7 @@ class AuthService(
         val body: BffAuthResponse = response.body()
         val session = sessionFromBff(body)
         sessionStore.save(session)
+        integrationsSyncService.restoreFromServer()
         val user = body.user?.toUserProfile()
         return SessionCheckResult.Valid(session, user).also { _authState.value = it }
     }
@@ -168,6 +170,7 @@ class AuthService(
                 applyAnisurgeAuth(stored)
             }
             if (response.status == HttpStatusCode.OK) {
+                integrationsSyncService.restoreFromServer()
                 val body: BffMeResponse = response.body()
                 SessionCheckResult.Valid(stored, body.user.toUserProfile()).also {
                     _authState.value = it
@@ -192,6 +195,7 @@ class AuthService(
         }
         val session = sessionFromBff(body)
         sessionStore.save(session)
+        integrationsSyncService.restoreFromServer()
         val user = body.user?.toUserProfile()
         _authState.value = SessionCheckResult.Valid(session, user)
         return session

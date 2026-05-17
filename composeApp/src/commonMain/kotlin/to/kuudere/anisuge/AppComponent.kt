@@ -22,7 +22,7 @@ object AppComponent {
     @Deprecated("Use PROJECT_R_BASE_URL", ReplaceWith("PROJECT_R_BASE_URL"))
     const val BASE_URL = PROJECT_R_BASE_URL
     /** Anisurge BFF — auth, signup, profile mirror, watchlist, continue, progress. */
-    const val ANISURGE_API_URL = "https://db-anisurge.n92dev.us.kg"
+    const val ANISURGE_API_URL = "https://db.anisurge.qzz.io"
     /** Public catalog for batch_scrape source ids (Next site); not the Project-R API host. */
     const val STREAMING_SERVERS_CATALOG_URL = "https://www.anisurge.lol/api/v1/streaming/servers"
     /** Anonymous install heartbeat for admin dashboard metrics (no account or PII). */
@@ -59,8 +59,16 @@ object AppComponent {
         SessionStore(dataStore)
     }
 
+    val integrationsSyncService: to.kuudere.anisuge.data.services.IntegrationsSyncService by lazy {
+        to.kuudere.anisuge.data.services.IntegrationsSyncService(httpClient, sessionStore, settingsStore)
+    }
+
+    val bffMeService: to.kuudere.anisuge.data.services.BffMeService by lazy {
+        to.kuudere.anisuge.data.services.BffMeService(sessionStore, httpClient)
+    }
+
     val authService: AuthService by lazy {
-        AuthService(sessionStore, httpClient)
+        AuthService(sessionStore, httpClient, integrationsSyncService)
     }
 
     val homeService: HomeService by lazy {
@@ -112,7 +120,7 @@ object AppComponent {
     }
 
     val trackingService: to.kuudere.anisuge.data.services.TrackingService by lazy {
-        to.kuudere.anisuge.data.services.TrackingService(httpClient, settingsStore)
+        to.kuudere.anisuge.data.services.TrackingService(httpClient, settingsStore, integrationsSyncService)
     }
 
     val malAnilistIdCache: to.kuudere.anisuge.data.services.MalAnilistIdCache by lazy {

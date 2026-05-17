@@ -283,40 +283,54 @@ fun SettingsScreen(
             } else {
                 // Mobile: List menu with navigation to detail screens
                 var showDetail by remember { mutableStateOf<SettingsTab?>(null) }
+                val showProfileAccount = uiState.showProfileAccount
 
-                to.kuudere.anisuge.platform.PlatformBackHandler(enabled = showDetail != null) {
-                    showDetail = null
+                to.kuudere.anisuge.platform.PlatformBackHandler(
+                    enabled = showDetail != null || showProfileAccount,
+                ) {
+                    if (showProfileAccount) {
+                        viewModel.closeProfileAccount()
+                    } else {
+                        showDetail = null
+                    }
                 }
 
                 AnimatedContent(
-                    targetState = showDetail,
+                    targetState = when {
+                        showProfileAccount -> "account"
+                        showDetail != null -> "detail"
+                        else -> "list"
+                    },
                     transitionSpec = {
                         fadeIn(tween(200)) togetherWith fadeOut(tween(200))
                     },
-                    label = "mobile_settings"
-                ) { detailTab ->
-                    if (detailTab == null) {
-                        MobileSettingsList(
+                    label = "mobile_settings",
+                ) { screen ->
+                    when (screen) {
+                        "account" -> MobileProfileAccountDetail(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            onBack = { viewModel.closeProfileAccount() },
+                        )
+                        "detail" -> MobileSettingsDetail(
+                            tab = showDetail!!,
+                            navItems = navItems,
+                            uiState = uiState,
+                            onBack = { showDetail = null },
+                            onLogout = onLogout,
+                            viewModel = viewModel,
+                        )
+                        else -> MobileSettingsList(
                             navItems = navItems.filter { it.tab != SettingsTab.Profile },
                             uiState = uiState,
                             onLogout = onLogout,
                             isLoggingOut = isLoggingOut,
                             onRetry = { viewModel.refresh() },
+                            onProfileClick = { viewModel.openProfileAccount() },
                             onItemClick = {
                                 showDetail = it
-                                // Load data when opening detail
                                 viewModel.onTabSelected(it)
-                            }
-                        )
-                    } else {
-                        // Detail page
-                        MobileSettingsDetail(
-                            tab = detailTab,
-                            navItems = navItems,
-                            uiState = uiState,
-                            onBack = { showDetail = null },
-                            onLogout = onLogout,
-                            viewModel = viewModel
+                            },
                         )
                     }
                 }
@@ -533,6 +547,7 @@ private fun MobileSettingsList(
     uiState: SettingsUiState,
     onLogout: () -> Unit,
     onItemClick: (SettingsTab) -> Unit,
+    onProfileClick: () -> Unit = {},
     isLoggingOut: Boolean = false,
     onRetry: () -> Unit = {},
 ) {
@@ -572,76 +587,12 @@ private fun MobileSettingsList(
                 }
             }
         } else if (!uiState.isLoadingProfile && uiState.userProfile != null) {
-            val user = uiState.userProfile
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(BG_CARD)
-                    .padding(20.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val avatarUrl = user.effectiveAvatar
-                    if (avatarUrl != null) {
-                        AsyncImage(
-                            model = avatarUrl,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .border(1.5.dp, BORDER, CircleShape)
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(BG_HOVER),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = MUTED,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                user.displayName ?: user.username ?: "Anonymous",
-                                color = TEXT,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (user.isEmailVerified == true) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                VerifiedBadge(size = 13.dp)
-                            }
-                        }
-                        user.username?.let {
-                            Text(
-                                "@$it",
-                                color = MUTED,
-                                fontSize = 13.sp
-                            )
-                        }
-                        user.joinDate?.let {
-                            Text(
-                                "Joined ${it.split("T").first()}",
-                                color = MUTED,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-                }
-            }
+            ProfileSummaryCard(
+                user = uiState.userProfile!!,
+                modifier = Modifier.padding(vertical = 16.dp),
+                onClick = onProfileClick,
+                showChevron = true,
+            )
         } else if (uiState.isLoadingProfile) {
             Box(
                 modifier = Modifier
@@ -960,7 +911,15 @@ private fun SettingsContent(
         modifier = modifier
     ) { tab ->
         when (tab) {
-            is SettingsTab.Profile -> ProfileTab(uiState = uiState, onRetry = { viewModel.refresh() })
+            is SettingsTab.Profile -> ProfileTab(
+                uiState = uiState,
+                onRetry = { viewModel.refresh() },
+                onPickCustomPfp = viewModel::onCustomPfpPicked,
+                onOpenAccount = viewModel::openProfileAccount,
+                onCloseAccount = viewModel::closeProfileAccount,
+                onUsernameChange = viewModel::setUsernameDraft,
+                onSaveUsername = viewModel::saveUsername,
+            )
             is SettingsTab.Preferences -> PreferencesTab(
                 uiState = uiState,
                 onAutoPlayChange = viewModel::setAutoPlay,
@@ -1156,7 +1115,7 @@ private fun SyncTab(
 
         val anyTrackingLinked = uiState.malConnected || uiState.anilistConnected
         val showLibraryImportCard =
-            uiState.userProfile != null && (anyTrackingLinked || uiState.isWatchHistorySyncing)
+            uiState.isSignedIn && (anyTrackingLinked || uiState.isWatchHistorySyncing)
         val syncLibraryEnabled =
             anyTrackingLinked &&
                 !uiState.isWatchHistorySyncing &&
@@ -1164,7 +1123,7 @@ private fun SyncTab(
                 !uiState.isSyncingAnilist &&
                 !uiState.isOffline
 
-        if (uiState.userProfile != null) {
+        if (uiState.isSignedIn) {
             if (showLibraryImportCard) {
                 val cardHighlighted = anyTrackingLinked || uiState.isWatchHistorySyncing
                 Box(
@@ -3543,33 +3502,310 @@ private fun MobileServersContent(
     }
 }
 
+// ── Profile summary / account ────────────────────────────────────────────────────
+@Composable
+private fun ProfileSummaryCard(
+    user: to.kuudere.anisuge.data.models.UserProfile,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    showChevron: Boolean = false,
+) {
+    val clickableModifier = if (onClick != null) {
+        Modifier.clickable(onClick = onClick)
+    } else {
+        Modifier
+    }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(BG_CARD)
+            .then(clickableModifier)
+            .padding(20.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val avatarUrl = user.effectiveAvatar
+            if (avatarUrl != null) {
+                to.kuudere.anisuge.ui.ProfileAvatar(
+                    url = avatarUrl,
+                    modifier = Modifier.size(64.dp),
+                    contentDescription = user.displayName,
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(BG_HOVER),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = MUTED,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        user.displayName ?: user.username ?: "Anonymous",
+                        color = TEXT,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (user.isEmailVerified == true) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        VerifiedBadge(size = 13.dp)
+                    }
+                }
+                user.username?.let {
+                    Text("@$it", color = MUTED, fontSize = 13.sp)
+                }
+                user.joinDate?.let {
+                    Text(
+                        "Joined ${it.split("T").first()}",
+                        color = MUTED,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+
+            if (showChevron) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MUTED,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileAccountSection(
+    uiState: SettingsUiState,
+    onPickCustomPfp: () -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onSaveUsername: () -> Unit,
+) {
+    val user = uiState.userProfile ?: return
+    val usernameChanged = uiState.usernameDraft.trim() != (user.username.orEmpty())
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(BG_CARD)
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+        Text(
+            "Account",
+            color = TEXT,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            "Email, photo, and username are stored on Anisurge only — not on reanime.to.",
+            color = MUTED,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+        )
+
+        ProfileDetailItem("Email", user.email ?: "Not provided")
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+            val avatarUrl = user.effectiveAvatar
+            Box(contentAlignment = Alignment.Center) {
+                if (avatarUrl != null) {
+                    to.kuudere.anisuge.ui.ProfileAvatar(
+                        url = avatarUrl,
+                        modifier = Modifier.size(96.dp),
+                        contentDescription = user.displayName,
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(CircleShape)
+                            .background(BG_HOVER),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Default.Person, null, tint = MUTED, modifier = Modifier.size(44.dp))
+                    }
+                }
+                if (uiState.isUploadingPfp) {
+                    Box(
+                        Modifier
+                            .size(96.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.55f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(28.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Change photo",
+                color = Color(0xFFE50914),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable(
+                    enabled = !uiState.isUploadingPfp,
+                    onClick = onPickCustomPfp,
+                ),
+            )
+            Text("JPEG, PNG, GIF, WebP · max 2.5 MB", color = MUTED, fontSize = 11.sp)
+        }
+
+        Column {
+            Text("Username", color = MUTED, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = uiState.usernameDraft,
+                onValueChange = onUsernameChange,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("username", color = MUTED) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = TEXT,
+                    unfocusedTextColor = TEXT,
+                    focusedBorderColor = BORDER,
+                    unfocusedBorderColor = BORDER,
+                    cursorColor = Color.White,
+                ),
+            )
+            Text(
+                "3–32 characters · letters, numbers, underscore",
+                color = MUTED,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            if (usernameChanged) {
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = onSaveUsername,
+                    enabled = !uiState.isSavingUsername && uiState.usernameDraft.trim().length >= 3,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (uiState.isSavingUsername) {
+                        CircularProgressIndicator(
+                            color = Color.Black,
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text("Save username", color = Color.Black)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MobileProfileAccountDetail(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit,
+) {
+    val pickPfp = to.kuudere.anisuge.platform.rememberProfileImagePicker(viewModel::onCustomPfpPicked)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BG)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 16.dp, bottom = 8.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TEXT)
+            }
+            Text("Account", color = TEXT, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        }
+        HorizontalDivider(thickness = 1.dp, color = BORDER)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .padding(bottom = 156.dp),
+        ) {
+            if (uiState.userProfile != null) {
+                ProfileAccountSection(
+                    uiState = uiState,
+                    onPickCustomPfp = pickPfp,
+                    onUsernameChange = viewModel::setUsernameDraft,
+                    onSaveUsername = viewModel::saveUsername,
+                )
+            }
+        }
+    }
+}
+
 // ── Profile Tab ──────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProfileTab(
     uiState: SettingsUiState,
     onRetry: () -> Unit = {},
+    onPickCustomPfp: (to.kuudere.anisuge.platform.ChatImagePick?) -> Unit = {},
+    onOpenAccount: () -> Unit = {},
+    onCloseAccount: () -> Unit = {},
+    onUsernameChange: (String) -> Unit = {},
+    onSaveUsername: () -> Unit = {},
 ) {
+    val pickPfp = to.kuudere.anisuge.platform.rememberProfileImagePicker(onPickCustomPfp)
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            "Profile",
-            color = TEXT,
-            fontSize = 42.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Text(
-            "Your account information and profile details",
-            color = MUTED,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
+        if (uiState.showProfileAccount) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 16.dp),
+            ) {
+                IconButton(onClick = onCloseAccount) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TEXT)
+                }
+                Text("Account", color = TEXT, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Text(
+                "Profile",
+                color = TEXT,
+                fontSize = 42.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            Text(
+                "Your account information and profile details",
+                color = MUTED,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(bottom = 32.dp),
+            )
+        }
 
         if (uiState.isOffline && uiState.userProfile == null) {
             OfflineState(
                 onRetry = onRetry,
                 isLoading = uiState.isLoadingProfile,
-                modifier = Modifier.fillMaxWidth().height(400.dp)
+                modifier = Modifier.fillMaxWidth().height(400.dp),
             )
         } else if (uiState.isLoadingProfile) {
             Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
@@ -3580,8 +3816,8 @@ private fun ProfileTab(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(uiState.errorMessage, color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center)
                     Spacer(Modifier.height(16.dp))
-                    Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) { 
-                        Text("Retry", color = Color.Black) 
+                    Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) {
+                        Text("Retry", color = Color.Black)
                     }
                 }
             }
@@ -3589,98 +3825,34 @@ private fun ProfileTab(
             Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                 Text("Please log in to view your profile", color = MUTED)
             }
+        } else if (uiState.showProfileAccount) {
+            ProfileAccountSection(
+                uiState = uiState,
+                onPickCustomPfp = pickPfp,
+                onUsernameChange = onUsernameChange,
+                onSaveUsername = onSaveUsername,
+            )
         } else {
             val user = uiState.userProfile!!
-            
-            // Profile Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(BG_CARD)
-                    .padding(32.dp)
-            ) {
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Avatar
-                        val avatarUrl = user.effectiveAvatar
-                        if (avatarUrl != null) {
-                            AsyncImage(
-                                model = avatarUrl,
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .size(100.dp)
-                                    .clip(CircleShape)
-                                    .border(2.dp, BORDER, CircleShape)
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(100.dp)
-                                    .clip(CircleShape)
-                                    .background(BG_HOVER),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = MUTED,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                            }
-                        }
+            ProfileSummaryCard(
+                user = user,
+                onClick = onOpenAccount,
+                showChevron = true,
+            )
 
-                        Spacer(modifier = Modifier.width(32.dp))
-
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    user.displayName ?: user.username ?: "Anonymous",
-                                    color = TEXT,
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (user.isEmailVerified == true) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    VerifiedBadge(size = 18.dp)
-                                }
-                            }
-                            Text(
-                                "@${user.username}",
-                                color = MUTED,
-                                fontSize = 16.sp
-                            )
-                            if (!user.location.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = MUTED, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(user.location, color = MUTED, fontSize = 14.sp)
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-                    HorizontalDivider(color = BORDER)
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Bio
-                    if (!user.bio.isNullOrBlank()) {
+            if (!user.bio.isNullOrBlank()) {
+                Spacer(Modifier.height(24.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(BG_CARD)
+                        .padding(24.dp),
+                ) {
+                    Column {
                         Text("About", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(Modifier.height(8.dp))
                         Text(user.bio, color = MUTED, fontSize = 14.sp, lineHeight = 20.sp)
-                        Spacer(modifier = Modifier.height(32.dp))
-                    }
-
-                    // Details Grid
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(48.dp),
-                        verticalArrangement = Arrangement.spacedBy(24.dp),
-                        maxItemsInEachRow = 3
-                    ) {
-                        ProfileDetailItem("Email", user.email ?: "Not provided")
-                        ProfileDetailItem("Joined", user.joinDate?.let { it.split("T").first() } ?: user.ago ?: "Unknown")
                     }
                 }
             }
@@ -3848,13 +4020,12 @@ private fun MobileProfileContent(
             ) {
                 val avatarUrl = user.effectiveAvatar
                 if (avatarUrl != null) {
-                    AsyncImage(
-                        model = avatarUrl,
+                    to.kuudere.anisuge.ui.ProfileAvatar(
+                        url = avatarUrl,
                         contentDescription = null,
                         modifier = Modifier
                             .size(120.dp)
-                            .clip(CircleShape)
-                            .border(3.dp, BORDER, CircleShape)
+                            .border(3.dp, BORDER, CircleShape),
                     )
                 } else {
                     Box(

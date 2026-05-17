@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.ChatLiveEvent
+import to.kuudere.anisuge.data.models.ChatMemberProfile
 import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.services.AuthService
@@ -32,6 +33,11 @@ data class LiveChatUiState(
     val connectionState: LiveChatConnectionState = LiveChatConnectionState.Connecting,
     val error: String? = null,
     val currentUserId: String? = null,
+    val currentUserAvatar: String? = null,
+    val currentUsername: String? = null,
+    val hasMoreOlder: Boolean = false,
+    val isLoadingOlder: Boolean = false,
+    val selectedMember: ChatMemberProfile? = null,
 )
 
 class LiveChatViewModel(
@@ -43,6 +49,7 @@ class LiveChatViewModel(
     val uiState: StateFlow<LiveChatUiState> = _uiState.asStateFlow()
 
     private var wsJob: Job? = null
+    private var loadOlderJob: Job? = null
 
     fun start() {
         viewModelScope.launch {
@@ -51,15 +58,21 @@ class LiveChatViewModel(
                     isLoading = true,
                     error = null,
                     connectionState = LiveChatConnectionState.Connecting,
+                    messages = emptyList(),
+                    hasMoreOlder = false,
                 )
             }
 
             when (val auth = authService.checkSession()) {
                 is SessionCheckResult.Valid -> {
+                    val profile = auth.user
                     _uiState.update {
                         it.copy(
                             needsAuth = false,
-                            currentUserId = auth.user?.effectiveId,
+                            currentUserId = profile?.effectiveId,
+                            currentUserAvatar = profile?.effectiveAvatar,
+                            currentUsername = profile?.displayName
+                                ?: profile?.username,
                         )
                     }
                 }
@@ -84,6 +97,12 @@ class LiveChatViewModel(
                     roomName = room?.name ?: "Live Chat",
                     onlineCount = room?.onlineCount ?: 0,
                     messages = history?.messages ?: emptyList(),
+                    hasMoreOlder = history?.hasMore == true,
+                    error = if (history == null) {
+                        "Could not load chat history. Pull to refresh after the server is updated."
+                    } else {
+                        null
+                    },
                 )
             }
 
@@ -104,8 +123,16 @@ class LiveChatViewModel(
             val result = chatService.postMessage(text)
             result.fold(
                 onSuccess = { message ->
+                    val snapshot = _uiState.value
+                    val enriched = message.copy(
+                        username = message.username.ifBlank {
+                            snapshot.currentUsername ?: message.username
+                        },
+                        avatarUrl = message.avatarUrl?.takeIf { it.isNotBlank() }
+                            ?: snapshot.currentUserAvatar,
+                    )
                     _uiState.update { state ->
-                        val merged = mergeMessages(state.messages, listOf(message))
+                        val merged = mergeMessages(state.messages, listOf(enriched))
                         state.copy(
                             draft = "",
                             isSending = false,
@@ -126,13 +153,47 @@ class LiveChatViewModel(
         }
     }
 
+    fun loadOlderMessages() {
+        val state = _uiState.value
+        if (state.isLoadingOlder || !state.hasMoreOlder || state.messages.isEmpty()) return
+        val before = state.messages.first().createdAt
+        if (before.isBlank()) return
+
+        loadOlderJob?.cancel()
+        loadOlderJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingOlder = true) }
+            val page = chatService.fetchHistory(limit = 50, before = before)
+            if (page == null) {
+                _uiState.update { it.copy(isLoadingOlder = false) }
+                return@launch
+            }
+            _uiState.update { current ->
+                current.copy(
+                    isLoadingOlder = false,
+                    hasMoreOlder = page.hasMore,
+                    messages = mergeMessages(current.messages, page.messages),
+                )
+            }
+        }
+    }
+
+    fun showMemberProfile(message: ChatMessage) {
+        _uiState.update { it.copy(selectedMember = message.toMemberProfile()) }
+    }
+
+    fun dismissMemberProfile() {
+        _uiState.update { it.copy(selectedMember = null) }
+    }
+
     fun refresh() {
         wsJob?.cancel()
+        loadOlderJob?.cancel()
         start()
     }
 
     override fun onCleared() {
         wsJob?.cancel()
+        loadOlderJob?.cancel()
         super.onCleared()
     }
 
