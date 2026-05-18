@@ -122,7 +122,7 @@ actual fun openDirectory(path: String) {
 
 actual fun buildDownloadOutputPath(epDir: String, title: String, episodeNumber: Int): String {
     val safeTitle = title.replace("[^A-Za-z0-9 ]".toRegex(), "")
-    return "$epDir/${safeTitle}_Ep_$episodeNumber.mp4"
+    return "$epDir/${safeTitle}_Ep_$episodeNumber.mkv"
 }
 
 actual suspend fun muxToMkv(
@@ -165,7 +165,7 @@ actual suspend fun muxToMkv(
         }
 
         if (!videoPath.startsWith("http")) {
-            if (remuxTsToMp4WithRxFfmpeg(videoPath, audioPath, outputPath)) {
+            if (remuxToMkvWithRxFfmpeg(videoPath, audioPath, subtitles, outputPath)) {
                 return@withContext true
             }
             val exported = exportLocalMediaToFile(
