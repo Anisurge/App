@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
@@ -33,11 +34,11 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -123,6 +124,7 @@ private fun ProfileImageCropContent(
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var viewportSize by remember { mutableStateOf(GeometrySize.Zero) }
+    val density = LocalDensity.current
 
     val cropFraction = 0.82f
 
@@ -143,58 +145,53 @@ private fun ProfileImageCropContent(
                     viewportSize = GeometrySize(it.width.toFloat(), it.height.toFloat())
                 },
         ) {
-            val cropSizePx = min(constraints.maxWidth, constraints.maxHeight).toFloat() * cropFraction
-            val cropLeft = (viewportSize.width - cropSizePx) / 2f
-            val cropTop = (viewportSize.height - cropSizePx) / 2f
-            val cropRect = Rect(cropLeft, cropTop, cropLeft + cropSizePx, cropTop + cropSizePx)
-
-            val fitScale = if (viewportSize.width > 0f && viewportSize.height > 0f) {
-                min(
-                    viewportSize.width / bitmap.width.toFloat(),
-                    viewportSize.height / bitmap.height.toFloat(),
+            if (viewportSize.width > 0f && viewportSize.height > 0f) {
+                val transform = rememberCropTransform(
+                    bitmap = bitmap,
+                    viewport = viewportSize,
+                    userScale = scale,
+                    userOffset = offset,
+                    cropFraction = cropFraction,
                 )
-            } else {
-                1f
-            }
-            val baseOffset = Offset(
-                x = (viewportSize.width - bitmap.width * fitScale) / 2f,
-                y = (viewportSize.height - bitmap.height * fitScale) / 2f,
-            )
+                val cropRect = transform.cropRect
 
-            Image(
-                bitmap = bitmap,
-                contentDescription = null,
-                contentScale = ContentScale.None,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        transformOrigin = TransformOrigin(0f, 0f)
-                        translationX = baseOffset.x + offset.x
-                        translationY = baseOffset.y + offset.y
-                        scaleX = fitScale * scale
-                        scaleY = fitScale * scale
-                    }
-                    .pointerInput(bitmap) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                            scale = (scale * zoom).coerceIn(1f, 5f)
-                            offset += pan
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    contentScale = ContentScale.FillBounds,
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                transform.imageLeft.roundToInt(),
+                                transform.imageTop.roundToInt(),
+                            )
                         }
-                    },
-            )
-
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val dimPath = Path().apply {
-                    fillType = PathFillType.EvenOdd
-                    addRect(Rect(Offset.Zero, size))
-                    addOval(cropRect)
-                }
-                drawPath(dimPath, Color.Black.copy(alpha = 0.55f))
-                drawOval(
-                    color = Color.White,
-                    topLeft = cropRect.topLeft,
-                    size = cropRect.size,
-                    style = Stroke(width = 3.dp.toPx()),
+                        .size(
+                            width = with(density) { transform.imageWidthPx.toDp() },
+                            height = with(density) { transform.imageHeightPx.toDp() },
+                        )
+                        .pointerInput(bitmap) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                scale = (scale * zoom).coerceIn(1f, 5f)
+                                offset += pan
+                            }
+                        },
                 )
+
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val dimPath = Path().apply {
+                        fillType = PathFillType.EvenOdd
+                        addRect(Rect(Offset.Zero, size))
+                        addOval(cropRect)
+                    }
+                    drawPath(dimPath, Color.Black.copy(alpha = 0.55f))
+                    drawOval(
+                        color = Color.White,
+                        topLeft = cropRect.topLeft,
+                        size = cropRect.size,
+                        style = Stroke(width = 3.dp.toPx()),
+                    )
+                }
             }
         }
 
@@ -211,25 +208,16 @@ private fun ProfileImageCropContent(
             Button(
                 onClick = {
                     if (viewportSize.width <= 0f) return@Button
-                    val cropSizePx = min(viewportSize.width, viewportSize.height) * cropFraction
-                    val cropLeft = (viewportSize.width - cropSizePx) / 2f
-                    val cropTop = (viewportSize.height - cropSizePx) / 2f
-                    val fitScale = min(
-                        viewportSize.width / bitmap.width.toFloat(),
-                        viewportSize.height / bitmap.height.toFloat(),
+                    val crop = computeCropTransform(
+                        bitmap = bitmap,
+                        viewport = viewportSize,
+                        userScale = scale,
+                        userOffset = offset,
+                        cropFraction = cropFraction,
                     )
-                    val totalScale = fitScale * scale
-                    val imageLeft = (viewportSize.width - bitmap.width * fitScale) / 2f + offset.x
-                    val imageTop = (viewportSize.height - bitmap.height * fitScale) / 2f + offset.y
-
-                    val srcLeft = ((cropLeft - imageLeft) / totalScale).roundToInt()
-                        .coerceIn(0, bitmap.width - 1)
-                    val srcTop = ((cropTop - imageTop) / totalScale).roundToInt()
-                        .coerceIn(0, bitmap.height - 1)
-                    val srcSize = (cropSizePx / totalScale).roundToInt()
-                        .coerceIn(1, min(bitmap.width - srcLeft, bitmap.height - srcTop))
-
-                    onConfirm(cropSquareBitmap(bitmap, srcLeft, srcTop, srcSize))
+                    onConfirm(
+                        cropSquareBitmap(bitmap, crop.srcLeft, crop.srcTop, crop.srcSize),
+                    )
                 },
                 enabled = !isSaving,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
@@ -246,4 +234,67 @@ private fun ProfileImageCropContent(
             }
         }
     }
+}
+
+private data class CropTransform(
+    val cropRect: Rect,
+    val imageLeft: Float,
+    val imageTop: Float,
+    val imageWidthPx: Float,
+    val imageHeightPx: Float,
+    val srcLeft: Int,
+    val srcTop: Int,
+    val srcSize: Int,
+)
+
+@Composable
+private fun rememberCropTransform(
+    bitmap: ImageBitmap,
+    viewport: GeometrySize,
+    userScale: Float,
+    userOffset: Offset,
+    cropFraction: Float,
+): CropTransform = remember(bitmap, viewport, userScale, userOffset, cropFraction) {
+    computeCropTransform(bitmap, viewport, userScale, userOffset, cropFraction)
+}
+
+private fun computeCropTransform(
+    bitmap: ImageBitmap,
+    viewport: GeometrySize,
+    userScale: Float,
+    userOffset: Offset,
+    cropFraction: Float,
+): CropTransform {
+    val cropSizePx = min(viewport.width, viewport.height) * cropFraction
+    val cropLeft = (viewport.width - cropSizePx) / 2f
+    val cropTop = (viewport.height - cropSizePx) / 2f
+    val cropRect = Rect(cropLeft, cropTop, cropLeft + cropSizePx, cropTop + cropSizePx)
+
+    val fitScale = min(
+        viewport.width / bitmap.width.toFloat(),
+        viewport.height / bitmap.height.toFloat(),
+    )
+    val totalScale = fitScale * userScale
+    val imageWidthPx = bitmap.width * totalScale
+    val imageHeightPx = bitmap.height * totalScale
+    val imageLeft = (viewport.width - imageWidthPx) / 2f + userOffset.x
+    val imageTop = (viewport.height - imageHeightPx) / 2f + userOffset.y
+
+    val srcLeft = ((cropLeft - imageLeft) / totalScale).roundToInt()
+        .coerceIn(0, bitmap.width - 1)
+    val srcTop = ((cropTop - imageTop) / totalScale).roundToInt()
+        .coerceIn(0, bitmap.height - 1)
+    val srcSize = (cropSizePx / totalScale).roundToInt()
+        .coerceIn(1, min(bitmap.width - srcLeft, bitmap.height - srcTop))
+
+    return CropTransform(
+        cropRect = cropRect,
+        imageLeft = imageLeft,
+        imageTop = imageTop,
+        imageWidthPx = imageWidthPx,
+        imageHeightPx = imageHeightPx,
+        srcLeft = srcLeft,
+        srcTop = srcTop,
+        srcSize = srcSize,
+    )
 }
