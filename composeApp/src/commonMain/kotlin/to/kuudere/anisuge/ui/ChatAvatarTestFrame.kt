@@ -10,8 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** Temporary: overlay bundled test APNG on every chat avatar. Set false before release. */
-const val USE_TEST_CHAT_FRAME = true
+/** Dev-only bundled test APNG; keep false so chat uses each user's equipped shop frame. */
+const val USE_TEST_CHAT_FRAME = false
 
 @Composable
 expect fun rememberChatTestFrameBytes(): ByteArray?
