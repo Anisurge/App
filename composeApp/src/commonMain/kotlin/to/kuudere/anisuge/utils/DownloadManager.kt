@@ -85,14 +85,20 @@ object DownloadManager {
                     val content: String = KmpFileSystem.source(persistenceFile).buffer().use { it.readUtf8() }
                     val loaded = json.decodeFromString<List<DownloadTask>>(content)
                     // Reset transient states
-                    val sanitized = loaded.map { 
+                    val sanitized = loaded.mapNotNull { task ->
                         val normalizedStatus = when {
-                            it.status.startsWith("Done") -> "Finished"
-                            else -> it.status
+                            task.status.startsWith("Done") -> "Finished"
+                            else -> task.status
                         }
-                        if (normalizedStatus != "Finished" && !normalizedStatus.startsWith("Failed")) {
-                            it.copy(status = "Paused", isPaused = true)
-                        } else it.copy(status = normalizedStatus)
+                        if (normalizedStatus.startsWith("Failed")) {
+                            scope.launch { cleanupPartialDownloadFiles(task) }
+                            return@mapNotNull null
+                        }
+                        if (normalizedStatus != "Finished") {
+                            task.copy(status = "Paused", isPaused = true)
+                        } else {
+                            task.copy(status = normalizedStatus)
+                        }
                     }
                     tasks.value = sanitized
                 }
@@ -129,15 +135,50 @@ object DownloadManager {
     ) {
         val taskId = "${animeId}_$episodeNumber"
         val existing = tasks.value.find { it.id == taskId }
-        if (existing != null) {
-            if (existing.isPaused || existing.status.startsWith("Failed")) resumeDownload(taskId)
-            return
+        when {
+            existing?.isPaused == true -> {
+                resumeDownload(taskId)
+                return
+            }
+            existing != null && isDownloadFinished(existing.status) -> return
+            existing != null && !existing.status.startsWith("Failed") -> return
+            existing != null && existing.status.startsWith("Failed") -> {
+                scope.launch {
+                    removeFailedTaskSync(existing)
+                    enqueueDownload(
+                        taskId, animeId, anilistId, episodeNumber, title, coverImage,
+                        server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub,
+                    )
+                }
+                return
+            }
         }
+        enqueueDownload(
+            taskId, animeId, anilistId, episodeNumber, title, coverImage,
+            server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub,
+        )
+    }
 
-        val newTask = DownloadTask(taskId, animeId, title, episodeNumber, coverImage, 0f, "Fetching stream...", headers = headers)
+    private fun enqueueDownload(
+        taskId: String,
+        animeId: String,
+        anilistId: Int,
+        episodeNumber: Int,
+        title: String,
+        coverImage: String?,
+        server: String,
+        subLang: String?,
+        audioLang: String?,
+        downloadFonts: Boolean,
+        headers: Map<String, String>?,
+        m3u8Url: String?,
+        preferBatchDub: Boolean,
+    ) {
+        val newTask = DownloadTask(
+            taskId, animeId, title, episodeNumber, coverImage, 0f, "Fetching stream...", headers = headers,
+        )
         tasks.update { it + newTask }
         saveTasks()
-
         executeDownload(newTask, anilistId, server, subLang, audioLang, downloadFonts, m3u8Url, preferBatchDub)
     }
 
@@ -152,11 +193,33 @@ object DownloadManager {
     ) {
         val taskId = "${animeId}_$episodeNumber"
         val existing = tasks.value.find { it.id == taskId }
-        if (existing != null) {
-            if (existing.isPaused || existing.status.startsWith("Failed")) resumeDownload(taskId)
-            return
+        when {
+            existing?.isPaused == true -> {
+                resumeDownload(taskId)
+                return
+            }
+            existing != null && isDownloadFinished(existing.status) -> return
+            existing != null && !existing.status.startsWith("Failed") -> return
+            existing != null && existing.status.startsWith("Failed") -> {
+                scope.launch {
+                    removeFailedTaskSync(existing)
+                    enqueueMp4Download(taskId, animeId, episodeNumber, title, coverImage, mp4Url, headers)
+                }
+                return
+            }
         }
+        enqueueMp4Download(taskId, animeId, episodeNumber, title, coverImage, mp4Url, headers)
+    }
 
+    private fun enqueueMp4Download(
+        taskId: String,
+        animeId: String,
+        episodeNumber: Int,
+        title: String,
+        coverImage: String?,
+        mp4Url: String,
+        headers: Map<String, String>,
+    ) {
         val newTask = DownloadTask(
             taskId,
             animeId,
@@ -169,8 +232,7 @@ object DownloadManager {
         )
         tasks.update { it + newTask }
         saveTasks()
-
-        executeMp4Download(newTask, mp4Url, qualityLabel)
+        executeMp4Download(newTask, mp4Url, "")
     }
 
     private fun executeMp4Download(task: DownloadTask, mp4Url: String, qualityLabel: String) {
@@ -184,15 +246,14 @@ object DownloadManager {
                 val outputPath = "$baseDir/$taskId.mp4"
                 val probe = probeDirectMp4(mp4Url, hdrs)
                 if (!probe.isDirectMp4) {
-                    updateTask(taskId) { it.copy(status = "Failed: Not a direct MP4 stream") }
+                    abortDownload(taskId, "not a direct MP4 stream")
                     return@launch
                 }
                 val downloaded = downloadDirectMp4(taskId, mp4Url, hdrs, outputPath, probe.contentLength)
                 if (!downloaded) return@launch
-                updateTask(taskId) { it.copy(status = "Finished") }
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
-                    updateTask(taskId) { it.copy(status = "Failed: ${e.message ?: "unknown error"}") }
+                    abortDownload(taskId, e.message ?: "unknown error")
                 }
             }
         }
@@ -290,13 +351,13 @@ object DownloadManager {
                     }
 
                     if (streamInfo == null) {
-                        updateTask(taskId) { it.copy(status = "Failed: No stream") }
+                        abortDownload(taskId, "no stream")
                         return@launch
                     }
 
                     m3u8Url = streamInfo.url
                     if (m3u8Url.isBlank()) {
-                        updateTask(taskId) { it.copy(status = "Failed: No M3U8 URL") }
+                        abortDownload(taskId, "no M3U8 URL")
                         return@launch
                     }
 
@@ -376,7 +437,7 @@ object DownloadManager {
                 } else emptyList()
 
                 if (videoSegments.isEmpty() && !isEncrypted && !useHlsUrlRemux) {
-                    updateTask(taskId) { it.copy(status = "Failed: No video segments") }
+                    abortDownload(taskId, "no video segments")
                     return@launch
                 }
 
@@ -504,12 +565,12 @@ object DownloadManager {
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
                     val message = e.message ?: "Unknown error"
-                    val finalStatus = if (message.contains("EPERM") || message.contains("Permission denied")) {
-                        "Failed: Permission denied. Try using 'Downloads' folder."
+                    val reason = if (message.contains("EPERM") || message.contains("Permission denied")) {
+                        "permission denied — try using the Downloads folder"
                     } else {
-                        "Failed: $message"
+                        message
                     }
-                    updateTask(taskId) { it.copy(status = finalStatus) }
+                    abortDownload(taskId, reason)
                 }
             }
         }
@@ -555,13 +616,15 @@ object DownloadManager {
     ): Boolean {
         updateTask(taskId) { it.copy(status = "Preparing direct MP4...", progress = 0f) }
         return try {
+            var httpOk = false
             httpClient.prepareGet(url) {
                 headers.forEach { (k, v) -> header(k, v) }
             }.execute { response ->
                 if (!response.status.isSuccess()) {
-                    updateTask(taskId) { it.copy(status = "Failed: HTTP ${response.status.value}") }
+                    abortDownload(taskId, "HTTP ${response.status.value}")
                     return@execute
                 }
+                httpOk = true
                 val expectedLength = if (contentLengthFromHead > 0L) {
                     contentLengthFromHead
                 } else {
@@ -614,6 +677,8 @@ object DownloadManager {
                 }
             }
 
+            if (!httpOk) return false
+
             updateTask(taskId) {
                 it.copy(
                     progress = 1f,
@@ -625,9 +690,7 @@ object DownloadManager {
             }
             true
         } catch (e: Exception) {
-            updateTask(taskId) {
-                it.copy(status = "Failed: ${e.message ?: "unknown error"}")
-            }
+            abortDownload(taskId, e.message ?: "unknown error")
             false
         }
     }
@@ -804,13 +867,80 @@ object DownloadManager {
     }
 
     fun cancelDownload(id: String) {
-        tasks.value.find { it.id == id }?.job?.cancel()
-        tasks.update { it.filterNot { t -> t.id == id } }
-        saveTasks()
+        removeTask(id)
     }
 
     fun removeTask(id: String) {
-        cancelDownload(id)
+        val task = tasks.value.find { it.id == id } ?: return
+        task.job?.cancel()
+        tasks.update { it.filterNot { t -> t.id == id } }
+        saveTasks()
+        scope.launch { cleanupPartialDownloadFiles(task) }
+    }
+
+    fun isDownloadFinished(status: String): Boolean =
+        status == "Finished" || status.startsWith("Finished (") || status.startsWith("Done")
+
+    fun countFinishedDownloads(tasks: List<DownloadTask> = this.tasks.value): Int =
+        tasks.count { isDownloadFinished(it.status) }
+
+    /** Drop failed task from UI/storage and delete partial files so the next download starts clean. */
+    private fun abortDownload(taskId: String, reason: String) {
+        val task = tasks.value.find { it.id == taskId } ?: return
+        scope.launch {
+            removeFailedTaskSync(task)
+            println("[Download] removed failed task $taskId: $reason")
+        }
+    }
+
+    private suspend fun removeFailedTaskSync(task: DownloadTask) {
+        task.job?.cancel()
+        cleanupPartialDownloadFiles(task)
+        tasks.update { list -> list.filterNot { it.id == task.id } }
+        saveTasks()
+    }
+
+    private suspend fun cleanupPartialDownloadFiles(task: DownloadTask) {
+        try {
+            val currentPath = AppComponent.settingsStore.downloadPathFlow.first()
+            val baseDir = if (currentPath.isNotBlank()) currentPath else getDownloadsDirectory()
+            val taskId = task.id
+            val mp4Path = "$baseDir/$taskId.mp4"
+            if (KmpFileSystem.exists(mp4Path)) {
+                KmpFileSystem.delete(mp4Path)
+            }
+            val animeSafe = task.animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
+            val epDir = "$baseDir/$animeSafe/ep_${task.episodeNumber}"
+            deleteDirectoryRecursively(epDir)
+            task.localPath?.let { path ->
+                if (path != mp4Path && KmpFileSystem.exists(path)) {
+                    KmpFileSystem.delete(path)
+                }
+            }
+        } catch (e: Exception) {
+            println("[Download] cleanup partial files: ${e.message}")
+        }
+    }
+
+    private fun deleteDirectoryRecursively(dir: String) {
+        if (!KmpFileSystem.exists(dir)) return
+        try {
+            KmpFileSystem.listDir(dir).forEach { name ->
+                val child = "$dir/$name"
+                try {
+                    deleteDirectoryRecursively(child)
+                } catch (_: Exception) {
+                    try {
+                        KmpFileSystem.delete(child)
+                    } catch (_: Exception) { }
+                }
+            }
+            KmpFileSystem.delete(dir)
+        } catch (_: Exception) {
+            try {
+                KmpFileSystem.delete(dir)
+            } catch (_: Exception) { }
+        }
     }
 
 

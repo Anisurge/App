@@ -671,7 +671,7 @@ fun DownloadEpisodeDialog(
                 if (!showDirectMp4Picker) {
                     Button(
                         onClick = {
-                            if (currentTask == null || currentTask.status.startsWith("Failed")) {
+                            if (currentTask == null) {
                                 if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
                                     shouldRequestNotificationPermission = true
                                 } else if (to.kuudere.anisuge.utils.hasStoragePermission()) {
@@ -717,7 +717,6 @@ fun DownloadEpisodeDialog(
                                 text = when {
                                     currentTask == null -> if (isPathValid) strings.startDownload(sizeText) else strings.chooseValidFolder
                                     isFinished -> strings.downloaded
-                                    currentTask?.status?.startsWith("Failed") == true -> if (isPathValid) strings.retryDownload else strings.chooseValidFolder
                                     else -> strings.keepDownloadingInBackground
                                 },
                                 color = if (isFinished) Color.Black.copy(alpha = 0.5f) else Color.Black,
