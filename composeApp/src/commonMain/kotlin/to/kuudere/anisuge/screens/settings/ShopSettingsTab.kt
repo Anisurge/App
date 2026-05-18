@@ -266,6 +266,7 @@ private fun ShopItemCard(
             url = pfpUrl,
             avatarSize = 52.dp,
             frameUrl = item.assetUrl,
+            frameCacheKey = item.id,
             showBundledTestFrame = false,
             contentDescription = item.name,
             modifier = Modifier.padding(4.dp),

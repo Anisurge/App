@@ -119,8 +119,11 @@ class WatchViewModel(
                 animeId = animeId,
                 currentEpisodeNumber = episodeNumber,
                 isLoading = true,
-                loadingMessage = if (offlinePath != null) "Loading offline video..." else "Fetching episode $episodeNumber...",
-                isLoadingVideo = false,
+                isLoadingVideo = offlinePath == null,
+                loadingMessage = when {
+                    offlinePath != null -> "Loading offline video..."
+                    else -> "Fetching streaming URL..."
+                },
                 episodeData = null,
                 streamingData = null,
                 availableQualities = emptyList(),
@@ -248,7 +251,16 @@ class WatchViewModel(
                 )
             }
 
-            if (streamLoadingJob == null) {
+            if (streamLoadingJob != null) {
+                try {
+                    streamLoadingJob.join()
+                } catch (_: kotlinx.coroutines.CancellationException) {
+                }
+            }
+            if (_uiState.value.streamingData == null &&
+                _uiState.value.offlinePath == null &&
+                coroutineContext.isActive
+            ) {
                 loadVideoStream(streamServer)
             }
         } else {
@@ -480,13 +492,12 @@ class WatchViewModel(
                 println("[WatchVM] NO STREAMS FOUND! streamSection is null or empty.")
                 _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            println("[WatchVM] loadVideoStream cancelled for server=$serverName")
+            throw e
         } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) {
-                println("[WatchVM] loadVideoStream cancelled for server=$serverName")
-            } else {
-                println("[WatchVM] loadVideoStream error for server=$serverName: ${e.message}")
-                e.printStackTrace()
-            }
+            println("[WatchVM] loadVideoStream error for server=$serverName: ${e.message}")
+            e.printStackTrace()
             _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
         }
     }

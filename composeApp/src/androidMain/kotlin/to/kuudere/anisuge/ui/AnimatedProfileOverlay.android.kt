@@ -20,7 +20,7 @@ import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.URL
+import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 
 @Composable
 actual fun PlatformAnimatedProfileOverlay(
@@ -56,7 +56,8 @@ private fun ApngImageDecoderOverlay(
     androidx.compose.runtime.LaunchedEffect(url) {
         val decoded = withContext(Dispatchers.IO) {
             runCatching {
-                val bytes = URL(url).openStream().use { it.readBytes() }
+                val bytes = AnimatedFrameBytesCache.load(url)
+                    ?: return@runCatching null
                 ImageDecoder.decodeDrawable(ImageDecoder.createSource(bytes))
             }.getOrNull()
         }

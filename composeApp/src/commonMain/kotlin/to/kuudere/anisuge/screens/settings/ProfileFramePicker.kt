@@ -93,6 +93,7 @@ fun ProfileFramePickerSection(
                         url = user.effectiveAvatar,
                         avatarSize = 40.dp,
                         frameUrl = item.assetUrl,
+                        frameCacheKey = item.id,
                         showBundledTestFrame = false,
                     )
                 }

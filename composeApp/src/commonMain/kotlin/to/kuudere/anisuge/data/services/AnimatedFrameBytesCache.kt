@@ -1,0 +1,131 @@
+package to.kuudere.anisuge.data.services
+
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+import okio.buffer
+import okio.use
+import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.platform.KmpFileSystem
+import to.kuudere.anisuge.utils.getCacheDirectory
+
+/** In-memory + disk cache for animated shop/chat frame bytes (APNG served as PNG). */
+object AnimatedFrameBytesCache {
+    private const val MAX_MEMORY_ENTRIES = 48
+    private val memoryLock = Any()
+    private val memory = object : LinkedHashMap<String, ByteArray>(MAX_MEMORY_ENTRIES, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?): Boolean =
+            size > MAX_MEMORY_ENTRIES
+    }
+    private val loadLocks = mutableMapOf<String, Mutex>()
+    private val loadLocksGuard = Mutex()
+
+    private fun framesDir(): String = "${getCacheDirectory()}/animated-frames"
+
+    private fun diskPath(url: String): String {
+        val safe = url.hashCode().toUInt().toString(16)
+        return "${framesDir()}/$safe.apng"
+    }
+
+    fun peekMemory(url: String): ByteArray? = synchronized(memoryLock) { memory[url] }
+
+    private fun putMemory(url: String, bytes: ByteArray) {
+        synchronized(memoryLock) { memory[url] = bytes }
+    }
+
+    private fun readFile(path: String): ByteArray? {
+        if (!KmpFileSystem.exists(path)) return null
+        return runCatching {
+            KmpFileSystem.source(path).buffer().use { it.readByteArray() }
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun readDisk(url: String): ByteArray? = readFile(diskPath(url))
+
+    private fun writeDisk(url: String, bytes: ByteArray) {
+        val base = framesDir()
+        if (!KmpFileSystem.exists(base)) {
+            KmpFileSystem.createDirectories(base, mustCreate = true)
+        }
+        KmpFileSystem.write(diskPath(url), bytes)
+    }
+
+    private suspend fun lockFor(url: String): Mutex =
+        loadLocksGuard.withLock {
+            loadLocks.getOrPut(url) { Mutex() }
+        }
+
+    suspend fun load(url: String, itemId: String? = null): ByteArray? {
+        peekMemory(url)?.let { return it }
+
+        itemId?.let { id ->
+            ShopFrameCache.localPathIfExists(id)?.let { path ->
+                readFile(path)?.let { bytes ->
+                    putMemory(url, bytes)
+                    return bytes
+                }
+            }
+        }
+
+        readDisk(url)?.let { bytes ->
+            putMemory(url, bytes)
+            return bytes
+        }
+
+        return lockFor(url).withLock {
+            peekMemory(url)?.let { return@withLock it }
+            readDisk(url)?.let { bytes ->
+                putMemory(url, bytes)
+                return@withLock bytes
+            }
+
+            val downloaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    AppComponent.httpClient.get(url).body<ByteArray>()
+                }.getOrNull()?.takeIf { it.isNotEmpty() }
+            } ?: return@withLock null
+
+            putMemory(url, downloaded)
+            withContext(Dispatchers.IO) {
+                writeDisk(url, downloaded)
+                itemId?.let { ShopFrameCache.save(it, downloaded) }
+            }
+            downloaded
+        }
+    }
+
+    suspend fun store(url: String, bytes: ByteArray, itemId: String? = null) {
+        if (bytes.isEmpty()) return
+        putMemory(url, bytes)
+        withContext(Dispatchers.IO) {
+            writeDisk(url, bytes)
+            itemId?.let { ShopFrameCache.save(it, bytes) }
+        }
+    }
+
+    suspend fun prefetch(urls: List<String>, concurrency: Int = 6) {
+        val pending = urls
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .filter { peekMemory(it) == null && readDisk(it) == null }
+        if (pending.isEmpty()) return
+
+        coroutineScope {
+            val gate = Semaphore(concurrency)
+            pending.map { url ->
+                async {
+                    gate.withPermit { load(url) }
+                }
+            }.awaitAll()
+        }
+    }
+}
