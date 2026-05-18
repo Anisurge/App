@@ -12,6 +12,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import to.kuudere.anisuge.data.models.Comment
 import to.kuudere.anisuge.data.models.CommunityCategory
 import to.kuudere.anisuge.data.models.CommunityCommentCreateRequest
@@ -151,6 +152,8 @@ data class SettingsUiState(
     val shopCatalogHasMore: Boolean = false,
     val shopCatalogTotal: Int = 0,
     val shopPurchasingId: String? = null,
+    val redeemCodeDraft: String = "",
+    val isRedeemingCode: Boolean = false,
     val isDownloadingShopFrames: Boolean = false,
     val isSavingEquippedFrame: Boolean = false,
 )
@@ -165,6 +168,7 @@ sealed class SettingsTab {
     data object Servers : SettingsTab()
     data object Notifications : SettingsTab()
     data object Shop : SettingsTab()
+    data object Redeem : SettingsTab()
 }
 
 class SettingsViewModel(
@@ -338,6 +342,9 @@ class SettingsViewModel(
                     loadUserProfile()
                 }
             }
+            is SettingsTab.Redeem -> {
+                loadUserProfile()
+            }
             is SettingsTab.Sync -> {
                 loadTrackingState()
                 if (_uiState.value.userProfile == null && authService.authState.value is SessionCheckResult.Valid) {
@@ -474,6 +481,7 @@ class SettingsViewModel(
             _uiState.update { it.copy(isLoadingShop = true) }
             bffShopService.fetchShopMe(catalogLimit = SHOP_PAGE_SIZE, catalogOffset = 0).fold(
                 onSuccess = { body ->
+                    prefetchShopFrameAnimations(body.catalog)
                     _uiState.update {
                         it.copy(
                             isLoadingShop = false,
@@ -484,7 +492,6 @@ class SettingsViewModel(
                             shopCatalogTotal = body.catalogTotal,
                         )
                     }
-                    prefetchShopFrameAnimations(body.catalog)
                 },
                 onFailure = { e ->
                     _uiState.update {
@@ -508,8 +515,9 @@ class SettingsViewModel(
                 catalogOffset = state.shopCatalog.size,
             ).fold(
                 onSuccess = { body ->
+                    val merged = (state.shopCatalog + body.catalog).distinctBy { it.id }
+                    prefetchShopFrameAnimations(body.catalog)
                     _uiState.update { current ->
-                        val merged = (current.shopCatalog + body.catalog).distinctBy { it.id }
                         current.copy(
                             isLoadingMoreShop = false,
                             shopCoins = body.coins,
@@ -519,7 +527,6 @@ class SettingsViewModel(
                             shopCatalogTotal = body.catalogTotal,
                         )
                     }
-                    prefetchShopFrameAnimations(body.catalog)
                 },
                 onFailure = { e ->
                     _uiState.update {
@@ -533,13 +540,15 @@ class SettingsViewModel(
         }
     }
 
-    private fun prefetchShopFrameAnimations(items: List<BffShopItem>) {
-        val urls = items.mapNotNull { item ->
-            resolveProfileMediaUrl(item.assetUrl)?.takeIf { isAnimatedFrameAssetUrl(it) }
+    private suspend fun prefetchShopFrameAnimations(items: List<BffShopItem>) {
+        if (items.isEmpty()) return
+        val entries = items.mapNotNull { item ->
+            val url = resolveProfileMediaUrl(item.assetUrl) ?: return@mapNotNull null
+            url to item.id
         }
-        if (urls.isEmpty()) return
-        viewModelScope.launch(Dispatchers.Default) {
-            AnimatedFrameBytesCache.prefetch(urls)
+        if (entries.isEmpty()) return
+        withContext(Dispatchers.Default) {
+            AnimatedFrameBytesCache.prefetchEntries(entries, concurrency = 16)
         }
     }
 
@@ -553,6 +562,44 @@ class SettingsViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun setRedeemCodeDraft(value: String) {
+        _uiState.update { it.copy(redeemCodeDraft = value) }
+    }
+
+    fun redeemShopCode() {
+        val code = _uiState.value.redeemCodeDraft.trim()
+        if (code.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "Enter a redeem code") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRedeemingCode = true, errorMessage = null) }
+            bffShopService.redeem(code).fold(
+                onSuccess = { body ->
+                    val profile = body.user?.toUserProfile()
+                    _uiState.update {
+                        it.copy(
+                            isRedeemingCode = false,
+                            redeemCodeDraft = "",
+                            shopCoins = body.coins,
+                            userProfile = profile ?: it.userProfile?.copy(coins = body.coins),
+                            successMessage = body.message
+                                ?: "Redeemed ${body.rewardCoins} Berries",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isRedeemingCode = false,
+                            errorMessage = e.message ?: "Could not redeem code",
+                        )
+                    }
+                },
+            )
         }
     }
 

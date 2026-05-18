@@ -18,6 +18,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,30 +36,13 @@ private val BG_CARD = Color(0xFF141414)
 private val TEXT = Color.White
 private val MUTED = Color(0xFF9E9E9E)
 private val ACCENT = Color(0xFFE50914)
-private val BERRY_GOLD = Color(0xFFFFD54F)
-private val BERRY_GOLD_DIM = Color(0xFFFFB300)
-private val BERRY_PANEL = Color(0xFF1E1808)
-
-/** One Piece–style currency label (API still uses `coins`). */
-private fun formatBerries(amount: Int): String {
-    val negative = amount < 0
-    val n = kotlin.math.abs(amount)
-    val raw = n.toString()
-    val grouped = raw.reversed().chunked(3).joinToString(",").reversed()
-    return if (negative) "-$grouped" else grouped
-}
-
-private fun berryLabel(amount: Int): String {
-    val word = if (amount == 1) "Berry" else "Berries"
-    return "${formatBerries(amount)} $word"
-}
-
 @Composable
 fun ShopSettingsTab(
     uiState: SettingsUiState,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
     onPurchase: (String) -> Unit,
+    onOpenRedeem: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -80,6 +64,15 @@ fun ShopSettingsTab(
         )
 
         BerriesBalanceCard(balance = uiState.shopCoins)
+
+        Spacer(Modifier.height(10.dp))
+
+        OutlinedButton(
+            onClick = onOpenRedeem,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Redeem Berries", maxLines = 1)
+        }
 
         Spacer(Modifier.height(14.dp))
 
@@ -155,54 +148,9 @@ fun ShopSettingsTab(
     }
 }
 
-@Composable
-private fun BerriesBalanceCard(balance: Int) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.horizontalGradient(
-                    colors = listOf(BERRY_PANEL, Color(0xFF2A2210)),
-                ),
-            )
-            .padding(horizontal = 18.dp, vertical = 16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Your balance",
-                    color = MUTED,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-                Text(
-                    formatBerries(balance),
-                    color = BERRY_GOLD,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                Text(
-                    if (balance == 1) "Berry" else "Berries",
-                    color = BERRY_GOLD_DIM,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            Text(
-                "฿",
-                color = BERRY_GOLD.copy(alpha = 0.35f),
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-    }
+private fun berryLabel(amount: Int): String {
+    val word = if (amount == 1) "Berry" else "Berries"
+    return "${formatBerries(amount)} $word"
 }
 
 @Composable
@@ -225,14 +173,16 @@ private fun ShopItemGrid(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     rowItems.forEach { item ->
-                        ShopItemCard(
-                            item = item,
-                            pfpUrl = pfpUrl,
-                            balance = balance,
-                            isPurchasing = purchasingId == item.id,
-                            onPurchase = { onPurchase(item.id) },
-                            modifier = Modifier.weight(1f),
-                        )
+                        key(item.id) {
+                            ShopItemCard(
+                                item = item,
+                                pfpUrl = pfpUrl,
+                                balance = balance,
+                                isPurchasing = purchasingId == item.id,
+                                onPurchase = { onPurchase(item.id) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                     repeat(columns - rowItems.size) {
                         Spacer(Modifier.weight(1f))
@@ -298,7 +248,7 @@ private fun ShopItemCard(
         Spacer(Modifier.height(10.dp))
         Text(
             berryLabel(item.priceCoins),
-            color = BERRY_GOLD_DIM,
+            color = ShopBerryGoldDim,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,

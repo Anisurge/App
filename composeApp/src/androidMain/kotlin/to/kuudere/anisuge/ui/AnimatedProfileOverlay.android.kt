@@ -50,13 +50,14 @@ private fun ApngImageDecoderOverlay(
     url: String,
     modifier: Modifier,
     contentDescription: String?,
+    cacheKey: String? = null,
 ) {
-    var drawable by remember(url) { mutableStateOf<Drawable?>(null) }
+    var drawable by remember(url, cacheKey) { mutableStateOf<Drawable?>(null) }
 
-    androidx.compose.runtime.LaunchedEffect(url) {
+    androidx.compose.runtime.LaunchedEffect(url, cacheKey) {
         val decoded = withContext(Dispatchers.IO) {
             runCatching {
-                val bytes = AnimatedFrameBytesCache.load(url)
+                val bytes = AnimatedFrameBytesCache.load(url, itemId = cacheKey)
                     ?: return@runCatching null
                 ImageDecoder.decodeDrawable(ImageDecoder.createSource(bytes))
             }.getOrNull()

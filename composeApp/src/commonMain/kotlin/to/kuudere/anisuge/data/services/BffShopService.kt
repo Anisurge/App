@@ -15,6 +15,8 @@ import to.kuudere.anisuge.data.models.BffShopDownloadAllResponse
 import to.kuudere.anisuge.data.models.BffShopMeResponse
 import to.kuudere.anisuge.data.models.BffShopPurchaseRequest
 import to.kuudere.anisuge.data.models.BffShopPurchaseResponse
+import to.kuudere.anisuge.data.models.BffShopRedeemRequest
+import to.kuudere.anisuge.data.models.BffShopRedeemResponse
 import to.kuudere.anisuge.data.models.UserProfile
 import to.kuudere.anisuge.data.models.toUserProfile
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
@@ -31,6 +33,24 @@ class BffShopService(
     ): Result<BffShopMeResponse> = authedGet(
         "/shop/me?catalogLimit=$catalogLimit&catalogOffset=$catalogOffset",
     ) { it.body() }
+
+    suspend fun redeem(code: String): Result<BffShopRedeemResponse> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/shop/redeem") {
+                applyAnisurgeAuth(stored)
+                contentType(ContentType.Application.Json)
+                setBody(BffShopRedeemRequest(code.trim()))
+            }
+            if (response.status.isSuccess()) {
+                Result.success(response.body())
+            } else {
+                Result.failure(Exception(errorMessage(response.bodyAsText())))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     suspend fun purchase(itemId: String): Result<BffShopPurchaseResponse> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))

@@ -1,6 +1,7 @@
 package to.kuudere.anisuge.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,27 +41,30 @@ fun AnimatedFrameUrlPreview(
     var bytes by remember(url, cacheKey) {
         mutableStateOf(AnimatedFrameBytesCache.peekMemory(url))
     }
-    var failed by remember(url, cacheKey) { mutableStateOf(false) }
 
     LaunchedEffect(url, cacheKey) {
-        if (bytes != null) return@LaunchedEffect
-        failed = false
+        AnimatedFrameBytesCache.peekMemory(url)?.let { cached ->
+            bytes = cached
+            return@LaunchedEffect
+        }
         val loaded = AnimatedFrameBytesCache.load(url, itemId = cacheKey)
         if (loaded != null) {
             bytes = loaded
-        } else {
-            failed = true
         }
     }
 
-    when {
-        bytes != null -> ApngBytesOverlay(bytes = bytes!!, modifier = modifier)
-        failed -> AsyncImage(
+    Box(modifier = modifier) {
+        AsyncImage(
             model = url,
             contentDescription = contentDescription,
             contentScale = ContentScale.Fit,
-            modifier = modifier,
+            modifier = Modifier.fillMaxSize(),
         )
-        else -> Box(modifier = modifier)
+        if (bytes != null) {
+            ApngBytesOverlay(
+                bytes = bytes!!,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
