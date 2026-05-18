@@ -73,6 +73,9 @@ fun DownloadEpisodeDialog(
     val scope = rememberCoroutineScope()
 
     var availableSubtitles by remember { mutableStateOf<List<String>>(listOf("All", "English")) }
+    var batchStreamSection by remember {
+        mutableStateOf<to.kuudere.anisuge.data.models.BatchScrapeStreamData?>(null)
+    }
     var availableAudioTracks by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var availableQualities by remember { mutableStateOf<List<Triple<String, String, Map<String, String>>>>(emptyList()) } // Triple(label, url, headers)
     val selectedM3u8 by remember(availableQualities, selectedQualityIndex) {
@@ -154,13 +157,7 @@ fun DownloadEpisodeDialog(
             }
             val response = infoService.getVideoStream(anilistId, episodeNumber, apiSource)
             var streamSection = if (useDubSection) response?.dub else response?.sub
-            
-            // 1. Subtitles
-            val subs = emptyList<String>()
-            availableSubtitles = listOf("All") + subs
-            if (selectedSubLang !in availableSubtitles) {
-                selectedSubLang = if ("English" in availableSubtitles) "English" else availableSubtitles.getOrNull(1) ?: "All"
-            }
+            batchStreamSection = streamSection
 
             // 2. Extract available qualities from streams
             val streams = streamSection?.streams ?: emptyList()
@@ -207,12 +204,45 @@ fun DownloadEpisodeDialog(
                 }
             }
             availableQualities = qualities
-            println("[DownloadDialog] server=$selectedServer qualities=${qualities.size} streams=${streams.size}")
+            val m3u8 = qualities.getOrNull(selectedQualityIndex)?.second
+            val stream = to.kuudere.anisuge.utils.BatchSubtitleExtract.findStream(
+                streamSection,
+                m3u8Url = m3u8,
+            )
+            val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStream(stream)
+                .mapNotNull { it.title ?: it.resolvedLang }
+                .distinct()
+            availableSubtitles = if (subLabels.isEmpty()) listOf("All") else listOf("All") + subLabels
+            if (selectedSubLang !in availableSubtitles) {
+                selectedSubLang = when {
+                    "English" in availableSubtitles -> "English"
+                    subLabels.isNotEmpty() -> subLabels.first()
+                    else -> "All"
+                }
+            }
+            println("[DownloadDialog] server=$selectedServer qualities=${qualities.size} streams=${streams.size} subs=${subLabels.size}")
         } catch (e: Exception) {
             println("[DownloadDialog] Failed to fetch for $selectedServer: ${e.message}")
             e.printStackTrace()
         } finally {
             isLoadingSubs = false
+        }
+    }
+
+    LaunchedEffect(batchStreamSection, availableQualities, selectedQualityIndex) {
+        val section = batchStreamSection ?: return@LaunchedEffect
+        val m3u8 = availableQualities.getOrNull(selectedQualityIndex.coerceAtLeast(0))?.second
+        val stream = to.kuudere.anisuge.utils.BatchSubtitleExtract.findStream(section, m3u8Url = m3u8)
+        val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStream(stream)
+            .mapNotNull { it.title ?: it.resolvedLang }
+            .distinct()
+        availableSubtitles = if (subLabels.isEmpty()) listOf("All") else listOf("All") + subLabels
+        if (selectedSubLang !in availableSubtitles) {
+            selectedSubLang = when {
+                "English" in availableSubtitles -> "English"
+                subLabels.isNotEmpty() -> subLabels.first()
+                else -> "All"
+            }
         }
     }
 

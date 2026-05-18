@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.isActive
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
+import to.kuudere.anisuge.data.models.BatchScrapeStreamData
 import to.kuudere.anisuge.data.models.asHttpHeaderMap
 import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.models.ServerInfo
@@ -87,6 +88,8 @@ class WatchViewModel(
     private var currentAnimeId: String = ""
     private var loadJob: kotlinx.coroutines.Job? = null
     private var pendingQualitySelection: String? = null
+    /** Last batch_scrape section (for per-stream subtitles when switching quality). */
+    private var cachedStreamSection: BatchScrapeStreamData? = null
 
     init {
         viewModelScope.launch { settingsStore.autoPlayFlow.collect { v -> _uiState.update { it.copy(autoPlay = v) } } }
@@ -143,6 +146,7 @@ class WatchViewModel(
             )
         }
 
+        cachedStreamSection = null
         loadJob = viewModelScope.launch {
             if (offlinePath != null) {
                 loadOfflineStream(offlinePath)
@@ -451,11 +455,21 @@ class WatchViewModel(
                     if (url != null) quality to url else null
                 }
 
-                val subtitles = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStreamSection(streamSection)
-                val selectedSubUrl = subtitles.firstOrNull { it.is_default == true }?.url
-                    ?: subtitles.firstOrNull()?.url
+                cachedStreamSection = streamSection
+                val requestedQuality = pendingQualitySelection
+                val defaultQuality = when {
+                    requestedQuality != null && qualities.any { it.first == requestedQuality } -> requestedQuality
+                    else -> qualities.firstOrNull()?.first ?: "Auto"
+                }
+                pendingQualitySelection = null
+
+                val subtitles = to.kuudere.anisuge.utils.BatchSubtitleExtract.forPlayback(
+                    streamSection,
+                    defaultQuality,
+                )
+                val selectedSubUrl = to.kuudere.anisuge.utils.BatchSubtitleExtract.defaultUrl(subtitles)
                 println(
-                    "[AnisugeSubs] WatchVM server=$serverName subs=${subtitles.size} default=${selectedSubUrl?.take(96)}",
+                    "[AnisugeSubs] WatchVM server=$serverName quality=$defaultQuality subs=${subtitles.size} default=${selectedSubUrl?.take(96)}",
                 )
 
                 val finalStreamData = StreamingData(
@@ -470,13 +484,6 @@ class WatchViewModel(
                     intro = null,
                     outro = null,
                 )
-
-                val requestedQuality = pendingQualitySelection
-                val defaultQuality = when {
-                    requestedQuality != null && qualities.any { it.first == requestedQuality } -> requestedQuality
-                    else -> qualities.firstOrNull()?.first ?: "Auto"
-                }
-                pendingQualitySelection = null
 
                 qualities.firstOrNull { it.first == defaultQuality }?.second?.let { streamUrl ->
                     viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
@@ -515,7 +522,19 @@ class WatchViewModel(
             server.equals("animepahe-dub", ignoreCase = true)
 
         if (!shouldRefreshStream) {
-            _uiState.update { it.copy(currentQuality = quality, showSettingsOverlay = false) }
+            val subtitles = to.kuudere.anisuge.utils.BatchSubtitleExtract.forPlayback(
+                cachedStreamSection,
+                quality,
+            )
+            val defaultUrl = to.kuudere.anisuge.utils.BatchSubtitleExtract.defaultUrl(subtitles)
+            _uiState.update {
+                it.copy(
+                    currentQuality = quality,
+                    availableSubtitles = subtitles,
+                    currentSubtitleUrl = if (!it.subtitlesDisabled) defaultUrl else null,
+                    showSettingsOverlay = false,
+                )
+            }
             return
         }
 
@@ -557,6 +576,7 @@ class WatchViewModel(
 
     fun setServer(server: String) {
         loadJob?.cancel()
+        cachedStreamSection = null
         _uiState.update { 
             it.copy(
                 showSettingsOverlay = false,
@@ -583,6 +603,7 @@ class WatchViewModel(
         targetSubtitleLangCode: String? = null
     ) {
         loadJob?.cancel()
+        cachedStreamSection = null
         _uiState.update { 
             it.copy(
                 savedWatchPosition = position,
@@ -639,6 +660,7 @@ class WatchViewModel(
 
     fun onEpisodeSelected(episodeNumber: Int) {
         loadJob?.cancel()
+        cachedStreamSection = null
         _uiState.update { 
             it.copy(
                 currentEpisodeNumber = episodeNumber, 

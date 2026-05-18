@@ -234,7 +234,10 @@ object DownloadManager {
                         }
                         val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
                         val streamData = if (useDub) response?.dub else response?.sub
-                        apiSubtitleTracks = BatchSubtitleExtract.trackUrls(streamData)
+                        apiSubtitleTracks = BatchSubtitleExtract.trackUrls(
+                            streamData,
+                            m3u8Url = preResolvedM3u8,
+                        )
                     } catch (_: Exception) { }
                 } else {
                     val legacyDub = server.endsWith("-dub", ignoreCase = true)
@@ -301,7 +304,8 @@ object DownloadManager {
                     streamInfo.headers?.Referer?.let { currentHeaders["Referer"] = it }
                     streamInfo.headers?.userAgent?.let { currentHeaders["User-Agent"] = it }
                     streamInfo.headers?.Origin?.let { currentHeaders["Origin"] = it }
-                    apiSubtitleTracks = BatchSubtitleExtract.trackUrls(streamData)
+                    apiSubtitleTracks = BatchSubtitleExtract.trackUrls(streamInfo)
+                        .ifEmpty { BatchSubtitleExtract.trackUrls(streamData, m3u8Url = m3u8Url) }
                 }
 
                 // Create folder

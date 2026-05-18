@@ -3,21 +3,79 @@ package to.kuudere.anisuge.utils
 import io.ktor.http.decodeURLQueryComponent
 import to.kuudere.anisuge.data.models.BatchScrapeStreamData
 import to.kuudere.anisuge.data.models.StreamInfo
+import to.kuudere.anisuge.data.models.StreamSubtitle
 import to.kuudere.anisuge.data.models.SubtitleData
 
 /**
- * batch_scrape often omits top-level `subtitles` (e.g. Anitaku) but embeds caption URLs in
- * stream query strings: `?caption_1=https://…/file.vtt&sub_1=English`.
+ * batch_scrape subtitles: prefer per-stream `subtitles[]` from the scraper API (Anitaku),
+ * then embed query captions (`caption_1=…vtt`), then legacy section-level URL string.
  */
 object BatchSubtitleExtract {
     fun fromStreamSection(section: BatchScrapeStreamData?): List<SubtitleData> {
         if (section == null) return emptyList()
+        val api = mergeStreamApiSubtitles(section.streams)
+        if (api.isNotEmpty()) return api
         val embed = fromEmbedStreams(section.streams)
         if (embed.isNotEmpty()) return embed
         return fromStreams(section.streams, section.subtitles)
     }
 
-    /** Anitaku / similar: captions live on embed URLs (`caption_1=…vtt`), not on vibeplayer HLS. */
+    fun fromStream(stream: StreamInfo?): List<SubtitleData> {
+        if (stream == null) return emptyList()
+        val api = stream.subtitles.mapNotNull { it.toSubtitleData() }
+        if (api.isNotEmpty()) return api
+        return fromStreams(listOf(stream), legacySubtitlesUrl = null)
+    }
+
+    fun findStream(
+        section: BatchScrapeStreamData?,
+        quality: String? = null,
+        m3u8Url: String? = null,
+    ): StreamInfo? {
+        if (section == null) return null
+        m3u8Url?.trim()?.takeIf { it.isNotBlank() }?.let { url ->
+            section.streams.find { it.url == url }?.let { return it }
+        }
+        quality?.let { q ->
+            section.streams.find { (it.quality ?: "Auto") == q }?.let { return it }
+        }
+        return section.streams.firstOrNull()
+    }
+
+    fun forPlayback(
+        section: BatchScrapeStreamData?,
+        quality: String?,
+    ): List<SubtitleData> {
+        val stream = findStream(section, quality = quality, m3u8Url = null)
+        return fromStream(stream).ifEmpty { fromStreamSection(section) }
+    }
+
+    fun defaultUrl(subtitles: List<SubtitleData>): String? =
+        subtitles.firstOrNull { sub ->
+            val name = sub.title ?: sub.resolvedLang ?: ""
+            name.equals("english", ignoreCase = true) || name.contains("english", ignoreCase = true)
+        }?.url
+            ?: subtitles.firstOrNull { it.is_default == true }?.url
+            ?: subtitles.firstOrNull()?.url
+
+    fun trackUrls(
+        section: BatchScrapeStreamData?,
+        quality: String? = null,
+        m3u8Url: String? = null,
+    ): List<Pair<String, String>> {
+        val stream = findStream(section, quality, m3u8Url)
+        val subs = fromStream(stream).ifEmpty { fromStreamSection(section) }
+        return subs.mapNotNull { sub ->
+            sub.url?.let { url -> url to (sub.title ?: sub.resolvedLang ?: "Default") }
+        }
+    }
+
+    fun trackUrls(stream: StreamInfo?): List<Pair<String, String>> =
+        fromStream(stream).mapNotNull { sub ->
+            sub.url?.let { url -> url to (sub.title ?: sub.resolvedLang ?: "Default") }
+        }
+
+    /** Anitaku legacy: captions on embed URLs (`caption_1=…vtt`), not on vibeplayer HLS. */
     fun fromEmbedStreams(streams: List<StreamInfo>): List<SubtitleData> {
         val embedOnly = streams.filter { stream ->
             val q = stream.url.substringAfter('?', "")
@@ -82,10 +140,37 @@ object BatchSubtitleExtract {
         return results
     }
 
-    fun trackUrls(section: BatchScrapeStreamData?): List<Pair<String, String>> =
-        fromStreamSection(section).mapNotNull { sub ->
-            sub.url?.let { url -> url to (sub.title ?: sub.resolvedLang ?: "Default") }
+    private fun mergeStreamApiSubtitles(streams: List<StreamInfo>): List<SubtitleData> {
+        val results = mutableListOf<SubtitleData>()
+        val seen = mutableSetOf<String>()
+        for (stream in streams) {
+            for (sub in fromStream(stream)) {
+                val url = sub.url ?: continue
+                if (url in seen) continue
+                seen.add(url)
+                results.add(sub)
+            }
         }
+        return results
+    }
+
+    private fun StreamSubtitle.toSubtitleData(): SubtitleData? {
+        val normalized = url.trim()
+        if (normalized.isBlank()) return null
+        val name = label.ifBlank { "English" }
+        val format = when {
+            normalized.contains(".vtt", ignoreCase = true) -> "vtt"
+            normalized.contains(".srt", ignoreCase = true) -> "srt"
+            else -> "ass"
+        }
+        return SubtitleData(
+            languageName = name,
+            title = name,
+            url = normalized,
+            format = format,
+            is_default = name.equals("english", ignoreCase = true),
+        )
+    }
 
     private fun decodeQueryValue(raw: String): String =
         runCatching { raw.decodeURLQueryComponent() }.getOrDefault(raw)
