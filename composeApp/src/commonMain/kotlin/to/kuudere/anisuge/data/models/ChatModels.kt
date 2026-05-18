@@ -33,6 +33,7 @@ data class ChatMessage(
     @SerialName("joinedAt") val joinedAt: String? = null,
     @SerialName("isPremium") val isPremium: Boolean = false,
     @SerialName("nameStyle") val nameStyle: ChatNameStyle? = null,
+    val coins: Int = 0,
 ) {
     fun toMemberProfile(): ChatMemberProfile = ChatMemberProfile(
         userId = userId,
@@ -43,6 +44,7 @@ data class ChatMessage(
         joinedAt = joinedAt,
         isPremium = isPremium,
         nameStyle = nameStyle,
+        coins = coins,
     )
 }
 
@@ -56,6 +58,7 @@ data class ChatMemberProfile(
     val joinedAt: String?,
     val isPremium: Boolean,
     val nameStyle: ChatNameStyle?,
+    val coins: Int = 0,
 )
 
 @Serializable

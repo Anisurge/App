@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import to.kuudere.anisuge.data.services.AnalyticsPingService
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.models.SessionCheckResult
@@ -45,26 +46,28 @@ class SplashViewModel(
         
         val authJob = viewModelScope.launch {
             _status.value = "Verifying user..."
-            authService.checkSession()
+            runCatching {
+                withTimeout(20_000) { authService.checkSession() }
+            }
         }
-        
+
         val updateJob = viewModelScope.launch {
             _status.value = "Checking for updates..."
-            updateService.checkUpdate()
+            runCatching {
+                withTimeout(12_000) { updateService.checkUpdate() }
+            }
         }
 
-        // Wait for auth to finish so we know if we should prefetch home data
         authJob.join()
-        
         val authResult = authService.authState.value
-        
-        // Step 3: Loading content (prefetch)
+
         if (authResult is SessionCheckResult.Valid || authResult is SessionCheckResult.NetworkError) {
             _status.value = "Loading home data..."
-            homeService.fetchHomeData()
+            runCatching {
+                withTimeout(15_000) { homeService.fetchHomeData() }
+            }
         }
 
-        // Ensure update check also finished
         updateJob.join()
 
         _status.value = "Ready"

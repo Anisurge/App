@@ -29,8 +29,10 @@ fun ProfileAvatar(
     contentDescription: String? = null,
     placeholderTint: Color = Color.White.copy(alpha = 0.45f),
     backgroundColor: Color = Color(0xFF222222),
+    /** When false, skips the bundled test APNG (shop previews & owned frames). */
+    showBundledTestFrame: Boolean = true,
 ) {
-    val showTestFrame = USE_TEST_CHAT_FRAME
+    val showTestFrame = USE_TEST_CHAT_FRAME && showBundledTestFrame
     val hasEquippedFrame = !frameUrl.isNullOrBlank() || !outerFrameUrl.isNullOrBlank()
     val needsDecor = showTestFrame || hasEquippedFrame
 

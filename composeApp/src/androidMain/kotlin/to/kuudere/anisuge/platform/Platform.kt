@@ -32,6 +32,7 @@ import android.provider.DocumentsContract
 import java.util.UUID
 
 actual val isDesktopPlatform: Boolean = false
+actual val isAndroidPlatform: Boolean = true
 actual val isAndroidTvPlatform: Boolean
     get() {
         val uiModeManager = androidAppContext.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager

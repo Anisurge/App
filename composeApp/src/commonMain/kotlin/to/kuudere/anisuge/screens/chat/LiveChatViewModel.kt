@@ -36,6 +36,8 @@ data class LiveChatUiState(
     val error: String? = null,
     val currentUserId: String? = null,
     val currentUserAvatar: String? = null,
+    val currentUserFrameUrl: String? = null,
+    val currentUserOuterFrameUrl: String? = null,
     val currentUsername: String? = null,
     val hasMoreOlder: Boolean = false,
     val isLoadingOlder: Boolean = false,
@@ -49,6 +51,40 @@ class LiveChatViewModel(
 
     private val _uiState = MutableStateFlow(LiveChatUiState())
     val uiState: StateFlow<LiveChatUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            authService.authState.collect { result ->
+                if (result is SessionCheckResult.Valid) {
+                    applyCurrentUserProfile(result.user)
+                }
+            }
+        }
+    }
+
+    private fun applyCurrentUserProfile(profile: to.kuudere.anisuge.data.models.UserProfile?) {
+        _uiState.update { state ->
+            val next = state.copy(
+                currentUserId = profile?.effectiveId,
+                currentUserAvatar = profile?.effectiveAvatar,
+                currentUserFrameUrl = profile?.equippedFrameUrl,
+                currentUserOuterFrameUrl = profile?.equippedOuterFrameUrl,
+                currentUsername = profile?.displayName ?: profile?.username,
+            )
+            next.copy(messages = next.messages.map { enrichOwnMessage(it, next) })
+        }
+    }
+
+    private fun enrichOwnMessage(message: ChatMessage, state: LiveChatUiState): ChatMessage {
+        val userId = state.currentUserId ?: return message
+        if (message.userId != userId) return message
+        return message.copy(
+            username = message.username.ifBlank { state.currentUsername ?: message.username },
+            avatarUrl = message.avatarUrl?.takeIf { it.isNotBlank() } ?: state.currentUserAvatar,
+            avatarFrameUrl = state.currentUserFrameUrl ?: message.avatarFrameUrl,
+            avatarOuterUrl = state.currentUserOuterFrameUrl ?: message.avatarOuterUrl,
+        )
+    }
 
     private var wsJob: Job? = null
     private var loadOlderJob: Job? = null
@@ -89,16 +125,8 @@ class LiveChatViewModel(
 
             when (val auth = authService.checkSession()) {
                 is SessionCheckResult.Valid -> {
-                    val profile = auth.user
-                    _uiState.update {
-                        it.copy(
-                            needsAuth = false,
-                            currentUserId = profile?.effectiveId,
-                            currentUserAvatar = profile?.effectiveAvatar,
-                            currentUsername = profile?.displayName
-                                ?: profile?.username,
-                        )
-                    }
+                    applyCurrentUserProfile(auth.user)
+                    _uiState.update { it.copy(needsAuth = false) }
                 }
                 else -> {
                     _uiState.update {
@@ -120,7 +148,7 @@ class LiveChatViewModel(
                     isLoading = false,
                     roomName = room?.name ?: Screen.LiveChat.displayName,
                     onlineCount = room?.onlineCount ?: 0,
-                    messages = history?.messages ?: emptyList(),
+                    messages = (history?.messages ?: emptyList()).map { enrichOwnMessage(it, _uiState.value) },
                     hasMoreOlder = history?.hasMore == true,
                     error = if (history == null) {
                         "Could not load chat history. Pull to refresh after the server is updated."
@@ -146,16 +174,8 @@ class LiveChatViewModel(
             }
             when (val auth = authService.checkSession()) {
                 is SessionCheckResult.Valid -> {
-                    val profile = auth.user
-                    _uiState.update {
-                        it.copy(
-                            needsAuth = false,
-                            currentUserId = profile?.effectiveId,
-                            currentUserAvatar = profile?.effectiveAvatar,
-                            currentUsername = profile?.displayName
-                                ?: profile?.username,
-                        )
-                    }
+                    applyCurrentUserProfile(auth.user)
+                    _uiState.update { it.copy(needsAuth = false) }
                 }
                 else -> {
                     _uiState.update {
@@ -176,14 +196,15 @@ class LiveChatViewModel(
         val room = chatService.fetchRoom()
         val history = chatService.fetchHistory(limit = 50)
         _uiState.update { state ->
+            val merged = if (history != null) {
+                mergeMessages(state.messages, history.messages)
+            } else {
+                state.messages
+            }
             state.copy(
                 roomName = room?.name ?: state.roomName,
                 onlineCount = room?.onlineCount ?: state.onlineCount,
-                messages = if (history != null) {
-                    mergeMessages(state.messages, history.messages)
-                } else {
-                    state.messages
-                },
+                messages = merged.map { enrichOwnMessage(it, state) },
                 hasMoreOlder = history?.hasMore ?: state.hasMoreOlder,
             )
         }
@@ -203,12 +224,15 @@ class LiveChatViewModel(
             result.fold(
                 onSuccess = { message ->
                     val snapshot = _uiState.value
-                    val enriched = message.copy(
-                        username = message.username.ifBlank {
-                            snapshot.currentUsername ?: message.username
-                        },
-                        avatarUrl = message.avatarUrl?.takeIf { it.isNotBlank() }
-                            ?: snapshot.currentUserAvatar,
+                    val enriched = enrichOwnMessage(
+                        message.copy(
+                            username = message.username.ifBlank {
+                                snapshot.currentUsername ?: message.username
+                            },
+                            avatarUrl = message.avatarUrl?.takeIf { it.isNotBlank() }
+                                ?: snapshot.currentUserAvatar,
+                        ),
+                        snapshot,
                     )
                     _uiState.update { state ->
                         val merged = mergeMessages(state.messages, listOf(enriched))
@@ -329,8 +353,9 @@ class LiveChatViewModel(
                     }
                     is ChatLiveEvent.Message -> {
                         _uiState.update { state ->
+                            val incoming = enrichOwnMessage(event.message, state)
                             state.copy(
-                                messages = mergeMessages(state.messages, listOf(event.message)),
+                                messages = mergeMessages(state.messages, listOf(incoming)),
                                 error = null,
                                 connectionState = LiveChatConnectionState.Connected,
                             )
@@ -346,12 +371,13 @@ class LiveChatViewModel(
         incoming: List<ChatMessage>,
     ): List<ChatMessage> {
         if (incoming.isEmpty()) return existing
+        val snapshot = _uiState.value
         val byId = linkedMapOf<String, ChatMessage>()
         for (m in existing) {
-            if (m.id.isNotBlank()) byId[m.id] = m
+            if (m.id.isNotBlank()) byId[m.id] = enrichOwnMessage(m, snapshot)
         }
         for (m in incoming) {
-            if (m.id.isNotBlank()) byId[m.id] = m
+            if (m.id.isNotBlank()) byId[m.id] = enrichOwnMessage(m, snapshot)
         }
         return byId.values.sortedBy { it.createdAt }
     }

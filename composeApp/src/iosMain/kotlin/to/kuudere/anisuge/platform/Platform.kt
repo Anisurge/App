@@ -16,6 +16,7 @@ import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSBundle
 
 actual val isDesktopPlatform: Boolean = false
+actual val isAndroidPlatform: Boolean = false
 actual val isAndroidTvPlatform: Boolean = false
 
 actual val PlatformName: String = "iOS"

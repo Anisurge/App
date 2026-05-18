@@ -111,6 +111,7 @@ fun App(
                 AppComponent.watchHistorySyncService,
                 AppComponent.integrationsSyncService,
                 AppComponent.bffMeService,
+                AppComponent.bffShopService,
             )
         }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }

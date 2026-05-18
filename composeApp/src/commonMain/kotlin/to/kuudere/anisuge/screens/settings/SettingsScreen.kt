@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
@@ -252,6 +253,13 @@ private fun SupportBrandLinkRow(
     }
 }
 
+/** Stable AnimatedContent key so detail tab survives until the exit transition finishes. */
+private sealed class MobileSettingsTarget {
+    data object List : MobileSettingsTarget()
+    data object Account : MobileSettingsTarget()
+    data class Detail(val tab: SettingsTab) : MobileSettingsTarget()
+}
+
 // ── Main Screen ─────────────────────────────────────────────────────────────────
 @Composable
 fun SettingsScreen(
@@ -298,6 +306,7 @@ fun SettingsScreen(
 
     val navItems = buildList {
         add(SettingsNavItem(SettingsTab.Profile, strings.profile, Icons.Default.Person))
+        add(SettingsNavItem(SettingsTab.Shop, "Frame shop", Icons.Default.ShoppingBag))
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
@@ -377,33 +386,34 @@ fun SettingsScreen(
                 // Mobile: List menu with navigation to detail screens
                 val showProfileAccount = uiState.showProfileAccount
                 val showDetail = uiState.mobileSettingsDetailTab
+                val mobileTarget = when {
+                    showProfileAccount -> MobileSettingsTarget.Account
+                    showDetail != null -> MobileSettingsTarget.Detail(showDetail)
+                    else -> MobileSettingsTarget.List
+                }
 
                 AnimatedContent(
-                    targetState = when {
-                        showProfileAccount -> "account"
-                        showDetail != null -> "detail"
-                        else -> "list"
-                    },
+                    targetState = mobileTarget,
                     transitionSpec = {
                         fadeIn(tween(200)) togetherWith fadeOut(tween(200))
                     },
                     label = "mobile_settings",
                 ) { screen ->
                     when (screen) {
-                        "account" -> MobileProfileAccountDetail(
+                        MobileSettingsTarget.Account -> MobileProfileAccountDetail(
                             uiState = uiState,
                             viewModel = viewModel,
                             onBack = { viewModel.closeProfileAccount() },
                         )
-                        "detail" -> MobileSettingsDetail(
-                            tab = showDetail!!,
+                        is MobileSettingsTarget.Detail -> MobileSettingsDetail(
+                            tab = screen.tab,
                             navItems = navItems,
                             uiState = uiState,
                             onBack = { viewModel.closeMobileSettingsDetail() },
                             onLogout = onLogout,
                             viewModel = viewModel,
                         )
-                        else -> MobileSettingsList(
+                        MobileSettingsTarget.List -> MobileSettingsList(
                             navItems = navItems.filter { it.tab != SettingsTab.Profile },
                             uiState = uiState,
                             onLogout = onLogout,
@@ -864,6 +874,7 @@ private fun MobileSettingsDetail(
 ) {
     val navItem = navItems.find { it.tab == tab }
     val uriHandler = LocalUriHandler.current
+    val pickPfp = to.kuudere.anisuge.platform.rememberProfileImagePicker(viewModel::onCustomPfpPicked)
 
     Column(
         modifier = Modifier
@@ -902,9 +913,17 @@ private fun MobileSettingsDetail(
         ) {
             when (tab) {
                 is SettingsTab.Profile -> MobileProfileContent(
-                uiState = uiState,
-                onRetry = { viewModel.refresh() }
-            )
+                    uiState = uiState,
+                    onRetry = { viewModel.refresh() },
+                    onPickCustomPfp = pickPfp,
+                    onEquipFrame = viewModel::equipShopFrame,
+                )
+                is SettingsTab.Shop -> ShopSettingsTab(
+                    uiState = uiState,
+                    onRefresh = viewModel::loadShop,
+                    onLoadMore = viewModel::loadMoreShop,
+                    onPurchase = viewModel::purchaseShopItem,
+                )
                 is SettingsTab.Preferences -> MobilePreferencesContent(
                     uiState = uiState,
                     onAutoPlayChange = viewModel::setAutoPlay,
@@ -1012,6 +1031,13 @@ private fun SettingsContent(
                 onCloseAccount = viewModel::closeProfileAccount,
                 onUsernameChange = viewModel::setUsernameDraft,
                 onSaveUsername = viewModel::saveUsername,
+                onEquipFrame = viewModel::equipShopFrame,
+            )
+            is SettingsTab.Shop -> ShopSettingsTab(
+                uiState = uiState,
+                onRefresh = viewModel::loadShop,
+                onLoadMore = viewModel::loadMoreShop,
+                onPurchase = viewModel::purchaseShopItem,
             )
             is SettingsTab.Preferences -> PreferencesTab(
                 uiState = uiState,
@@ -3623,6 +3649,8 @@ private fun ProfileSummaryCard(
             to.kuudere.anisuge.ui.ProfileAvatar(
                 url = user.effectiveAvatar,
                 avatarSize = 64.dp,
+                frameUrl = user.equippedFrameUrl,
+                showBundledTestFrame = false,
                 contentDescription = user.displayName,
             )
 
@@ -3667,43 +3695,27 @@ private fun ProfileSummaryCard(
 }
 
 @Composable
-private fun ProfileAccountSection(
+private fun ProfilePfpAndFramesSection(
     uiState: SettingsUiState,
     onPickCustomPfp: () -> Unit,
-    onUsernameChange: (String) -> Unit,
-    onSaveUsername: () -> Unit,
+    onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit,
 ) {
     val user = uiState.userProfile ?: return
-    val usernameChanged = uiState.usernameDraft.trim() != (user.username.orEmpty())
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(BG_CARD)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            "Account",
-            color = TEXT,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            "Email, photo, and username are stored on Anisurge only — not on reanime.to.",
-            color = MUTED,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-        )
-
-        ProfileDetailItem("Email", user.email ?: "Not provided")
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Box(contentAlignment = Alignment.Center) {
                 to.kuudere.anisuge.ui.ProfileAvatar(
                     url = user.effectiveAvatar,
                     avatarSize = 96.dp,
+                    frameUrl = user.equippedFrameUrl,
+                    showBundledTestFrame = false,
                     contentDescription = user.displayName,
                 )
                 if (uiState.isUploadingPfp) {
@@ -3735,6 +3747,56 @@ private fun ProfileAccountSection(
             )
             Text("JPEG, PNG, GIF, WebP · max 2.5 MB", color = MUTED, fontSize = 11.sp)
         }
+
+        ProfileFramePickerSection(
+            user = user,
+            ownedFrames = uiState.shopOwned,
+            selectedItemId = user.equippedFrameItemId,
+            isSaving = uiState.isSavingEquippedFrame,
+            onSelectFrame = onEquipFrame,
+        )
+    }
+}
+
+@Composable
+private fun ProfileAccountSection(
+    uiState: SettingsUiState,
+    onPickCustomPfp: () -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onSaveUsername: () -> Unit,
+    onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit,
+) {
+    val user = uiState.userProfile ?: return
+    val usernameChanged = uiState.usernameDraft.trim() != (user.username.orEmpty())
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(BG_CARD)
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+        Text(
+            "Account",
+            color = TEXT,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            "Email, photo, and username are stored on Anisurge only — not on reanime.to.",
+            color = MUTED,
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+        )
+
+        ProfileDetailItem("Email", user.email ?: "Not provided")
+
+        ProfilePfpAndFramesSection(
+            uiState = uiState,
+            onPickCustomPfp = onPickCustomPfp,
+            onEquipFrame = onEquipFrame,
+        )
 
         Column {
             Text("Username", color = MUTED, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -3817,6 +3879,7 @@ private fun MobileProfileAccountDetail(
                     onPickCustomPfp = pickPfp,
                     onUsernameChange = viewModel::setUsernameDraft,
                     onSaveUsername = viewModel::saveUsername,
+                    onEquipFrame = viewModel::equipShopFrame,
                 )
             }
         }
@@ -3834,6 +3897,7 @@ private fun ProfileTab(
     onCloseAccount: () -> Unit = {},
     onUsernameChange: (String) -> Unit = {},
     onSaveUsername: () -> Unit = {},
+    onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit = {},
 ) {
     val pickPfp = to.kuudere.anisuge.platform.rememberProfileImagePicker(onPickCustomPfp)
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -3893,6 +3957,7 @@ private fun ProfileTab(
                 onPickCustomPfp = pickPfp,
                 onUsernameChange = onUsernameChange,
                 onSaveUsername = onSaveUsername,
+                onEquipFrame = onEquipFrame,
             )
         } else {
             val user = uiState.userProfile!!
@@ -3900,6 +3965,13 @@ private fun ProfileTab(
                 user = user,
                 onClick = onOpenAccount,
                 showChevron = true,
+            )
+
+            Spacer(Modifier.height(20.dp))
+            ProfilePfpAndFramesSection(
+                uiState = uiState,
+                onPickCustomPfp = pickPfp,
+                onEquipFrame = onEquipFrame,
             )
 
             if (!user.bio.isNullOrBlank()) {
@@ -4061,6 +4133,8 @@ private fun ProfileDetailItem(label: String, value: String) {
 private fun MobileProfileContent(
     uiState: SettingsUiState,
     onRetry: () -> Unit = {},
+    onPickCustomPfp: () -> Unit = {},
+    onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit = {},
 ) {
     if (uiState.isOffline && uiState.userProfile == null) {
         OfflineState(
@@ -4083,6 +4157,8 @@ private fun MobileProfileContent(
                 to.kuudere.anisuge.ui.ProfileAvatar(
                     url = user?.effectiveAvatar,
                     avatarSize = 120.dp,
+                    frameUrl = user?.equippedFrameUrl,
+                    showBundledTestFrame = false,
                     contentDescription = null,
                 )
 
@@ -4101,7 +4177,23 @@ private fun MobileProfileContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(BG_CARD)
+                    .padding(16.dp),
+            ) {
+                ProfilePfpAndFramesSection(
+                    uiState = uiState,
+                    onPickCustomPfp = onPickCustomPfp,
+                    onEquipFrame = onEquipFrame,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Bio
             if (!user.bio.isNullOrBlank()) {

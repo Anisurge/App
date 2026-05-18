@@ -15,6 +15,8 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import to.kuudere.anisuge.data.models.BffErrorResponse
 import to.kuudere.anisuge.data.models.BffMeResponse
 import to.kuudere.anisuge.data.models.BffPfpUploadResponse
@@ -117,6 +119,45 @@ class BffMeService(
         }
     }
 
+    suspend fun updateEquippedFrame(
+        currentEquipped: JsonObject?,
+        frameUrl: String?,
+        frameItemId: String?,
+    ): Result<UserProfile> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        val base = currentEquipped
+            ?.entries
+            ?.associate { it.key to it.value }
+            ?.toMutableMap()
+            ?: mutableMapOf()
+        listOf("chatAvatarFrame", "chatAvatarFrameItemId", "avatarFrame", "frame").forEach { base.remove(it) }
+        if (!frameUrl.isNullOrBlank()) {
+            base["chatAvatarFrame"] = JsonPrimitive(frameUrl)
+            if (!frameItemId.isNullOrBlank()) {
+                base["chatAvatarFrameItemId"] = JsonPrimitive(frameItemId)
+            }
+        }
+        val equipped = JsonObject(base.mapValues { it.value })
+        return try {
+            val response = httpClient.patch("${AnisurgeApi.v1Base}/me") {
+                applyAnisurgeAuth(stored)
+                contentType(ContentType.Application.Json)
+                setBody(BffPatchEquippedRequest(equipped = equipped))
+            }
+            if (response.status.isSuccess()) {
+                val body: BffMeResponse = response.body()
+                Result.success(body.user.toUserProfile())
+            } else {
+                val message = runCatching {
+                    json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+                }.getOrElse { "Failed to update frame (${response.status.value})" }
+                Result.failure(Exception(message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     companion object {
         private const val CHAT_IMAGE_MAX_BYTES = (2.5 * 1024 * 1024).toLong()
     }
@@ -132,4 +173,9 @@ private data class BffPfpJsonUploadRequest(
     val imageBase64: String,
     val mimeType: String,
     val fileName: String,
+)
+
+@Serializable
+private data class BffPatchEquippedRequest(
+    val equipped: JsonObject,
 )
