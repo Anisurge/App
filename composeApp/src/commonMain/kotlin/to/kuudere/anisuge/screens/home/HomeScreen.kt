@@ -56,6 +56,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import to.kuudere.anisuge.screens.settings.SettingsTab
 import to.kuudere.anisuge.screens.settings.SettingsScreen
@@ -1749,10 +1750,15 @@ private fun AnisugSidebar(
                     isSelected = selectedTab == AnisugTab.Bookmarks,
                     onClick = { onTabSelect(AnisugTab.Bookmarks, null) }
                 )
+                val downloadTasks by DownloadManager.tasks.collectAsState()
+                val finishedDownloadCount = remember(downloadTasks) {
+                    DownloadManager.countFinishedDownloads(downloadTasks)
+                }
                 SidebarIcon(
-                    Icons.Outlined.Download, 
+                    Icons.Outlined.Download,
                     isSelected = selectedTab == AnisugTab.Downloads,
-                    onClick = { onTabSelect(AnisugTab.Downloads, null) }
+                    badgeCount = finishedDownloadCount,
+                    onClick = { onTabSelect(AnisugTab.Downloads, null) },
                 )
                 SidebarIcon(
                     Icons.Default.ChatBubbleOutline,
@@ -1778,11 +1784,12 @@ private fun AnisugSidebar(
 
 @Composable
 private fun SidebarIcon(
-    icon: androidx.compose.ui.graphics.vector.ImageVector, 
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     isSelected: Boolean,
     selectedTint: Color = Color.White,
     defaultTint: Color = Color.Gray.copy(alpha = 0.4f),
-    onClick: () -> Unit = {}
+    badgeCount: Int = 0,
+    onClick: () -> Unit = {},
 ) {
     val animatedTint by animateColorAsState(
         targetValue = if (isSelected) selectedTint else defaultTint,
@@ -1801,9 +1808,10 @@ private fun SidebarIcon(
                 .clip(RoundedCornerShape(12.dp))
                 .background(animatedBg)
                 .tvFocusableClick(shape = RoundedCornerShape(12.dp), onClick = onClick),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null, tint = animatedTint, modifier = Modifier.size(22.dp))
+            DownloadCountBadge(count = badgeCount, modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = 2.dp))
         }
         // Active dot indicator
         Box(
@@ -1894,6 +1902,34 @@ private fun DonateButton(onClick: () -> Unit) {
 
 
 @Composable
+private fun DownloadCountBadge(
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    if (count <= 0) return
+    val label = if (count > 9) "9+" else count.toString()
+    val wide = count > 9
+    Box(
+        modifier = modifier
+            .height(12.dp)
+            .defaultMinSize(minWidth = if (wide) 14.dp else 12.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFFBF80FF))
+            .padding(horizontal = if (wide) 2.dp else 0.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = Color.Black,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold,
+            lineHeight = 8.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
 private fun MobileTopBar(
     avatarUrl: String?,
     avatarFrameUrl: String? = null,
@@ -1902,8 +1938,12 @@ private fun MobileTopBar(
     onProfileClick: () -> Unit,
     onLiveChatClick: () -> Unit,
     hazeState: HazeState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
+    val downloadTasks by DownloadManager.tasks.collectAsState()
+    val finishedDownloadCount = remember(downloadTasks) {
+        DownloadManager.countFinishedDownloads(downloadTasks)
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -1945,15 +1985,21 @@ private fun MobileTopBar(
                         modifier = Modifier.size(24.dp),
                     )
                 }
-                IconButton(
-                    onClick = onDownloadClick,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Outlined.Download,
-                        contentDescription = "Downloads",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
+                Box(modifier = Modifier.size(36.dp)) {
+                    IconButton(
+                        onClick = onDownloadClick,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Download,
+                            contentDescription = "Downloads",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    DownloadCountBadge(
+                        count = finishedDownloadCount,
+                        modifier = Modifier.align(Alignment.TopEnd).offset(x = (-1).dp, y = (-1).dp),
                     )
                 }
 
@@ -2421,9 +2467,8 @@ private fun downloadTaskPriority(task: DownloadTask): Int = when {
     else -> 1
 }
 
-private fun isTaskFinishedStatus(status: String): Boolean {
-    return status == "Finished" || status.startsWith("Done")
-}
+private fun isTaskFinishedStatus(status: String): Boolean =
+    DownloadManager.isDownloadFinished(status)
 
 @Composable
 private fun DownloadsAnimatedEntry(
