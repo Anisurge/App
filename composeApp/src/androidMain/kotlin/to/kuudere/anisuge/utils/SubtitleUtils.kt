@@ -7,7 +7,7 @@ package to.kuudere.anisuge.utils
  */
 object SubtitleUtils {
 
-    fun prepareSubtitle(url: String): String? {
+    fun prepareSubtitle(url: String, headers: Map<String, String>? = null): String? {
         return try {
             // PGS/SUP is a binary image-based format — download raw bytes and pass directly to mpv
             val cleanUrl = url.lowercase().substringBefore('?')
@@ -17,9 +17,7 @@ object SubtitleUtils {
                 if (url.startsWith("file://")) {
                     java.io.File(java.net.URI(url)).copyTo(tmp, overwrite = true)
                 } else {
-                    val conn = java.net.URL(url).openConnection()
-                    conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                    conn.getInputStream().use { it.copyTo(tmp.outputStream()) }
+                    openUrlConnection(url, headers).getInputStream().use { it.copyTo(tmp.outputStream()) }
                 }
                 println("[SubtitleUtils] Prepared PGS subtitle → ${tmp.absolutePath}")
                 return tmp.absolutePath
@@ -28,12 +26,17 @@ object SubtitleUtils {
             val content = if (url.startsWith("file://")) {
                 java.io.File(java.net.URI(url)).readText()
             } else {
-                val conn = java.net.URL(url).openConnection()
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                conn.getInputStream().bufferedReader().readText()
+                openUrlConnection(url, headers).getInputStream().bufferedReader().readText()
             }
 
             val format = detectFormat(url, content)
+            if (format == SubtitleFormat.VTT) {
+                val tmp = java.io.File.createTempFile("anisuge_sub_", ".vtt")
+                tmp.writeText(content)
+                android.util.Log.i("AnisugeSubs", "Prepared VTT → ${tmp.absolutePath}")
+                return tmp.absolutePath
+            }
+
             val assContent = when (format) {
                 SubtitleFormat.ASS -> content
                 SubtitleFormat.SRT -> srtToAss(content)
@@ -187,4 +190,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     }
 
     enum class SubtitleFormat { ASS, VTT, SRT, PGS, UNKNOWN }
+
+    private fun openUrlConnection(url: String, headers: Map<String, String>?): java.net.URLConnection {
+        val conn = java.net.URL(url).openConnection()
+        val ua = headers?.get("User-Agent") ?: headers?.get("user-agent")
+            ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        conn.setRequestProperty("User-Agent", ua)
+        headers?.get("Referer")?.let { conn.setRequestProperty("Referer", it) }
+        headers?.get("Origin")?.let { conn.setRequestProperty("Origin", it) }
+        return conn
+    }
 }

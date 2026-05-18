@@ -448,9 +448,12 @@ class WatchViewModel(
                     if (url != null) quality to url else null
                 }
 
-                val subtitles = subtitlesFromBatchUrl(streamSection.subtitles)
+                val subtitles = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStreamSection(streamSection)
                 val selectedSubUrl = subtitles.firstOrNull { it.is_default == true }?.url
                     ?: subtitles.firstOrNull()?.url
+                println(
+                    "[AnisugeSubs] WatchVM server=$serverName subs=${subtitles.size} default=${selectedSubUrl?.take(96)}",
+                )
 
                 val finalStreamData = StreamingData(
                     sources = streamSection.streams.map { 
@@ -818,23 +821,4 @@ class WatchViewModel(
             }
         }
     }
-}
-
-private fun subtitlesFromBatchUrl(subtitlesUrl: String?): List<to.kuudere.anisuge.data.models.SubtitleData> {
-    val url = subtitlesUrl?.trim().orEmpty()
-    if (url.isBlank()) return emptyList()
-    val format = when {
-        url.contains(".vtt", ignoreCase = true) -> "vtt"
-        url.contains(".srt", ignoreCase = true) -> "srt"
-        else -> "ass"
-    }
-    return listOf(
-        to.kuudere.anisuge.data.models.SubtitleData(
-            languageName = "English",
-            title = "English",
-            url = url,
-            format = format,
-            is_default = true,
-        ),
-    )
 }
