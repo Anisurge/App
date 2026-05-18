@@ -376,6 +376,11 @@ object DownloadManager {
                 val epDir = "$baseDir/$animeSafe/ep_${task.episodeNumber}"
                 KmpFileSystem.createDirectories(epDir)
 
+                if (m3u8Url.contains(".mpd", ignoreCase = true)) {
+                    abortDownload(taskId, "DASH (.mpd) download not supported yet")
+                    return@launch
+                }
+
                 // Some providers return a direct video file (MP4) instead of an HLS playlist.
                 val probe = probeDirectMp4(m3u8Url, currentHeaders)
                 if (probe.isDirectMp4) {
@@ -704,8 +709,7 @@ object DownloadManager {
             val uriMatch = Regex("URI=\"([^\"]+)\"").find(mediaLine)
             val uri = uriMatch?.groupValues?.get(1)
             if (uri != null) {
-                val base = baseUrl.substringBeforeLast("/")
-                return if (uri.startsWith("http")) uri else "$base/$uri"
+                return HlsPngTsStrip.resolvePlaylistUrl(baseUrl, uri)
             }
         }
         return null
@@ -716,8 +720,7 @@ object DownloadManager {
             val lines = content.lines()
             val variantLine = lines.firstOrNull { it.isNotBlank() && !it.startsWith("#") }
             if (variantLine != null) {
-                val base = baseUrl.substringBeforeLast("/")
-                return if (variantLine.startsWith("http")) variantLine else "$base/$variantLine"
+                return HlsPngTsStrip.resolvePlaylistUrl(baseUrl, variantLine)
             }
         }
         return baseUrl
@@ -738,33 +741,30 @@ object DownloadManager {
     }
 
     private fun parseSegments(playlistUrl: String, content: String): List<String> {
-        val base = playlistUrl.substringBeforeLast("/")
         val segments = mutableListOf<String>()
         content.lines().forEach { line ->
             if (line.startsWith("#EXT-X-MAP", ignoreCase = true)) {
                 val uri = Regex("URI=\"([^\"]+)\"").find(line)?.groupValues?.getOrNull(1)
                 if (uri != null) {
-                    segments.add(if (uri.startsWith("http")) uri else "$base/$uri")
+                    segments.add(HlsPngTsStrip.resolvePlaylistUrl(playlistUrl, uri))
                 }
             }
         }
         content.lines()
             .filter { it.isNotBlank() && !it.startsWith("#") }
             .forEach { line ->
-                segments.add(if (line.startsWith("http")) line else "$base/$line")
+                segments.add(HlsPngTsStrip.resolvePlaylistUrl(playlistUrl, line))
             }
         return segments
     }
 
     private fun parseSubtitlePlaylistUrls(baseUrl: String, content: String): List<Pair<String, String>> {
-        val base = baseUrl.substringBeforeLast("/")
         val results = mutableListOf<Pair<String, String>>()
         content.lines().forEach { line ->
             if (!line.startsWith("#EXT-X-MEDIA:TYPE=SUBTITLES", ignoreCase = true)) return@forEach
             val uri = Regex("URI=\"([^\"]+)\"").find(line)?.groupValues?.getOrNull(1) ?: return@forEach
             val name = Regex("NAME=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: "Subtitles"
-            val url = if (uri.startsWith("http")) uri else "$base/$uri"
-            results.add(url to name)
+            results.add(HlsPngTsStrip.resolvePlaylistUrl(baseUrl, uri) to name)
         }
         return results
     }

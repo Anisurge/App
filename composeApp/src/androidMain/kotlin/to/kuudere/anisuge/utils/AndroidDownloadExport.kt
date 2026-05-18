@@ -63,7 +63,8 @@ internal suspend fun exportHlsPlaylistToFile(
             exportResult: ExportResult,
             exportException: ExportException,
         ) {
-            println("[Media3] export error: ${exportException.message}")
+            println("[Media3] export error: ${exportException.errorCodeName} ${exportException.message}")
+            exportException.cause?.let { println("[Media3] export cause: ${it.message}") }
             if (continuation.isActive) continuation.resume(false)
         }
     }

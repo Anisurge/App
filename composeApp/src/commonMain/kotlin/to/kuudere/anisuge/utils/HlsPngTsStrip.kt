@@ -19,6 +19,18 @@ object HlsPngTsStrip {
         return host.contains("vibeplayer.site")
     }
 
+    fun isAnikageHlsHost(url: String): Boolean {
+        val host = url.substringAfter("://", "").substringBefore('/').lowercase()
+        return host.contains("anikage")
+    }
+
+    /** Proxied AES HLS (Anikage): Media3 export via local header proxy, not raw segment concat. */
+    fun prefersRemoteHlsExport(apiServer: String?, masterUrl: String?): Boolean {
+        if (apiServer.equals("anikage", ignoreCase = true)) return true
+        if (masterUrl != null && isAnikageHlsHost(masterUrl)) return true
+        return false
+    }
+
     /** Anitaku / vibeplayer HLS: download segments locally and remux; skip Media3 remote playlist export. */
     fun prefersLocalSegmentMux(
         masterUrl: String?,
@@ -27,7 +39,22 @@ object HlsPngTsStrip {
     ): Boolean {
         if (apiServer.equals("anitaku", ignoreCase = true)) return true
         if (masterUrl != null && isVibeplayerHlsHost(masterUrl)) return true
+        if (prefersRemoteHlsExport(apiServer, masterUrl)) return false
         return segmentUrls.any { isDisguisedTsCdnHost(it) }
+    }
+
+    /** Resolve relative `/proxy/…` and `segment.ts` paths against the playlist URL. */
+    fun resolvePlaylistUrl(playlistUrl: String, reference: String): String {
+        val ref = reference.trim()
+        if (ref.startsWith("http://") || ref.startsWith("https://")) return ref
+        if (ref.startsWith("/")) {
+            val afterScheme = playlistUrl.substringAfter("://", missingDelimiterValue = playlistUrl)
+            val host = afterScheme.substringBefore('/')
+            val scheme = playlistUrl.substringBefore("://", missingDelimiterValue = "https")
+            return "$scheme://$host$ref"
+        }
+        val base = playlistUrl.substringBeforeLast("/")
+        return "$base/$ref"
     }
 
     fun stripSegmentPayloadIfNeeded(segmentUrl: String, raw: ByteArray): ByteArray {

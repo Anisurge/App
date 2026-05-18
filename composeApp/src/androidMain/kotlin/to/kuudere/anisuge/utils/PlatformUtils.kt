@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
 import to.kuudere.anisuge.platform.androidAppContext
+import to.kuudere.anisuge.player.StreamProxy
 import java.io.File
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -136,8 +137,16 @@ actual suspend fun muxToMkv(
     masterPlaylistUrl: String?,
     preferLocalTsRemux: Boolean,
 ): Boolean = withContext(Dispatchers.IO) {
+    val proxiedUrls = mutableListOf<Pair<String, String>>() // proxied -> original (for release)
     try {
         File(outputPath).parentFile?.mkdirs()
+
+        fun urlForHlsExport(original: String): String {
+            if (!original.startsWith("http") || inputHeaders.isNullOrEmpty()) return original
+            val proxied = StreamProxy.proxyUrl(original, inputHeaders)
+            proxiedUrls.add(proxied to original)
+            return proxied
+        }
 
         val skipRemoteHlsExport = preferLocalTsRemux ||
             HlsPngTsStrip.isDisguisedTsCdnHost(videoPath) ||
@@ -147,7 +156,7 @@ actual suspend fun muxToMkv(
         if (masterUrl != null && !skipRemoteHlsExport) {
             val exported = exportHlsPlaylistToFile(
                 context = androidAppContext,
-                playlistUrl = masterUrl,
+                playlistUrl = urlForHlsExport(masterUrl),
                 outputPath = outputPath,
                 headers = inputHeaders,
             )
@@ -155,9 +164,14 @@ actual suspend fun muxToMkv(
         }
 
         if (videoPath.startsWith("http") && !skipRemoteHlsExport) {
+            val exportPlaylist = if (videoPath == masterUrl && proxiedUrls.isNotEmpty()) {
+                proxiedUrls.last().first
+            } else {
+                urlForHlsExport(videoPath)
+            }
             val exported = exportHlsPlaylistToFile(
                 context = androidAppContext,
-                playlistUrl = videoPath,
+                playlistUrl = exportPlaylist,
                 outputPath = outputPath,
                 headers = inputHeaders,
             )
@@ -177,9 +191,12 @@ actual suspend fun muxToMkv(
             return@withContext finalizeLocalDownload(videoPath, audioPath, outputPath)
         }
 
+        println("[Download] mux/export failed for remote HLS (host=${masterPlaylistUrl?.substringAfter("://")?.substringBefore('/')})")
         false
     } catch (e: Exception) {
         e.printStackTrace()
         false
+    } finally {
+        proxiedUrls.forEach { (_, original) -> StreamProxy.release(original) }
     }
 }

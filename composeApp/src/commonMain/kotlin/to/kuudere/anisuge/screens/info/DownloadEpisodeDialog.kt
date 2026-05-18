@@ -118,7 +118,14 @@ fun DownloadEpisodeDialog(
                 Regex("(\\d{3,4})").find(label)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
             }
     }
-    val showDirectMp4Picker = mp4QualityOptions.isNotEmpty()
+    /** AllAnime-style catalogs are MP4-only; mixed providers (e.g. Anikage) keep the HLS quality row. */
+    val showDirectMp4Picker = remember(availableQualities, mp4QualityOptions) {
+        mp4QualityOptions.isNotEmpty() &&
+            availableQualities.all { isDirectProgressiveMp4Url(it.second) }
+    }
+    val selectedQualityIsDash = remember(availableQualities, selectedQualityIndex) {
+        availableQualities.getOrNull(selectedQualityIndex)?.second?.let { isDashManifestUrl(it) } == true
+    }
 
     val catalogServers = serverRepository.servers.collectAsState()
     val selectableServers = remember(catalogServers.value) {
@@ -204,6 +211,7 @@ fun DownloadEpisodeDialog(
                 }
             }
             availableQualities = qualities
+            selectedQualityIndex = preferredDownloadQualityIndex(qualities)
             val m3u8 = qualities.getOrNull(selectedQualityIndex)?.second
             val stream = to.kuudere.anisuge.utils.BatchSubtitleExtract.findStream(
                 streamSection,
@@ -246,13 +254,19 @@ fun DownloadEpisodeDialog(
         }
     }
 
-    LaunchedEffect(availableQualities, selectedQualityIndex, estimatedDurationSeconds) {
+    LaunchedEffect(availableQualities, selectedQualityIndex, estimatedDurationSeconds, showDirectMp4Picker) {
         if (availableQualities.isEmpty()) {
             estimatedSizeBytes = 0L
             availableAudioTracks = emptyList()
             return@LaunchedEffect
         }
-        if (availableQualities.any { isDirectProgressiveMp4Url(it.second) }) {
+        if (showDirectMp4Picker) {
+            estimatedSizeBytes = 0L
+            availableAudioTracks = emptyList()
+            return@LaunchedEffect
+        }
+        val idxForEstimate = selectedQualityIndex.coerceIn(0, availableQualities.lastIndex)
+        if (isDashManifestUrl(availableQualities[idxForEstimate].second)) {
             estimatedSizeBytes = 0L
             availableAudioTracks = emptyList()
             return@LaunchedEffect
@@ -480,6 +494,14 @@ fun DownloadEpisodeDialog(
                             lineHeight = 14.sp
                         )
                     }
+                    if (selectedQualityIsDash) {
+                        Text(
+                            text = "DASH (.mpd) streams are for playback only — pick an HLS or MP4 quality to download.",
+                            color = Color(0xFFFFB74D),
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp
+                        )
+                    }
                 }
             }
 
@@ -687,7 +709,7 @@ fun DownloadEpisodeDialog(
                                 }
                             }
                         },
-                        enabled = !isFinished && isPathValid && !isLoadingSubs,
+                        enabled = !isFinished && isPathValid && !isLoadingSubs && !selectedQualityIsDash,
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp),
@@ -732,6 +754,38 @@ fun DownloadEpisodeDialog(
             }
         }
     }
+}
+
+internal fun isDashManifestUrl(url: String): Boolean {
+    val path = url.lowercase().substringBefore("#").substringBefore("?")
+    return path.endsWith(".mpd") || ".mpd/" in path
+}
+
+/** Prefer HLS with Referer (Anikage proxy / Vibeplayer) over DASH or tokenized MP4. */
+internal fun preferredDownloadQualityIndex(
+    qualities: List<Triple<String, String, Map<String, String>>>,
+): Int {
+    if (qualities.isEmpty()) return 0
+    val downloadable = qualities.withIndex().filter { (_, triple) ->
+        !isDashManifestUrl(triple.second) && !isDirectProgressiveMp4Url(triple.second)
+    }
+    if (downloadable.isEmpty()) return 0
+    val withReferer = downloadable.filter { (_, triple) ->
+        triple.third["Referer"]?.isNotBlank() == true
+    }
+    val pool = if (withReferer.isNotEmpty()) withReferer else downloadable
+    pool.firstOrNull { (_, triple) ->
+        triple.first.contains("1080", ignoreCase = true) &&
+            (triple.second.contains("anikage", ignoreCase = true) ||
+                triple.second.contains("vibeplayer", ignoreCase = true))
+    }?.index?.let { return it }
+    pool.firstOrNull { (_, triple) ->
+        triple.second.contains("vibeplayer", ignoreCase = true)
+    }?.index?.let { return it }
+    pool.firstOrNull { (_, triple) ->
+        triple.second.contains("anikage", ignoreCase = true)
+    }?.index?.let { return it }
+    return pool.first().index
 }
 
 internal fun isDirectProgressiveMp4Url(url: String): Boolean {
