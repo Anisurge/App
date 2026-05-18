@@ -17,7 +17,9 @@ import androidx.media3.transformer.ExoPlayerAssetLoader
 import androidx.media3.transformer.Transformer
 import java.io.File
 import kotlin.coroutines.resume
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 @UnstableApi
 internal suspend fun exportHlsPlaylistToFile(
@@ -25,7 +27,8 @@ internal suspend fun exportHlsPlaylistToFile(
     playlistUrl: String,
     outputPath: String,
     headers: Map<String, String>?,
-): Boolean = suspendCancellableCoroutine { continuation ->
+): Boolean = withContext(Dispatchers.Main.immediate) {
+    suspendCancellableCoroutine { continuation ->
     val outputFile = File(outputPath)
     outputFile.parentFile?.mkdirs()
 
@@ -84,13 +87,15 @@ internal suspend fun exportHlsPlaylistToFile(
         e.printStackTrace()
         if (continuation.isActive) continuation.resume(false)
     }
+    }
 }
 
 internal suspend fun exportLocalMediaToFile(
     context: Context,
     inputPath: String,
     outputPath: String,
-): Boolean = suspendCancellableCoroutine { continuation ->
+): Boolean = withContext(Dispatchers.Main.immediate) {
+    suspendCancellableCoroutine { continuation ->
     val inputFile = File(inputPath)
     if (!inputFile.exists() || inputFile.length() == 0L) {
         if (continuation.isActive) continuation.resume(false)
@@ -136,6 +141,7 @@ internal suspend fun exportLocalMediaToFile(
     } catch (e: Exception) {
         e.printStackTrace()
         if (continuation.isActive) continuation.resume(false)
+    }
     }
 }
 

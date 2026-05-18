@@ -42,6 +42,13 @@ data class DownloadTask(
     val localPath: String? = null,
     val isPaused: Boolean = false,
     val headers: Map<String, String>? = null,
+    /** Persisted so Resume can restart the coroutine after pause or process death. */
+    val serverId: String? = null,
+    val anilistId: Int? = null,
+    val subLang: String? = null,
+    val audioLang: String? = null,
+    val streamUrl: String? = null,
+    val preferBatchDub: Boolean = false,
     @kotlinx.serialization.Transient internal var job: Job? = null
 )
 
@@ -95,9 +102,15 @@ object DownloadManager {
                             return@mapNotNull null
                         }
                         if (normalizedStatus != "Finished") {
-                            task.copy(status = "Paused", isPaused = true)
+                            val almostDone = task.progress >= 0.92f ||
+                                normalizedStatus.contains("Finaliz", ignoreCase = true) ||
+                                normalizedStatus.contains("Mux", ignoreCase = true)
+                            task.copy(
+                                status = if (almostDone) "Almost done — tap Resume" else "Paused",
+                                isPaused = true,
+                            )
                         } else {
-                            task.copy(status = normalizedStatus)
+                            task.copy(status = normalizedStatus, isPaused = false)
                         }
                     }
                     tasks.value = sanitized
@@ -175,7 +188,20 @@ object DownloadManager {
         preferBatchDub: Boolean,
     ) {
         val newTask = DownloadTask(
-            taskId, animeId, title, episodeNumber, coverImage, 0f, "Fetching stream...", headers = headers,
+            id = taskId,
+            animeId = animeId,
+            title = title,
+            episodeNumber = episodeNumber,
+            coverImage = coverImage,
+            progress = 0f,
+            status = "Fetching stream...",
+            headers = headers,
+            serverId = server,
+            anilistId = anilistId,
+            subLang = subLang,
+            audioLang = audioLang,
+            streamUrl = m3u8Url,
+            preferBatchDub = preferBatchDub,
         )
         tasks.update { it + newTask }
         saveTasks()
@@ -221,14 +247,15 @@ object DownloadManager {
         headers: Map<String, String>,
     ) {
         val newTask = DownloadTask(
-            taskId,
-            animeId,
-            title,
-            episodeNumber,
-            coverImage,
-            0f,
-            "Queued (MP4)...",
+            id = taskId,
+            animeId = animeId,
+            title = title,
+            episodeNumber = episodeNumber,
+            coverImage = coverImage,
+            progress = 0f,
+            status = "Queued (MP4)...",
             headers = headers,
+            streamUrl = mp4Url,
         )
         tasks.update { it + newTask }
         saveTasks()
@@ -367,6 +394,18 @@ object DownloadManager {
                     streamInfo.headers?.Origin?.let { currentHeaders["Origin"] = it }
                     apiSubtitleTracks = BatchSubtitleExtract.trackUrls(streamInfo)
                         .ifEmpty { BatchSubtitleExtract.trackUrls(streamData, m3u8Url = m3u8Url) }
+                }
+
+                updateTask(taskId) {
+                    it.copy(
+                        streamUrl = m3u8Url,
+                        serverId = server,
+                        anilistId = anilistId,
+                        subLang = subLang,
+                        audioLang = audioLang,
+                        preferBatchDub = preferBatchDub,
+                        headers = currentHeaders,
+                    )
                 }
 
                 // Create folder
@@ -557,26 +596,39 @@ object DownloadManager {
                         subsToDownload.forEach { (path, _) -> KmpFileSystem.delete(path) }
                     } catch (e: Exception) { }
                     
-                    updateTask(taskId) { it.copy(status = "Finished", progress = 1f, localPath = finalOutputPath) }
+                    updateTask(taskId) {
+                        it.copy(
+                            status = "Finished",
+                            progress = 1f,
+                            localPath = finalOutputPath,
+                            isPaused = false,
+                        )
+                    }
                 } else {
                     updateTask(taskId) {
                         it.copy(
                             status = "Finished (Mux Failed)",
                             progress = 1f,
-                            localPath = if (!isEncrypted && !useHlsUrlRemux) rawVideoPath else null
+                            localPath = if (!isEncrypted && !useHlsUrlRemux) rawVideoPath else null,
+                            isPaused = false,
                         )
                     }
                 }
             } catch (e: Exception) {
-                if (e !is kotlinx.coroutines.CancellationException) {
-                    val message = e.message ?: "Unknown error"
-                    val reason = if (message.contains("EPERM") || message.contains("Permission denied")) {
-                        "permission denied — try using the Downloads folder"
-                    } else {
-                        message
+                if (e is kotlinx.coroutines.CancellationException) {
+                    val current = tasks.value.find { it.id == taskId }
+                    if (current != null && !isDownloadFinished(current.status) && current.progress >= 0.5f) {
+                        updateTask(taskId) { it.copy(isPaused = true, status = "Paused") }
                     }
-                    abortDownload(taskId, reason)
+                    return@launch
                 }
+                val message = e.message ?: "Unknown error"
+                val reason = if (message.contains("EPERM") || message.contains("Permission denied")) {
+                    "permission denied — try using the Downloads folder"
+                } else {
+                    message
+                }
+                abortDownload(taskId, reason)
             }
         }
         updateTask(taskId) { it.copy(job = job) }
@@ -691,6 +743,7 @@ object DownloadManager {
                     localPath = outputPath,
                     downloadSpeed = "",
                     eta = "",
+                    isPaused = false,
                 )
             }
             true
@@ -858,12 +911,43 @@ object DownloadManager {
     }
 
     fun pauseDownload(id: String) {
-        updateTask(id) { it.copy(isPaused = true, status = "Paused") }
-        saveTasks()
+        val task = tasks.value.find { it.id == id } ?: return
+        task.job?.cancel()
+        updateTask(id) { it.copy(isPaused = true, status = "Paused", job = null) }
     }
 
     fun resumeDownload(id: String) {
+        val task = tasks.value.find { it.id == id } ?: return
+        if (isDownloadFinished(task.status)) return
+        if (task.job?.isActive == true) {
+            updateTask(id) { it.copy(isPaused = false, status = "Resuming...") }
+            return
+        }
+        val streamUrl = task.streamUrl
+        if (streamUrl.isNullOrBlank()) {
+            updateTask(id) { it.copy(isPaused = true, status = "Paused — restart from episode") }
+            return
+        }
         updateTask(id) { it.copy(isPaused = false, status = "Resuming...") }
+        val resumed = task.copy(isPaused = false, status = "Resuming...")
+        val mp4Only = streamUrl.contains(".mp4", ignoreCase = true) ||
+            streamUrl.contains("fast4speed", ignoreCase = true)
+        if (mp4Only && !streamUrl.contains(".m3u8", ignoreCase = true) && !streamUrl.contains(".mpd", ignoreCase = true)) {
+            executeMp4Download(resumed, streamUrl, "")
+        } else {
+            val server = task.serverId ?: return
+            val anilist = task.anilistId ?: return
+            executeDownload(
+                resumed,
+                anilist,
+                server,
+                task.subLang,
+                task.audioLang,
+                downloadFonts = true,
+                preResolvedM3u8 = streamUrl,
+                preferBatchDub = task.preferBatchDub,
+            )
+        }
     }
 
     fun cancelDownload(id: String) {
