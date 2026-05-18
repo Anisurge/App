@@ -22,7 +22,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import android.util.Log
 import java.io.File
+
+private const val SUB_TAG = "AnisugeSubs"
 
 @Composable
 @UnstableApi
@@ -342,38 +345,22 @@ actual fun VideoPlayerSurface(
                                     state.selectedSubtitleTrack = sTracks.first().first
                                 }
                             } else {
-                                val apiSubs = state.allSubUrls ?: emptyList()
-                                state.subtitleTracks = apiSubs.mapIndexed { idx, sub ->
-                                    idx to sub.second
-                                }
-                                // select default if available
-                                val defaultIndex = apiSubs.indexOfFirst { it.third }
-                                if (defaultIndex >= 0) {
-                                    state.selectedSubtitleTrack = defaultIndex
-                                }
+                                // External subs (embed captions) are added below; refresh track ids after sub-add.
+                                state.subtitleTracks = emptyList()
+                                state.selectedSubtitleTrack = null
                             }
                         } catch (e: Exception) {
                             println("[VideoPlayerSurface] Error extracting tracks: ${e.message}")
                         }
-                        
-                        state.allSubUrls?.let { subs ->
+
+                        val pendingSubs = state.allSubUrls
+                        if (!pendingSubs.isNullOrEmpty()) {
+                            val subHeaders = state.config.headers ?: emptyMap()
                             coroutineScope.launch(Dispatchers.IO) {
-                                subs.map { (url, name, isDefault) ->
-                                    async {
-                                        val localPath = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(url)
-                                        if (localPath != null && isActive) {
-                                            try {
-                                                val flag = if (isDefault) "select" else "auto"
-                                                MPVLib.command(arrayOf<String>("sub-add", localPath, flag))
-                                            } catch (e: Exception) {
-                                                e.printStackTrace()
-                                            }
-                                        }
-                                    }
-                                }.awaitAll()
+                                addExternalSubtitles(state, pendingSubs, subHeaders)
                             }
-                            state.allSubUrls = null
                         }
+                        state.allSubUrls = null
 
                         if (state.config.hwdec != "no" && !retriedWithSoftwareDecode.value) {
                             coroutineScope.launch(Dispatchers.IO) {
@@ -558,13 +545,16 @@ actual fun VideoPlayerSurface(
     LaunchedEffect(state.subFileUrl) {
         state.subFileUrl?.let { sub ->
             if (sub == "NONE") {
-                MPVLib.setPropertyInt("sid", 0) 
-            } else {
-                val localPath = withContext(Dispatchers.IO) {
-                    to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(sub)
+                withContext(Dispatchers.IO) {
+                    MPVLib.setPropertyInt("sid", 0)
                 }
-                if (localPath != null) {
-                    MPVLib.command(arrayOf<String>("sub-add", localPath, "select"))
+            } else {
+                withContext(Dispatchers.IO) {
+                    val subHeaders = state.config.headers ?: emptyMap()
+                    if (subAddExternal(sub, "select", subHeaders)) {
+                        MPVLib.setPropertyString("sub-visibility", "yes")
+                        refreshMpvSubtitleTracks(state)
+                    }
                 }
             }
             state.subFileUrl = null
@@ -577,18 +567,9 @@ actual fun VideoPlayerSurface(
     // after MPVLib.init().
     LaunchedEffect(state.allSubUrls) {
         state.allSubUrls?.let { subs ->
+            val subHeaders = state.config.headers ?: emptyMap()
             withContext(Dispatchers.IO) {
-                subs.map { (url, name, isDefault) ->
-                    async {
-                        val localPath = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(url)
-                        if (localPath != null && isActive) {
-                            try {
-                                val flag = if (isDefault) "select" else "auto"
-                                MPVLib.command(arrayOf<String>("sub-add", localPath, flag))
-                            } catch (e: Exception) { }
-                        }
-                    }
-                }.awaitAll()
+                addExternalSubtitles(state, subs, subHeaders)
             }
             state.allSubUrls = null
         }
@@ -613,8 +594,11 @@ actual fun VideoPlayerSurface(
 
     LaunchedEffect(state.selectedSubtitleTrack) {
         state.selectedSubtitleTrack?.let { sid ->
-            withContext(Dispatchers.IO) {
-                MPVLib.setPropertyInt("sid", sid)
+            // mpv sid=0 means subtitles off — never apply list index 0 as sid.
+            if (sid > 0) {
+                withContext(Dispatchers.IO) {
+                    MPVLib.setPropertyInt("sid", sid)
+                }
             }
         }
     }
@@ -647,4 +631,80 @@ actual fun VideoPlayerSurface(
 // Ensure MPV natively creates only once for app stability
 private var isMPVInitialized = false
 private var isMPVInited = false
+private fun subAddExternal(url: String, flag: String, headers: Map<String, String>): Boolean {
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+        return try {
+            MPVLib.command(arrayOf("sub-add", url, flag))
+            Log.i(SUB_TAG, "sub-add remote [$flag] $url")
+            true
+        } catch (e: Exception) {
+            Log.w(SUB_TAG, "remote sub-add failed, downloading: ${e.message}")
+            val localPath = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(url, headers)
+                ?: return false
+            MPVLib.command(arrayOf("sub-add", localPath, flag))
+            Log.i(SUB_TAG, "sub-add local [$flag] $localPath")
+            true
+        }
+    }
+    val localPath = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(url, headers) ?: return false
+    return try {
+        MPVLib.command(arrayOf("sub-add", localPath, flag))
+        Log.i(SUB_TAG, "sub-add file [$flag] $localPath")
+        true
+    } catch (e: Exception) {
+        Log.e(SUB_TAG, "sub-add file failed: ${e.message}")
+        false
+    }
+}
+
+private fun addExternalSubtitles(
+    state: VideoPlayerState,
+    subs: List<Triple<String, String, Boolean>>,
+    headers: Map<String, String>,
+) {
+    if (subs.isEmpty()) return
+    Log.i(SUB_TAG, "Loading ${subs.size} embed/API subtitle(s)")
+    var anyAdded = false
+    subs.forEach { (url, label, isDefault) ->
+        val flag = if (isDefault) "select" else "auto"
+        if (subAddExternal(url, flag, headers)) {
+            anyAdded = true
+        } else {
+            Log.e(SUB_TAG, "failed: $label $url")
+        }
+    }
+    if (anyAdded) {
+        try {
+            MPVLib.setPropertyString("sub-visibility", "yes")
+        } catch (_: Exception) { }
+    }
+    refreshMpvSubtitleTracks(state)
+}
+
+private fun refreshMpvSubtitleTracks(state: VideoPlayerState) {
+    try {
+        val count = MPVLib.getPropertyInt("track-list/count") ?: 0
+        val sTracks = mutableListOf<Pair<Int, String>>()
+        for (i in 0 until count) {
+            val type = MPVLib.getPropertyString("track-list/$i/type") ?: continue
+            if (type != "sub") continue
+            val id = MPVLib.getPropertyInt("track-list/$i/id") ?: continue
+            val lang = MPVLib.getPropertyString("track-list/$i/lang")
+                ?: MPVLib.getPropertyString("track-list/$i/title")
+                ?: "Subtitle $id"
+            sTracks.add(id to lang)
+        }
+        state.subtitleTracks = sTracks
+        if (sTracks.isNotEmpty()) {
+            val currentSid = MPVLib.getPropertyInt("sid") ?: 0
+            state.selectedSubtitleTrack = when {
+                currentSid > 0 && sTracks.any { it.first == currentSid } -> currentSid
+                else -> sTracks.first().first
+            }
+        }
+    } catch (e: Exception) {
+        println("[VideoPlayerSurface] refreshMpvSubtitleTracks: ${e.message}")
+    }
+}
+
 private val MPVLibLock = Any()

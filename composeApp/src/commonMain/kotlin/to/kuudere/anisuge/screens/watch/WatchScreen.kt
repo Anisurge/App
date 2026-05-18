@@ -1224,17 +1224,25 @@ fun WatchVideoPlayer(
                 }
             }
             
-            LaunchedEffect(uiState.availableSubtitles) {
+            LaunchedEffect(uiState.availableSubtitles, uiState.currentSubtitleUrl) {
                 if (uiState.availableSubtitles.isNotEmpty()) {
                     playerState.allSubUrls = uiState.availableSubtitles.mapNotNull { sub ->
-                        sub.url?.let { Triple(it, sub.title ?: sub.resolvedLang ?: "Subtitle", it == uiState.currentSubtitleUrl) }
+                        sub.url?.let { url ->
+                            Triple(
+                                url,
+                                sub.title ?: sub.resolvedLang ?: "Subtitle",
+                                url == uiState.currentSubtitleUrl,
+                            )
+                        }
                     }
                 }
             }
 
-            LaunchedEffect(uiState.currentSubtitleUrl) {
+            LaunchedEffect(uiState.currentSubtitleUrl, uiState.isLoadingVideo) {
+                if (uiState.isLoadingVideo) return@LaunchedEffect
                 playerState.subFileUrl = uiState.currentSubtitleUrl ?: "NONE"
-                playerState.subFileName = uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }?.let { it.title ?: it.resolvedLang } ?: "Subtitle"
+                playerState.subFileName = uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }
+                    ?.let { it.title ?: it.resolvedLang } ?: "Subtitle"
             }
             
             LaunchedEffect(uiState.playbackSpeed) {

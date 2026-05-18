@@ -215,7 +215,7 @@ object DownloadManager {
             try {
                 val m3u8Url: String
                 val currentHeaders: MutableMap<String, String>
-                var subtitlesUrl: String? = null
+                var apiSubtitleTracks = emptyList<Pair<String, String>>()
 
                 if (!preResolvedM3u8.isNullOrBlank()) {
                     // Use pre-resolved M3U8 URL (quality was selected in dialog)
@@ -234,7 +234,7 @@ object DownloadManager {
                         }
                         val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
                         val streamData = if (useDub) response?.dub else response?.sub
-                        subtitlesUrl = streamData?.subtitles?.trim()?.takeIf { it.isNotEmpty() }
+                        apiSubtitleTracks = BatchSubtitleExtract.trackUrls(streamData)
                     } catch (_: Exception) { }
                 } else {
                     val legacyDub = server.endsWith("-dub", ignoreCase = true)
@@ -301,7 +301,7 @@ object DownloadManager {
                     streamInfo.headers?.Referer?.let { currentHeaders["Referer"] = it }
                     streamInfo.headers?.userAgent?.let { currentHeaders["User-Agent"] = it }
                     streamInfo.headers?.Origin?.let { currentHeaders["Origin"] = it }
-                    subtitlesUrl = streamData?.subtitles
+                    apiSubtitleTracks = BatchSubtitleExtract.trackUrls(streamData)
                 }
 
                 // Create folder
@@ -333,7 +333,7 @@ object DownloadManager {
                 updateTask(taskId) { it.copy(status = "Downloading subtitles...") }
                 collectDownloadedSubtitles(
                     epDir = epDir,
-                    apiSubtitlesUrl = subtitlesUrl,
+                    apiSubtitleTracks = apiSubtitleTracks,
                     masterPlaylistUrl = m3u8Url,
                     masterPlaylist = masterPlaylist,
                     headers = currentHeaders,
@@ -704,7 +704,7 @@ object DownloadManager {
 
     private suspend fun collectDownloadedSubtitles(
         epDir: String,
-        apiSubtitlesUrl: String?,
+        apiSubtitleTracks: List<Pair<String, String>>,
         masterPlaylistUrl: String,
         masterPlaylist: String,
         headers: Map<String, String>,
@@ -719,7 +719,7 @@ object DownloadManager {
             out.add(saved)
         }
 
-        apiSubtitlesUrl?.let { addFromUrl(it, "Default") }
+        apiSubtitleTracks.forEach { (url, label) -> addFromUrl(url, label) }
         parseSubtitlePlaylistUrls(masterPlaylistUrl, masterPlaylist).forEach { (url, name) ->
             addFromUrl(url, name)
         }
