@@ -285,6 +285,7 @@ object DownloadManager {
                     currentHeaders = (taskHeaders ?: emptyMap()).toMutableMap()
                     streamInfo.headers?.Referer?.let { currentHeaders["Referer"] = it }
                     streamInfo.headers?.userAgent?.let { currentHeaders["User-Agent"] = it }
+                    streamInfo.headers?.Origin?.let { currentHeaders["Origin"] = it }
                     subtitlesUrl = streamData?.subtitles
                 }
 
@@ -381,9 +382,7 @@ object DownloadManager {
                             lastMeasureTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                         }
 
-                        val segmentBytes = httpClient.get(segmentUrl) {
-                            currentHeaders.forEach { (k, v) -> header(k, v) }
-                        }.readBytes()
+                        val segmentBytes = fetchHlsSegmentBytes(segmentUrl, currentHeaders)
                         videoSink.write(segmentBytes)
                         totalBytesDownloaded += segmentBytes.size
                         bytesSinceLastMeasure += segmentBytes.size
@@ -419,9 +418,7 @@ object DownloadManager {
                             while (tasks.value.find { it.id == taskId }?.isPaused == true) {
                                 kotlinx.coroutines.delay(1000)
                             }
-                            val segmentBytes = httpClient.get(segmentUrl) {
-                                currentHeaders.forEach { (k, v) -> header(k, v) }
-                            }.readBytes()
+                            val segmentBytes = fetchHlsSegmentBytes(segmentUrl, currentHeaders)
                             audioSink.write(segmentBytes)
                             
                             val progress = (videoSegments.size + index + 1).toFloat() / (videoSegments.size + audioSegments.size)
@@ -638,6 +635,16 @@ object DownloadManager {
             }
         }
         return baseUrl
+    }
+
+    private suspend fun fetchHlsSegmentBytes(
+        segmentUrl: String,
+        headers: Map<String, String>,
+    ): ByteArray {
+        val raw = httpClient.get(segmentUrl) {
+            headers.forEach { (k, v) -> header(k, v) }
+        }.readBytes()
+        return HlsPngTsStrip.stripSegmentPayloadIfNeeded(segmentUrl, raw)
     }
 
     private fun parseSegments(playlistUrl: String, content: String): List<String> {
