@@ -32,13 +32,13 @@ fun ProfileAvatar(
     /** When false, skips the bundled test APNG (shop previews & owned frames). */
     showBundledTestFrame: Boolean = true,
 ) {
-    val showTestFrame = USE_TEST_CHAT_FRAME && showBundledTestFrame
     val hasEquippedFrame = !frameUrl.isNullOrBlank() || !outerFrameUrl.isNullOrBlank()
+    val showTestFrame = USE_TEST_CHAT_FRAME && showBundledTestFrame && !hasEquippedFrame
     val needsDecor = showTestFrame || hasEquippedFrame
 
     val layoutSize = when {
-        showTestFrame -> testChatFrameSize(avatarSize)
         hasEquippedFrame -> avatarSize * 1.55f
+        showTestFrame -> testChatFrameSize(avatarSize)
         else -> avatarSize
     }
 
@@ -49,17 +49,6 @@ fun ProfileAvatar(
         contentAlignment = Alignment.Center,
     ) {
         when {
-            showTestFrame -> {
-                val frameSize = testChatFrameSize(avatarSize)
-                ProfileAvatarContent(
-                    url = url,
-                    modifier = Modifier.size(avatarSize),
-                    contentDescription = contentDescription,
-                    placeholderTint = placeholderTint,
-                    backgroundColor = backgroundColor,
-                )
-                BundledChatTestFrame(Modifier.size(frameSize))
-            }
             hasEquippedFrame -> {
                 val outerSize = avatarSize * 1.55f
                 val ringSize = avatarSize * 1.28f
@@ -84,6 +73,17 @@ fun ProfileAvatar(
                     placeholderTint = placeholderTint,
                     backgroundColor = backgroundColor,
                 )
+            }
+            showTestFrame -> {
+                val frameSize = testChatFrameSize(avatarSize)
+                ProfileAvatarContent(
+                    url = url,
+                    modifier = Modifier.size(avatarSize),
+                    contentDescription = contentDescription,
+                    placeholderTint = placeholderTint,
+                    backgroundColor = backgroundColor,
+                )
+                BundledChatTestFrame(Modifier.size(frameSize))
             }
             else -> {
                 ProfileAvatarContent(

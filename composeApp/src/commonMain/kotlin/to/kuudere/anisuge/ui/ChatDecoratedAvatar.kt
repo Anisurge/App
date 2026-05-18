@@ -23,5 +23,6 @@ fun ChatDecoratedAvatar(
         outerFrameUrl = outerFrameUrl,
         modifier = modifier,
         contentDescription = contentDescription,
+        showBundledTestFrame = false,
     )
 }
