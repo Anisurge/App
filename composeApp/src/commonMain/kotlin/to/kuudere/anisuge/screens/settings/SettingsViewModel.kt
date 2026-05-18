@@ -37,6 +37,7 @@ import to.kuudere.anisuge.data.models.WatchlistEntry
 import to.kuudere.anisuge.platform.clearSyncProgressNotification
 import to.kuudere.anisuge.platform.updateSyncProgressNotification
 import to.kuudere.anisuge.utils.isNetworkError
+import to.kuudere.anisuge.data.models.toUserProfile
 import to.kuudere.anisuge.i18n.AppLocale
 
 data class SettingsUiState(
@@ -137,6 +138,17 @@ data class SettingsUiState(
     val isPostingCommunityComment: Boolean = false,
     /** Full-screen image/GIF viewer URL overlay. */
     val communityFullscreenImageUrl: String? = null,
+
+    val shopCoins: Int = 0,
+    val shopCatalog: List<to.kuudere.anisuge.data.models.BffShopItem> = emptyList(),
+    val shopOwned: List<to.kuudere.anisuge.data.models.BffShopItem> = emptyList(),
+    val isLoadingShop: Boolean = false,
+    val isLoadingMoreShop: Boolean = false,
+    val shopCatalogHasMore: Boolean = false,
+    val shopCatalogTotal: Int = 0,
+    val shopPurchasingId: String? = null,
+    val isDownloadingShopFrames: Boolean = false,
+    val isSavingEquippedFrame: Boolean = false,
 )
 
 sealed class SettingsTab {
@@ -148,6 +160,7 @@ sealed class SettingsTab {
     data object Community : SettingsTab()
     data object Servers : SettingsTab()
     data object Notifications : SettingsTab()
+    data object Shop : SettingsTab()
 }
 
 class SettingsViewModel(
@@ -161,8 +174,13 @@ class SettingsViewModel(
     private val watchHistorySyncService: WatchHistorySyncService,
     private val integrationsSyncService: to.kuudere.anisuge.data.services.IntegrationsSyncService,
     private val bffMeService: to.kuudere.anisuge.data.services.BffMeService,
+    private val bffShopService: to.kuudere.anisuge.data.services.BffShopService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
+
+    private companion object {
+        const val SHOP_PAGE_SIZE = 25
+    }
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -306,7 +324,16 @@ class SettingsViewModel(
 
     fun onTabSelected(tab: SettingsTab) {
         when (tab) {
-            is SettingsTab.Profile -> loadUserProfile()
+            is SettingsTab.Profile -> {
+                loadUserProfile()
+                loadShopInventory()
+            }
+            is SettingsTab.Shop -> {
+                loadShop()
+                if (_uiState.value.userProfile == null) {
+                    loadUserProfile()
+                }
+            }
             is SettingsTab.Sync -> {
                 loadTrackingState()
                 if (_uiState.value.userProfile == null && authService.authState.value is SessionCheckResult.Valid) {
@@ -349,6 +376,7 @@ class SettingsViewModel(
                     _uiState.update {
                         it.copy(
                             userProfile = profile,
+                            shopCoins = profile.coins,
                             isLoadingProfile = false,
                             isOffline = false,
                             usernameDraft = if (it.showProfileAccount) it.usernameDraft else profile.username.orEmpty(),
@@ -369,6 +397,7 @@ class SettingsViewModel(
     }
 
     fun openProfileAccount() {
+        loadShopInventory()
         val username = _uiState.value.userProfile?.username.orEmpty()
         _uiState.update { it.copy(showProfileAccount = true, usernameDraft = username) }
     }
@@ -429,6 +458,186 @@ class SettingsViewModel(
                         it.copy(
                             isSavingUsername = false,
                             errorMessage = e.message ?: "Failed to update username",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun loadShop() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingShop = true) }
+            bffShopService.fetchShopMe(catalogLimit = SHOP_PAGE_SIZE, catalogOffset = 0).fold(
+                onSuccess = { body ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingShop = false,
+                            shopCoins = body.coins,
+                            shopCatalog = body.catalog,
+                            shopOwned = body.owned,
+                            shopCatalogHasMore = body.catalogHasMore,
+                            shopCatalogTotal = body.catalogTotal,
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingShop = false,
+                            errorMessage = e.message ?: "Failed to load shop",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun loadMoreShop() {
+        val state = _uiState.value
+        if (state.isLoadingShop || state.isLoadingMoreShop || !state.shopCatalogHasMore) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMoreShop = true) }
+            bffShopService.fetchShopMe(
+                catalogLimit = SHOP_PAGE_SIZE,
+                catalogOffset = state.shopCatalog.size,
+            ).fold(
+                onSuccess = { body ->
+                    _uiState.update { current ->
+                        val merged = (current.shopCatalog + body.catalog).distinctBy { it.id }
+                        current.copy(
+                            isLoadingMoreShop = false,
+                            shopCoins = body.coins,
+                            shopCatalog = merged,
+                            shopOwned = body.owned,
+                            shopCatalogHasMore = body.catalogHasMore,
+                            shopCatalogTotal = body.catalogTotal,
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingMoreShop = false,
+                            errorMessage = e.message ?: "Failed to load more",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun loadShopInventory() {
+        viewModelScope.launch {
+            bffShopService.fetchShopMe().onSuccess { body ->
+                _uiState.update {
+                    it.copy(
+                        shopCoins = body.coins,
+                        shopOwned = body.owned,
+                    )
+                }
+            }
+        }
+    }
+
+    fun purchaseShopItem(itemId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(shopPurchasingId = itemId) }
+            bffShopService.purchase(itemId).fold(
+                onSuccess = { body ->
+                    val profile = body.user?.toUserProfile()
+                    _uiState.update {
+                        it.copy(
+                            shopPurchasingId = null,
+                            shopCoins = body.coins,
+                            shopCatalog = it.shopCatalog.map { item ->
+                                if (item.id == body.item.id) body.item else item
+                            },
+                            shopOwned = if (it.shopOwned.any { o -> o.id == body.item.id }) {
+                                it.shopOwned
+                            } else {
+                                it.shopOwned + body.item
+                            },
+                            userProfile = profile ?: it.userProfile?.copy(coins = body.coins),
+                            successMessage = "Purchased ${body.item.name}",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            shopPurchasingId = null,
+                            errorMessage = e.message ?: "Purchase failed",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun downloadOwnedShopFrames() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDownloadingShopFrames = true) }
+            bffShopService.fetchDownloadManifest().fold(
+                onSuccess = { manifest ->
+                    var saved = 0
+                    for (entry in manifest.items) {
+                        bffShopService.downloadFrameBytes(entry.assetUrl).onSuccess { bytes ->
+                            to.kuudere.anisuge.data.services.ShopFrameCache.save(entry.id, bytes)
+                            saved++
+                        }
+                    }
+                    _uiState.update {
+                        it.copy(
+                            isDownloadingShopFrames = false,
+                            successMessage = "Saved $saved frame(s) offline",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isDownloadingShopFrames = false,
+                            errorMessage = e.message ?: "Download failed",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun equipShopFrame(item: to.kuudere.anisuge.data.models.BffShopItem?) {
+        viewModelScope.launch {
+            val profile = _uiState.value.userProfile ?: return@launch
+            _uiState.update {
+                it.copy(
+                    isSavingEquippedFrame = true,
+                    userProfile = profile.copy(
+                        equippedFrameUrl = item?.assetUrl,
+                        equippedFrameItemId = item?.id,
+                    ),
+                )
+            }
+            bffMeService.updateEquippedFrame(
+                currentEquipped = profile.equipped,
+                frameUrl = item?.assetUrl,
+                frameItemId = item?.id,
+            ).fold(
+                onSuccess = { updated ->
+                    authService.checkSession()
+                    _uiState.update {
+                        it.copy(
+                            isSavingEquippedFrame = false,
+                            userProfile = updated,
+                            successMessage = if (item == null) "Frame removed" else "Equipped ${item.name}",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isSavingEquippedFrame = false,
+                            errorMessage = e.message ?: "Failed to equip frame",
                         )
                     }
                 },
@@ -710,6 +919,7 @@ class SettingsViewModel(
             _uiState.update { it.copy(isUploadingPfp = true, errorMessage = null) }
             bffMeService.uploadCustomPfp(pick).fold(
                 onSuccess = { profile ->
+                    authService.checkSession()
                     _uiState.update {
                         it.copy(
                             isUploadingPfp = false,

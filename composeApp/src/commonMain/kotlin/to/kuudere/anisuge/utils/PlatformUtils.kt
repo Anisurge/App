@@ -15,6 +15,8 @@ expect fun hasNotificationPermission(): Boolean
 @androidx.compose.runtime.Composable
 expect fun RequestNotificationPermission(onResult: (Boolean) -> Unit)
 
+expect fun buildDownloadOutputPath(epDir: String, title: String, episodeNumber: Int): String
+
 expect suspend fun muxToMkv(
     videoPath: String,
     audioPath: String?,
@@ -22,5 +24,7 @@ expect suspend fun muxToMkv(
     fonts: List<String>,
     metadataPath: String?,
     outputPath: String,
-    inputHeaders: Map<String, String>? = null
+    inputHeaders: Map<String, String>? = null,
+    /** Master HLS URL — Android uses Media3 to export the full playlist when set. */
+    masterPlaylistUrl: String? = null,
 ): Boolean

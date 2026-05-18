@@ -1,6 +1,7 @@
 package to.kuudere.anisuge.data.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class SessionInfo(
@@ -78,6 +79,11 @@ data class UserProfile(
     val isEmailVerified: Boolean? = null,
     val timezone: String? = null,
     val website: String? = null,
+    val coins: Int = 0,
+    val equippedFrameUrl: String? = null,
+    val equippedOuterFrameUrl: String? = null,
+    val equippedFrameItemId: String? = null,
+    val equipped: JsonObject? = null,
 ) {
     val effectiveId: String? get() = id ?: userId
     val effectiveAvatar: String? get() = pfp ?: avatar

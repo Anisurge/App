@@ -28,7 +28,9 @@ actual fun PlatformAnimatedProfileOverlay(
     modifier: Modifier,
     contentDescription: String?,
 ) {
-    if (isProfileApngUrl(url) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+    if (isAnimatedFrameAssetUrl(url) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        ApngImageDecoderOverlay(url = url, modifier = modifier, contentDescription = contentDescription)
+    } else if (isProfileApngUrl(url) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         ApngImageDecoderOverlay(url = url, modifier = modifier, contentDescription = contentDescription)
     } else {
         AsyncImage(

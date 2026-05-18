@@ -75,6 +75,13 @@ fun ChatMemberSheet(
                 )
             }
 
+            Text(
+                text = formatBerries(member.coins),
+                color = Color(0xFFFFB300),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+
             if (member.isPremium) {
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -96,4 +103,11 @@ fun ChatMemberSheet(
 private fun formatJoinDate(iso: String): String {
     val day = iso.substringBefore('T').ifBlank { iso }
     return day
+}
+
+private fun formatBerries(amount: Int): String {
+    val n = kotlin.math.abs(amount)
+    val grouped = n.toString().reversed().chunked(3).joinToString(",").reversed()
+    val word = if (amount == 1) "Berry" else "Berries"
+    return "$grouped $word"
 }

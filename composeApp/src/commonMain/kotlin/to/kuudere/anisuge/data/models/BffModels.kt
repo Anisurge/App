@@ -50,6 +50,7 @@ data class BffPublicUser(
     val showOnlineStatus: Boolean? = null,
     val reanimeSettings: JsonObject? = null,
     val customPfpUrl: String? = null,
+    val coins: Int = 0,
     val equipped: JsonObject? = null,
     val profileExtra: JsonObject? = null,
 )
@@ -57,6 +58,14 @@ data class BffPublicUser(
 fun BffPublicUser.toUserProfile(): UserProfile {
     val ago = (profileExtra?.get("ago") as? JsonPrimitive)?.contentOrNull
     val resolvedAvatar = customPfpUrl?.takeIf { it.isNotBlank() } ?: avatarUrl
+    val equippedMap = equipped
+    val frameUrl = equippedMap.stringField("chatAvatarFrame")
+        ?: equippedMap.stringField("avatarFrame")
+        ?: equippedMap.stringField("frame")
+    val frameItemId = equippedMap.stringField("chatAvatarFrameItemId")
+    val outerUrl = equippedMap.stringField("chatAvatarOuter")
+        ?: equippedMap.stringField("avatarOuter")
+        ?: equippedMap.stringField("outerFrame")
     return UserProfile(
         id = externalUserId,
         userId = externalUserId,
@@ -71,5 +80,13 @@ fun BffPublicUser.toUserProfile(): UserProfile {
         joinDate = joinDate,
         ago = ago,
         isEmailVerified = emailVerified,
+        coins = coins,
+        equippedFrameUrl = frameUrl,
+        equippedOuterFrameUrl = outerUrl,
+        equippedFrameItemId = frameItemId,
+        equipped = equippedMap,
     )
 }
+
+private fun JsonObject?.stringField(key: String): String? =
+    (this?.get(key) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }

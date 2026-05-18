@@ -21,6 +21,7 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.platform.KmpFileSystem
+import to.kuudere.anisuge.platform.isAndroidPlatform
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import kotlinx.coroutines.Job
 import kotlinx.serialization.Serializable
@@ -343,8 +344,8 @@ object DownloadManager {
                             (l.endsWith(".m4s", ignoreCase = true) ||
                                 l.endsWith(".mp4", ignoreCase = true))
                     }
-                /** Suzu commonly serves fMP4 HLS — concatenating `.m4s` into `.ts` breaks FFmpeg; pull from playlist URL instead. */
-                val useHlsUrlRemux = !isEncrypted && (
+                /** fMP4/Suzu HLS: desktop muxes from playlist URLs; Android always segments + Media3 export (no native FFmpeg). */
+                val useHlsUrlRemux = !isAndroidPlatform && !isEncrypted && (
                     fmp4LikePlaylist || apiServerForRemux.equals("suzu", ignoreCase = true)
                 )
 
@@ -364,7 +365,7 @@ object DownloadManager {
 
                 val rawVideoPath = "$epDir/video_raw.ts"
                 val rawAudioPath = "$epDir/audio_raw.ts"
-                val finalMkvPath = "$epDir/${task.title.replace("[^A-Za-z0-9 ]".toRegex(), "")}_Ep_${task.episodeNumber}.mkv"
+                val finalOutputPath = buildDownloadOutputPath(epDir, task.title, task.episodeNumber)
                 
                 var totalBytesDownloaded = 0L
                 var lastMeasureTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
@@ -435,7 +436,8 @@ object DownloadManager {
                 }
 
                 // 4. Muxing
-                updateTask(taskId) { it.copy(status = "Muxing into MKV...", progress = 0.99f, downloadSpeed = "", eta = "") }
+                val muxStatus = if (isAndroidPlatform) "Finalizing download..." else "Muxing into MKV..."
+                updateTask(taskId) { it.copy(status = muxStatus, progress = 0.99f, downloadSpeed = "", eta = "") }
                 
                 val muxVideoSource = when {
                     isEncrypted || useHlsUrlRemux -> videoPlaylistUrl
@@ -454,8 +456,9 @@ object DownloadManager {
                     subtitles = subsToDownload,
                     fonts = emptyList(),
                     metadataPath = null,
-                    outputPath = finalMkvPath,
-                    inputHeaders = currentHeaders
+                    outputPath = finalOutputPath,
+                    inputHeaders = currentHeaders,
+                    masterPlaylistUrl = m3u8Url,
                 )
 
                 if (muxSuccess) {
@@ -468,7 +471,7 @@ object DownloadManager {
                         subsToDownload.forEach { (path, _) -> KmpFileSystem.delete(path) }
                     } catch (e: Exception) { }
                     
-                    updateTask(taskId) { it.copy(status = "Finished", progress = 1f, localPath = finalMkvPath) }
+                    updateTask(taskId) { it.copy(status = "Finished", progress = 1f, localPath = finalOutputPath) }
                 } else {
                     updateTask(taskId) {
                         it.copy(
@@ -639,11 +642,21 @@ object DownloadManager {
 
     private fun parseSegments(playlistUrl: String, content: String): List<String> {
         val base = playlistUrl.substringBeforeLast("/")
-        return content.lines()
-            .filter { it.isNotBlank() && !it.startsWith("#") }
-            .map { line ->
-                if (line.startsWith("http")) line else "$base/$line"
+        val segments = mutableListOf<String>()
+        content.lines().forEach { line ->
+            if (line.startsWith("#EXT-X-MAP", ignoreCase = true)) {
+                val uri = Regex("URI=\"([^\"]+)\"").find(line)?.groupValues?.getOrNull(1)
+                if (uri != null) {
+                    segments.add(if (uri.startsWith("http")) uri else "$base/$uri")
+                }
             }
+        }
+        content.lines()
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+            .forEach { line ->
+                segments.add(if (line.startsWith("http")) line else "$base/$line")
+            }
+        return segments
     }
 
     private fun formatSpeed(bytesPerSec: Double): String {

@@ -39,5 +39,13 @@ fun isProfileApngUrl(url: String): Boolean {
     return path.endsWith(".apng")
 }
 
+/** Shop / equipped frames are APNG bytes served as `.png` under `/pfp-animated/`. */
+fun isAnimatedFrameAssetUrl(url: String): Boolean {
+    val path = url.substringBefore('?').lowercase()
+    if (path.endsWith(".gif") || path.endsWith(".apng")) return true
+    return path.endsWith(".png") &&
+        ("/pfp-animated/" in path || path.contains("pfp-animated"))
+}
+
 fun isAnimatedProfileOverlayUrl(url: String): Boolean =
-    isProfileGifUrl(url) || isProfileApngUrl(url)
+    isProfileGifUrl(url) || isProfileApngUrl(url) || isAnimatedFrameAssetUrl(url)

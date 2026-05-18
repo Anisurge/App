@@ -297,6 +297,8 @@ fun HomeScreen(
             if (isDesktop) {
                 AnisugSidebar(
                     avatarUrl = homeState.userProfile?.effectiveAvatar,
+                    avatarFrameUrl = homeState.userProfile?.equippedFrameUrl,
+                    avatarOuterFrameUrl = homeState.userProfile?.equippedOuterFrameUrl,
                     selectedTab = currentTab,
                     isLoggingOut = homeState.isLoggingOut,
                     onTabSelect = { tab, nested ->
@@ -424,6 +426,8 @@ fun HomeScreen(
                     // Top Bar — measured so content knows how tall it is
                     MobileTopBar(
                         avatarUrl = homeState.userProfile?.effectiveAvatar,
+                        avatarFrameUrl = homeState.userProfile?.equippedFrameUrl,
+                        avatarOuterFrameUrl = homeState.userProfile?.equippedOuterFrameUrl,
                         onDownloadClick = {
                             prevTabIndex = AnisugTab.entries.indexOf(currentTab)
                             currentTab = AnisugTab.Downloads
@@ -1683,6 +1687,8 @@ private fun SmallBadge(text: String, color: Color = Color.White) {
 @Composable
 private fun AnisugSidebar(
     avatarUrl: String?,
+    avatarFrameUrl: String? = null,
+    avatarOuterFrameUrl: String? = null,
     selectedTab: AnisugTab,
     isLoggingOut: Boolean,
     onTabSelect: (AnisugTab, SettingsTab?) -> Unit,
@@ -1707,7 +1713,10 @@ private fun AnisugSidebar(
                 Spacer(Modifier.height(32.dp))
                 ProfileAvatar(
                     url = avatarUrl,
+                    frameUrl = avatarFrameUrl,
+                    outerFrameUrl = avatarOuterFrameUrl,
                     avatarSize = 36.dp,
+                    showBundledTestFrame = false,
                     modifier = Modifier.clickable { onTabSelect(AnisugTab.Settings, SettingsTab.Profile) },
                     contentDescription = strings.userAvatar,
                 )
@@ -1882,6 +1891,8 @@ private fun DonateButton(onClick: () -> Unit) {
 @Composable
 private fun MobileTopBar(
     avatarUrl: String?,
+    avatarFrameUrl: String? = null,
+    avatarOuterFrameUrl: String? = null,
     onDownloadClick: () -> Unit,
     onLiveChatClick: () -> Unit,
     hazeState: HazeState,
@@ -1942,7 +1953,10 @@ private fun MobileTopBar(
 
                 ProfileAvatar(
                     url = avatarUrl,
+                    frameUrl = avatarFrameUrl,
+                    outerFrameUrl = avatarOuterFrameUrl,
                     avatarSize = 36.dp,
+                    showBundledTestFrame = false,
                     contentDescription = "Profile",
                 )
             }
