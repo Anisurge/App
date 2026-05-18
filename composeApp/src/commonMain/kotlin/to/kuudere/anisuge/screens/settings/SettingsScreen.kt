@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -3640,6 +3641,39 @@ private fun MobileServersContent(
     }
 }
 
+@Composable
+private fun ChangePfpButton(
+    isUploading: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = !isUploading,
+            modifier = Modifier.fillMaxWidth(0.65f),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, BORDER),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
+        ) {
+            Text(
+                if (isUploading) "Uploading…" else "Change PFP",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Text(
+            "JPEG, PNG, GIF, WebP · max 2.5 MB",
+            color = MUTED,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
+}
+
 // ── Profile summary / account ────────────────────────────────────────────────────
 @Composable
 private fun ProfileSummaryCard(
@@ -3718,6 +3752,7 @@ private fun ProfilePfpAndFramesSection(
     uiState: SettingsUiState,
     onPickCustomPfp: () -> Unit,
     onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit,
+    showPfpPicker: Boolean = true,
 ) {
     val user = uiState.userProfile ?: return
 
@@ -3725,46 +3760,48 @@ private fun ProfilePfpAndFramesSection(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                to.kuudere.anisuge.ui.ProfileAvatar(
-                    url = user.effectiveAvatar,
-                    avatarSize = 96.dp,
-                    frameUrl = user.equippedFrameUrl,
-                    showBundledTestFrame = false,
-                    contentDescription = user.displayName,
-                )
-                if (uiState.isUploadingPfp) {
-                    Box(
-                        Modifier
-                            .size(96.dp)
-                            .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.55f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(28.dp),
-                            strokeWidth = 2.dp,
-                        )
+        if (showPfpPicker) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    to.kuudere.anisuge.ui.ProfileAvatar(
+                        url = user.effectiveAvatar,
+                        avatarSize = 96.dp,
+                        frameUrl = user.equippedFrameUrl,
+                        showBundledTestFrame = false,
+                        contentDescription = user.displayName,
+                    )
+                    if (uiState.isUploadingPfp) {
+                        Box(
+                            Modifier
+                                .size(96.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.55f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(28.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        }
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Change photo",
+                    color = Color(0xFFE50914),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable(
+                        enabled = !uiState.isUploadingPfp,
+                        onClick = onPickCustomPfp,
+                    ),
+                )
+                Text("JPEG, PNG, GIF, WebP · max 2.5 MB", color = MUTED, fontSize = 11.sp)
             }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Change photo",
-                color = Color(0xFFE50914),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(
-                    enabled = !uiState.isUploadingPfp,
-                    onClick = onPickCustomPfp,
-                ),
-            )
-            Text("JPEG, PNG, GIF, WebP · max 2.5 MB", color = MUTED, fontSize = 11.sp)
         }
 
         ProfileFramePickerSection(
@@ -3986,11 +4023,18 @@ private fun ProfileTab(
                 showChevron = true,
             )
 
+            Spacer(Modifier.height(12.dp))
+            ChangePfpButton(
+                isUploading = uiState.isUploadingPfp,
+                onClick = pickPfp,
+            )
+
             Spacer(Modifier.height(20.dp))
             ProfilePfpAndFramesSection(
                 uiState = uiState,
                 onPickCustomPfp = pickPfp,
                 onEquipFrame = onEquipFrame,
+                showPfpPicker = false,
             )
 
             if (!user.bio.isNullOrBlank()) {
@@ -4166,20 +4210,36 @@ private fun MobileProfileContent(
             CircularProgressIndicator(color = Color.White)
         }
     } else if (uiState.userProfile != null) {
-        val user = uiState.userProfile
+        val user = uiState.userProfile!!
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Profile Header
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                to.kuudere.anisuge.ui.ProfileAvatar(
-                    url = user?.effectiveAvatar,
-                    avatarSize = 120.dp,
-                    frameUrl = user?.equippedFrameUrl,
-                    showBundledTestFrame = false,
-                    contentDescription = null,
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    to.kuudere.anisuge.ui.ProfileAvatar(
+                        url = user.effectiveAvatar,
+                        avatarSize = 120.dp,
+                        frameUrl = user.equippedFrameUrl,
+                        showBundledTestFrame = false,
+                        contentDescription = user.displayName,
+                    )
+                    if (uiState.isUploadingPfp) {
+                        Box(
+                            Modifier
+                                .size(120.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.55f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(32.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -4187,12 +4247,16 @@ private fun MobileProfileContent(
                     user.displayName ?: user.username ?: "Anonymous",
                     color = TEXT,
                     fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
-                Text(
-                    "@${user.username}",
-                    color = MUTED,
-                    fontSize = 14.sp
+                user.username?.let {
+                    Text("@$it", color = MUTED, fontSize = 14.sp)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                ChangePfpButton(
+                    isUploading = uiState.isUploadingPfp,
+                    onClick = onPickCustomPfp,
                 )
             }
 
@@ -4209,6 +4273,7 @@ private fun MobileProfileContent(
                     uiState = uiState,
                     onPickCustomPfp = onPickCustomPfp,
                     onEquipFrame = onEquipFrame,
+                    showPfpPicker = false,
                 )
             }
 
