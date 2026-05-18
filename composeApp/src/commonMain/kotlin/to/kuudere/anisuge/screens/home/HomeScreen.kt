@@ -432,6 +432,11 @@ fun HomeScreen(
                             prevTabIndex = AnisugTab.entries.indexOf(currentTab)
                             currentTab = AnisugTab.Downloads
                         },
+                        onProfileClick = {
+                            settingsViewModel.openMobileSettingsDetail(SettingsTab.Profile)
+                            settingsViewModel.onTabSelected(SettingsTab.Profile)
+                            switchTab(AnisugTab.Settings, SettingsTab.Profile)
+                        },
                         onLiveChatClick = onLiveChatClick,
                         hazeState = hazeState,
                         modifier = Modifier
@@ -1894,6 +1899,7 @@ private fun MobileTopBar(
     avatarFrameUrl: String? = null,
     avatarOuterFrameUrl: String? = null,
     onDownloadClick: () -> Unit,
+    onProfileClick: () -> Unit,
     onLiveChatClick: () -> Unit,
     hazeState: HazeState,
     modifier: Modifier = Modifier
@@ -1958,6 +1964,7 @@ private fun MobileTopBar(
                     avatarSize = 36.dp,
                     showBundledTestFrame = false,
                     contentDescription = "Profile",
+                    modifier = Modifier.clickable(onClick = onProfileClick),
                 )
             }
         }

@@ -19,7 +19,7 @@ import to.kuudere.anisuge.utils.getCacheDirectory
 
 /** In-memory + disk cache for animated shop/chat frame bytes (APNG served as PNG). */
 object AnimatedFrameBytesCache {
-    private const val MAX_MEMORY_ENTRIES = 48
+    private const val MAX_MEMORY_ENTRIES = 96
     private val memoryLock = Any()
     private val memory = object : LinkedHashMap<String, ByteArray>(MAX_MEMORY_ENTRIES, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?): Boolean =
@@ -111,19 +111,31 @@ object AnimatedFrameBytesCache {
         }
     }
 
-    suspend fun prefetch(urls: List<String>, concurrency: Int = 6) {
-        val pending = urls
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .filter { peekMemory(it) == null && readDisk(it) == null }
+    suspend fun prefetch(urls: List<String>, concurrency: Int = 12) {
+        prefetchEntries(
+            urls.map { url -> url to null },
+            concurrency = concurrency,
+        )
+    }
+
+    suspend fun prefetchEntries(
+        entries: List<Pair<String, String?>>,
+        concurrency: Int = 12,
+    ) {
+        val pending = entries
+            .mapNotNull { (rawUrl, itemId) ->
+                val url = rawUrl.trim()
+                if (url.isEmpty()) null else url to itemId
+            }
+            .distinctBy { it.first }
+            .filter { (url, _) -> peekMemory(url) == null && readDisk(url) == null }
         if (pending.isEmpty()) return
 
         coroutineScope {
             val gate = Semaphore(concurrency)
-            pending.map { url ->
+            pending.map { (url, itemId) ->
                 async {
-                    gate.withPermit { load(url) }
+                    gate.withPermit { load(url, itemId = itemId) }
                 }
             }.awaitAll()
         }

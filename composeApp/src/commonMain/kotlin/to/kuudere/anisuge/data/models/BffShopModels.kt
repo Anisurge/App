@@ -52,6 +52,20 @@ data class BffShopDownloadAllResponse(
 )
 
 @Serializable
+data class BffShopRedeemRequest(
+    val code: String,
+)
+
+@Serializable
+data class BffShopRedeemResponse(
+    val coins: Int,
+    val rewardCoins: Int,
+    val code: String,
+    val message: String? = null,
+    val user: BffPublicUser? = null,
+)
+
+@Serializable
 data class BffShopDownloadEntry(
     val id: String,
     val slug: String,
