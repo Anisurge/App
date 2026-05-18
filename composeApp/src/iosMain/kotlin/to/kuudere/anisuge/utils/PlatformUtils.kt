@@ -56,6 +56,7 @@ actual suspend fun muxToMkv(
     outputPath: String,
     inputHeaders: Map<String, String>?,
     masterPlaylistUrl: String?,
+    preferLocalTsRemux: Boolean,
 ): Boolean {
     // TODO: iOS FFmpeg integration
     return false
