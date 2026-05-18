@@ -1224,8 +1224,8 @@ fun WatchVideoPlayer(
                 }
             }
             
-            LaunchedEffect(uiState.availableSubtitles, uiState.currentSubtitleUrl) {
-                if (uiState.availableSubtitles.isNotEmpty()) {
+            LaunchedEffect(uiState.availableSubtitles, uiState.currentSubtitleUrl, uiState.subtitlesDisabled) {
+                if (uiState.availableSubtitles.isNotEmpty() && !uiState.subtitlesDisabled) {
                     playerState.allSubUrls = uiState.availableSubtitles.mapNotNull { sub ->
                         sub.url?.let { url ->
                             Triple(
@@ -1235,12 +1235,24 @@ fun WatchVideoPlayer(
                             )
                         }
                     }
+                } else {
+                    playerState.allSubUrls = null
                 }
             }
 
-            LaunchedEffect(uiState.currentSubtitleUrl, uiState.isLoadingVideo) {
+            LaunchedEffect(
+                uiState.currentSubtitleUrl,
+                uiState.isLoadingVideo,
+                uiState.subtitlesDisabled,
+                uiState.availableSubtitles,
+            ) {
                 if (uiState.isLoadingVideo) return@LaunchedEffect
-                playerState.subFileUrl = uiState.currentSubtitleUrl ?: "NONE"
+                playerState.subFileUrl = when {
+                    uiState.subtitlesDisabled -> "NONE"
+                    uiState.currentSubtitleUrl != null -> uiState.currentSubtitleUrl
+                    uiState.availableSubtitles.isEmpty() -> "NONE"
+                    else -> null
+                }
                 playerState.subFileName = uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }
                     ?.let { it.title ?: it.resolvedLang } ?: "Subtitle"
             }
