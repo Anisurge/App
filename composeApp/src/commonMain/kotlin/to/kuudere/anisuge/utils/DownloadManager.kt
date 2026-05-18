@@ -447,6 +447,12 @@ object DownloadManager {
                         rawAudioPath
                     } else null
 
+                val preferLocalTsRemux = HlsPngTsStrip.prefersLocalSegmentMux(
+                    masterUrl = m3u8Url,
+                    segmentUrls = videoSegments,
+                    apiServer = apiServerForRemux,
+                )
+
                 val muxSuccess = muxToMkv(
                     videoPath = muxVideoSource,
                     audioPath = muxAudioSource,
@@ -456,6 +462,7 @@ object DownloadManager {
                     outputPath = finalOutputPath,
                     inputHeaders = currentHeaders,
                     masterPlaylistUrl = m3u8Url,
+                    preferLocalTsRemux = preferLocalTsRemux,
                 )
 
                 if (muxSuccess) {
@@ -641,8 +648,12 @@ object DownloadManager {
         segmentUrl: String,
         headers: Map<String, String>,
     ): ByteArray {
+        val requestHeaders = headers.toMutableMap()
+        if (!requestHeaders.containsKey("Origin")) {
+            requestHeaders["Referer"]?.let { requestHeaders["Origin"] = it }
+        }
         val raw = httpClient.get(segmentUrl) {
-            headers.forEach { (k, v) -> header(k, v) }
+            requestHeaders.forEach { (k, v) -> header(k, v) }
         }.readBytes()
         return HlsPngTsStrip.stripSegmentPayloadIfNeeded(segmentUrl, raw)
     }

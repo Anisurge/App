@@ -27,4 +27,6 @@ expect suspend fun muxToMkv(
     inputHeaders: Map<String, String>? = null,
     /** Master HLS URL — Android uses Media3 to export the full playlist when set. */
     masterPlaylistUrl: String? = null,
+    /** When true (vibeplayer / PNG-wrapped segments), remux the local `.ts` file instead of exporting the master URL. */
+    preferLocalTsRemux: Boolean = false,
 ): Boolean

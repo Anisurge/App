@@ -14,9 +14,27 @@ object HlsPngTsStrip {
         return host.contains("ibyteimg.com") || host.contains("byteimg.com")
     }
 
+    fun isVibeplayerHlsHost(url: String): Boolean {
+        val host = url.substringAfter("://", "").substringBefore('/').lowercase()
+        return host.contains("vibeplayer.site")
+    }
+
+    /** Anitaku / vibeplayer HLS: download segments locally and remux; skip Media3 remote playlist export. */
+    fun prefersLocalSegmentMux(
+        masterUrl: String?,
+        segmentUrls: List<String> = emptyList(),
+        apiServer: String? = null,
+    ): Boolean {
+        if (apiServer.equals("anitaku", ignoreCase = true)) return true
+        if (masterUrl != null && isVibeplayerHlsHost(masterUrl)) return true
+        return segmentUrls.any { isDisguisedTsCdnHost(it) }
+    }
+
     fun stripSegmentPayloadIfNeeded(segmentUrl: String, raw: ByteArray): ByteArray {
-        if (!isDisguisedTsCdnHost(segmentUrl)) return raw
-        return stripPngTsWrapper(raw)
+        if (isDisguisedTsCdnHost(segmentUrl) || raw.hasPngSignature()) {
+            return stripPngTsWrapper(raw)
+        }
+        return raw
     }
 
     fun stripPngTsWrapper(raw: ByteArray): ByteArray {

@@ -134,15 +134,17 @@ actual suspend fun muxToMkv(
     outputPath: String,
     inputHeaders: Map<String, String>?,
     masterPlaylistUrl: String?,
+    preferLocalTsRemux: Boolean,
 ): Boolean = withContext(Dispatchers.IO) {
     try {
         File(outputPath).parentFile?.mkdirs()
 
-        val disguisedHls = HlsPngTsStrip.isDisguisedTsCdnHost(videoPath) ||
-            masterPlaylistUrl?.let { HlsPngTsStrip.isDisguisedTsCdnHost(it) } == true
+        val skipRemoteHlsExport = preferLocalTsRemux ||
+            HlsPngTsStrip.isDisguisedTsCdnHost(videoPath) ||
+            masterPlaylistUrl?.let { HlsPngTsStrip.isVibeplayerHlsHost(it) } == true
 
         val masterUrl = masterPlaylistUrl?.takeIf { it.startsWith("http") }
-        if (masterUrl != null && !disguisedHls) {
+        if (masterUrl != null && !skipRemoteHlsExport) {
             val exported = exportHlsPlaylistToFile(
                 context = androidAppContext,
                 playlistUrl = masterUrl,
@@ -152,7 +154,7 @@ actual suspend fun muxToMkv(
             if (exported) return@withContext true
         }
 
-        if (videoPath.startsWith("http") && !disguisedHls) {
+        if (videoPath.startsWith("http") && !skipRemoteHlsExport) {
             val exported = exportHlsPlaylistToFile(
                 context = androidAppContext,
                 playlistUrl = videoPath,
@@ -163,6 +165,9 @@ actual suspend fun muxToMkv(
         }
 
         if (!videoPath.startsWith("http")) {
+            if (remuxTsToMp4WithRxFfmpeg(videoPath, audioPath, outputPath)) {
+                return@withContext true
+            }
             val exported = exportLocalMediaToFile(
                 context = androidAppContext,
                 inputPath = videoPath,

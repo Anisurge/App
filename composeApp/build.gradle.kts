@@ -151,6 +151,7 @@ kotlin {
             implementation(libs.androidx.media3.exoplayer)
             implementation(libs.androidx.media3.exoplayer.hls)
             implementation(libs.androidx.media3.transformer)
+            implementation(libs.rxffmpeg)
 
             // SAF Document access
             implementation("androidx.documentfile:documentfile:1.0.1")

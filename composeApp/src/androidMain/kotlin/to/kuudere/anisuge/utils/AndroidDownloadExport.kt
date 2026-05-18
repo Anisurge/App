@@ -2,7 +2,9 @@ package to.kuudere.anisuge.utils
 
 import android.content.Context
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.Clock
+import io.microshow.rxffmpeg.RxFFmpegInvoke
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -97,7 +99,10 @@ internal suspend fun exportLocalMediaToFile(
     val outputFile = File(outputPath)
     outputFile.parentFile?.mkdirs()
 
-    val mediaItem = MediaItem.fromUri(android.net.Uri.fromFile(inputFile))
+    val mediaItem = MediaItem.Builder()
+        .setUri(android.net.Uri.fromFile(inputFile))
+        .setMimeType(MimeTypes.VIDEO_MP2T)
+        .build()
     val transformer = Transformer.Builder(context).build()
 
     val listener = object : Transformer.Listener {
@@ -130,6 +135,44 @@ internal suspend fun exportLocalMediaToFile(
     } catch (e: Exception) {
         e.printStackTrace()
         if (continuation.isActive) continuation.resume(false)
+    }
+}
+
+internal fun remuxTsToMp4WithRxFfmpeg(
+    videoPath: String,
+    audioPath: String?,
+    outputPath: String,
+): Boolean {
+    val inputFile = File(videoPath)
+    if (!inputFile.exists() || inputFile.length() == 0L) {
+        println("[RxFFmpeg] missing or empty input: $videoPath")
+        return false
+    }
+
+    val outFile = File(outputPath)
+    outFile.parentFile?.mkdirs()
+    if (outFile.exists()) outFile.delete()
+
+    val cmd = mutableListOf("ffmpeg", "-y", "-i", videoPath)
+    val audioFile = audioPath?.let { File(it) }?.takeIf { it.exists() && it.length() > 0L }
+    if (audioFile != null) {
+        cmd.addAll(listOf("-i", audioFile.absolutePath, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy"))
+    } else {
+        cmd.addAll(listOf("-c", "copy", "-bsf:a", "aac_adtstoasc"))
+    }
+    cmd.add(outputPath)
+
+    return try {
+        val rc = RxFFmpegInvoke.getInstance().runCommand(cmd.toTypedArray(), null)
+        val ok = outFile.exists() && outFile.length() > 1024L
+        if (!ok) {
+            println("[RxFFmpeg] remux failed rc=$rc inputBytes=${inputFile.length()} outputBytes=${outFile.length()}")
+        }
+        ok
+    } catch (e: Exception) {
+        println("[RxFFmpeg] remux error: ${e.message}")
+        e.printStackTrace()
+        false
     }
 }
 

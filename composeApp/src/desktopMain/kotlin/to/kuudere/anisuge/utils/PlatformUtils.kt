@@ -58,6 +58,7 @@ actual suspend fun muxToMkv(
     outputPath: String,
     inputHeaders: Map<String, String>?,
     masterPlaylistUrl: String?,
+    preferLocalTsRemux: Boolean,
 ): Boolean = withContext(Dispatchers.IO) {
     try {
         val ffmpegPath = try {
