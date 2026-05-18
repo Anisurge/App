@@ -18,10 +18,17 @@ data class BatchScrapeStreamData(
 )
 
 @Serializable
+data class StreamSubtitle(
+    val url: String = "",
+    val label: String = "",
+)
+
+@Serializable
 data class StreamInfo(
     val url: String = "",
     val quality: String? = null,
     val headers: StreamHeaders? = null,
+    val subtitles: List<StreamSubtitle> = emptyList(),
 )
 
 @Serializable
