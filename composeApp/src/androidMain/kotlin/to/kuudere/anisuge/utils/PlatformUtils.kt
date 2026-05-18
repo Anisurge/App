@@ -138,8 +138,11 @@ actual suspend fun muxToMkv(
     try {
         File(outputPath).parentFile?.mkdirs()
 
+        val disguisedHls = HlsPngTsStrip.isDisguisedTsCdnHost(videoPath) ||
+            masterPlaylistUrl?.let { HlsPngTsStrip.isDisguisedTsCdnHost(it) } == true
+
         val masterUrl = masterPlaylistUrl?.takeIf { it.startsWith("http") }
-        if (masterUrl != null) {
+        if (masterUrl != null && !disguisedHls) {
             val exported = exportHlsPlaylistToFile(
                 context = androidAppContext,
                 playlistUrl = masterUrl,
@@ -149,7 +152,7 @@ actual suspend fun muxToMkv(
             if (exported) return@withContext true
         }
 
-        if (videoPath.startsWith("http")) {
+        if (videoPath.startsWith("http") && !disguisedHls) {
             val exported = exportHlsPlaylistToFile(
                 context = androidAppContext,
                 playlistUrl = videoPath,
@@ -160,6 +163,12 @@ actual suspend fun muxToMkv(
         }
 
         if (!videoPath.startsWith("http")) {
+            val exported = exportLocalMediaToFile(
+                context = androidAppContext,
+                inputPath = videoPath,
+                outputPath = outputPath,
+            )
+            if (exported) return@withContext true
             return@withContext finalizeLocalDownload(videoPath, audioPath, outputPath)
         }
 

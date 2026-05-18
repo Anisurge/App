@@ -83,6 +83,56 @@ internal suspend fun exportHlsPlaylistToFile(
     }
 }
 
+internal suspend fun exportLocalMediaToFile(
+    context: Context,
+    inputPath: String,
+    outputPath: String,
+): Boolean = suspendCancellableCoroutine { continuation ->
+    val inputFile = File(inputPath)
+    if (!inputFile.exists() || inputFile.length() == 0L) {
+        if (continuation.isActive) continuation.resume(false)
+        return@suspendCancellableCoroutine
+    }
+
+    val outputFile = File(outputPath)
+    outputFile.parentFile?.mkdirs()
+
+    val mediaItem = MediaItem.fromUri(android.net.Uri.fromFile(inputFile))
+    val transformer = Transformer.Builder(context).build()
+
+    val listener = object : Transformer.Listener {
+        override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+            val ok = outputFile.exists() && outputFile.length() > 0L
+            if (continuation.isActive) continuation.resume(ok)
+        }
+
+        override fun onError(
+            composition: Composition,
+            exportResult: ExportResult,
+            exportException: ExportException,
+        ) {
+            println("[Media3] local export error: ${exportException.message}")
+            if (continuation.isActive) continuation.resume(false)
+        }
+    }
+
+    transformer.addListener(listener)
+    continuation.invokeOnCancellation {
+        try {
+            transformer.cancel()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    try {
+        transformer.start(mediaItem, outputFile.absolutePath)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        if (continuation.isActive) continuation.resume(false)
+    }
+}
+
 internal fun finalizeLocalDownload(
     videoPath: String,
     audioPath: String?,

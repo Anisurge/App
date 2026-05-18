@@ -14,13 +14,11 @@ import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.concurrent.thread
+import to.kuudere.anisuge.utils.HlsPngTsStrip
 
 internal class LocalStreamProxy {
     private companion object {
         const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        private val PNG_SIGNATURE = byteArrayOf(
-            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-        )
     }
 
     private data class Session(val headers: Map<String, String>)
@@ -139,7 +137,7 @@ internal class LocalStreamProxy {
             }
             // Disguised PNG+TS segments must be fetched whole so we can strip the PNG prefix before
             // honoring the player's byte range on the MPEG-TS payload.
-            if (!needsPngTsStrip(targetUrl)) {
+            if (!HlsPngTsStrip.isDisguisedTsCdnHost(targetUrl)) {
                 range?.let { setRequestProperty("Range", it) }
             }
         }
@@ -159,9 +157,9 @@ internal class LocalStreamProxy {
                 val bytes = rewritten.toByteArray(StandardCharsets.UTF_8)
                 writeHeaders(output, 200, "OK", "application/vnd.apple.mpegurl", bytes.size.toLong())
                 output.write(bytes)
-            } else if (needsPngTsStrip(targetUrl)) {
+            } else if (HlsPngTsStrip.isDisguisedTsCdnHost(targetUrl)) {
                 val raw = source.use { it.readBytes() }
-                val payload = stripPngTsWrapper(raw)
+                val payload = HlsPngTsStrip.stripPngTsWrapper(raw)
                 val slice = sliceForClientRange(payload, range)
                 val responseHeaders = buildSegmentResponseHeaders(
                     upstreamStatus = status,
@@ -254,47 +252,9 @@ internal class LocalStreamProxy {
         val lowerUrl = url.substringBefore('?').lowercase()
         return when {
             lowerUrl.endsWith(".jpg") || lowerUrl.endsWith(".jpeg") -> "video/mp2t"
-            isDisguisedTsCdnHost(url) -> "video/mp2t"
+            HlsPngTsStrip.isDisguisedTsCdnHost(url) -> "video/mp2t"
             else -> contentType.ifBlank { "application/octet-stream" }
         }
-    }
-
-    /** Vibeplayer / Anitaku HLS lists PNG-looking URLs that are a tiny PNG header + MPEG-TS payload. */
-    private fun isDisguisedTsCdnHost(url: String): Boolean {
-        val host = runCatching { URI(url).host?.lowercase() }.getOrNull() ?: return false
-        return host.contains("ibyteimg.com") || host.contains("byteimg.com")
-    }
-
-    private fun needsPngTsStrip(targetUrl: String): Boolean = isDisguisedTsCdnHost(targetUrl)
-
-    private fun stripPngTsWrapper(raw: ByteArray): ByteArray {
-        if (raw.size < 12 || !raw.hasPngSignature()) return raw
-        var pos = 8
-        while (pos + 12 <= raw.size) {
-            val chunkLen = readUInt32Be(raw, pos)
-            if (chunkLen < 0 || pos + 12L + chunkLen > raw.size) return raw
-            val chunkType = raw.decodeToString(pos + 4, pos + 8)
-            pos += 12 + chunkLen
-            if (chunkType == "IEND") {
-                if (pos >= raw.size) return raw
-                val ts = raw.copyOfRange(pos, raw.size)
-                return if (ts.size >= 188 && ts[0] == 0x47.toByte()) ts else raw
-            }
-        }
-        return raw
-    }
-
-    private fun ByteArray.hasPngSignature(): Boolean {
-        if (size < PNG_SIGNATURE.size) return false
-        return PNG_SIGNATURE.indices.all { this[it] == PNG_SIGNATURE[it] }
-    }
-
-    private fun readUInt32Be(data: ByteArray, offset: Int): Int {
-        if (offset + 4 > data.size) return -1
-        return ((data[offset].toInt() and 0xFF) shl 24) or
-            ((data[offset + 1].toInt() and 0xFF) shl 16) or
-            ((data[offset + 2].toInt() and 0xFF) shl 8) or
-            (data[offset + 3].toInt() and 0xFF)
     }
 
     private data class SegmentResponseHeaders(
