@@ -18,6 +18,9 @@ import kotlin.concurrent.thread
 internal class LocalStreamProxy {
     private companion object {
         const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        private val PNG_SIGNATURE = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        )
     }
 
     private data class Session(val headers: Map<String, String>)
@@ -44,7 +47,8 @@ internal class LocalStreamProxy {
             sessions.remove(sessionId)
             targets.keys.removeAll { it.startsWith("$sessionId:") }
         }
-        if (sessions.isEmpty()) stop()
+        // Do not stop the local server here — mpv may still be reading the previous
+        // session's proxied URLs; stopping changes the port and causes HLS open failures.
     }
 
     private fun ensureStarted() {
@@ -133,7 +137,11 @@ internal class LocalStreamProxy {
             if (session.headers.keys.none { it.equals("Accept", ignoreCase = true) }) {
                 setRequestProperty("Accept", "*/*")
             }
-            range?.let { setRequestProperty("Range", it) }
+            // Disguised PNG+TS segments must be fetched whole so we can strip the PNG prefix before
+            // honoring the player's byte range on the MPEG-TS payload.
+            if (!needsPngTsStrip(targetUrl)) {
+                range?.let { setRequestProperty("Range", it) }
+            }
         }
 
         try {
@@ -151,10 +159,29 @@ internal class LocalStreamProxy {
                 val bytes = rewritten.toByteArray(StandardCharsets.UTF_8)
                 writeHeaders(output, 200, "OK", "application/vnd.apple.mpegurl", bytes.size.toLong())
                 output.write(bytes)
+            } else if (needsPngTsStrip(targetUrl)) {
+                val raw = source.use { it.readBytes() }
+                val payload = stripPngTsWrapper(raw)
+                val slice = sliceForClientRange(payload, range)
+                val responseHeaders = buildSegmentResponseHeaders(
+                    upstreamStatus = status,
+                    clientRange = range,
+                    payloadSize = payload.size,
+                    upstreamAcceptRanges = connection.getHeaderField("Accept-Ranges"),
+                )
+                writeHeaders(
+                    output,
+                    responseHeaders.status,
+                    responseHeaders.message,
+                    proxiedContentType(targetUrl, contentType),
+                    slice.size.toLong(),
+                    responseHeaders.extra,
+                )
+                output.write(slice)
             } else {
                 val responseHeaders = listOfNotNull(
                     connection.getHeaderField("Content-Range")?.let { "Content-Range" to it },
-                    connection.getHeaderField("Accept-Ranges")?.let { "Accept-Ranges" to it }
+                    connection.getHeaderField("Accept-Ranges")?.let { "Accept-Ranges" to it },
                 )
                 writeHeaders(
                     output,
@@ -162,7 +189,7 @@ internal class LocalStreamProxy {
                     connection.responseMessage ?: "OK",
                     proxiedContentType(targetUrl, contentType),
                     connection.contentLengthLong,
-                    responseHeaders
+                    responseHeaders,
                 )
                 source.use { it.copyTo(output) }
             }
@@ -225,11 +252,112 @@ internal class LocalStreamProxy {
 
     private fun proxiedContentType(url: String, contentType: String): String {
         val lowerUrl = url.substringBefore('?').lowercase()
-        return if (lowerUrl.endsWith(".jpg") || lowerUrl.endsWith(".jpeg")) {
-            "video/mp2t"
-        } else {
-            contentType.ifBlank { "application/octet-stream" }
+        return when {
+            lowerUrl.endsWith(".jpg") || lowerUrl.endsWith(".jpeg") -> "video/mp2t"
+            isDisguisedTsCdnHost(url) -> "video/mp2t"
+            else -> contentType.ifBlank { "application/octet-stream" }
         }
+    }
+
+    /** Vibeplayer / Anitaku HLS lists PNG-looking URLs that are a tiny PNG header + MPEG-TS payload. */
+    private fun isDisguisedTsCdnHost(url: String): Boolean {
+        val host = runCatching { URI(url).host?.lowercase() }.getOrNull() ?: return false
+        return host.contains("ibyteimg.com") || host.contains("byteimg.com")
+    }
+
+    private fun needsPngTsStrip(targetUrl: String): Boolean = isDisguisedTsCdnHost(targetUrl)
+
+    private fun stripPngTsWrapper(raw: ByteArray): ByteArray {
+        if (raw.size < 12 || !raw.hasPngSignature()) return raw
+        var pos = 8
+        while (pos + 12 <= raw.size) {
+            val chunkLen = readUInt32Be(raw, pos)
+            if (chunkLen < 0 || pos + 12L + chunkLen > raw.size) return raw
+            val chunkType = raw.decodeToString(pos + 4, pos + 8)
+            pos += 12 + chunkLen
+            if (chunkType == "IEND") {
+                if (pos >= raw.size) return raw
+                val ts = raw.copyOfRange(pos, raw.size)
+                return if (ts.size >= 188 && ts[0] == 0x47.toByte()) ts else raw
+            }
+        }
+        return raw
+    }
+
+    private fun ByteArray.hasPngSignature(): Boolean {
+        if (size < PNG_SIGNATURE.size) return false
+        return PNG_SIGNATURE.indices.all { this[it] == PNG_SIGNATURE[it] }
+    }
+
+    private fun readUInt32Be(data: ByteArray, offset: Int): Int {
+        if (offset + 4 > data.size) return -1
+        return ((data[offset].toInt() and 0xFF) shl 24) or
+            ((data[offset + 1].toInt() and 0xFF) shl 16) or
+            ((data[offset + 2].toInt() and 0xFF) shl 8) or
+            (data[offset + 3].toInt() and 0xFF)
+    }
+
+    private data class SegmentResponseHeaders(
+        val status: Int,
+        val message: String,
+        val extra: List<Pair<String, String>>,
+    )
+
+    private fun buildSegmentResponseHeaders(
+        upstreamStatus: Int,
+        clientRange: String?,
+        payloadSize: Int,
+        upstreamAcceptRanges: String?,
+    ): SegmentResponseHeaders {
+        val extra = mutableListOf<Pair<String, String>>()
+        upstreamAcceptRanges?.let { extra.add("Accept-Ranges" to it) }
+
+        if (clientRange.isNullOrBlank()) {
+            return SegmentResponseHeaders(
+                status = if (upstreamStatus in 200..299) upstreamStatus else 200,
+                message = "OK",
+                extra = extra,
+            )
+        }
+
+        val (start, endInclusive) = parseHttpRange(clientRange, payloadSize) ?: return SegmentResponseHeaders(
+            status = if (upstreamStatus in 200..299) upstreamStatus else 200,
+            message = "OK",
+            extra = extra,
+        )
+        extra.add("Content-Range" to "bytes $start-$endInclusive/$payloadSize")
+        return SegmentResponseHeaders(
+            status = 206,
+            message = "Partial Content",
+            extra = extra,
+        )
+    }
+
+    private fun sliceForClientRange(payload: ByteArray, range: String?): ByteArray {
+        if (range.isNullOrBlank()) return payload
+        val (start, endInclusive) = parseHttpRange(range, payload.size) ?: return payload
+        return payload.copyOfRange(start, endInclusive + 1)
+    }
+
+    private fun parseHttpRange(range: String, totalSize: Int): Pair<Int, Int>? {
+        if (!range.startsWith("bytes=", ignoreCase = true) || totalSize <= 0) return null
+        val spec = range.substringAfter("bytes=").substringBefore(',').trim()
+        val dash = spec.indexOf('-')
+        if (dash < 0) return null
+        val startText = spec.substring(0, dash).trim()
+        val endText = spec.substring(dash + 1).trim()
+        val start = if (startText.isEmpty()) {
+            (totalSize - (endText.toLongOrNull() ?: return null)).toInt()
+        } else {
+            startText.toIntOrNull() ?: return null
+        }
+        val endInclusive = if (endText.isEmpty()) {
+            totalSize - 1
+        } else {
+            endText.toIntOrNull() ?: return null
+        }
+        if (start < 0 || endInclusive < start || start >= totalSize) return null
+        return start to minOf(endInclusive, totalSize - 1)
     }
 
     private fun writeHeaders(

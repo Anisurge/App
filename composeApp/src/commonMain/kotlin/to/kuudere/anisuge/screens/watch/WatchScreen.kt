@@ -1121,7 +1121,7 @@ fun WatchVideoPlayer(
                 autoPlay = uiState.autoPlay,
                 speed = uiState.playbackSpeed,
                 subtitleSize = uiState.subtitleSize,
-                headers = uiState.streamingData?.headers
+                headers = streamHeaders
             )
 
             // Resume: [rememberVideoPlayerState] keys only on [playbackUrl], so [savedWatchPosition] can

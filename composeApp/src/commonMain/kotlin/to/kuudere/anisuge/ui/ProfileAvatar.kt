@@ -59,13 +59,6 @@ fun ProfileAvatar(
                         contentDescription = null,
                     )
                 }
-                if (!frameUrl.isNullOrBlank()) {
-                    AnimatedProfileOverlay(
-                        url = frameUrl,
-                        modifier = Modifier.size(ringSize),
-                        contentDescription = null,
-                    )
-                }
                 ProfileAvatarContent(
                     url = url,
                     modifier = Modifier.size(avatarSize),
@@ -73,6 +66,13 @@ fun ProfileAvatar(
                     placeholderTint = placeholderTint,
                     backgroundColor = backgroundColor,
                 )
+                if (!frameUrl.isNullOrBlank()) {
+                    AnimatedProfileOverlay(
+                        url = frameUrl,
+                        modifier = Modifier.size(ringSize),
+                        contentDescription = null,
+                    )
+                }
             }
             showTestFrame -> {
                 val frameSize = testChatFrameSize(avatarSize)
