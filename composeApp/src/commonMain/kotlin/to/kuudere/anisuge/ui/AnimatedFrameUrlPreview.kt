@@ -10,11 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
-import io.ktor.client.call.body
-import io.ktor.client.request.get
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 
 /** Frame-only preview (shop catalog) — plays APNG from URL, no profile picture underneath. */
 @Composable
@@ -22,11 +18,13 @@ fun ShopFramePreview(
     frameUrl: String?,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    cacheKey: String? = null,
 ) {
     val resolved = remember(frameUrl) { resolveProfileMediaUrl(frameUrl) }
     if (resolved == null) return
     AnimatedFrameUrlPreview(
         url = resolved,
+        cacheKey = cacheKey,
         modifier = modifier,
         contentDescription = contentDescription,
     )
@@ -37,19 +35,18 @@ fun AnimatedFrameUrlPreview(
     url: String,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    cacheKey: String? = null,
 ) {
-    var bytes by remember(url) { mutableStateOf<ByteArray?>(null) }
-    var failed by remember(url) { mutableStateOf(false) }
+    var bytes by remember(url, cacheKey) {
+        mutableStateOf(AnimatedFrameBytesCache.peekMemory(url))
+    }
+    var failed by remember(url, cacheKey) { mutableStateOf(false) }
 
-    LaunchedEffect(url) {
-        bytes = null
+    LaunchedEffect(url, cacheKey) {
+        if (bytes != null) return@LaunchedEffect
         failed = false
-        val loaded = withContext(Dispatchers.Default) {
-            runCatching {
-                AppComponent.httpClient.get(url).body<ByteArray>()
-            }.getOrNull()
-        }
-        if (loaded != null && loaded.isNotEmpty()) {
+        val loaded = AnimatedFrameBytesCache.load(url, itemId = cacheKey)
+        if (loaded != null) {
             bytes = loaded
         } else {
             failed = true

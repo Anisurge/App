@@ -1753,7 +1753,7 @@ fun WatchVideoPlayer(
                     onAutoSkipOutroToggle = { viewModel.setAutoSkipOutro(it) }
                 )
             }
-        } else {
+        } else if (!uiState.isLoading && !uiState.isLoadingVideo) {
             Box(modifier = modifier.background(Color.Black)) {
                 Column(
                     modifier = Modifier.align(Alignment.Center),

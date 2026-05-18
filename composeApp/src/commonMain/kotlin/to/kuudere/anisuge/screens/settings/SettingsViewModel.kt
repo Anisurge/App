@@ -37,7 +37,11 @@ import to.kuudere.anisuge.data.models.WatchlistEntry
 import to.kuudere.anisuge.platform.clearSyncProgressNotification
 import to.kuudere.anisuge.platform.updateSyncProgressNotification
 import to.kuudere.anisuge.utils.isNetworkError
+import to.kuudere.anisuge.data.models.BffShopItem
 import to.kuudere.anisuge.data.models.toUserProfile
+import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
+import to.kuudere.anisuge.ui.isAnimatedFrameAssetUrl
+import to.kuudere.anisuge.ui.resolveProfileMediaUrl
 import to.kuudere.anisuge.i18n.AppLocale
 
 data class SettingsUiState(
@@ -480,6 +484,7 @@ class SettingsViewModel(
                             shopCatalogTotal = body.catalogTotal,
                         )
                     }
+                    prefetchShopFrameAnimations(body.catalog)
                 },
                 onFailure = { e ->
                     _uiState.update {
@@ -514,6 +519,7 @@ class SettingsViewModel(
                             shopCatalogTotal = body.catalogTotal,
                         )
                     }
+                    prefetchShopFrameAnimations(body.catalog)
                 },
                 onFailure = { e ->
                     _uiState.update {
@@ -524,6 +530,16 @@ class SettingsViewModel(
                     }
                 },
             )
+        }
+    }
+
+    private fun prefetchShopFrameAnimations(items: List<BffShopItem>) {
+        val urls = items.mapNotNull { item ->
+            resolveProfileMediaUrl(item.assetUrl)?.takeIf { isAnimatedFrameAssetUrl(it) }
+        }
+        if (urls.isEmpty()) return
+        viewModelScope.launch(Dispatchers.Default) {
+            AnimatedFrameBytesCache.prefetch(urls)
         }
     }
 
@@ -583,7 +599,12 @@ class SettingsViewModel(
                     var saved = 0
                     for (entry in manifest.items) {
                         bffShopService.downloadFrameBytes(entry.assetUrl).onSuccess { bytes ->
-                            to.kuudere.anisuge.data.services.ShopFrameCache.save(entry.id, bytes)
+                            val resolved = resolveProfileMediaUrl(entry.assetUrl)
+                            if (resolved != null) {
+                                AnimatedFrameBytesCache.store(resolved, bytes, itemId = entry.id)
+                            } else {
+                                to.kuudere.anisuge.data.services.ShopFrameCache.save(entry.id, bytes)
+                            }
                             saved++
                         }
                     }

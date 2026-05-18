@@ -10,11 +10,13 @@ fun AnimatedProfileOverlay(
     url: String?,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    cacheKey: String? = null,
 ) {
     val resolved = resolveProfileMediaUrl(url) ?: return
     if (isAnimatedFrameAssetUrl(resolved)) {
         AnimatedFrameUrlPreview(
             url = resolved,
+            cacheKey = cacheKey,
             modifier = modifier,
             contentDescription = contentDescription,
         )
