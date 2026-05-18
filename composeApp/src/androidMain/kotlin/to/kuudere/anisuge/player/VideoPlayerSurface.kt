@@ -632,7 +632,22 @@ actual fun VideoPlayerSurface(
 private var isMPVInitialized = false
 private var isMPVInited = false
 private fun subAddExternal(url: String, flag: String, headers: Map<String, String>): Boolean {
+    val preferLocalText = url.contains(".vtt", ignoreCase = true) ||
+        url.contains(".srt", ignoreCase = true) ||
+        url.contains(".ass", ignoreCase = true)
     if (url.startsWith("http://") || url.startsWith("https://")) {
+        if (preferLocalText) {
+            val localPath = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(url, headers)
+            if (localPath != null) {
+                try {
+                    MPVLib.command(arrayOf("sub-add", localPath, flag))
+                    Log.i(SUB_TAG, "sub-add cached text [$flag] $localPath")
+                    return true
+                } catch (e: Exception) {
+                    Log.w(SUB_TAG, "cached sub-add failed: ${e.message}")
+                }
+            }
+        }
         return try {
             MPVLib.command(arrayOf("sub-add", url, flag))
             Log.i(SUB_TAG, "sub-add remote [$flag] $url")

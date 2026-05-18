@@ -40,6 +40,8 @@ data class WatchUiState(
     val currentQuality: String = "Auto",
     val availableSubtitles: List<to.kuudere.anisuge.data.models.SubtitleData> = emptyList(), // Store the full data object
     val currentSubtitleUrl: String? = null,
+    /** User picked "Off" in settings; avoids forcing sid=0 while embed subs are still loading. */
+    val subtitlesDisabled: Boolean = false,
     val currentFontsDir: String? = null,
     val playbackSpeed: Double = 1.0,
     val savedWatchPosition: Double = 0.0,
@@ -129,6 +131,7 @@ class WatchViewModel(
                 availableQualities = emptyList(),
                 availableSubtitles = emptyList(),
                 currentSubtitleUrl = null,
+                subtitlesDisabled = false,
                 currentFontsDir = null,
                 savedWatchPosition = resumeFromContinueSeconds?.takeIf { it >= 1.0 } ?: 0.0,
                 targetLang = null,
@@ -488,6 +491,7 @@ class WatchViewModel(
                         currentQuality = defaultQuality,
                         availableSubtitles = subtitles,
                         currentSubtitleUrl = selectedSubUrl,
+                        subtitlesDisabled = false,
                         offlinePath = null,
                     )
                 }
@@ -527,6 +531,7 @@ class WatchViewModel(
                 availableQualities = emptyList(),
                 availableSubtitles = emptyList(),
                 currentSubtitleUrl = null,
+                subtitlesDisabled = false,
                 currentFontsDir = null,
             )
         }
@@ -538,7 +543,8 @@ class WatchViewModel(
     fun setSubtitle(url: String?, subtitleLang: String? = null) {
         _uiState.update { 
             it.copy(
-                currentSubtitleUrl = url, 
+                currentSubtitleUrl = url,
+                subtitlesDisabled = url == null,
                 targetSubtitleLang = subtitleLang ?: it.targetSubtitleLang,
                 showSettingsOverlay = false
             ) 
@@ -560,6 +566,7 @@ class WatchViewModel(
                 availableQualities = emptyList(),
                 availableSubtitles = emptyList(),
                 currentSubtitleUrl = null,
+                subtitlesDisabled = false,
                 currentFontsDir = null
             ) 
         }
@@ -589,6 +596,7 @@ class WatchViewModel(
                 availableQualities = emptyList(),
                 availableSubtitles = emptyList(),
                 currentSubtitleUrl = null,
+                subtitlesDisabled = false,
                 currentFontsDir = null
             ) 
         }
@@ -644,6 +652,7 @@ class WatchViewModel(
                 availableQualities = emptyList(),
                 availableSubtitles = emptyList(),
                 currentSubtitleUrl = null,
+                subtitlesDisabled = false,
                 currentFontsDir = null,
                 savedWatchPosition = 0.0  // always start new episode from beginning
             ) 
