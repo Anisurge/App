@@ -2,15 +2,13 @@ package to.kuudere.anisuge.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
@@ -19,6 +17,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -35,14 +34,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.foundation.Image
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 import to.kuudere.anisuge.platform.ChatImagePick
@@ -50,6 +49,9 @@ import to.kuudere.anisuge.platform.CHAT_IMAGE_MAX_BYTES
 import to.kuudere.anisuge.platform.cropSquareBitmap
 import to.kuudere.anisuge.platform.decodeImageBitmap
 import to.kuudere.anisuge.platform.encodeJpeg
+
+private const val MIN_CROP_PX = 96f
+private const val INITIAL_CROP_FRACTION = 0.88f
 
 @Composable
 fun ProfileImageCropSheet(
@@ -114,6 +116,15 @@ fun ProfileImageCropSheet(
     }
 }
 
+private enum class CropHandle {
+    None,
+    Move,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
 @Composable
 private fun ProfileImageCropContent(
     bitmap: ImageBitmap,
@@ -121,23 +132,39 @@ private fun ProfileImageCropContent(
     onCancel: () -> Unit,
     onConfirm: (ImageBitmap) -> Unit,
 ) {
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
     var viewportSize by remember { mutableStateOf(GeometrySize.Zero) }
-    val density = LocalDensity.current
+    var cropCenter by remember(bitmap) { mutableStateOf(Offset.Zero) }
+    var cropSize by remember(bitmap) { mutableFloatStateOf(0f) }
+    var cropInitialized by remember(bitmap) { mutableStateOf(false) }
+    var activeHandle by remember { mutableStateOf(CropHandle.None) }
 
-    val cropFraction = 0.82f
+    LaunchedEffect(viewportSize, bitmap) {
+        if (cropInitialized || viewportSize.width <= 0f) return@LaunchedEffect
+        val imageRect = fitImageRect(bitmap, viewportSize)
+        val maxSquare = min(imageRect.width, imageRect.height) * INITIAL_CROP_FRACTION
+        cropSize = maxSquare
+        cropCenter = imageRect.center
+        cropInitialized = true
+    }
+
+    val imageRect = if (viewportSize.width > 0f) {
+        fitImageRect(bitmap, viewportSize)
+    } else {
+        Rect.Zero
+    }
+    val density = LocalDensity.current
+    val handleRadiusPx = with(density) { 22.dp.toPx() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = "Move and zoom to fit your photo in the circle",
+            text = "Drag the square to move. Drag a corner to resize. The circle shows your profile preview.",
             color = Color.White.copy(alpha = 0.85f),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp, vertical = 20.dp),
         )
 
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -145,52 +172,126 @@ private fun ProfileImageCropContent(
                     viewportSize = GeometrySize(it.width.toFloat(), it.height.toFloat())
                 },
         ) {
-            if (viewportSize.width > 0f && viewportSize.height > 0f) {
-                val transform = rememberCropTransform(
-                    bitmap = bitmap,
-                    viewport = viewportSize,
-                    userScale = scale,
-                    userOffset = offset,
-                    cropFraction = cropFraction,
-                )
-                val cropRect = transform.cropRect
-
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = null,
-                    contentScale = ContentScale.FillBounds,
+            if (viewportSize.width > 0f && cropInitialized) {
+                Canvas(
                     modifier = Modifier
-                        .offset {
-                            IntOffset(
-                                transform.imageLeft.roundToInt(),
-                                transform.imageTop.roundToInt(),
-                            )
-                        }
-                        .size(
-                            width = with(density) { transform.imageWidthPx.toDp() },
-                            height = with(density) { transform.imageHeightPx.toDp() },
-                        )
+                        .fillMaxSize()
                         .pointerInput(bitmap) {
-                            detectTransformGestures { _, pan, zoom, _ ->
-                                scale = (scale * zoom).coerceIn(1f, 5f)
-                                offset += pan
-                            }
+                            detectDragGestures(
+                                onDragStart = { start ->
+                                    activeHandle = hitTestCropHandle(
+                                        point = start,
+                                        crop = cropRectFromCenter(cropCenter, cropSize),
+                                        handleRadius = handleRadiusPx,
+                                    )
+                                },
+                                onDrag = { change, dragAmount ->
+                                    val handle = activeHandle
+                                    if (handle == CropHandle.None) return@detectDragGestures
+                                    val current = cropRectFromCenter(cropCenter, cropSize)
+                                    val next = when (handle) {
+                                        CropHandle.Move -> {
+                                            clampCropSquare(
+                                                center = cropCenter + dragAmount,
+                                                size = cropSize,
+                                                imageRect = imageRect,
+                                            )
+                                        }
+                                        CropHandle.TopLeft -> resizeCropSquare(
+                                            anchor = Offset(current.right, current.bottom),
+                                            finger = change.position,
+                                            imageRect = imageRect,
+                                            growX = -1,
+                                            growY = -1,
+                                        )
+                                        CropHandle.TopRight -> resizeCropSquare(
+                                            anchor = Offset(current.left, current.bottom),
+                                            finger = change.position,
+                                            imageRect = imageRect,
+                                            growX = 1,
+                                            growY = -1,
+                                        )
+                                        CropHandle.BottomLeft -> resizeCropSquare(
+                                            anchor = Offset(current.right, current.top),
+                                            finger = change.position,
+                                            imageRect = imageRect,
+                                            growX = -1,
+                                            growY = 1,
+                                        )
+                                        CropHandle.BottomRight -> resizeCropSquare(
+                                            anchor = Offset(current.left, current.top),
+                                            finger = change.position,
+                                            imageRect = imageRect,
+                                            growX = 1,
+                                            growY = 1,
+                                        )
+                                        CropHandle.None -> return@detectDragGestures
+                                    }
+                                    cropCenter = next.first
+                                    cropSize = next.second
+                                    change.consume()
+                                },
+                                onDragEnd = { activeHandle = CropHandle.None },
+                                onDragCancel = { activeHandle = CropHandle.None },
+                            )
                         },
-                )
+                ) {
+                    drawImage(
+                        image = bitmap,
+                        dstOffset = IntOffset(
+                            imageRect.left.roundToInt(),
+                            imageRect.top.roundToInt(),
+                        ),
+                        dstSize = IntSize(
+                            imageRect.width.roundToInt().coerceAtLeast(1),
+                            imageRect.height.roundToInt().coerceAtLeast(1),
+                        ),
+                    )
 
-                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val crop = cropRectFromCenter(cropCenter, cropSize)
                     val dimPath = Path().apply {
                         fillType = PathFillType.EvenOdd
                         addRect(Rect(Offset.Zero, size))
-                        addOval(cropRect)
+                        addRect(crop)
                     }
-                    drawPath(dimPath, Color.Black.copy(alpha = 0.55f))
-                    drawOval(
+                    drawPath(dimPath, Color.Black.copy(alpha = 0.58f))
+
+                    drawRect(
                         color = Color.White,
-                        topLeft = cropRect.topLeft,
-                        size = cropRect.size,
-                        style = Stroke(width = 3.dp.toPx()),
+                        topLeft = crop.topLeft,
+                        size = crop.size,
+                        style = Stroke(width = 2.5.dp.toPx()),
                     )
+
+                    val guideInset = crop.width * 0.04f
+                    val guideSize = crop.width - guideInset * 2f
+                    val guideLeft = crop.left + guideInset
+                    val guideTop = crop.top + guideInset
+                    drawOval(
+                        color = Color.White.copy(alpha = 0.9f),
+                        topLeft = Offset(guideLeft, guideTop),
+                        size = androidx.compose.ui.geometry.Size(guideSize, guideSize),
+                        style = Stroke(width = 2.dp.toPx()),
+                    )
+
+                    val handleRadius = 10.dp.toPx()
+                    listOf(
+                        Offset(crop.left, crop.top),
+                        Offset(crop.right, crop.top),
+                        Offset(crop.left, crop.bottom),
+                        Offset(crop.right, crop.bottom),
+                    ).forEach { corner ->
+                        drawCircle(
+                            color = Color.White,
+                            radius = handleRadius,
+                            center = corner,
+                        )
+                        drawCircle(
+                            color = Color(0xFF0D0D0D),
+                            radius = handleRadius * 0.55f,
+                            center = corner,
+                        )
+                    }
                 }
             }
         }
@@ -207,19 +308,22 @@ private fun ProfileImageCropContent(
             }
             Button(
                 onClick = {
-                    if (viewportSize.width <= 0f) return@Button
-                    val crop = computeCropTransform(
+                    if (!cropInitialized || viewportSize.width <= 0f) return@Button
+                    val pixels = mapCropRectToBitmap(
                         bitmap = bitmap,
-                        viewport = viewportSize,
-                        userScale = scale,
-                        userOffset = offset,
-                        cropFraction = cropFraction,
-                    )
+                        imageRect = imageRect,
+                        cropRect = cropRectFromCenter(cropCenter, cropSize),
+                    ) ?: return@Button
                     onConfirm(
-                        cropSquareBitmap(bitmap, crop.srcLeft, crop.srcTop, crop.srcSize),
+                        cropSquareBitmap(
+                            bitmap,
+                            pixels.first,
+                            pixels.second,
+                            pixels.third,
+                        ),
                     )
                 },
-                enabled = !isSaving,
+                enabled = !isSaving && cropInitialized,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
             ) {
                 if (isSaving) {
@@ -236,65 +340,89 @@ private fun ProfileImageCropContent(
     }
 }
 
-private data class CropTransform(
-    val cropRect: Rect,
-    val imageLeft: Float,
-    val imageTop: Float,
-    val imageWidthPx: Float,
-    val imageHeightPx: Float,
-    val srcLeft: Int,
-    val srcTop: Int,
-    val srcSize: Int,
-)
-
-@Composable
-private fun rememberCropTransform(
-    bitmap: ImageBitmap,
-    viewport: GeometrySize,
-    userScale: Float,
-    userOffset: Offset,
-    cropFraction: Float,
-): CropTransform = remember(bitmap, viewport, userScale, userOffset, cropFraction) {
-    computeCropTransform(bitmap, viewport, userScale, userOffset, cropFraction)
-}
-
-private fun computeCropTransform(
-    bitmap: ImageBitmap,
-    viewport: GeometrySize,
-    userScale: Float,
-    userOffset: Offset,
-    cropFraction: Float,
-): CropTransform {
-    val cropSizePx = min(viewport.width, viewport.height) * cropFraction
-    val cropLeft = (viewport.width - cropSizePx) / 2f
-    val cropTop = (viewport.height - cropSizePx) / 2f
-    val cropRect = Rect(cropLeft, cropTop, cropLeft + cropSizePx, cropTop + cropSizePx)
-
-    val fitScale = min(
+private fun fitImageRect(bitmap: ImageBitmap, viewport: GeometrySize): Rect {
+    val scale = min(
         viewport.width / bitmap.width.toFloat(),
         viewport.height / bitmap.height.toFloat(),
     )
-    val totalScale = fitScale * userScale
-    val imageWidthPx = bitmap.width * totalScale
-    val imageHeightPx = bitmap.height * totalScale
-    val imageLeft = (viewport.width - imageWidthPx) / 2f + userOffset.x
-    val imageTop = (viewport.height - imageHeightPx) / 2f + userOffset.y
+    val width = bitmap.width * scale
+    val height = bitmap.height * scale
+    val left = (viewport.width - width) / 2f
+    val top = (viewport.height - height) / 2f
+    return Rect(left, top, left + width, top + height)
+}
 
-    val srcLeft = ((cropLeft - imageLeft) / totalScale).roundToInt()
-        .coerceIn(0, bitmap.width - 1)
-    val srcTop = ((cropTop - imageTop) / totalScale).roundToInt()
-        .coerceIn(0, bitmap.height - 1)
-    val srcSize = (cropSizePx / totalScale).roundToInt()
-        .coerceIn(1, min(bitmap.width - srcLeft, bitmap.height - srcTop))
+private fun cropRectFromCenter(center: Offset, size: Float): Rect {
+    val half = size / 2f
+    return Rect(center.x - half, center.y - half, center.x + half, center.y + half)
+}
 
-    return CropTransform(
-        cropRect = cropRect,
-        imageLeft = imageLeft,
-        imageTop = imageTop,
-        imageWidthPx = imageWidthPx,
-        imageHeightPx = imageHeightPx,
-        srcLeft = srcLeft,
-        srcTop = srcTop,
-        srcSize = srcSize,
+private fun clampCropSquare(
+    center: Offset,
+    size: Float,
+    imageRect: Rect,
+): Pair<Offset, Float> {
+    val maxSize = min(imageRect.width, imageRect.height)
+    val clampedSize = size.coerceIn(MIN_CROP_PX, maxSize)
+    val half = clampedSize / 2f
+    val clampedCenter = Offset(
+        x = center.x.coerceIn(imageRect.left + half, imageRect.right - half),
+        y = center.y.coerceIn(imageRect.top + half, imageRect.bottom - half),
     )
+    return clampedCenter to clampedSize
+}
+
+private fun resizeCropSquare(
+    anchor: Offset,
+    finger: Offset,
+    imageRect: Rect,
+    growX: Int,
+    growY: Int,
+): Pair<Offset, Float> {
+    val dx = (finger.x - anchor.x) * growX
+    val dy = (finger.y - anchor.y) * growY
+    val rawSize = min(abs(dx), abs(dy))
+    val maxSize = min(
+        if (growX > 0) imageRect.right - anchor.x else anchor.x - imageRect.left,
+        if (growY > 0) imageRect.bottom - anchor.y else anchor.y - imageRect.top,
+    )
+    val size = rawSize.coerceIn(MIN_CROP_PX, maxSize)
+    val center = Offset(
+        x = anchor.x + growX * size / 2f,
+        y = anchor.y + growY * size / 2f,
+    )
+    return clampCropSquare(center, size, imageRect)
+}
+
+private fun hitTestCropHandle(
+    point: Offset,
+    crop: Rect,
+    handleRadius: Float,
+): CropHandle {
+    val corners = listOf(
+        CropHandle.TopLeft to Offset(crop.left, crop.top),
+        CropHandle.TopRight to Offset(crop.right, crop.top),
+        CropHandle.BottomLeft to Offset(crop.left, crop.bottom),
+        CropHandle.BottomRight to Offset(crop.right, crop.bottom),
+    )
+    for ((handle, corner) in corners) {
+        if ((point - corner).getDistance() <= handleRadius) return handle
+    }
+    return if (crop.contains(point)) CropHandle.Move else CropHandle.None
+}
+
+private fun mapCropRectToBitmap(
+    bitmap: ImageBitmap,
+    imageRect: Rect,
+    cropRect: Rect,
+): Triple<Int, Int, Int>? {
+    if (imageRect.width <= 0f || imageRect.height <= 0f) return null
+    val scale = imageRect.width / bitmap.width.toFloat()
+    val srcLeft = ((cropRect.left - imageRect.left) / scale).roundToInt()
+        .coerceIn(0, bitmap.width - 1)
+    val srcTop = ((cropRect.top - imageRect.top) / scale).roundToInt()
+        .coerceIn(0, bitmap.height - 1)
+    val srcSize = (cropRect.width / scale).roundToInt()
+        .coerceIn(1, min(bitmap.width - srcLeft, bitmap.height - srcTop))
+    return Triple(srcLeft, srcTop, srcSize)
 }
