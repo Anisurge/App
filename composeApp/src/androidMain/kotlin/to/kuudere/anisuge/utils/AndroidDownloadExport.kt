@@ -138,9 +138,10 @@ internal suspend fun exportLocalMediaToFile(
     }
 }
 
-internal fun remuxTsToMp4WithRxFfmpeg(
+internal fun remuxToMkvWithRxFfmpeg(
     videoPath: String,
     audioPath: String?,
+    subtitles: List<Pair<String, String>>,
     outputPath: String,
 ): Boolean {
     val inputFile = File(videoPath)
@@ -156,9 +157,37 @@ internal fun remuxTsToMp4WithRxFfmpeg(
     val cmd = mutableListOf("ffmpeg", "-y", "-i", videoPath)
     val audioFile = audioPath?.let { File(it) }?.takeIf { it.exists() && it.length() > 0L }
     if (audioFile != null) {
-        cmd.addAll(listOf("-i", audioFile.absolutePath, "-map", "0:v:0", "-map", "1:a:0", "-c", "copy"))
+        cmd.addAll(listOf("-i", audioFile.absolutePath))
+    }
+
+    val validSubs = subtitles.mapNotNull { (path, label) ->
+        val f = File(path)
+        if (f.exists() && f.length() > 0L) f to label else null
+    }
+    validSubs.forEach { (file, _) ->
+        cmd.addAll(listOf("-i", file.absolutePath))
+    }
+
+    cmd.addAll(listOf("-map", "0:v:0"))
+    if (audioFile != null) {
+        cmd.addAll(listOf("-map", "1:a:0"))
     } else {
-        cmd.addAll(listOf("-c", "copy", "-bsf:a", "aac_adtstoasc"))
+        cmd.addAll(listOf("-map", "0:a?"))
+    }
+
+    var nextInputIndex = if (audioFile != null) 2 else 1
+    validSubs.forEach { _ ->
+        cmd.addAll(listOf("-map", "$nextInputIndex:s:0"))
+        nextInputIndex++
+    }
+
+    cmd.add("-c")
+    cmd.add("copy")
+    if (audioFile == null) {
+        cmd.addAll(listOf("-bsf:a", "aac_adtstoasc"))
+    }
+    validSubs.forEachIndexed { index, (_, label) ->
+        cmd.addAll(listOf("-metadata:s:s:$index", "title=$label"))
     }
     cmd.add(outputPath)
 
@@ -166,7 +195,7 @@ internal fun remuxTsToMp4WithRxFfmpeg(
         val rc = RxFFmpegInvoke.getInstance().runCommand(cmd.toTypedArray(), null)
         val ok = outFile.exists() && outFile.length() > 1024L
         if (!ok) {
-            println("[RxFFmpeg] remux failed rc=$rc inputBytes=${inputFile.length()} outputBytes=${outFile.length()}")
+            println("[RxFFmpeg] remux failed rc=$rc inputBytes=${inputFile.length()} subs=${validSubs.size} outputBytes=${outFile.length()}")
         }
         ok
     } catch (e: Exception) {

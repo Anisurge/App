@@ -221,6 +221,21 @@ object DownloadManager {
                     // Use pre-resolved M3U8 URL (quality was selected in dialog)
                     m3u8Url = preResolvedM3u8
                     currentHeaders = (taskHeaders ?: emptyMap()).toMutableMap()
+                    try {
+                        val legacyDub = server.endsWith("-dub", ignoreCase = true)
+                        val apiServer = if (legacyDub) server.dropLast(4) else server
+                        val meta = AppComponent.serverRepository.getServerById(server)
+                            ?: AppComponent.serverRepository.getServerById(apiServer)
+                        val useDub = when {
+                            legacyDub -> true
+                            meta?.type == "dub" -> true
+                            meta?.type == "sub" -> false
+                            else -> preferBatchDub
+                        }
+                        val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
+                        val streamData = if (useDub) response?.dub else response?.sub
+                        subtitlesUrl = streamData?.subtitles?.trim()?.takeIf { it.isNotEmpty() }
+                    } catch (_: Exception) { }
                 } else {
                     val legacyDub = server.endsWith("-dub", ignoreCase = true)
                     val apiServer = if (legacyDub) server.dropLast(4) else server
@@ -305,23 +320,7 @@ object DownloadManager {
                     return@launch
                 }
 
-                // 2. Download Subtitles (only when we fetched from API and have a subtitles URL)
-                val subsToDownload = mutableListOf<Pair<String, String>>()
-                if (!subtitlesUrl.isNullOrBlank()) {
-                    updateTask(taskId) { it.copy(status = "Downloading subtitles...") }
-                    try {
-                        val subBytes = httpClient.get(subtitlesUrl) {
-                            currentHeaders.forEach { (k, v) -> header(k, v) }
-                        }.readBytes()
-                        val format = if (subtitlesUrl.contains(".vtt")) "vtt" else if (subtitlesUrl.contains(".srt")) "srt" else "ass"
-                        val fileName = "subtitle_default.$format"
-                        val subFile = "$epDir/$fileName"
-                        KmpFileSystem.write(subFile, subBytes)
-                        subsToDownload.add(subFile to "Default")
-                    } catch (e: Exception) { }
-                }
-
-                // 3. Download Video & Audio
+                // 2. Parse master playlist (video + optional embedded subtitle tracks)
                 updateTask(taskId) { it.copy(status = "Parsing playlist...") }
                 val legacyForRemuxGuess = server.endsWith("-dub", ignoreCase = true)
                 val apiServerForRemux = if (legacyForRemuxGuess) server.dropLast(4) else server
@@ -329,6 +328,19 @@ object DownloadManager {
                 val masterPlaylist = httpClient.get(m3u8Url) {
                     currentHeaders.forEach { (k, v) -> header(k, v) }
                 }.bodyAsText()
+
+                val subsToDownload = mutableListOf<Pair<String, String>>()
+                updateTask(taskId) { it.copy(status = "Downloading subtitles...") }
+                collectDownloadedSubtitles(
+                    epDir = epDir,
+                    apiSubtitlesUrl = subtitlesUrl,
+                    masterPlaylistUrl = m3u8Url,
+                    masterPlaylist = masterPlaylist,
+                    headers = currentHeaders,
+                    out = subsToDownload,
+                )
+
+                // 3. Download Video & Audio
                 
                 val audioPlaylistUrl = parseAudioPlaylistUrl(m3u8Url, masterPlaylist, audioLang ?: "jpn")
                 val videoPlaylistUrl = getFinalPlaylistUrl(m3u8Url, masterPlaylist)
@@ -675,6 +687,91 @@ object DownloadManager {
                 segments.add(if (line.startsWith("http")) line else "$base/$line")
             }
         return segments
+    }
+
+    private fun parseSubtitlePlaylistUrls(baseUrl: String, content: String): List<Pair<String, String>> {
+        val base = baseUrl.substringBeforeLast("/")
+        val results = mutableListOf<Pair<String, String>>()
+        content.lines().forEach { line ->
+            if (!line.startsWith("#EXT-X-MEDIA:TYPE=SUBTITLES", ignoreCase = true)) return@forEach
+            val uri = Regex("URI=\"([^\"]+)\"").find(line)?.groupValues?.getOrNull(1) ?: return@forEach
+            val name = Regex("NAME=\"([^\"]+)\"").find(line)?.groupValues?.get(1) ?: "Subtitles"
+            val url = if (uri.startsWith("http")) uri else "$base/$uri"
+            results.add(url to name)
+        }
+        return results
+    }
+
+    private suspend fun collectDownloadedSubtitles(
+        epDir: String,
+        apiSubtitlesUrl: String?,
+        masterPlaylistUrl: String,
+        masterPlaylist: String,
+        headers: Map<String, String>,
+        out: MutableList<Pair<String, String>>,
+    ) {
+        val seen = mutableSetOf<String>()
+        suspend fun addFromUrl(url: String, label: String) {
+            val normalized = url.trim()
+            if (normalized.isBlank() || normalized in seen) return
+            seen.add(normalized)
+            val saved = downloadSubtitleAsset(epDir, normalized, label, headers) ?: return
+            out.add(saved)
+        }
+
+        apiSubtitlesUrl?.let { addFromUrl(it, "Default") }
+        parseSubtitlePlaylistUrls(masterPlaylistUrl, masterPlaylist).forEach { (url, name) ->
+            addFromUrl(url, name)
+        }
+    }
+
+    private suspend fun downloadSubtitleAsset(
+        epDir: String,
+        url: String,
+        label: String,
+        headers: Map<String, String>,
+    ): Pair<String, String>? {
+        val requestHeaders = headers.toMutableMap()
+        if (!requestHeaders.containsKey("Origin")) {
+            requestHeaders["Referer"]?.let { requestHeaders["Origin"] = it }
+        }
+        return try {
+            val rawBytes = httpClient.get(url) {
+                requestHeaders.forEach { (k, v) -> header(k, v) }
+            }.readBytes()
+            val head = rawBytes.decodeToString(0, minOf(rawBytes.size, 64))
+            if (head.contains("#EXTM3U", ignoreCase = true)) {
+                val bodyText = rawBytes.decodeToString()
+                val segments = parseSegments(url, bodyText)
+                if (segments.isEmpty()) return null
+                val merged = buildString {
+                    segments.forEach { segmentUrl ->
+                        val part = httpClient.get(segmentUrl) {
+                            requestHeaders.forEach { (k, v) -> header(k, v) }
+                        }.bodyAsText()
+                        append(part.trim())
+                        append('\n')
+                    }
+                }
+                val safeLabel = label.replace("[^A-Za-z0-9_]".toRegex(), "_").ifBlank { "Default" }
+                val subFile = "$epDir/subtitle_$safeLabel.vtt"
+                KmpFileSystem.write(subFile, merged.encodeToByteArray())
+                subFile to label
+            } else {
+                val ext = when {
+                    url.contains(".vtt", ignoreCase = true) || head.startsWith("WEBVTT") -> "vtt"
+                    url.contains(".srt", ignoreCase = true) -> "srt"
+                    else -> "ass"
+                }
+                val safeLabel = label.replace("[^A-Za-z0-9_]".toRegex(), "_").ifBlank { "Default" }
+                val subFile = "$epDir/subtitle_$safeLabel.$ext"
+                KmpFileSystem.write(subFile, rawBytes)
+                subFile to label
+            }
+        } catch (e: Exception) {
+            println("[Download] subtitle fetch failed ($label): ${e.message}")
+            null
+        }
     }
 
     private fun formatSpeed(bytesPerSec: Double): String {
