@@ -2,21 +2,23 @@ package to.kuudere.anisuge.screens.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.services.SearchFiltersMapper
 import to.kuudere.anisuge.data.services.SearchService
 import to.kuudere.anisuge.utils.isNetworkError
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 
 data class SearchUiState(
     val results: List<AnimeItem> = emptyList(),
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val currentOffset: Int = 0,
+    val total: Int = 0,
     val hasMore: Boolean = true,
     val keyword: String = "",
     val selectedGenres: List<String> = emptyList(),
@@ -25,6 +27,7 @@ data class SearchUiState(
     val selectedType: String? = null,
     val selectedStatus: String? = null,
     val selectedSort: String? = "Popularity",
+    val selectedCountry: String? = null,
     val isOffline: Boolean = false,
 )
 
@@ -38,10 +41,6 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
         search()
     }
 
-    /**
-     * Apply a preset search configuration in a single state update.
-     * Used for dedicated "browse" screens (e.g. New on App) without navigating to the Search tab.
-     */
     fun applyPreset(
         keyword: String = "",
         selectedGenres: List<String> = emptyList(),
@@ -50,6 +49,7 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
         selectedType: String? = null,
         selectedStatus: String? = null,
         selectedSort: String? = "Popularity",
+        selectedCountry: String? = null,
     ) {
         searchJob?.cancel()
         _uiState.value = _uiState.value.copy(
@@ -60,6 +60,7 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
             selectedType = selectedType,
             selectedStatus = selectedStatus,
             selectedSort = selectedSort,
+            selectedCountry = selectedCountry,
         )
         search()
     }
@@ -110,6 +111,11 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
         search()
     }
 
+    fun onCountryChange(country: String?) {
+        _uiState.value = _uiState.value.copy(selectedCountry = country)
+        search()
+    }
+
     fun clearFilters() {
         _uiState.value = _uiState.value.copy(
             selectedGenres = emptyList(),
@@ -117,7 +123,8 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
             selectedYear = null,
             selectedType = null,
             selectedStatus = null,
-            selectedSort = "Popularity"
+            selectedSort = "Popularity",
+            selectedCountry = null,
         )
         search()
     }
@@ -128,7 +135,7 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
             if (state.isLoadingMore || !state.hasMore) return@launch
             _uiState.value = state.copy(isLoadingMore = true)
         } else {
-            _uiState.value = state.copy(isLoading = true, results = emptyList(), currentOffset = 0)
+            _uiState.value = state.copy(isLoading = true, results = emptyList(), currentOffset = 0, total = 0)
         }
 
         val currentState = _uiState.value
@@ -136,34 +143,41 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
             val response = searchService.search(
                 q = currentState.keyword.ifBlank { null },
                 limit = 20,
-                offset = currentState.currentOffset,
-                format = currentState.selectedType,
-                status = currentState.selectedStatus,
-                genres = currentState.selectedGenres.ifEmpty { null }?.joinToString(","),
+                offset = if (loadMore) currentState.currentOffset else 0,
+                format = SearchFiltersMapper.formatForApi(currentState.selectedType),
+                status = currentState.selectedStatus?.takeIf { it.isNotBlank() },
+                genre = SearchFiltersMapper.genresForApi(currentState.selectedGenres),
+                season = SearchFiltersMapper.seasonForApi(currentState.selectedSeason),
+                year = SearchFiltersMapper.yearForApi(currentState.selectedYear),
+                sort = SearchFiltersMapper.sortForApi(currentState.selectedSort),
+                country = SearchFiltersMapper.countryForApi(currentState.selectedCountry),
             )
 
             if (response != null) {
                 val newItems = response.results
+                val nextOffset = (if (loadMore) currentState.currentOffset else 0) + newItems.size
+                val total = response.total
                 _uiState.value = _uiState.value.copy(
                     results = if (loadMore) _uiState.value.results + newItems else newItems,
                     isLoading = false,
                     isLoadingMore = false,
                     isOffline = false,
-                    hasMore = (newItems.size >= 20),
-                    currentOffset = _uiState.value.currentOffset + newItems.size
+                    total = total,
+                    hasMore = nextOffset < total && newItems.isNotEmpty(),
+                    currentOffset = nextOffset,
                 )
             } else {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isLoadingMore = false,
-                    isOffline = false
+                    isOffline = false,
                 )
             }
         } catch (e: Exception) {
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 isLoadingMore = false,
-                isOffline = e.isNetworkError()
+                isOffline = e.isNetworkError(),
             )
         }
     }

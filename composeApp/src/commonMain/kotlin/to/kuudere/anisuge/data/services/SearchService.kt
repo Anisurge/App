@@ -18,11 +18,14 @@ class SearchService(
         offset: Int = 0,
         format: String? = null,
         status: String? = null,
-        genres: String? = null,
+        genre: String? = null,
+        season: String? = null,
+        year: Int? = null,
+        sort: String? = null,
+        country: String? = null,
         character: String? = null,
         staff: String? = null,
         studio: String? = null,
-        country: String? = null,
         watchlist: String? = null,
         facets: Boolean? = null,
     ): SearchResponse? {
@@ -33,11 +36,14 @@ class SearchService(
             if (offset > 0) parameter("offset", offset)
             format?.let { parameter("format", it) }
             status?.let { parameter("status", it) }
-            genres?.let { parameter("genres", it) }
+            genre?.let { parameter("genre", it) }
+            season?.let { parameter("season", it) }
+            year?.let { parameter("year", it) }
+            sort?.let { parameter("sort", it) }
+            country?.let { parameter("country", it) }
             character?.let { parameter("character", it) }
             staff?.let { parameter("staff", it) }
             studio?.let { parameter("studio", it) }
-            country?.let { parameter("country", it) }
             watchlist?.let { parameter("watchlist", it) }
             facets?.let { parameter("facets", it) }
             if (stored != null) header("Authorization", "Bearer ${stored.token}")
