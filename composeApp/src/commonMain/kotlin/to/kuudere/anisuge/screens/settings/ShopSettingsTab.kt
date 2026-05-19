@@ -49,33 +49,39 @@ fun ShopSettingsTab(
             .padding(bottom = 24.dp),
     ) {
         Text(
-            "Frame shop",
+            "Store",
             color = TEXT,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Animated profile frames — spend Berries from Settings → Berries.",
+            "Animated profile frames — spend Berries from Settings → Berries tab.",
             color = MUTED,
             fontSize = 12.sp,
             lineHeight = 17.sp,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
         )
 
-        Text(
-            "Balance: ${formatBerries(uiState.shopCoins)} Berries",
-            color = ShopBerryGoldDim,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
+        Row(
             modifier = Modifier.padding(bottom = 14.dp),
-        )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            BerryIcon(size = 22.dp)
+            Text(
+                "Balance: ${formatBerries(uiState.shopCoins)} Berries",
+                color = ShopBerryGoldDim,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
 
         OutlinedButton(
             onClick = onRefresh,
             enabled = !uiState.isLoadingShop,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Refresh shop", maxLines = 1)
+            Text("Refresh store", maxLines = 1)
         }
 
         Spacer(Modifier.height(16.dp))
@@ -93,7 +99,7 @@ fun ShopSettingsTab(
             }
             uiState.shopCatalog.isEmpty() -> {
                 Text(
-                    "No frames in the shop yet.",
+                    "No frames in the store yet.",
                     color = MUTED,
                     modifier = Modifier.padding(top = 8.dp),
                 )
@@ -240,14 +246,21 @@ private fun ShopItemCard(
             )
         }
         Spacer(Modifier.height(10.dp))
-        Text(
-            berryLabel(item.priceCoins),
-            color = ShopBerryGoldDim,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            BerryIcon(size = 16.dp)
+            Text(
+                " ${berryLabel(item.priceCoins)}",
+                color = ShopBerryGoldDim,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         when {
             item.owned -> {

@@ -54,7 +54,7 @@ fun ProfileFramePickerSection(
 
         if (ownedFrames.isEmpty()) {
             Text(
-                "No frames yet — buy some in Frame shop.",
+                "No frames yet — buy some in the Store.",
                 color = Color(0xFF9E9E9E),
                 fontSize = 12.sp,
             )

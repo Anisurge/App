@@ -168,7 +168,9 @@ private const val ANISURGE_TELEGRAM_URL = "https://t.me/anisurge"
 data class SettingsNavItem(
     val tab: SettingsTab,
     val label: String,
-    val icon: ImageVector
+    val icon: ImageVector,
+    /** Berries tab uses the Beli mark (฿) instead of [icon]. */
+    val useBeliIcon: Boolean = false,
 )
 
 @Composable
@@ -308,8 +310,8 @@ fun SettingsScreen(
 
     val navItems = buildList {
         add(SettingsNavItem(SettingsTab.Profile, strings.profile, Icons.Default.Person))
-        add(SettingsNavItem(SettingsTab.Shop, "Frame shop", Icons.Default.ShoppingBag))
-        add(SettingsNavItem(SettingsTab.Berries, "Berries", Icons.Default.Star))
+        add(SettingsNavItem(SettingsTab.Shop, "Store", Icons.Default.ShoppingBag))
+        add(SettingsNavItem(SettingsTab.Berries, "Berries", Icons.Default.Star, useBeliIcon = true))
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
@@ -472,6 +474,24 @@ private fun localizedSettingsMessage(message: String, strings: AppStrings): Stri
     else -> message
 }
 
+@Composable
+private fun SettingsNavLeadingIcon(
+    item: SettingsNavItem,
+    tint: Color,
+    size: androidx.compose.ui.unit.Dp,
+) {
+    if (item.useBeliIcon) {
+        BerryIcon(size = size, color = tint)
+    } else {
+        Icon(
+            imageVector = item.icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size),
+        )
+    }
+}
+
 // ── Sidebar ─────────────────────────────────────────────────────────────────────
 @Composable
 private fun Sidebar(
@@ -517,12 +537,7 @@ private fun Sidebar(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = null,
-                    tint = textColor,
-                    modifier = Modifier.size(18.dp)
-                )
+                SettingsNavLeadingIcon(item = item, tint = textColor, size = 18.dp)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     item.label,
@@ -719,6 +734,7 @@ private fun MobileSettingsList(
             MobileSettingsItem(
                 icon = item.icon,
                 label = item.label,
+                useBeliIcon = item.useBeliIcon,
                 onClick = { onItemClick(item.tab) }
             )
         }
@@ -817,6 +833,7 @@ private fun MobileSettingsList(
 private fun MobileSettingsItem(
     icon: ImageVector,
     label: String,
+    useBeliIcon: Boolean = false,
     tint: Color = TEXT,
     isLoading: Boolean = false,
     onClick: () -> Unit
@@ -840,6 +857,8 @@ private fun MobileSettingsItem(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp
                 )
+            } else if (useBeliIcon) {
+                BerryIcon(size = 22.dp, color = tint)
             } else {
                 Icon(
                     imageVector = icon,

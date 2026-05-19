@@ -40,6 +40,7 @@ class AuthService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
     private val integrationsSyncService: IntegrationsSyncService,
+    private val librarySyncService: LibrarySyncService,
 ) {
     private val _authState = MutableStateFlow<SessionCheckResult>(SessionCheckResult.NoSession)
     val authState: StateFlow<SessionCheckResult> = _authState.asStateFlow()
@@ -144,7 +145,7 @@ class AuthService(
         if (!sessionStore.hasProjectRToken(session)) {
             throw Exception("Invalid paired session")
         }
-        val upgraded = if (sessionStore.needsAnisurgeSync(session)) {
+        val upgraded = if (sessionStore.requiresBffRelogin(session)) {
             when (val synced = syncSession(session.token)) {
                 is SessionCheckResult.Valid -> synced.session
                 else -> throw Exception("Failed to sync TV session")
@@ -184,22 +185,11 @@ class AuthService(
             return SessionCheckResult.NoSession
         }
 
-        if (sessionStore.needsAnisurgeSync(stored)) {
-            return try {
-                when (val synced = syncSession(stored.token)) {
-                    is SessionCheckResult.Valid -> {
-                        stored = synced.session
-                        fetchMe(stored)
-                    }
-                    is SessionCheckResult.Expired -> SessionCheckResult.Expired.also {
-                        _authState.value = it
-                    }
-                    else -> SessionCheckResult.NetworkError.also { _authState.value = it }
-                }
-            } catch (e: Exception) {
-                println("[AuthService] legacy sync failed: ${e.message}")
-                SessionCheckResult.Expired.also { _authState.value = it }
-            }
+        if (sessionStore.requiresBffRelogin(stored)) {
+            println("[AuthService] legacy ReAnime-only session — clearing; user must log in again")
+            sessionStore.clear()
+            _authState.value = SessionCheckResult.Expired
+            return SessionCheckResult.Expired
         }
 
         if (!sessionStore.isValid(stored)) {
@@ -276,6 +266,9 @@ class AuthService(
         val session = sessionFromBff(body)
         sessionStore.save(session)
         integrationsSyncService.restoreFromServer()
+        if (status == HttpStatusCode.Created) {
+            librarySyncService.syncWithReanime(force = true)
+        }
         val user = body.user?.toUserProfile()
         _authState.value = SessionCheckResult.Valid(session, user)
         return session

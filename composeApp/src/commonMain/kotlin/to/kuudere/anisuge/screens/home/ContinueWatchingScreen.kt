@@ -96,12 +96,12 @@ fun ContinueWatchingScreen(
             val spacing = if (isSmall) 14.dp else 18.dp
 
             when {
-                state.isLoading && state.continueWatching.isEmpty() -> {
+                state.isLoading && state.continueWatchingAll.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = Color.White)
                     }
                 }
-                state.continueWatching.isEmpty() -> {
+                state.continueWatchingAll.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             "Nothing to continue yet",
@@ -123,7 +123,7 @@ fun ContinueWatchingScreen(
                         horizontalArrangement = Arrangement.spacedBy(spacing),
                         verticalArrangement = Arrangement.spacedBy(spacing)
                     ) {
-                        items(state.continueWatching) { item ->
+                        items(state.continueWatchingAll) { item ->
                             ContinueWatchingGridCard(
                                 item = item,
                                 onClick = {

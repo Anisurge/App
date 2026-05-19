@@ -29,6 +29,12 @@ data class BffLibraryCounts(
 )
 
 @Serializable
+data class BffLibrarySyncResponse(
+    val ok: Boolean = true,
+    val library: BffLibraryCounts? = null,
+)
+
+@Serializable
 data class BffMeResponse(
     val user: BffPublicUser,
 )

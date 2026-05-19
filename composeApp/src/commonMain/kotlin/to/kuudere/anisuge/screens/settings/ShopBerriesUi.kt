@@ -1,8 +1,8 @@
 package to.kuudere.anisuge.screens.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -29,6 +30,50 @@ internal val ShopBerryMuted = Color(0xFF9E9E9E)
 internal val ShopBerryGold = Color(0xFFFFD54F)
 internal val ShopBerryGoldDim = Color(0xFFFFB300)
 internal val ShopBerryPanel = Color(0xFF1E1808)
+
+/** One Piece Beli / Berries currency mark (B with two vertical strokes — same glyph as ฿). */
+internal const val BELI_SYMBOL = "฿"
+
+@Composable
+internal fun BerryIcon(
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    color: Color = ShopBerryGold,
+) {
+    Text(
+        text = BELI_SYMBOL,
+        color = color,
+        fontSize = (size.value * 0.95f).sp,
+        fontWeight = FontWeight.Bold,
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun BerriesAmountLabel(
+    amount: Int,
+    modifier: Modifier = Modifier,
+    iconSize: Dp = 18.dp,
+    textColor: Color = ShopBerryGoldDim,
+    fontSize: androidx.compose.ui.unit.TextUnit = 14.sp, // default
+    fontWeight: FontWeight = FontWeight.SemiBold,
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        BerryIcon(size = iconSize)
+        Text(
+            formatBerries(amount),
+            color = textColor,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 internal fun formatBerries(amount: Int): String {
     val negative = amount < 0
@@ -88,12 +133,7 @@ internal fun BerriesBalanceCard(
                     fontWeight = FontWeight.SemiBold,
                 )
             }
-            Text(
-                "฿",
-                color = ShopBerryGold.copy(alpha = 0.35f),
-                fontSize = 48.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            BerryIcon(size = 56.dp, color = ShopBerryGold.copy(alpha = 0.9f))
         }
 
         Text(

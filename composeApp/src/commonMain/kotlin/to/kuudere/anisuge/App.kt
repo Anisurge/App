@@ -92,6 +92,7 @@ fun App(
                 AppComponent.authService,
                 AppComponent.watchlistService,
                 AppComponent.sessionStore,
+                AppComponent.librarySyncService,
             )
         }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }

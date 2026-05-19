@@ -32,6 +32,7 @@ data class WatchlistState(
 
 class WatchlistViewModel : ViewModel() {
     private val watchlistService = AppComponent.watchlistService
+    private val librarySyncService = AppComponent.librarySyncService
 
     private val _uiState = MutableStateFlow(WatchlistState())
     val uiState: StateFlow<WatchlistState> = _uiState.asStateFlow()
@@ -64,7 +65,10 @@ class WatchlistViewModel : ViewModel() {
 
     fun refresh() {
         _uiState.update { it.copy(items = emptyList(), currentOffset = 0, total = 0) }
-        fetchWatchlist()
+        viewModelScope.launch {
+            librarySyncService.syncWithReanime()
+            loadWatchlistPage(append = false)
+        }
     }
 
     fun onFolderChange(folder: String) {
@@ -117,7 +121,10 @@ class WatchlistViewModel : ViewModel() {
     }
 
     private fun fetchWatchlist(append: Boolean = false) {
-        viewModelScope.launch {
+        viewModelScope.launch { loadWatchlistPage(append) }
+    }
+
+    private suspend fun loadWatchlistPage(append: Boolean) {
             val offset = if (append) _uiState.value.currentOffset else 0
             if (!append) {
                 _uiState.update { it.copy(isLoading = true, error = null) }
@@ -164,7 +171,6 @@ class WatchlistViewModel : ViewModel() {
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, isPaginating = false, isOffline = e.isNetworkError(), error = if (e.isNetworkError()) null else e.message) }
             }
-        }
     }
 
     fun updateAnimeStatus(animeId: String, newFolder: String) {
