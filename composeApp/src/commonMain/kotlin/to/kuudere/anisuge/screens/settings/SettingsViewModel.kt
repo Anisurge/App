@@ -174,7 +174,7 @@ sealed class SettingsTab {
     data object Servers : SettingsTab()
     data object Notifications : SettingsTab()
     data object Shop : SettingsTab()
-    data object Redeem : SettingsTab()
+    data object Berries : SettingsTab()
 }
 
 class SettingsViewModel(
@@ -345,13 +345,14 @@ class SettingsViewModel(
             }
             is SettingsTab.Shop -> {
                 loadShop()
-                loadRewardsStatus()
                 if (_uiState.value.userProfile == null) {
                     loadUserProfile()
                 }
             }
-            is SettingsTab.Redeem -> {
+            is SettingsTab.Berries -> {
                 loadUserProfile()
+                loadShopInventory()
+                loadRewardsStatus()
             }
             is SettingsTab.Sync -> {
                 loadTrackingState()
@@ -533,7 +534,6 @@ class SettingsViewModel(
     fun loadShop() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingShop = true) }
-            loadRewardsStatus()
             bffShopService.fetchShopMe(catalogLimit = SHOP_PAGE_SIZE, catalogOffset = 0).fold(
                 onSuccess = { body ->
                     prefetchShopFrameAnimations(body.catalog)

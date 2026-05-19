@@ -66,7 +66,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ShoppingBag
-import androidx.compose.material.icons.filled.Redeem
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
@@ -309,7 +309,7 @@ fun SettingsScreen(
     val navItems = buildList {
         add(SettingsNavItem(SettingsTab.Profile, strings.profile, Icons.Default.Person))
         add(SettingsNavItem(SettingsTab.Shop, "Frame shop", Icons.Default.ShoppingBag))
-        add(SettingsNavItem(SettingsTab.Redeem, "Redeem code", Icons.Default.Redeem))
+        add(SettingsNavItem(SettingsTab.Berries, "Berries", Icons.Default.Star))
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
@@ -378,7 +378,6 @@ fun SettingsScreen(
                                 navItems = navItems,
                                 onLogout = onLogout,
                                 viewModel = viewModel,
-                                onOpenRedeem = { selectedTab = SettingsTab.Redeem },
                                 modifier = Modifier
                                     .widthIn(max = 900.dp)
                                     .padding(horizontal = 48.dp, vertical = 40.dp)
@@ -927,16 +926,12 @@ private fun MobileSettingsDetail(
                     onRefresh = viewModel::loadShop,
                     onLoadMore = viewModel::loadMoreShop,
                     onPurchase = viewModel::purchaseShopItem,
-                    onOpenRedeem = {
-                        viewModel.openMobileSettingsDetail(SettingsTab.Redeem)
-                        viewModel.onTabSelected(SettingsTab.Redeem)
-                    },
-                    onClaimDaily = viewModel::claimDailyReward,
                 )
-                is SettingsTab.Redeem -> RedeemCodeSettingsTab(
+                is SettingsTab.Berries -> BerriesSettingsTab(
                     uiState = uiState,
                     onCodeChange = viewModel::setRedeemCodeDraft,
                     onRedeem = viewModel::redeemShopCode,
+                    onClaimDaily = viewModel::claimDailyReward,
                 )
                 is SettingsTab.Preferences -> MobilePreferencesContent(
                     uiState = uiState,
@@ -1027,7 +1022,6 @@ private fun SettingsContent(
     navItems: List<SettingsNavItem>,
     onLogout: () -> Unit,
     viewModel: SettingsViewModel,
-    onOpenRedeem: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -1053,13 +1047,12 @@ private fun SettingsContent(
                 onRefresh = viewModel::loadShop,
                 onLoadMore = viewModel::loadMoreShop,
                 onPurchase = viewModel::purchaseShopItem,
-                onOpenRedeem = onOpenRedeem,
-                onClaimDaily = viewModel::claimDailyReward,
             )
-            is SettingsTab.Redeem -> RedeemCodeSettingsTab(
+            is SettingsTab.Berries -> BerriesSettingsTab(
                 uiState = uiState,
                 onCodeChange = viewModel::setRedeemCodeDraft,
                 onRedeem = viewModel::redeemShopCode,
+                onClaimDaily = viewModel::claimDailyReward,
             )
             is SettingsTab.Preferences -> PreferencesTab(
                 uiState = uiState,

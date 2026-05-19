@@ -57,7 +57,8 @@ class AuthService(
             setBody(LoginRequest(identifier, password))
         }
         if (response.status != HttpStatusCode.OK) {
-            throw Exception(response.bffErrorMessage("Login failed (${response.status})"))
+            val msg = response.bffErrorMessage("Login failed (${response.status})")
+            throw Exception(msg.friendlyAuthFailure(response.status.value))
         }
         return handleAuthResponse(response.status, response.body())
     }
@@ -69,7 +70,10 @@ class AuthService(
         }
         val ok = response.status == HttpStatusCode.OK || response.status == HttpStatusCode.Created
         if (!ok) {
-            throw Exception(response.bffErrorMessage("Registration failed (${response.status})"))
+            val msg = response.bffErrorMessage("Registration failed (${response.status})")
+                .friendlyAuthFailure(response.status.value)
+            println("[AuthService] signup failed: ${response.status} — $msg")
+            throw Exception(msg)
         }
         return handleAuthResponse(response.status, response.body())
     }
@@ -112,6 +116,18 @@ class AuthService(
         } catch (_: Exception) {
             fallback
         }
+    }
+
+    private fun String.friendlyAuthFailure(httpStatus: Int): String {
+        if (contains("failed (409)", ignoreCase = true) || contains("already", ignoreCase = true)) {
+            return when {
+                contains("email", ignoreCase = true) -> "That email is already registered — try logging in"
+                contains("username", ignoreCase = true) -> "That username is taken — pick another"
+                httpStatus == 409 -> "An account with this email or username already exists — try logging in"
+                else -> this
+            }
+        }
+        return this
     }
 
     private fun formatBffValidationError(err: JsonObject): String? {

@@ -26,10 +26,11 @@ private val BG_CARD = Color(0xFF141414)
 private val TEXT = Color.White
 
 @Composable
-fun RedeemCodeSettingsTab(
+fun BerriesSettingsTab(
     uiState: SettingsUiState,
     onCodeChange: (String) -> Unit,
     onRedeem: () -> Unit,
+    onClaimDaily: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -37,20 +38,37 @@ fun RedeemCodeSettingsTab(
             .padding(bottom = 24.dp),
     ) {
         Text(
-            "Redeem code",
+            "Berries",
             color = TEXT,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Enter a promo code to add Berries to your account. Each code works once per user.",
+            "Anisurge currency for profile frames. Earn by watching and checking in, or redeem promo codes.",
             color = ShopBerryMuted,
             fontSize = 12.sp,
             lineHeight = 17.sp,
             modifier = Modifier.padding(top = 4.dp, bottom = 20.dp),
         )
 
-        BerriesBalanceCard(balance = uiState.shopCoins)
+        BerriesBalanceCard(
+            balance = uiState.shopCoins,
+            loginStreak = uiState.rewardsLoginStreak,
+            canClaimDaily = uiState.rewardsCanClaimDaily,
+            nextDailyReward = uiState.rewardsNextDaily,
+            todayWatch = uiState.rewardsTodayWatch,
+            todayWatchCap = uiState.rewardsTodayWatchCap,
+            isClaimingDaily = uiState.isClaimingDailyReward,
+            onClaimDaily = onClaimDaily,
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        EarnBerriesTipsCard(
+            todayWatch = uiState.rewardsTodayWatch,
+            todayWatchCap = uiState.rewardsTodayWatchCap,
+            loginStreak = uiState.rewardsLoginStreak,
+        )
 
         Spacer(Modifier.height(20.dp))
 
@@ -62,13 +80,13 @@ fun RedeemCodeSettingsTab(
                 .padding(16.dp),
         ) {
             Text(
-                "Code",
+                "Redeem code",
                 color = TEXT,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                "From Discord, events, or staff.",
+                "Enter a promo code to add Berries. Each code works once per account.",
                 color = ShopBerryMuted,
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
@@ -108,7 +126,7 @@ fun RedeemCodeSettingsTab(
                         strokeWidth = 2.dp,
                     )
                 } else {
-                    Text("Redeem Berries", fontWeight = FontWeight.SemiBold)
+                    Text("Redeem", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
