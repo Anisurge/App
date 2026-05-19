@@ -42,8 +42,6 @@ fun ShopSettingsTab(
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
     onPurchase: (String) -> Unit,
-    onOpenRedeem: () -> Unit,
-    onClaimDaily: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -57,34 +55,20 @@ fun ShopSettingsTab(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Animated profile frames — earn Berries by watching · buy packs coming soon.",
+            "Animated profile frames — spend Berries from Settings → Berries.",
             color = MUTED,
             fontSize = 12.sp,
             lineHeight = 17.sp,
-            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
         )
 
-        BerriesBalanceCard(
-            balance = uiState.shopCoins,
-            loginStreak = uiState.rewardsLoginStreak,
-            canClaimDaily = uiState.rewardsCanClaimDaily,
-            nextDailyReward = uiState.rewardsNextDaily,
-            todayWatch = uiState.rewardsTodayWatch,
-            todayWatchCap = uiState.rewardsTodayWatchCap,
-            isClaimingDaily = uiState.isClaimingDailyReward,
-            onClaimDaily = onClaimDaily,
+        Text(
+            "Balance: ${formatBerries(uiState.shopCoins)} Berries",
+            color = ShopBerryGoldDim,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 14.dp),
         )
-
-        Spacer(Modifier.height(10.dp))
-
-        OutlinedButton(
-            onClick = onOpenRedeem,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Redeem Berries", maxLines = 1)
-        }
-
-        Spacer(Modifier.height(14.dp))
 
         OutlinedButton(
             onClick = onRefresh,

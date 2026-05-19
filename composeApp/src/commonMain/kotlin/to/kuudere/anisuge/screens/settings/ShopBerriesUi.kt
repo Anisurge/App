@@ -139,3 +139,69 @@ internal fun BerriesBalanceCard(
         }
     }
 }
+
+@Composable
+internal fun EarnBerriesTipsCard(
+    todayWatch: Int,
+    todayWatchCap: Int,
+    loginStreak: Int,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF141414))
+            .padding(16.dp),
+    ) {
+        Text(
+            "How to earn Berries",
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(12.dp))
+        EarnBerryTip(
+            title = "Watch anime",
+            detail = "Finish episodes (~85% watched) for 2 Berries each · up to $todayWatchCap/day ($todayWatch today)",
+        )
+        Spacer(Modifier.height(10.dp))
+        EarnBerryTip(
+            title = "Daily check-in",
+            detail = if (loginStreak > 0) {
+                "Claim above — ${loginStreak}-day streak adds bonus Berries"
+            } else {
+                "Claim above — streaks add bonus Berries over time"
+            },
+        )
+        Spacer(Modifier.height(10.dp))
+        EarnBerryTip(
+            title = "Community chat",
+            detail = "Your first message each day earns 1 Berry",
+        )
+        Spacer(Modifier.height(10.dp))
+        EarnBerryTip(
+            title = "Promo codes",
+            detail = "Redeem event or Discord codes below",
+        )
+    }
+}
+
+@Composable
+private fun EarnBerryTip(title: String, detail: String) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            title,
+            color = ShopBerryGoldDim,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            detail,
+            color = ShopBerryMuted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
