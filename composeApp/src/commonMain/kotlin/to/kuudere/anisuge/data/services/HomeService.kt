@@ -38,23 +38,37 @@ class HomeService(
         }
     }
 
-    suspend fun fetchContinueWatching(
-        limit: Int = 20,
-        offset: Int = 0
-    ): List<ContinueWatchingItem> {
-        val stored = sessionStore.get() ?: return emptyList()
+    suspend fun fetchContinueWatchingPage(
+        limit: Int = 100,
+        offset: Int = 0,
+    ): ContinueWatchingResponse? {
+        val stored = sessionStore.get() ?: return null
         return try {
             val response = httpClient.get("${AnisurgeApi.v1Base}/watch/continue") {
                 applyAnisurgeAuth(stored)
                 parameter("limit", limit)
                 if (offset > 0) parameter("offset", offset)
             }
-            val result: ContinueWatchingResponse = response.body()
-            result.data
+            response.body<ContinueWatchingResponse>()
         } catch (e: Exception) {
-            println("[HomeService] fetchContinueWatching error: ${e.message}")
-            emptyList()
+            println("[HomeService] fetchContinueWatchingPage error: ${e.message}")
+            null
         }
+    }
+
+    /** Loads every saved continue row from the BFF (not capped like ReAnime's list). */
+    suspend fun fetchAllContinueWatching(): List<ContinueWatchingItem> {
+        val pageSize = 100
+        var offset = 0
+        val all = mutableListOf<ContinueWatchingItem>()
+        while (true) {
+            val page = fetchContinueWatchingPage(limit = pageSize, offset = offset) ?: break
+            all.addAll(page.data)
+            if (page.data.isEmpty() || all.size >= page.total) break
+            offset += page.data.size
+            if (page.data.size < pageSize) break
+        }
+        return all
     }
 
     suspend fun fetchLatestAired(

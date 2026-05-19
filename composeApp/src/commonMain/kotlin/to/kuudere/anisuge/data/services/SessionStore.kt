@@ -54,7 +54,8 @@ class SessionStore(private val dataStore: DataStore<Preferences>) {
         return session.token.isNotBlank() && session.token.startsWith(PROJECT_R_PREFIX)
     }
 
-    fun needsAnisurgeSync(session: SessionInfo): Boolean {
+    /** Pre-BFF installs: ReAnime token only — user must sign in again for an Anisurge JWT. */
+    fun requiresBffRelogin(session: SessionInfo): Boolean {
         return hasProjectRToken(session) && session.anisurgeToken.isNullOrBlank()
     }
 }

@@ -15,8 +15,11 @@ import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.models.UserProfile
 import to.kuudere.anisuge.data.services.AuthService
 import kotlinx.coroutines.flow.update
+import to.kuudere.anisuge.data.services.LibrarySyncService
 import to.kuudere.anisuge.data.services.SessionStore
 import to.kuudere.anisuge.data.services.WatchlistService
+import to.kuudere.anisuge.utils.latestPerAnime
+import to.kuudere.anisuge.utils.sortedByRecent
 
 data class HomeUiState(
     val isLoading:        Boolean              = true,
@@ -26,7 +29,10 @@ data class HomeUiState(
     val latestAired:      List<AnimeItem>       = emptyList(),
     val newOnSite:        List<AnimeItem>       = emptyList(),
     val upcoming:         List<AnimeItem>       = emptyList(),
+    /** Home row: one entry per anime (latest episode). */
     val continueWatching: List<ContinueWatchingItem> = emptyList(),
+    /** Full list screen: every saved episode row. */
+    val continueWatchingAll: List<ContinueWatchingItem> = emptyList(),
     val isUpdatingWatchlist: Boolean            = false,
     val error:            String?               = null,
 )
@@ -36,6 +42,7 @@ class HomeViewModel(
     private val authService: AuthService,
     private val watchlistService: WatchlistService,
     private val sessionStore: SessionStore,
+    private val librarySyncService: LibrarySyncService,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var homeDataJob: Job? = null
@@ -102,18 +109,20 @@ class HomeViewModel(
 
     private suspend fun loadContinueWatching() {
         val session = sessionStore.get() ?: return
-        if (sessionStore.needsAnisurgeSync(session)) {
-            when (authService.checkSession()) {
-                is SessionCheckResult.Valid -> Unit
-                else -> return
-            }
-        } else if (authService.authState.value !is SessionCheckResult.Valid) {
+        if (!sessionStore.isValid(session) || authService.authState.value !is SessionCheckResult.Valid) {
             return
         }
 
+        librarySyncService.syncWithReanime()
+
         try {
-            val continueWatching = homeService.fetchContinueWatching()
-            _uiState.update { it.copy(continueWatching = continueWatching) }
+            val all = homeService.fetchAllContinueWatching().sortedByRecent()
+            _uiState.update {
+                it.copy(
+                    continueWatchingAll = all,
+                    continueWatching = all.latestPerAnime(),
+                )
+            }
         } catch (e: Exception) {
             println("[HomeVM] Failed to fetch continue watching: ${e.message}")
         }

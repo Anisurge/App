@@ -76,7 +76,7 @@ object AppComponent {
     }
 
     val authService: AuthService by lazy {
-        AuthService(sessionStore, httpClient, integrationsSyncService)
+        AuthService(sessionStore, httpClient, integrationsSyncService, librarySyncService)
     }
 
     val homeService: HomeService by lazy {
@@ -93,6 +93,10 @@ object AppComponent {
 
     val watchlistService: to.kuudere.anisuge.data.services.WatchlistService by lazy {
         to.kuudere.anisuge.data.services.WatchlistService(sessionStore, httpClient)
+    }
+
+    val librarySyncService: to.kuudere.anisuge.data.services.LibrarySyncService by lazy {
+        to.kuudere.anisuge.data.services.LibrarySyncService(sessionStore, httpClient)
     }
 
     val scheduleService: to.kuudere.anisuge.data.services.ScheduleService by lazy {
