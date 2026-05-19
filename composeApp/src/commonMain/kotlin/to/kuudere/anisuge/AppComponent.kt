@@ -39,9 +39,9 @@ object AppComponent {
             }
             install(Logging) { level = LogLevel.ALL }
             install(HttpTimeout) {
-                requestTimeoutMillis = 60000
-                connectTimeoutMillis = 30000
-                socketTimeoutMillis  = 60000
+                requestTimeoutMillis = 90_000
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis  = 90_000
             }
             install(WebSockets)
         }
