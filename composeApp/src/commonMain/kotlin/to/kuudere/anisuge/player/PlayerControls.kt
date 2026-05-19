@@ -509,6 +509,8 @@ fun PlayerControls(
                             val duration = playerState.duration
                             val activePosition = if (isSeeking) seekValue.toDouble() else expectedPosition ?: playerState.position
                             val progress = if (duration > 0) (activePosition / duration).toFloat().coerceIn(0f, 1f) else 0f
+                            val introRange = streamingData?.intro
+                            val outroRange = streamingData?.outro
 
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -568,42 +570,41 @@ fun PlayerControls(
                                     Canvas(Modifier.fillMaxWidth().height(3.dp)) {
                                         val w = size.width
                                         val h = size.height
+                                        val corner = CornerRadius(4.dp.toPx())
 
-                                        // Background track (dark)
-                                        drawRoundRect(Color.White.copy(alpha = 0.25f), size = size, cornerRadius = CornerRadius(4.dp.toPx()))
-                                        // Buffered portion (light gray) - between background and progress
+                                        drawRoundRect(Color.White.copy(alpha = 0.25f), size = size, cornerRadius = corner)
                                         if (bufferedProgress > progress) {
-                                            drawRoundRect(Color.White.copy(alpha = 0.5f), size = Size(w * bufferedProgress, h), cornerRadius = CornerRadius(4.dp.toPx()))
-                                        }
-                                        // White progress fill
-                                        drawRoundRect(Color.White, size = Size(w * progress, h), cornerRadius = CornerRadius(4.dp.toPx()))
-
-                                        // Intro highlight — yellow ON TOP of fill so always visible
-                                        val intro = streamingData?.intro
-                                        if (intro?.start != null && intro.end != null && duration > 0) {
-                                            val x0 = ((intro.start / duration).toFloat() * w).coerceIn(0f, w)
-                                            val x1 = ((intro.end / duration).toFloat() * w).coerceIn(0f, w)
-                                            if (x1 > x0) drawRect(Color.Yellow, Offset(x0, 0f), Size(x1 - x0, h))
+                                            drawRoundRect(Color.White.copy(alpha = 0.5f), size = Size(w * bufferedProgress, h), cornerRadius = corner)
                                         }
 
-                                        // Outro highlight — also yellow
-                                        val outro = streamingData?.outro
-                                        if (outro?.start != null && outro.end != null && duration > 0) {
-                                            val x0 = ((outro.start / duration).toFloat() * w).coerceIn(0f, w)
-                                            val x1 = ((outro.end / duration).toFloat() * w).coerceIn(0f, w)
-                                            if (x1 > x0) drawRect(Color.Yellow, Offset(x0, 0f), Size(x1 - x0, h))
+                                        fun drawSkipSpan(startSec: Double, endSec: Double, color: Color) {
+                                            if (duration <= 0) return
+                                            val endClamped = endSec.coerceAtMost(duration)
+                                            val startClamped = startSec.coerceIn(0.0, endClamped)
+                                            val x0 = ((startClamped / duration).toFloat() * w).coerceIn(0f, w)
+                                            val x1 = ((endClamped / duration).toFloat() * w).coerceIn(0f, w)
+                                            if (x1 > x0) drawRect(color, Offset(x0, 0f), Size(x1 - x0, h))
                                         }
 
-                                        // Chapter dividers
+                                        drawRoundRect(Color.White, size = Size(w * progress, h), cornerRadius = corner)
+
+                                        // Draw skip regions on top so outro at end of timeline stays visible
+                                        if (introRange?.start != null && introRange.end != null) {
+                                            drawSkipSpan(introRange.start, introRange.end, Color.Yellow.copy(alpha = 0.9f))
+                                        }
+                                        if (outroRange?.start != null && outroRange.end != null) {
+                                            drawSkipSpan(outroRange.start, outroRange.end, Color(0xFFFF8A80).copy(alpha = 0.9f))
+                                        }
+
                                         streamingData?.chapters?.forEach { ch ->
                                             if (ch.start_time != null && ch.start_time > 0 && duration > 0) {
                                                 val x = (ch.start_time / duration).toFloat() * w
-                                                if (x > 1f && x < w - 1f)
+                                                if (x > 1f && x < w - 1f) {
                                                     drawRect(Color.Black.copy(alpha = 0.8f), Offset(x - 1.dp.toPx(), 0f), Size(2.dp.toPx(), h))
+                                                }
                                             }
                                         }
                                     }
-                                    // Thumb
                                     Box(Modifier.fillMaxWidth(progress).wrapContentWidth(Alignment.End)) {
                                         Box(Modifier.size(10.dp).background(Color.White, CircleShape))
                                     }
