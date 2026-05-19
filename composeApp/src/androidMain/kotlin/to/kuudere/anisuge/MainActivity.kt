@@ -30,6 +30,7 @@ import to.kuudere.anisuge.platform.isAndroidTvPlatform
 
 class MainActivity : ComponentActivity() {
     private var notificationLaunch by mutableStateOf<NotificationLaunch?>(null)
+    private var skipSplash by mutableStateOf(false)
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -51,10 +52,12 @@ class MainActivity : ComponentActivity() {
         initNotificationTopics()
         android.util.Log.d("MainActivity", "onCreate intent=${intent?.data}")
         notificationLaunch = NotificationIntentParser.parse(intent)
+        skipSplash = NotificationIntentParser.shouldSkipSplash(intent, savedInstanceState)
         handleTrackingDeepLink(intent)
 
         setContent {
             App(
+                skipSplash = skipSplash,
                 notificationLaunch = notificationLaunch,
                 onNotificationLaunchConsumed = { notificationLaunch = null },
                 onAppExit = { finishAffinity() }
@@ -70,6 +73,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         android.util.Log.d("MainActivity", "onNewIntent data=${intent.data}")
+        skipSplash = true
         notificationLaunch = NotificationIntentParser.parse(intent)
         handleTrackingDeepLink(intent)
     }

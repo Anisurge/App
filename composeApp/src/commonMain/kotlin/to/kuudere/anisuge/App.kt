@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -71,6 +72,8 @@ private fun SavedState?.str(key: String): String? =
 
 @Composable
 fun App(
+    /** When true (warm resume / deep link), start on home and do not show splash video. */
+    skipSplash: Boolean = false,
     notificationLaunch: NotificationLaunch? = null,
     onNotificationLaunchConsumed: () -> Unit = {},
     onAppExit: () -> Unit = {},
@@ -162,6 +165,12 @@ fun App(
             }
         }
 
+        LaunchedEffect(skipSplash) {
+            if (skipSplash) {
+                homeVm.refresh(force = false)
+            }
+        }
+
         // Discord Rich Presence removed - not supported by new API
 
         LaunchedEffect(currentRoute, pendingNotificationLaunch?.id) {
@@ -174,10 +183,14 @@ fun App(
 
             when {
                 launch.animeId != null && launch.episodeNumber != null -> {
-                    navController.navigate(Screen.Watch(launch.animeId, launch.episodeNumber).route)
+                    navController.navigate(Screen.Watch(launch.animeId, launch.episodeNumber).route) {
+                        launchSingleTop = true
+                    }
                 }
                 launch.animeId != null -> {
-                    navController.navigate(Screen.Info(launch.animeId).route)
+                    navController.navigate(Screen.Info(launch.animeId).route) {
+                        launchSingleTop = true
+                    }
                 }
                 else -> {
                     notificationDialog = launch
@@ -232,9 +245,13 @@ fun App(
                 )
             }
             
+            val navStartDestination =
+                if (skipSplash) Screen.Home().route else Screen.Splash.route
+
+            key(navStartDestination) {
             NavHost(
                 navController    = navController,
-                startDestination = Screen.Splash.route,
+                startDestination = navStartDestination,
                 // Splash exit: keep it visible while auth fades in on top
                 enterTransition  = { fadeIn(animationSpec = tween(400)) },
                 exitTransition   = { fadeOut(animationSpec = tween(400)) },
@@ -478,6 +495,7 @@ fun App(
                         }
                     )
                 }
+            }
             }
         }
         }

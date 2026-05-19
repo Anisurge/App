@@ -49,7 +49,7 @@ object NotificationDisplayManager {
         val notifId = NOTIF_ID_BASE + (title.hashCode() and 0xFFFF)
 
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(deepLink), context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             putExtra("type", type)
             putExtra("title", title)
             putExtra("body", body)
@@ -95,7 +95,7 @@ object NotificationDisplayManager {
                 if (animeId != null) {
                     val watchUri = "anisurge://anime/$animeId/episode/${episodeNumber ?: 1}"
                     val watchIntent = Intent(Intent.ACTION_VIEW, Uri.parse(watchUri), context, MainActivity::class.java).apply {
-                        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
                         putExtra("type", type)
                         putExtra("title", title)
                         putExtra("body", body)
