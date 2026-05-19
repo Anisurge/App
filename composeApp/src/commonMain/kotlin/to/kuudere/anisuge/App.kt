@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.navigation.compose.NavHost
@@ -69,6 +71,10 @@ import to.kuudere.anisuge.i18n.appStringsFor
 /** Compat helper: reads a String from the new KMP SavedState arguments type. */
 private fun SavedState?.str(key: String): String? =
     try { this?.read { if (contains(key)) getString(key) else null } } catch (_: Exception) { null }
+
+private fun deepLinkLog(message: String) {
+    println("[AnisurgeDeepLink] $message")
+}
 
 @Composable
 fun App(
@@ -145,8 +151,9 @@ fun App(
         
         var showExitConfirm by remember { mutableStateOf(false) }
         var homeBackAction by remember { mutableStateOf<(() -> Boolean)?>(null) }
-        var pendingNotificationLaunch by remember { mutableStateOf<NotificationLaunch?>(null) }
         var notificationDialog by remember { mutableStateOf<NotificationLaunch?>(null) }
+        /** Frozen at first composition — do not change when [skipSplash] flips on warm [onNewIntent]. */
+        val initialSkipSplash = remember { skipSplash }
         
         // Handle back button - show exit confirmation only when at the root (home)
         val currentRoute = navBackStackEntry?.destination?.route
@@ -159,40 +166,42 @@ fun App(
             if (isAtRoot) showExitConfirm = true
         }
 
-        LaunchedEffect(notificationLaunch?.id) {
-            if (notificationLaunch != null) {
-                pendingNotificationLaunch = notificationLaunch
-            }
-        }
-
         LaunchedEffect(skipSplash) {
             if (skipSplash) {
                 homeVm.refresh(force = false)
             }
         }
 
-        // Discord Rich Presence removed - not supported by new API
+        LaunchedEffect(notificationLaunch?.id) {
+            val launch = notificationLaunch ?: return@LaunchedEffect
+            deepLinkLog("launch id=${launch.id} anime=${launch.animeId} ep=${launch.episodeNumber}")
 
-        LaunchedEffect(currentRoute, pendingNotificationLaunch?.id) {
-            val launch = pendingNotificationLaunch ?: return@LaunchedEffect
-            val route = currentRoute ?: return@LaunchedEffect
-            if (route == Screen.Splash.route || route == Screen.Auth.route || route.startsWith("update")) return@LaunchedEffect
+            snapshotFlow { navController.currentDestination?.route }
+                .filter { route ->
+                    route != null &&
+                        route != Screen.Splash.route &&
+                        route != Screen.Auth.route &&
+                        !route.startsWith("update")
+                }
+                .first()
 
-            pendingNotificationLaunch = null
+            val readyRoute = navController.currentDestination?.route
+            deepLinkLog("nav ready route=$readyRoute")
             onNotificationLaunchConsumed()
 
             when {
                 launch.animeId != null && launch.episodeNumber != null -> {
-                    navController.navigate(Screen.Watch(launch.animeId, launch.episodeNumber).route) {
-                        launchSingleTop = true
-                    }
+                    val dest = Screen.Watch(launch.animeId, launch.episodeNumber).route
+                    deepLinkLog("navigate watch $dest")
+                    navController.navigate(dest) { launchSingleTop = true }
                 }
                 launch.animeId != null -> {
-                    navController.navigate(Screen.Info(launch.animeId).route) {
-                        launchSingleTop = true
-                    }
+                    val dest = Screen.Info(launch.animeId).route
+                    deepLinkLog("navigate info $dest")
+                    navController.navigate(dest) { launchSingleTop = true }
                 }
                 else -> {
+                    deepLinkLog("show notification dialog")
                     notificationDialog = launch
                 }
             }
@@ -246,9 +255,8 @@ fun App(
             }
             
             val navStartDestination =
-                if (skipSplash) Screen.Home().route else Screen.Splash.route
+                if (initialSkipSplash) Screen.Home().route else Screen.Splash.route
 
-            key(navStartDestination) {
             NavHost(
                 navController    = navController,
                 startDestination = navStartDestination,
@@ -495,7 +503,6 @@ fun App(
                         }
                     )
                 }
-            }
             }
         }
         }

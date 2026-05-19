@@ -28,8 +28,8 @@ object NotificationIntentParser {
             else -> intent.getStringExtra("animeId")
         }
         val episodeNumber = when {
-            data.host == "anime" && segments.size >= 3 && segments[1] == "episode" -> segments[2].toIntOrNull()
-            else -> intent.getStringExtra("episodeNumber")?.toIntOrNull()
+            data.host == "anime" && segments.size >= 3 && segments[1] == "episode" -> parseEpisodeNumber(segments[2])
+            else -> parseEpisodeNumber(intent.getStringExtra("episodeNumber"))
         }
 
         val type = intent.getStringExtra("type") ?: when {
@@ -65,7 +65,7 @@ object NotificationIntentParser {
             title = intent.getStringExtra("title") ?: defaultTitle(type),
             body = intent.getStringExtra("body") ?: "",
             animeId = intent.getStringExtra("animeId"),
-            episodeNumber = intent.getStringExtra("episodeNumber")?.toIntOrNull(),
+            episodeNumber = parseEpisodeNumber(intent.getStringExtra("episodeNumber")),
             actionUrl = intent.getStringExtra("actionUrl"),
             actionLabel = intent.getStringExtra("actionLabel"),
             mediaType = intent.getStringExtra("mediaType"),
@@ -74,6 +74,17 @@ object NotificationIntentParser {
             referenceId = intent.getStringExtra("referenceId"),
             campaign = intent.getStringExtra("campaign"),
         )
+    }
+
+    /** Accepts `12`, `ep-4`, etc. from FCM / notification extras. */
+    private fun parseEpisodeNumber(raw: String?): Int? {
+        if (raw.isNullOrBlank()) return null
+        raw.trim().toIntOrNull()?.let { return it }
+        val s = raw.trim()
+        if (s.startsWith("ep-", ignoreCase = true)) {
+            return s.substring(3).trim().toIntOrNull()
+        }
+        return null
     }
 
     private fun defaultTitle(type: String): String = when (type) {
