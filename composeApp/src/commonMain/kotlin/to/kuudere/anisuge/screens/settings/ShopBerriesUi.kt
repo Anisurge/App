@@ -4,9 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,8 +39,18 @@ internal fun formatBerries(amount: Int): String {
 }
 
 @Composable
-internal fun BerriesBalanceCard(balance: Int, modifier: Modifier = Modifier) {
-    Box(
+internal fun BerriesBalanceCard(
+    balance: Int,
+    modifier: Modifier = Modifier,
+    loginStreak: Int = 0,
+    canClaimDaily: Boolean = false,
+    nextDailyReward: Int = 0,
+    todayWatch: Int = 0,
+    todayWatchCap: Int = 12,
+    isClaimingDaily: Boolean = false,
+    onClaimDaily: (() -> Unit)? = null,
+) {
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
@@ -78,6 +94,48 @@ internal fun BerriesBalanceCard(balance: Int, modifier: Modifier = Modifier) {
                 fontSize = 48.sp,
                 fontWeight = FontWeight.Bold,
             )
+        }
+
+        Text(
+            "Earn by watching · Today $todayWatch/$todayWatchCap from episodes",
+            color = ShopBerryMuted,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+
+        if (loginStreak > 0) {
+            Text(
+                "${loginStreak}-day streak",
+                color = ShopBerryGoldDim,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+
+        if (onClaimDaily != null) {
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onClaimDaily,
+                enabled = canClaimDaily && !isClaimingDaily,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE50914),
+                    disabledContainerColor = Color(0xFF3A3A3A),
+                ),
+            ) {
+                if (isClaimingDaily) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else if (canClaimDaily) {
+                    Text("Claim daily (+$nextDailyReward Berries)")
+                } else {
+                    Text("Daily claimed")
+                }
+            }
         }
     }
 }

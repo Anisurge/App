@@ -143,6 +143,13 @@ fun WatchScreen(
         }
     }
 
+    LaunchedEffect(uiState.berriesToast) {
+        uiState.berriesToast?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.dismissBerriesToast()
+        }
+    }
+
     Scaffold(
         containerColor = Color.Black,
         snackbarHost = { SnackbarHost(snackbarHostState) }

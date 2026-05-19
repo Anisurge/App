@@ -931,6 +931,7 @@ private fun MobileSettingsDetail(
                         viewModel.openMobileSettingsDetail(SettingsTab.Redeem)
                         viewModel.onTabSelected(SettingsTab.Redeem)
                     },
+                    onClaimDaily = viewModel::claimDailyReward,
                 )
                 is SettingsTab.Redeem -> RedeemCodeSettingsTab(
                     uiState = uiState,
@@ -1053,6 +1054,7 @@ private fun SettingsContent(
                 onLoadMore = viewModel::loadMoreShop,
                 onPurchase = viewModel::purchaseShopItem,
                 onOpenRedeem = onOpenRedeem,
+                onClaimDaily = viewModel::claimDailyReward,
             )
             is SettingsTab.Redeem -> RedeemCodeSettingsTab(
                 uiState = uiState,
