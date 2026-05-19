@@ -494,6 +494,7 @@ actual fun VideoPlayerSurface(
 
     LaunchedEffect(state.seekTarget) {
         val target = state.seekTarget ?: return@LaunchedEffect
+        state.lastUserSeekAtMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         state.seekTarget = null
         isSeeking.value = true
         val safeTarget = target.coerceAtLeast(0.1)

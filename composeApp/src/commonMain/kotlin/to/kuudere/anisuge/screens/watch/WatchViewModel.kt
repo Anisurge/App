@@ -690,11 +690,17 @@ class WatchViewModel(
     /**
      * Auto-next / natural EOF only — ignores mpv end-of-file from failed streams (Suzu token expiry, etc.).
      */
-    fun tryAutoAdvanceToNextEpisode(positionSec: Double, durationSec: Double): Boolean {
+    fun tryAutoAdvanceToNextEpisode(
+        positionSec: Double,
+        durationSec: Double,
+        peakPositionSec: Double = positionSec,
+        lastUserSeekAtMs: Long = 0L,
+    ): Boolean {
         if (!_uiState.value.autoNext) return false
         if (_uiState.value.offlinePath != null) return false
-        if (!watchedEnoughForAutoNext(positionSec, durationSec)) return false
         val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        if (isWithinUserSeekCooldown(lastUserSeekAtMs, now)) return false
+        if (!watchedEnoughForAutoNext(positionSec, durationSec, peakPositionSec)) return false
         if (now - lastAutoEpisodeAdvanceMs < 8_000) return false
         val nextEp = _uiState.value.episodeData?.episodes
             ?.filter { it.number > _uiState.value.currentEpisodeNumber }

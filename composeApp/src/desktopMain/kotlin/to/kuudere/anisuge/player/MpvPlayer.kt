@@ -453,6 +453,9 @@ internal class MpvPlayer(
 
                 // Handle seek
                 state.seekTarget?.let { target ->
+                    withContext(Dispatchers.Main) {
+                        state.lastUserSeekAtMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                    }
                     seekTo(target)
                     withContext(Dispatchers.Main) { state.seekTarget = null }
                 }
