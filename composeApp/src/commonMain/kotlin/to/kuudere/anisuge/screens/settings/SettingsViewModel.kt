@@ -156,6 +156,12 @@ data class SettingsUiState(
     val isRedeemingCode: Boolean = false,
     val isDownloadingShopFrames: Boolean = false,
     val isSavingEquippedFrame: Boolean = false,
+    val rewardsLoginStreak: Int = 0,
+    val rewardsCanClaimDaily: Boolean = false,
+    val rewardsNextDaily: Int = 0,
+    val rewardsTodayWatch: Int = 0,
+    val rewardsTodayWatchCap: Int = 12,
+    val isClaimingDailyReward: Boolean = false,
 )
 
 sealed class SettingsTab {
@@ -183,6 +189,7 @@ class SettingsViewModel(
     private val integrationsSyncService: to.kuudere.anisuge.data.services.IntegrationsSyncService,
     private val bffMeService: to.kuudere.anisuge.data.services.BffMeService,
     private val bffShopService: to.kuudere.anisuge.data.services.BffShopService,
+    private val bffRewardsService: to.kuudere.anisuge.data.services.BffRewardsService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
 
@@ -338,6 +345,7 @@ class SettingsViewModel(
             }
             is SettingsTab.Shop -> {
                 loadShop()
+                loadRewardsStatus()
                 if (_uiState.value.userProfile == null) {
                     loadUserProfile()
                 }
@@ -476,9 +484,56 @@ class SettingsViewModel(
         }
     }
 
+    fun loadRewardsStatus() {
+        viewModelScope.launch {
+            bffRewardsService.fetchStatus().onSuccess { status ->
+                _uiState.update {
+                    it.copy(
+                        shopCoins = status.coins,
+                        rewardsLoginStreak = status.loginStreak,
+                        rewardsCanClaimDaily = status.canClaimDaily,
+                        rewardsNextDaily = status.nextDailyReward,
+                        rewardsTodayWatch = status.todayEarned.watch,
+                        rewardsTodayWatchCap = status.todayEarned.watchCap,
+                    )
+                }
+            }
+        }
+    }
+
+    fun claimDailyReward() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isClaimingDailyReward = true) }
+            bffRewardsService.claimDaily().fold(
+                onSuccess = { body ->
+                    _uiState.update {
+                        it.copy(
+                            isClaimingDailyReward = false,
+                            shopCoins = body.coins,
+                            successMessage = when {
+                                body.granted -> body.message ?: "+${body.amount} Berries — daily check-in"
+                                else -> body.message
+                            },
+                        )
+                    }
+                    loadRewardsStatus()
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isClaimingDailyReward = false,
+                            errorMessage = e.message ?: "Failed to claim daily reward",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
     fun loadShop() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingShop = true) }
+            loadRewardsStatus()
             bffShopService.fetchShopMe(catalogLimit = SHOP_PAGE_SIZE, catalogOffset = 0).fold(
                 onSuccess = { body ->
                     prefetchShopFrameAnimations(body.catalog)

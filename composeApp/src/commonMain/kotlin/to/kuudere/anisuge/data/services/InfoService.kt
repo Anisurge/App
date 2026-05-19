@@ -19,6 +19,7 @@ import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import to.kuudere.anisuge.data.models.EpisodeListResponse
 import to.kuudere.anisuge.data.models.RecommendationsResponse
 import to.kuudere.anisuge.data.models.SuzuEmbedStream
+import to.kuudere.anisuge.data.models.BffWatchProgressResponse
 import to.kuudere.anisuge.data.models.WatchInfoResponse
 
 class InfoService(
@@ -133,10 +134,10 @@ class InfoService(
         currentTime: Double,
         duration: Double,
         server: String,
-        language: String = "sub"
-    ): Boolean {
+        language: String = "sub",
+    ): BffWatchProgressResponse? {
         return try {
-            val stored = sessionStore.get() ?: return false
+            val stored = sessionStore.get() ?: return null
             val payload = buildJsonObject {
                 put("animeId", animeId)
                 put("episodeId", episodeId)
@@ -150,10 +151,14 @@ class InfoService(
                 contentType(ContentType.Application.Json)
                 setBody(payload.toString())
             }
-            response.status.value in 200..299
+            if (response.status.value in 200..299) {
+                response.body<BffWatchProgressResponse>()
+            } else {
+                null
+            }
         } catch (e: Exception) {
             println("[InfoService] saveProgress error: ${e.message}")
-            false
+            null
         }
     }
 }

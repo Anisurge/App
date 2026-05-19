@@ -74,6 +74,7 @@ data class WatchUiState(
     val isSyncingMal: Boolean = false,
     val isSyncingAnilist: Boolean = false,
     val syncSnackbar: String? = null,
+    val berriesToast: String? = null,
 )
     
 class WatchViewModel(
@@ -755,15 +756,25 @@ class WatchViewModel(
         if (currentAnimeId.isEmpty() || duration <= 0) return
 
         viewModelScope.launch {
-            infoService.saveProgress(
+            val result = infoService.saveProgress(
                 animeId = currentAnimeId,
                 episodeId = episodeId,
                 currentTime = currentTime,
                 duration = duration,
                 server = server,
-                language = language
+                language = language,
             )
+            val reward = result?.reward
+            if (reward?.granted == true && reward.amount > 0) {
+                _uiState.update {
+                    it.copy(berriesToast = "+${reward.amount} Berries — episode complete")
+                }
+            }
         }
+    }
+
+    fun dismissBerriesToast() {
+        _uiState.update { it.copy(berriesToast = null) }
     }
 
     /**

@@ -123,6 +123,7 @@ fun App(
                 AppComponent.integrationsSyncService,
                 AppComponent.bffMeService,
                 AppComponent.bffShopService,
+                AppComponent.bffRewardsService,
             )
         }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }

@@ -43,6 +43,7 @@ fun ShopSettingsTab(
     onLoadMore: () -> Unit,
     onPurchase: (String) -> Unit,
     onOpenRedeem: () -> Unit,
+    onClaimDaily: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -56,14 +57,23 @@ fun ShopSettingsTab(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Animated profile frames — saved to your account.",
+            "Animated profile frames — earn Berries by watching · buy packs coming soon.",
             color = MUTED,
             fontSize = 12.sp,
             lineHeight = 17.sp,
             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
         )
 
-        BerriesBalanceCard(balance = uiState.shopCoins)
+        BerriesBalanceCard(
+            balance = uiState.shopCoins,
+            loginStreak = uiState.rewardsLoginStreak,
+            canClaimDaily = uiState.rewardsCanClaimDaily,
+            nextDailyReward = uiState.rewardsNextDaily,
+            todayWatch = uiState.rewardsTodayWatch,
+            todayWatchCap = uiState.rewardsTodayWatchCap,
+            isClaimingDaily = uiState.isClaimingDailyReward,
+            onClaimDaily = onClaimDaily,
+        )
 
         Spacer(Modifier.height(10.dp))
 
