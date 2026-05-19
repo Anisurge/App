@@ -753,23 +753,62 @@ class SettingsViewModel(
             try {
                 val loaded = settingsService.getSettings()
                 if (loaded != null) {
-                    originalSettings = loaded
-                    _uiState.update { it.copy(settings = loaded, isLoading = false, hasSettingsChanges = false, isOffline = false) }
-                    loaded.let { s ->
-                        settingsStore.setAutoPlay(s.autoPlay)
-                        settingsStore.setAutoNext(s.autoNext)
-                        settingsStore.setAutoSkipIntro(s.skipIntro)
-                        settingsStore.setAutoSkipOutro(s.skipOutro)
-                        settingsStore.setDefaultLang(s.defaultLang)
-                        settingsStore.setSyncPercentage(s.syncPercentage.toInt())
-                    }
+                    applySettingsFromServer(loaded)
                 } else {
-                    _uiState.update { it.copy(isLoading = false, errorMessage = "Failed to load settings") }
+                    applyLocalPlaybackSettingsFallback(errorMessage = "Failed to load settings")
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, isOffline = e.isNetworkError()) }
+                applyLocalPlaybackSettingsFallback(
+                    isOffline = e.isNetworkError(),
+                    errorMessage = if (e.isNetworkError()) null else "Failed to load settings",
+                )
             }
         }
+    }
+
+    private suspend fun applySettingsFromServer(loaded: UserSettings) {
+        originalSettings = loaded
+        _uiState.update { it.copy(settings = loaded, isLoading = false, hasSettingsChanges = false, isOffline = false) }
+        pushPlaybackPrefsToLocalStore(loaded)
+    }
+
+    private suspend fun applyLocalPlaybackSettingsFallback(
+        isOffline: Boolean = true,
+        errorMessage: String? = null,
+    ) {
+        val local = readLocalPlaybackSettings()
+        originalSettings = local
+        _uiState.update {
+            it.copy(
+                settings = local,
+                isLoading = false,
+                hasSettingsChanges = false,
+                isOffline = isOffline,
+                errorMessage = errorMessage,
+            )
+        }
+    }
+
+    private suspend fun readLocalPlaybackSettings(): UserSettings {
+        return UserSettings(
+            autoPlay = settingsStore.autoPlayFlow.first(),
+            autoNext = settingsStore.autoNextFlow.first(),
+            skipIntro = settingsStore.autoSkipIntroFlow.first(),
+            skipOutro = settingsStore.autoSkipOutroFlow.first(),
+            defaultLang = settingsStore.defaultLangFlow.first(),
+            syncPercentage = settingsStore.syncPercentageFlow.first().toDouble(),
+            showComments = _uiState.value.settings.showComments,
+            publicWatchlist = _uiState.value.settings.publicWatchlist,
+        )
+    }
+
+    private suspend fun pushPlaybackPrefsToLocalStore(settings: UserSettings) {
+        settingsStore.setAutoPlay(settings.autoPlay)
+        settingsStore.setAutoNext(settings.autoNext)
+        settingsStore.setAutoSkipIntro(settings.skipIntro)
+        settingsStore.setAutoSkipOutro(settings.skipOutro)
+        settingsStore.setDefaultLang(settings.defaultLang)
+        settingsStore.setSyncPercentage(settings.syncPercentage.toInt())
     }
 
     fun saveSettings() {
@@ -777,16 +816,16 @@ class SettingsViewModel(
             _uiState.update { it.copy(isSaving = true) }
             val saved = settingsService.updateSettings(_uiState.value.settings)
             if (saved != null) {
-                originalSettings = _uiState.value.settings
-                _uiState.update { it.copy(isSaving = false, hasSettingsChanges = false, successMessage = "Settings saved successfully") }
-                _uiState.value.settings.let { s ->
-                    settingsStore.setAutoPlay(s.autoPlay)
-                    settingsStore.setAutoNext(s.autoNext)
-                    settingsStore.setAutoSkipIntro(s.skipIntro)
-                    settingsStore.setAutoSkipOutro(s.skipOutro)
-                    settingsStore.setDefaultLang(s.defaultLang)
-                    settingsStore.setSyncPercentage(s.syncPercentage.toInt())
+                originalSettings = saved
+                _uiState.update {
+                    it.copy(
+                        settings = saved,
+                        isSaving = false,
+                        hasSettingsChanges = false,
+                        successMessage = "Settings saved successfully",
+                    )
                 }
+                pushPlaybackPrefsToLocalStore(saved)
             } else {
                 _uiState.update { it.copy(isSaving = false, errorMessage = "Failed to save settings") }
             }
@@ -800,12 +839,51 @@ class SettingsViewModel(
         }
     }
 
-    fun setDefaultLang(enabled: Boolean) = updateSetting { it.copy(defaultLang = enabled) }
-    fun setAutoNext(enabled: Boolean) = updateSetting { it.copy(autoNext = enabled) }
-    fun setAutoPlay(enabled: Boolean) = updateSetting { it.copy(autoPlay = enabled) }
-    fun setSkipIntro(enabled: Boolean) = updateSetting { it.copy(skipIntro = enabled) }
-    fun setSkipOutro(enabled: Boolean) = updateSetting { it.copy(skipOutro = enabled) }
-    fun setSyncPercentage(percentage: Int) = updateSetting { it.copy(syncPercentage = percentage.coerceIn(50, 100).toDouble()) }
+    fun setDefaultLang(enabled: Boolean) = persistPlaybackPreference { it.copy(defaultLang = enabled) }
+    fun setAutoNext(enabled: Boolean) = persistPlaybackPreference { it.copy(autoNext = enabled) }
+    fun setAutoPlay(enabled: Boolean) = persistPlaybackPreference { it.copy(autoPlay = enabled) }
+    fun setSkipIntro(enabled: Boolean) = persistPlaybackPreference { it.copy(skipIntro = enabled) }
+    fun setSkipOutro(enabled: Boolean) = persistPlaybackPreference { it.copy(skipOutro = enabled) }
+    fun setSyncPercentage(percentage: Int) =
+        persistPlaybackPreference { it.copy(syncPercentage = percentage.coerceIn(50, 100).toDouble()) }
+
+    /** Apply playback prefs locally and to the account immediately (no separate Save tap). */
+    private fun persistPlaybackPreference(updater: (UserSettings) -> UserSettings) {
+        updateSetting(updater)
+        viewModelScope.launch {
+            val prefs = _uiState.value.settings
+            pushPlaybackPrefsToLocalStore(prefs)
+            syncPlaybackSettingsToServer(prefs)
+        }
+    }
+
+    private suspend fun syncPlaybackSettingsToServer(prefs: UserSettings) {
+        try {
+            val current = settingsService.getSettings()
+            val base = current ?: UserSettings()
+            val merged = base.copy(
+                autoPlay = prefs.autoPlay,
+                autoNext = prefs.autoNext,
+                skipIntro = prefs.skipIntro,
+                skipOutro = prefs.skipOutro,
+                defaultLang = prefs.defaultLang,
+                syncPercentage = prefs.syncPercentage,
+            )
+            val saved = settingsService.updateSettings(merged)
+            if (saved != null) {
+                originalSettings = saved
+                _uiState.update {
+                    it.copy(
+                        settings = saved,
+                        hasSettingsChanges = it.settings != originalSettings,
+                    )
+                }
+                pushPlaybackPrefsToLocalStore(saved)
+            }
+        } catch (e: Exception) {
+            println("[SettingsViewModel] syncPlaybackSettings error: ${e.message}")
+        }
+    }
 
     fun setDownloadPath(path: String) { viewModelScope.launch { settingsStore.setDownloadPath(path) } }
     fun setSubtitleSize(sizePercent: Int) { viewModelScope.launch { settingsStore.setSubtitleSize(sizePercent) } }

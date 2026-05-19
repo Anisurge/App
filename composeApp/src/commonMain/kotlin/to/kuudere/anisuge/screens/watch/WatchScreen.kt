@@ -1316,6 +1316,10 @@ fun WatchVideoPlayer(
                 playerState.playbackSpeed = uiState.playbackSpeed
             }
 
+            LaunchedEffect(uiState.autoPlay) {
+                playerState.pauseRequested = !uiState.autoPlay
+            }
+
             LaunchedEffect(uiState.subtitleSize) {
                 playerState.subtitleSize = uiState.subtitleSize
             }

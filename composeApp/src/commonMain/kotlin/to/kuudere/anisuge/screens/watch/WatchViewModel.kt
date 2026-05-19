@@ -814,28 +814,32 @@ class WatchViewModel(
     }
 
     fun setAutoPlay(enabled: Boolean) {
-        viewModelScope.launch { 
+        _uiState.update { it.copy(autoPlay = enabled) }
+        viewModelScope.launch {
             settingsStore.setAutoPlay(enabled)
             syncPreferencesToServer()
         }
     }
 
     fun setAutoNext(enabled: Boolean) {
-        viewModelScope.launch { 
+        _uiState.update { it.copy(autoNext = enabled) }
+        viewModelScope.launch {
             settingsStore.setAutoNext(enabled)
             syncPreferencesToServer()
         }
     }
 
     fun setAutoSkipIntro(enabled: Boolean) {
-        viewModelScope.launch { 
+        _uiState.update { it.copy(autoSkipIntro = enabled) }
+        viewModelScope.launch {
             settingsStore.setAutoSkipIntro(enabled)
             syncPreferencesToServer()
         }
     }
 
     fun setAutoSkipOutro(enabled: Boolean) {
-        viewModelScope.launch { 
+        _uiState.update { it.copy(autoSkipOutro = enabled) }
+        viewModelScope.launch {
             settingsStore.setAutoSkipOutro(enabled)
             syncPreferencesToServer()
         }
