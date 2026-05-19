@@ -6,13 +6,22 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.BasicApiResponse
 import to.kuudere.anisuge.data.models.BffAuthResponse
@@ -34,30 +43,85 @@ class AuthService(
 ) {
     private val _authState = MutableStateFlow<SessionCheckResult>(SessionCheckResult.NoSession)
     val authState: StateFlow<SessionCheckResult> = _authState.asStateFlow()
+    private val bffErrorJson = Json { ignoreUnknownKeys = true }
 
-    suspend fun login(identifier: String, password: String): SessionInfo {
+    suspend fun login(identifier: String, password: String): SessionInfo =
+        withAuthRetry { loginOnce(identifier, password) }
+
+    suspend fun register(username: String, email: String, password: String): SessionInfo =
+        withAuthRetry { registerOnce(username, email, password) }
+
+    private suspend fun loginOnce(identifier: String, password: String): SessionInfo {
         val response = httpClient.post("${AnisurgeApi.v1Base}/auth/login") {
             contentType(ContentType.Application.Json)
             setBody(LoginRequest(identifier, password))
         }
         if (response.status != HttpStatusCode.OK) {
-            val err = try { response.body<BffErrorResponse>() } catch (_: Exception) { null }
-            throw Exception(err?.displayMessage() ?: "Login failed (${response.status})")
+            throw Exception(response.bffErrorMessage("Login failed (${response.status})"))
         }
         return handleAuthResponse(response.status, response.body())
     }
 
-    suspend fun register(username: String, email: String, password: String): SessionInfo {
+    private suspend fun registerOnce(username: String, email: String, password: String): SessionInfo {
         val response = httpClient.post("${AnisurgeApi.v1Base}/auth/signup") {
             contentType(ContentType.Application.Json)
             setBody(RegisterRequest(username, email, password))
         }
         val ok = response.status == HttpStatusCode.OK || response.status == HttpStatusCode.Created
         if (!ok) {
-            val err = try { response.body<BffErrorResponse>() } catch (_: Exception) { null }
-            throw Exception(err?.displayMessage() ?: "Registration failed (${response.status})")
+            throw Exception(response.bffErrorMessage("Registration failed (${response.status})"))
         }
         return handleAuthResponse(response.status, response.body())
+    }
+
+    private suspend fun <T> withAuthRetry(block: suspend () -> T): T {
+        return try {
+            block()
+        } catch (e: Exception) {
+            if (isRetryableAuthError(e)) {
+                block()
+            } else {
+                throw e
+            }
+        }
+    }
+
+    private fun isRetryableAuthError(e: Exception): Boolean {
+        val msg = e.message.orEmpty()
+        return msg.contains("timeout", ignoreCase = true) ||
+            msg.contains("timed out", ignoreCase = true) ||
+            msg.contains("408", ignoreCase = false) ||
+            msg.contains("504", ignoreCase = false)
+    }
+
+    private suspend fun HttpResponse.bffErrorMessage(fallback: String): String {
+        val raw = bodyAsText()
+        try {
+            bffErrorJson.decodeFromString<BffErrorResponse>(raw).displayMessage()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return it }
+        } catch (_: Exception) { }
+        return try {
+            val root = bffErrorJson.parseToJsonElement(raw).jsonObject
+            val err = root["error"] ?: return fallback
+            when (err) {
+                is JsonPrimitive -> err.contentOrNull?.takeIf { it.isNotBlank() } ?: fallback
+                is JsonObject -> formatBffValidationError(err) ?: fallback
+                else -> fallback
+            }
+        } catch (_: Exception) {
+            fallback
+        }
+    }
+
+    private fun formatBffValidationError(err: JsonObject): String? {
+        val fieldErrors = err["fieldErrors"]?.jsonObject ?: return null
+        val parts = fieldErrors.mapNotNull { (field, messages) ->
+            val msg = messages.jsonArray?.firstOrNull()?.jsonPrimitive?.contentOrNull
+                ?: messages.jsonPrimitive.contentOrNull
+            msg?.let { "$field: $it" }
+        }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString("; ")
     }
 
     suspend fun savePairedSession(session: SessionInfo) {
