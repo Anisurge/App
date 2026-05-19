@@ -402,13 +402,18 @@ actual fun VideoPlayerSurface(
                         state.duration = dur
                         val naturalEnd = dur >= 45.0 && pos >= 20.0 &&
                             (pos >= dur - 2.5 || pos >= dur * 0.88)
-                        if (!naturalEnd) {
-                            if (pos < 20.0 || dur < 45.0 || pos < dur * 0.1) {
-                                state.error = "Stream ended early — try another server"
-                                println("[VideoPlayerSurface] END_FILE ignored (pos=$pos dur=$dur)")
-                            }
-                        } else if (!state.config.loop) {
-                            currentOnFinished?.invoke()
+                        if (naturalEnd) {
+                            state.error = null
+                            if (!state.config.loop) currentOnFinished?.invoke()
+                        } else if (state.isBuffering || isSeeking.value) {
+                            // Slow HLS / server switch — mpv often ends the demuxer briefly while buffering.
+                            println("[VideoPlayerSurface] END_FILE during buffer/seek ignored (pos=$pos dur=$dur)")
+                        } else if (dur >= 90.0 && pos < 8.0) {
+                            state.error = "Stream failed to start — try another server in Settings"
+                            println("[VideoPlayerSurface] END_FILE failed start (pos=$pos dur=$dur)")
+                        } else {
+                            state.error = null
+                            println("[VideoPlayerSurface] END_FILE transient (pos=$pos dur=$dur)")
                         }
                     }
                 }

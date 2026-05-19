@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.kuudere.anisuge.data.models.SkipData
 import to.kuudere.anisuge.data.models.StreamingData
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -54,6 +55,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 fun PlayerControls(
     playerState: VideoPlayerState,
     streamingData: StreamingData? = null,
+    /** Persists across quality/server reload when [streamingData] is temporarily null. */
+    introMarker: SkipData? = null,
+    outroMarker: SkipData? = null,
     title: String = "",
     isFullscreen: Boolean = false,
     onFullscreenToggle: () -> Unit = {},
@@ -509,8 +513,8 @@ fun PlayerControls(
                             val duration = playerState.duration
                             val activePosition = if (isSeeking) seekValue.toDouble() else expectedPosition ?: playerState.position
                             val progress = if (duration > 0) (activePosition / duration).toFloat().coerceIn(0f, 1f) else 0f
-                            val introRange = streamingData?.intro
-                            val outroRange = streamingData?.outro
+                            val introRange = introMarker ?: streamingData?.intro
+                            val outroRange = outroMarker ?: streamingData?.outro
 
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 20.dp),
