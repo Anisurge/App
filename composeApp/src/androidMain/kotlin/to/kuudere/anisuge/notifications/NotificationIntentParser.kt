@@ -1,9 +1,20 @@
 package to.kuudere.anisuge.notifications
 
 import android.content.Intent
+import android.os.Bundle
 import to.kuudere.anisuge.navigation.NotificationLaunch
 
 object NotificationIntentParser {
+    /**
+     * Skip splash when the task is already alive (rotation) or any `anisurge://` / notification
+     * deep link opened the activity — avoids replaying the splash video on warm resume.
+     */
+    fun shouldSkipSplash(intent: Intent?, savedInstanceState: Bundle?): Boolean {
+        if (savedInstanceState != null) return true
+        if (parse(intent) != null) return true
+        val data = intent?.data ?: return false
+        return data.scheme == "anisurge"
+    }
     fun parse(intent: Intent?): NotificationLaunch? {
         intent ?: return null
         val data = intent.data ?: return parseExtras(intent)

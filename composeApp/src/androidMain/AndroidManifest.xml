@@ -44,6 +44,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
             android:screenOrientation="${activityOrientation}"
             android:windowSoftInputMode="adjustResize">
@@ -68,6 +69,13 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="anisurge" android:host="anilist" android:pathPrefix="/callback"/>
+            </intent-filter>
+            <!-- In-app / notification deep links (anisurge://anime/..., donate, etc.) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="anisurge"/>
             </intent-filter>
         </activity>
     </application>
