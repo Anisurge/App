@@ -41,12 +41,26 @@ internal fun clampSkipToDuration(skip: SkipData?, durationSec: Double): SkipData
 /**
  * Auto-next must not run when mpv ends a failed/broken stream (common on Suzu token expiry).
  */
-internal fun watchedEnoughForAutoNext(positionSec: Double, durationSec: Double): Boolean {
+internal fun watchedEnoughForAutoNext(
+    positionSec: Double,
+    durationSec: Double,
+    peakPositionSec: Double = positionSec,
+): Boolean {
     if (durationSec < 45.0) return false
     if (positionSec < 20.0) return false
-    if (positionSec >= durationSec - 2.5) return true
-    return positionSec >= durationSec * 0.88
+    // User scrubbed back from the end — do not treat stale "near end" samples as finished.
+    val atEndNow = positionSec >= durationSec - 2.5 || positionSec >= durationSec * 0.88
+    if (!atEndNow) return false
+    // Must have played most of the episode forward at least once (not a seek-to-end glitch).
+    if (peakPositionSec < durationSec * 0.75) return false
+    return true
 }
+
+/** After a manual seek, block auto-skip / auto-next so scrubbing back from the end does not chain to the next ep. */
+internal const val USER_SEEK_AUTO_BLOCK_MS = 12_000L
+
+internal fun isWithinUserSeekCooldown(lastUserSeekAtMs: Long, nowMs: Long): Boolean =
+    lastUserSeekAtMs > 0L && nowMs - lastUserSeekAtMs < USER_SEEK_AUTO_BLOCK_MS
 
 internal fun WatchUiState.effectiveIntroSkip() = introSkip ?: streamingData?.intro
 

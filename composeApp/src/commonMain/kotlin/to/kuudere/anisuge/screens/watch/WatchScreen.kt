@@ -1185,6 +1185,22 @@ fun WatchVideoPlayer(
             val skipIntro = uiState.effectiveIntroSkip()
             val skipOutro = uiState.effectiveOutroSkip()
 
+            androidx.compose.runtime.SideEffect {
+                if (playerState.seekTarget != null) {
+                    playerState.lastUserSeekAtMs = Clock.System.now().toEpochMilliseconds()
+                }
+            }
+
+            LaunchedEffect(uiState.currentEpisodeNumber, playbackUrl) {
+                playerState.peakPlaybackPosition = 0.0
+            }
+
+            LaunchedEffect(playerState.position) {
+                if (playerState.position > playerState.peakPlaybackPosition) {
+                    playerState.peakPlaybackPosition = playerState.position
+                }
+            }
+
             LaunchedEffect(playbackUrl) {
                 playerState.error = null
             }
@@ -1449,13 +1465,23 @@ fun WatchVideoPlayer(
                 )
             }
 
-            LaunchedEffect(playerState.position, playerState.duration) {
+            LaunchedEffect(playerState.position, playerState.duration, playerState.lastUserSeekAtMs) {
                 if (playerState.duration <= 0) return@LaunchedEffect
+                val now = Clock.System.now().toEpochMilliseconds()
+                if (isWithinUserSeekCooldown(playerState.lastUserSeekAtMs, now)) return@LaunchedEffect
                 val pos = playerState.position
                 val dur = playerState.duration
 
-                if (playerState.hasNextEpisode && watchedEnoughForAutoNext(pos, dur)) {
-                    if (viewModel.tryAutoAdvanceToNextEpisode(pos, dur)) {
+                if (playerState.hasNextEpisode &&
+                    watchedEnoughForAutoNext(pos, dur, playerState.peakPlaybackPosition)
+                ) {
+                    if (viewModel.tryAutoAdvanceToNextEpisode(
+                            pos,
+                            dur,
+                            playerState.peakPlaybackPosition,
+                            playerState.lastUserSeekAtMs,
+                        )
+                    ) {
                         return@LaunchedEffect
                     }
                 }
@@ -1483,10 +1509,15 @@ fun WatchVideoPlayer(
                 }
                     .filter { (_, dur, markers) -> dur >= 60.0 && (markers.first != null || markers.second != null) }
                     .collect { (pos, dur, markers) ->
+                        val now = Clock.System.now().toEpochMilliseconds()
+                        if (isWithinUserSeekCooldown(playerState.lastUserSeekAtMs, now)) return@collect
+                        if (playerState.seekTarget != null) return@collect
                         val intro = if (autoIntro) markers.first else null
                         val outro = if (autoOutro) markers.second else null
                         val target = skipSeekTargetForPosition(intro, outro, pos, dur) ?: return@collect
                         if (kotlin.math.abs(target - lastSkipAt) < 1.0) return@collect
+                        // Only auto-skip forward — never override a backward scrub.
+                        if (target < pos - 1.0) return@collect
                         lastSkipAt = target
                         playerState.seekTarget = target
                     }
@@ -1625,6 +1656,8 @@ fun WatchVideoPlayer(
                         viewModel.tryAutoAdvanceToNextEpisode(
                             playerState.position,
                             playerState.duration,
+                            playerState.peakPlaybackPosition,
+                            playerState.lastUserSeekAtMs,
                         )
                     }
                 )
