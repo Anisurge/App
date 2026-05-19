@@ -1082,25 +1082,80 @@ fun WatchVideoPlayer(
                 modifier = Modifier.fillMaxWidth().height(48.dp).align(Alignment.TopStart)
             ) { }
 
+            IconButton(
+                onClick = { viewModel.toggleSettingsOverlay() },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = 16.dp, end = 56.dp)
+            ) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+
             to.kuudere.anisuge.platform.WindowManagementButtons(
                 onClose = onExit,
                 modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
             )
+
+            if (uiState.showSettingsOverlay) {
+                val servers = viewModel.getAvailableServers()
+                SettingsOverlay(
+                    uiState = uiState,
+                    servers = servers,
+                    onDismiss = { viewModel.toggleSettingsOverlay() },
+                    onQualitySelected = { viewModel.setQuality(it) },
+                    onSubtitleSelected = { url ->
+                        val selectedSub = uiState.availableSubtitles.firstOrNull { it.url == url }
+                        val lang = selectedSub?.title ?: selectedSub?.resolvedLang
+                        viewModel.setSubtitle(url, lang)
+                    },
+                    onServerSelected = { serverLabel ->
+                        val currentSub = uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }
+                        viewModel.changeServerWithState(
+                            newServer = serverLabel,
+                            position = uiState.savedWatchPosition,
+                            targetAudioLang = uiState.targetLang,
+                            targetSubtitleLang = currentSub?.title ?: currentSub?.resolvedLang,
+                            targetSubtitleLangCode = currentSub?.language ?: currentSub?.lang,
+                        )
+                    },
+                    onSpeedSelected = { viewModel.setSpeed(it) },
+                    onCycleAudio = { },
+                    audioTracks = emptyList(),
+                    selectedAudioTrack = null,
+                    onAudioTrackSelected = { },
+                    subtitleTracks = emptyList(),
+                    selectedSubtitleTrack = null,
+                    onSubtitleTrackSelected = { },
+                    onSubtitleSizeSelected = { viewModel.setSubtitleSize(it) },
+                    onWatchlistStatusSelected = { folder -> viewModel.updateWatchlistStatus(folder) },
+                    onAutoPlayToggle = { viewModel.setAutoPlay(it) },
+                    onAutoNextToggle = { viewModel.setAutoNext(it) },
+                    onAutoSkipIntroToggle = { viewModel.setAutoSkipIntro(it) },
+                    onAutoSkipOutroToggle = { viewModel.setAutoSkipOutro(it) },
+                )
+            }
         }
     } else {
         val currentUrl = uiState.availableQualities.find { it.first == uiState.currentQuality }?.second
-            ?: if (uiState.currentServer.equals("suzu", ignoreCase = true)) {
-                uiState.availableQualities.firstOrNull { it.first.equals("HardSub", ignoreCase = true) }?.second
-            } else {
-                null
-            }
             ?: uiState.availableQualities.firstOrNull()?.second
 
         if (currentUrl != null) {
             // Get headers from the matching source in streamingData
             val currentSource = uiState.streamingData?.sources?.find { it.url == currentUrl }
             val streamHeaders = currentSource?.headers ?: uiState.streamingData?.headers
-            val playbackUrl = remember(currentUrl, streamHeaders) {
+            val streamHeaderKey = remember(streamHeaders) {
+                streamHeaders?.entries
+                    ?.sortedBy { it.key }
+                    ?.joinToString("\u0001") { "${it.key}=${it.value}" }
+                    .orEmpty()
+            }
+            val playbackUrl = remember(currentUrl, streamHeaderKey) {
                 StreamProxy.proxyUrl(currentUrl, streamHeaders)
             }
             DisposableEffect(playbackUrl) {
@@ -1372,11 +1427,9 @@ fun WatchVideoPlayer(
                 val pos = playerState.position
                 val dur = playerState.duration
                 
-                // Proactive Auto Next at the very end of the video
-                if (uiState.autoNext && playerState.hasNextEpisode && pos >= dur - 0.5) {
-                    val nextEp = uiState.episodeData?.episodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
-                    if (nextEp != null) {
-                        viewModel.onEpisodeSelected(nextEp.number)
+                // Proactive auto-next only after real watch progress (not failed Suzu/HLS opens).
+                if (playerState.hasNextEpisode && watchedEnoughForAutoNext(pos, dur)) {
+                    if (viewModel.tryAutoAdvanceToNextEpisode(pos, dur)) {
                         return@LaunchedEffect
                     }
                 }
@@ -1535,12 +1588,26 @@ fun WatchVideoPlayer(
                     state = playerState,
                     modifier = Modifier.fillMaxSize(),
                     onFinished = {
-                        if (uiState.autoNext && playerState.hasNextEpisode) {
-                            val nextEp = uiState.episodeData?.episodes?.filter { it.number > uiState.currentEpisodeNumber }?.minByOrNull { it.number }
-                            if (nextEp != null) viewModel.onEpisodeSelected(nextEp.number)
-                        }
+                        viewModel.tryAutoAdvanceToNextEpisode(
+                            playerState.position,
+                            playerState.duration,
+                        )
                     }
                 )
+
+                playerState.error?.let { err ->
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 72.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.85f))
+                            .clickable { viewModel.toggleSettingsOverlay() }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    ) {
+                        Text(err, color = Color(0xFFFFB74D), fontSize = 13.sp)
+                    }
+                }
 
                 // Render out our cross-platform compose player controls overlay
                 val isOffline = uiState.offlinePath != null
