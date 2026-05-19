@@ -1182,6 +1182,19 @@ fun WatchVideoPlayer(
                 headers = streamHeaders
             )
 
+            val skipIntro = uiState.effectiveIntroSkip()
+            val skipOutro = uiState.effectiveOutroSkip()
+
+            LaunchedEffect(playbackUrl) {
+                playerState.error = null
+            }
+            LaunchedEffect(uiState.isLoadingVideo) {
+                if (uiState.isLoadingVideo) playerState.error = null
+            }
+            LaunchedEffect(playerState.position) {
+                if (playerState.position > 15.0) playerState.error = null
+            }
+
             // Resume: [rememberVideoPlayerState] keys only on [playbackUrl], so [savedWatchPosition] can
             // arrive after the player is created (e.g. GET /watch returns after the stream is ready).
             // Seek once duration is known and playback is still at the beginning.
@@ -1222,8 +1235,8 @@ fun WatchVideoPlayer(
                 if (!playerState.isPlaying || playerState.isPaused) return@LaunchedEffect
                 
                 val current = playerState.position
-                val intro = uiState.streamingData?.intro
-                val outro = uiState.streamingData?.outro
+                val intro = skipIntro
+                val outro = skipOutro
 
                 // Intro timer logic
                 if (intro != null && intro.start != null && intro.end != null && current >= intro.start && current < intro.end - 1.0) {
@@ -1258,8 +1271,8 @@ fun WatchVideoPlayer(
                     kotlinx.coroutines.delay(100)
                     if (playerState.isPlaying && !playerState.isPaused) {
                         val current = playerState.position
-                        val intro = uiState.streamingData?.intro
-                        val outro = uiState.streamingData?.outro
+                        val intro = skipIntro
+                        val outro = skipOutro
 
                         if (intro != null && intro.start != null && intro.end != null && current >= intro.start && current < intro.end - 1.0) {
                             if (!skipIntroTimedOut && !skipIntroManualDismissed) {
@@ -1452,8 +1465,8 @@ fun WatchVideoPlayer(
             LaunchedEffect(
                 uiState.autoSkipIntro,
                 uiState.autoSkipOutro,
-                uiState.streamingData?.intro,
-                uiState.streamingData?.outro,
+                skipIntro,
+                skipOutro,
                 uiState.currentEpisodeNumber,
             ) {
                 if (!uiState.autoSkipIntro && !uiState.autoSkipOutro) return@LaunchedEffect
@@ -1465,13 +1478,13 @@ fun WatchVideoPlayer(
                     Triple(
                         playerState.position,
                         playerState.duration,
-                        uiState.streamingData,
+                        Pair(skipIntro, skipOutro),
                     )
                 }
-                    .filter { (_, dur, stream) -> dur >= 60.0 && (stream?.intro != null || stream?.outro != null) }
-                    .collect { (pos, dur, stream) ->
-                        val intro = if (autoIntro) stream?.intro else null
-                        val outro = if (autoOutro) stream?.outro else null
+                    .filter { (_, dur, markers) -> dur >= 60.0 && (markers.first != null || markers.second != null) }
+                    .collect { (pos, dur, markers) ->
+                        val intro = if (autoIntro) markers.first else null
+                        val outro = if (autoOutro) markers.second else null
                         val target = skipSeekTargetForPosition(intro, outro, pos, dur) ?: return@collect
                         if (kotlin.math.abs(target - lastSkipAt) < 1.0) return@collect
                         lastSkipAt = target
@@ -1545,8 +1558,8 @@ fun WatchVideoPlayer(
                                 }
                                 Key.S -> {
                                     val target = skipSeekTargetForPosition(
-                                        uiState.streamingData?.intro,
-                                        uiState.streamingData?.outro,
+                                        skipIntro,
+                                        skipOutro,
                                         playerState.position,
                                         playerState.duration,
                                     )
@@ -1623,7 +1636,7 @@ fun WatchVideoPlayer(
                             .padding(top = 72.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.Black.copy(alpha = 0.85f))
-                            .clickable { viewModel.toggleSettingsOverlay() }
+                            .clickable { playerState.error = null }
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                     ) {
                         Text(err, color = Color(0xFFFFB74D), fontSize = 13.sp)
@@ -1638,6 +1651,8 @@ fun WatchVideoPlayer(
                 PlayerControls(
                     playerState = playerState,
                     streamingData = uiState.streamingData,
+                    introMarker = skipIntro,
+                    outroMarker = skipOutro,
                     title = title,
                     isFullscreen = uiState.isFullscreen,
                     onFullscreenToggle = onFullscreenToggle,
@@ -1720,7 +1735,7 @@ fun WatchVideoPlayer(
                 }
 
                 // Skip Intro Overlay
-                val intro = uiState.streamingData?.intro
+                val intro = skipIntro
                 if (intro != null && intro.start != null && intro.end != null) {
                     val inRange = intro.isPositionInRange(playerState.position)
                     if (inRange && !skipIntroTimedOut && !skipIntroManualDismissed) {
@@ -1770,7 +1785,7 @@ fun WatchVideoPlayer(
                 }
 
                 // Skip Outro Overlay
-                val outro = uiState.streamingData?.outro
+                val outro = skipOutro
                 if (outro != null && outro.start != null && outro.end != null) {
                     val inRange = outro.isPositionInRange(playerState.position)
                     if (inRange && !skipOutroTimedOut && !skipOutroManualDismissed) {

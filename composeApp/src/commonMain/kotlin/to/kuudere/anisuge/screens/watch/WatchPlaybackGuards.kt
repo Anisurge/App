@@ -48,6 +48,10 @@ internal fun watchedEnoughForAutoNext(positionSec: Double, durationSec: Double):
     return positionSec >= durationSec * 0.88
 }
 
+internal fun WatchUiState.effectiveIntroSkip() = introSkip ?: streamingData?.intro
+
+internal fun WatchUiState.effectiveOutroSkip() = outroSkip ?: streamingData?.outro
+
 internal fun isLikelyPlaybackFailure(positionSec: Double, durationSec: Double): Boolean {
     if (durationSec <= 0.0) return true
     if (positionSec < 15.0 && durationSec < 120.0) return true

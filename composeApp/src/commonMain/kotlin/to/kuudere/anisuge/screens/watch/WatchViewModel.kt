@@ -35,8 +35,11 @@ data class WatchUiState(
     val episodeData: WatchInfoResponse? = null,
     val thumbnails: Map<String, String> = emptyMap(),
     val currentEpisodeNumber: Int = 1,
-    val currentServer: String = "suzu",
+    val currentServer: String = "",
     val streamingData: StreamingData? = null,
+    /** Aniskip intro/outro — kept when [streamingData] is cleared during quality/server reload. */
+    val introSkip: to.kuudere.anisuge.data.models.SkipData? = null,
+    val outroSkip: to.kuudere.anisuge.data.models.SkipData? = null,
     val availableQualities: List<Pair<String, String>> = emptyList(), // Pair(Quality, URL)
     val currentQuality: String = "Auto",
     val availableSubtitles: List<to.kuudere.anisuge.data.models.SubtitleData> = emptyList(), // Store the full data object
@@ -96,6 +99,8 @@ class WatchViewModel(
     private var cachedStreamSection: BatchScrapeStreamData? = null
     private var skipTimesJob: kotlinx.coroutines.Job? = null
     private var lastSkipEpisodeLengthSec = 0.0
+    /** Server explicitly chosen in player settings (not the Settings → priority list default). */
+    private var userPinnedStreamServer: String? = null
 
     init {
         viewModelScope.launch { settingsStore.autoPlayFlow.collect { v -> _uiState.update { it.copy(autoPlay = v) } } }
@@ -121,7 +126,12 @@ class WatchViewModel(
         loadJob?.cancel()
         streamLoadGeneration++
 
+        val newAnime = animeId != currentAnimeId
         currentAnimeId = animeId
+        if (newAnime) {
+            userPinnedStreamServer = null
+        }
+        server?.takeIf { it.isNotBlank() }?.let { userPinnedStreamServer = it.lowercase() }
 
         // Update state IMMEDIATELY (synchronously) to prevent stale data from being used
         // before the coroutine starts. This fixes the bug where switching from online
@@ -149,7 +159,10 @@ class WatchViewModel(
                 targetSubtitleLangCode = null,
                 didMarkWatched = false,
                 offlinePath = offlinePath,
-                offlineTitle = offlineTitle
+                offlineTitle = offlineTitle,
+                currentServer = server?.lowercase().orEmpty().ifBlank { if (newAnime) "" else it.currentServer },
+                introSkip = if (newAnime) null else it.introSkip,
+                outroSkip = if (newAnime) null else it.outroSkip,
             )
         }
 
@@ -292,6 +305,10 @@ class WatchViewModel(
             val s = reqServer.lowercase()
             val lang = normalizeWatchLang(reqLang ?: state.targetLang, preferenceIfUnset)
             return lang to s
+        }
+
+        userPinnedStreamServer?.takeIf { supportsServerLang(it, effectiveLang) }?.let { pinned ->
+            return effectiveLang to pinned
         }
 
         val prior = state.currentServer.lowercase().takeIf {
@@ -463,6 +480,8 @@ class WatchViewModel(
                     "[AnisugeSubs] WatchVM server=$serverName quality=$defaultQuality subs=${subtitles.size} default=${selectedSubUrl?.take(96)}",
                 )
 
+                val skipIntro = currState.introSkip
+                val skipOutro = currState.outroSkip
                 val finalStreamData = StreamingData(
                     sources = streamSection.streams.map {
                         to.kuudere.anisuge.data.models.SourceData(
@@ -472,8 +491,8 @@ class WatchViewModel(
                         )
                     },
                     subtitles = subtitles,
-                    intro = null,
-                    outro = null,
+                    intro = skipIntro,
+                    outro = skipOutro,
                 )
 
                 qualities.firstOrNull { it.first == defaultQuality }?.second?.let { streamUrl ->
@@ -581,6 +600,7 @@ class WatchViewModel(
     }
 
     fun setServer(server: String) {
+        userPinnedStreamServer = server.lowercase()
         loadJob?.cancel()
         streamLoadGeneration++
         cachedStreamSection = null
@@ -609,6 +629,7 @@ class WatchViewModel(
         targetSubtitleLang: String?,
         targetSubtitleLangCode: String? = null
     ) {
+        userPinnedStreamServer = newServer.lowercase()
         loadJob?.cancel()
         streamLoadGeneration++
         cachedStreamSection = null
@@ -705,6 +726,8 @@ class WatchViewModel(
                 isLoadingVideo = false,
                 loadingMessage = "Fetching episode $episodeNumber...",
                 streamingData = null,
+                introSkip = null,
+                outroSkip = null,
                 availableQualities = emptyList(),
                 availableSubtitles = emptyList(),
                 currentSubtitleUrl = null,
@@ -892,11 +915,21 @@ class WatchViewModel(
     fun clampSkipRangesToDuration(durationSec: Double) {
         if (durationSec < 1.0) return
         _uiState.update { state ->
-            val stream = state.streamingData ?: return@update state
-            val intro = clampSkipToDuration(stream.intro, durationSec) ?: stream.intro
-            val outro = clampSkipToDuration(stream.outro, durationSec) ?: stream.outro
-            if (intro == stream.intro && outro == stream.outro) return@update state
-            state.copy(streamingData = stream.copy(intro = intro, outro = outro))
+            val intro = clampSkipToDuration(state.introSkip, durationSec) ?: state.introSkip
+            val outro = clampSkipToDuration(state.outroSkip, durationSec) ?: state.outroSkip
+            val stream = state.streamingData
+            val streamIntro = stream?.intro
+            val streamOutro = stream?.outro
+            if (intro == state.introSkip && outro == state.outroSkip &&
+                intro == streamIntro && outro == streamOutro
+            ) {
+                return@update state
+            }
+            state.copy(
+                introSkip = intro,
+                outroSkip = outro,
+                streamingData = stream?.copy(intro = intro, outro = outro),
+            )
         }
     }
 
@@ -936,12 +969,12 @@ class WatchViewModel(
             if (skips.intro == null && skips.outro == null) return@launch
 
             _uiState.update { state ->
-                val stream = state.streamingData ?: return@update state
+                val intro = skips.intro ?: state.introSkip ?: state.streamingData?.intro
+                val outro = skips.outro ?: state.outroSkip ?: state.streamingData?.outro
                 state.copy(
-                    streamingData = stream.copy(
-                        intro = skips.intro ?: stream.intro,
-                        outro = skips.outro ?: stream.outro,
-                    ),
+                    introSkip = intro,
+                    outroSkip = outro,
+                    streamingData = state.streamingData?.copy(intro = intro, outro = outro),
                 )
             }
             val dur = lastSkipEpisodeLengthSec
