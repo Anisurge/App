@@ -72,9 +72,13 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        android.util.Log.d("MainActivity", "onNewIntent data=${intent.data}")
+        val parsed = NotificationIntentParser.parse(intent)
+        android.util.Log.d(
+            "MainActivity",
+            "onNewIntent data=${intent.data} anime=${parsed?.animeId} ep=${parsed?.episodeNumber}",
+        )
         skipSplash = true
-        notificationLaunch = NotificationIntentParser.parse(intent)
+        notificationLaunch = parsed
         handleTrackingDeepLink(intent)
     }
 
