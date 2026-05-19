@@ -205,6 +205,7 @@ data class WatchInfoResponse(
     val coverImage: CoverImage? get() = anime?.coverImage
     val bannerImage: String? get() = anime?.bannerImage
     val anilistId: Int? get() = anime?.anilistId
+    val malId: Int? get() = anime?.malId
     val currentTime: Double? get() = progress?.currentTime
     val server: String? get() = progress?.server
     val language: String? get() = progress?.language

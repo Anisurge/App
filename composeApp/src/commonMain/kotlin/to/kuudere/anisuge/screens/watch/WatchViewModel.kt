@@ -79,6 +79,7 @@ class WatchViewModel(
     private val settingsStore: to.kuudere.anisuge.data.services.SettingsStore,
     private val settingsService: to.kuudere.anisuge.data.services.SettingsService,
     private val serverRepository: ServerRepository,
+    private val aniskipService: to.kuudere.anisuge.data.services.AniskipService,
     private val syncManager: SyncManager? = null,
     private val trackingService: TrackingService? = null,
 ) : ViewModel() {
@@ -93,6 +94,8 @@ class WatchViewModel(
     private var pendingQualitySelection: String? = null
     /** Last batch_scrape section (for per-stream subtitles when switching quality). */
     private var cachedStreamSection: BatchScrapeStreamData? = null
+    private var skipTimesJob: kotlinx.coroutines.Job? = null
+    private var lastSkipEpisodeLengthSec = 0.0
 
     init {
         viewModelScope.launch { settingsStore.autoPlayFlow.collect { v -> _uiState.update { it.copy(autoPlay = v) } } }
@@ -352,6 +355,7 @@ class WatchViewModel(
         }
 
         val generation = ++streamLoadGeneration
+        lastSkipEpisodeLengthSec = 0.0
         val currState = _uiState.value
         var anilistId = explicitAnilistId ?: currState.episodeData?.anilistId
 
@@ -460,12 +464,12 @@ class WatchViewModel(
                 )
 
                 val finalStreamData = StreamingData(
-                    sources = streamSection.streams.map { 
+                    sources = streamSection.streams.map {
                         to.kuudere.anisuge.data.models.SourceData(
-                            quality = it.quality, 
+                            quality = it.quality,
                             url = it.url,
-                            headers = it.headers.asHttpHeaderMap()
-                        ) 
+                            headers = it.headers.asHttpHeaderMap(),
+                        )
                     },
                     subtitles = subtitles,
                     intro = null,
@@ -491,6 +495,14 @@ class WatchViewModel(
                         offlinePath = null,
                     )
                 }
+
+                attachAniskipTimes(
+                    streamGeneration = generation,
+                    malId = currState.episodeData?.malId,
+                    anilistId = anilistId,
+                    episodeNumber = episodeNum,
+                    episodeLengthSec = lastSkipEpisodeLengthSec.takeIf { it >= 60.0 },
+                )
             } else {
                 println("[WatchVM] NO STREAMS FOUND! streamSection is null or empty.")
                 if (generation == streamLoadGeneration) {
@@ -855,6 +867,86 @@ class WatchViewModel(
     private fun mergeResumeHint(fromApi: Double?, retained: Double): Double {
         val api = fromApi ?: 0.0
         return if (api > 1.0) api else retained
+    }
+
+    /** Refetch Aniskip when the player reports a real duration (improves interval matching). */
+    fun refreshSkipTimesWhenDurationKnown(durationSec: Double) {
+        if (durationSec < 60.0) return
+        if (_uiState.value.offlinePath != null) return
+        clampSkipRangesToDuration(durationSec)
+
+        val prev = lastSkipEpisodeLengthSec
+        if (prev > 0 && kotlin.math.abs(prev - durationSec) < 15.0) return
+        lastSkipEpisodeLengthSec = durationSec
+
+        val state = _uiState.value
+        attachAniskipTimes(
+            streamGeneration = streamLoadGeneration,
+            malId = state.episodeData?.malId,
+            anilistId = state.episodeData?.anilistId,
+            episodeNumber = state.currentEpisodeNumber,
+            episodeLengthSec = durationSec,
+        )
+    }
+
+    fun clampSkipRangesToDuration(durationSec: Double) {
+        if (durationSec < 1.0) return
+        _uiState.update { state ->
+            val stream = state.streamingData ?: return@update state
+            val intro = clampSkipToDuration(stream.intro, durationSec) ?: stream.intro
+            val outro = clampSkipToDuration(stream.outro, durationSec) ?: stream.outro
+            if (intro == stream.intro && outro == stream.outro) return@update state
+            state.copy(streamingData = stream.copy(intro = intro, outro = outro))
+        }
+    }
+
+    private suspend fun resolveWatchMalId(malId: Int?, anilistId: Int?): Int? {
+        malId?.takeIf { it > 0 }?.let { return it }
+        anilistId?.takeIf { it > 0 }?.let { id ->
+            aniskipService.resolveMalId(null, id)?.let { return it }
+        }
+        val details = infoService.getAnimeDetails(currentAnimeId)
+        details?.malId?.takeIf { it > 0 }?.let { return it }
+        details?.anilistId?.takeIf { it > 0 }?.let { id ->
+            return aniskipService.resolveMalId(null, id)
+        }
+        return null
+    }
+
+    private fun attachAniskipTimes(
+        streamGeneration: Int,
+        malId: Int?,
+        anilistId: Int?,
+        episodeNumber: Int,
+        episodeLengthSec: Double?,
+    ) {
+        skipTimesJob?.cancel()
+        skipTimesJob = viewModelScope.launch {
+            val resolvedMal = resolveWatchMalId(malId, anilistId)
+            println(
+                "[WatchVM] Aniskip lookup malIn=$malId anilist=$anilistId resolvedMal=$resolvedMal ep=$episodeNumber len=${episodeLengthSec ?: 1440.0}",
+            )
+            val skips = aniskipService.resolveIntroOutro(
+                malId = resolvedMal,
+                anilistId = null,
+                episodeNumber = episodeNumber,
+                episodeLengthSec = episodeLengthSec ?: 1440.0,
+            )
+            if (streamGeneration != streamLoadGeneration) return@launch
+            if (skips.intro == null && skips.outro == null) return@launch
+
+            _uiState.update { state ->
+                val stream = state.streamingData ?: return@update state
+                state.copy(
+                    streamingData = stream.copy(
+                        intro = skips.intro ?: stream.intro,
+                        outro = skips.outro ?: stream.outro,
+                    ),
+                )
+            }
+            val dur = lastSkipEpisodeLengthSec
+            if (dur >= 60.0) clampSkipRangesToDuration(dur)
+        }
     }
 
     private fun syncPreferencesToServer() {

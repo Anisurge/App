@@ -66,6 +66,9 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.layout.ContentScale
 import to.kuudere.anisuge.ui.WatchlistBottomSheet
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.SessionCheckResult
@@ -1320,6 +1323,13 @@ fun WatchVideoPlayer(
                 playerState.pauseRequested = !uiState.autoPlay
             }
 
+            LaunchedEffect(playerState.duration, uiState.currentEpisodeNumber) {
+                if (playerState.duration >= 60.0) {
+                    viewModel.clampSkipRangesToDuration(playerState.duration)
+                    viewModel.refreshSkipTimesWhenDurationKnown(playerState.duration)
+                }
+            }
+
             LaunchedEffect(uiState.subtitleSize) {
                 playerState.subtitleSize = uiState.subtitleSize
             }
@@ -1426,40 +1436,47 @@ fun WatchVideoPlayer(
                 )
             }
 
-            LaunchedEffect(playerState.position) {
+            LaunchedEffect(playerState.position, playerState.duration) {
                 if (playerState.duration <= 0) return@LaunchedEffect
                 val pos = playerState.position
                 val dur = playerState.duration
-                
-                // Proactive auto-next only after real watch progress (not failed Suzu/HLS opens).
+
                 if (playerState.hasNextEpisode && watchedEnoughForAutoNext(pos, dur)) {
                     if (viewModel.tryAutoAdvanceToNextEpisode(pos, dur)) {
                         return@LaunchedEffect
                     }
                 }
+            }
 
-                // Auto skip intro
-                if (uiState.autoSkipIntro) {
-                    val intro = uiState.streamingData?.intro
-                    if (intro != null && intro.start != null && intro.end != null) {
-                        // Wait 1s into the range to match Zen logic
-                        if (pos >= intro.start + 1.0 && pos < intro.end - 1.0) {
-                            playerState.seekTarget = (intro.end + 0.5).toDouble()
-                        }
-                    }
-                }
+            // Auto-skip: poll position via snapshotFlow so seeks fire when Aniskip data arrives late.
+            LaunchedEffect(
+                uiState.autoSkipIntro,
+                uiState.autoSkipOutro,
+                uiState.streamingData?.intro,
+                uiState.streamingData?.outro,
+                uiState.currentEpisodeNumber,
+            ) {
+                if (!uiState.autoSkipIntro && !uiState.autoSkipOutro) return@LaunchedEffect
+                val autoIntro = uiState.autoSkipIntro
+                val autoOutro = uiState.autoSkipOutro
 
-                // Auto skip outro
-                if (uiState.autoSkipOutro) {
-                    val outro = uiState.streamingData?.outro
-                    if (outro != null && outro.start != null && outro.end != null) {
-                        // Wait 1s into the range to match Zen logic
-                        if (pos >= outro.start + 1.0 && pos < outro.end - 1.0) {
-                            val target = (outro.end + 0.5).toDouble()
-                            playerState.seekTarget = if (dur > 0) target.coerceAtMost(dur - 0.5) else target
-                        }
-                    }
+                var lastSkipAt = -1.0
+                snapshotFlow {
+                    Triple(
+                        playerState.position,
+                        playerState.duration,
+                        uiState.streamingData,
+                    )
                 }
+                    .filter { (_, dur, stream) -> dur >= 60.0 && (stream?.intro != null || stream?.outro != null) }
+                    .collect { (pos, dur, stream) ->
+                        val intro = if (autoIntro) stream?.intro else null
+                        val outro = if (autoOutro) stream?.outro else null
+                        val target = skipSeekTargetForPosition(intro, outro, pos, dur) ?: return@collect
+                        if (kotlin.math.abs(target - lastSkipAt) < 1.0) return@collect
+                        lastSkipAt = target
+                        playerState.seekTarget = target
+                    }
             }
 
             Box(
@@ -1527,18 +1544,18 @@ fun WatchVideoPlayer(
                                     } else false
                                 }
                                 Key.S -> {
-                                    val intro = uiState.streamingData?.intro
-                                    val outro = uiState.streamingData?.outro
-                                    val pos = playerState.position
-                                    
-                                    if (intro != null && intro.start != null && intro.end != null && pos >= intro.start && pos < intro.end) {
-                                        playerState.seekTarget = (intro.end + 0.5).toDouble()
+                                    val target = skipSeekTargetForPosition(
+                                        uiState.streamingData?.intro,
+                                        uiState.streamingData?.outro,
+                                        playerState.position,
+                                        playerState.duration,
+                                    )
+                                    if (target != null) {
+                                        playerState.seekTarget = target
                                         true
-                                    } else if (outro != null && outro.start != null && outro.end != null && pos >= outro.start && pos < outro.end) {
-                                        val target = (outro.end + 0.5).toDouble()
-                                        playerState.seekTarget = if (playerState.duration > 0) target.coerceAtMost(playerState.duration - 0.5) else target
-                                        true
-                                    } else false
+                                    } else {
+                                        false
+                                    }
                                 }
                                 Key.Escape, Key.Back -> {
                                     if (uiState.isFullscreen) {
@@ -1705,8 +1722,8 @@ fun WatchVideoPlayer(
                 // Skip Intro Overlay
                 val intro = uiState.streamingData?.intro
                 if (intro != null && intro.start != null && intro.end != null) {
-                    val inRange = playerState.position >= intro.start && playerState.position < intro.end - 1.0
-                    if (inRange && !uiState.autoSkipIntro && !skipIntroTimedOut && !skipIntroManualDismissed) {
+                    val inRange = intro.isPositionInRange(playerState.position)
+                    if (inRange && !skipIntroTimedOut && !skipIntroManualDismissed) {
                         val progress = (1.0f - (skipIntroElapsed.toFloat() / SKIP_TIMEOUT)).coerceIn(0f, 1f)
                         Box(
                             modifier = Modifier
@@ -1720,9 +1737,14 @@ fun WatchVideoPlayer(
                                     .clip(RoundedCornerShape(4.dp))
                                     .border(0.8.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
                                     .background(Color.Black.copy(alpha = 0.7f))
-                                    .clickable { 
-                                        playerState.seekTarget = (intro.end + 0.5).toDouble()
-                                        skipIntroManualDismissed = true 
+                                    .clickable {
+                                        skipSeekTargetForPosition(
+                                            intro,
+                                            null,
+                                            playerState.position,
+                                            playerState.duration,
+                                        )?.let { playerState.seekTarget = it }
+                                        skipIntroManualDismissed = true
                                     }
                             ) {
                                 // Progress bar background (draining effect)
@@ -1750,8 +1772,8 @@ fun WatchVideoPlayer(
                 // Skip Outro Overlay
                 val outro = uiState.streamingData?.outro
                 if (outro != null && outro.start != null && outro.end != null) {
-                    val inRange = playerState.position >= outro.start && playerState.position < outro.end - 1.0
-                    if (inRange && !uiState.autoSkipOutro && !skipOutroTimedOut && !skipOutroManualDismissed) {
+                    val inRange = outro.isPositionInRange(playerState.position)
+                    if (inRange && !skipOutroTimedOut && !skipOutroManualDismissed) {
                         val progress = (1.0f - (skipOutroElapsed.toFloat() / SKIP_TIMEOUT)).coerceIn(0f, 1f)
                         Box(
                             modifier = Modifier
@@ -1765,9 +1787,13 @@ fun WatchVideoPlayer(
                                     .clip(RoundedCornerShape(4.dp))
                                     .border(0.8.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
                                     .background(Color.Black.copy(alpha = 0.7f))
-                                    .clickable { 
-                                        val target = (outro.end + 0.5).toDouble()
-                                        playerState.seekTarget = if (playerState.duration > 0) target.coerceAtMost(playerState.duration - 0.5) else target
+                                    .clickable {
+                                        skipSeekTargetForPosition(
+                                            null,
+                                            outro,
+                                            playerState.position,
+                                            playerState.duration,
+                                        )?.let { playerState.seekTarget = it }
                                         skipOutroManualDismissed = true
                                     }
                             ) {

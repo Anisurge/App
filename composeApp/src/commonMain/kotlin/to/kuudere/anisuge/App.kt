@@ -96,7 +96,18 @@ fun App(
         }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }
         val infoVm   = remember { AnimeInfoViewModel(AppComponent.infoService, AppComponent.watchlistService) }
-        val watchVm  = remember { WatchViewModel(AppComponent.infoService, AppComponent.watchlistService, AppComponent.settingsStore, AppComponent.settingsService, AppComponent.serverRepository, AppComponent.syncManager, AppComponent.trackingService) }
+        val watchVm  = remember {
+            WatchViewModel(
+                AppComponent.infoService,
+                AppComponent.watchlistService,
+                AppComponent.settingsStore,
+                AppComponent.settingsService,
+                AppComponent.serverRepository,
+                AppComponent.aniskipService,
+                AppComponent.syncManager,
+                AppComponent.trackingService,
+            )
+        }
         val watchlistVm = remember { WatchlistViewModel() }
         val scheduleVm = remember { ScheduleViewModel(AppComponent.scheduleService) }
         val settingsVm = remember {

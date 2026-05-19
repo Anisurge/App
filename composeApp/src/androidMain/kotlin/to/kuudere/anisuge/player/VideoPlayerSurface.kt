@@ -489,7 +489,6 @@ actual fun VideoPlayerSurface(
 
     LaunchedEffect(state.seekTarget) {
         val target = state.seekTarget ?: return@LaunchedEffect
-        if (isSeeking.value) return@LaunchedEffect
         state.seekTarget = null
         isSeeking.value = true
         val safeTarget = target.coerceAtLeast(0.1)
