@@ -394,7 +394,20 @@ actual fun VideoPlayerSurface(
                     }
                     MPVLib.MPV_EVENT_END_FILE -> {
                         state.isPlaying = false
-                        if (!state.config.loop) {
+                        val pos = runCatching { MPVLib.getPropertyDouble("time-pos") }
+                            .getOrNull()?.coerceAtLeast(0.0) ?: state.position
+                        val dur = runCatching { MPVLib.getPropertyDouble("duration") }
+                            .getOrNull()?.coerceAtLeast(0.0) ?: state.duration
+                        state.position = pos
+                        state.duration = dur
+                        val naturalEnd = dur >= 45.0 && pos >= 20.0 &&
+                            (pos >= dur - 2.5 || pos >= dur * 0.88)
+                        if (!naturalEnd) {
+                            if (pos < 20.0 || dur < 45.0 || pos < dur * 0.1) {
+                                state.error = "Stream ended early — try another server"
+                                println("[VideoPlayerSurface] END_FILE ignored (pos=$pos dur=$dur)")
+                            }
+                        } else if (!state.config.loop) {
                             currentOnFinished?.invoke()
                         }
                     }

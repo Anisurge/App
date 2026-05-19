@@ -87,6 +87,9 @@ class WatchViewModel(
 
     private var currentAnimeId: String = ""
     private var loadJob: kotlinx.coroutines.Job? = null
+    /** Bumps when a new stream fetch starts; stale loads must not publish UI state. */
+    private var streamLoadGeneration = 0
+    private var lastAutoEpisodeAdvanceMs = 0L
     private var pendingQualitySelection: String? = null
     /** Last batch_scrape section (for per-stream subtitles when switching quality). */
     private var cachedStreamSection: BatchScrapeStreamData? = null
@@ -113,6 +116,7 @@ class WatchViewModel(
         // Cancel any ongoing loading IMMEDIATELY before touching state
         // This prevents race conditions when switching between videos
         loadJob?.cancel()
+        streamLoadGeneration++
 
         currentAnimeId = animeId
 
@@ -218,19 +222,9 @@ class WatchViewModel(
             )
         }
 
-        val speculativeAnilistId = currentAnimeId.toIntOrNull()
-        var streamLoadingJob: kotlinx.coroutines.Job? = null
-
-        if (speculativeAnilistId != null) {
-            streamLoadingJob = viewModelScope.launch {
-                loadVideoStream(streamServer, speculativeAnilistId)
-            }
-        }
-
         val data = infoService.getWatchInfo(currentAnimeId, ep = episodeNumber.toString())
 
         if (!coroutineContext.isActive || _uiState.value.offlinePath != null) {
-            streamLoadingJob?.cancel()
             return
         }
 
@@ -252,27 +246,17 @@ class WatchViewModel(
                 val mergedResume = mergeResumeHint(data.currentTime, state.savedWatchPosition)
                 state.copy(
                     isLoading = false,
-                    loadingMessage = if (streamLoadingJob != null) null else "Switching servers...",
+                    loadingMessage = "Switching servers...",
                     episodeData = dataWithEpisodes,
-                    savedWatchPosition = mergedResume
+                    savedWatchPosition = mergedResume,
                 )
             }
 
-            if (streamLoadingJob != null) {
-                try {
-                    streamLoadingJob.join()
-                } catch (_: kotlinx.coroutines.CancellationException) {
-                }
-            }
-            if (_uiState.value.streamingData == null &&
-                _uiState.value.offlinePath == null &&
-                coroutineContext.isActive
-            ) {
-                loadVideoStream(streamServer)
+            if (_uiState.value.offlinePath == null && coroutineContext.isActive) {
+                loadVideoStream(streamServer, data.anilistId)
             }
         } else {
-            streamLoadingJob?.cancel()
-            _uiState.update { it.copy(isLoading = false) }
+            _uiState.update { it.copy(isLoading = false, isLoadingVideo = false, loadingMessage = null) }
         }
     }
 
@@ -367,6 +351,7 @@ class WatchViewModel(
             return
         }
 
+        val generation = ++streamLoadGeneration
         val currState = _uiState.value
         var anilistId = explicitAnilistId ?: currState.episodeData?.anilistId
 
@@ -397,7 +382,7 @@ class WatchViewModel(
         try {
             val response = infoService.getVideoStream(anilistId, episodeNum, apiSource)
 
-            if (!coroutineContext.isActive) return
+            if (!coroutineContext.isActive || generation != streamLoadGeneration) return
 
             var subStreams = response?.sub
             var dubStreams = response?.dub
@@ -459,6 +444,8 @@ class WatchViewModel(
                 val requestedQuality = pendingQualitySelection
                 val defaultQuality = when {
                     requestedQuality != null && qualities.any { it.first == requestedQuality } -> requestedQuality
+                    apiSource.equals("suzu", ignoreCase = true) &&
+                        qualities.any { it.first.equals("HardSub", ignoreCase = true) } -> "HardSub"
                     else -> qualities.firstOrNull()?.first ?: "Auto"
                 }
                 pendingQualitySelection = null
@@ -489,6 +476,8 @@ class WatchViewModel(
                     viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
                 }
 
+                if (generation != streamLoadGeneration) return
+
                 _uiState.update { state ->
                     state.copy(
                         isLoadingVideo = false,
@@ -504,7 +493,9 @@ class WatchViewModel(
                 }
             } else {
                 println("[WatchVM] NO STREAMS FOUND! streamSection is null or empty.")
-                _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
+                if (generation == streamLoadGeneration) {
+                    _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
+                }
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             println("[WatchVM] loadVideoStream cancelled for server=$serverName")
@@ -512,7 +503,9 @@ class WatchViewModel(
         } catch (e: Exception) {
             println("[WatchVM] loadVideoStream error for server=$serverName: ${e.message}")
             e.printStackTrace()
-            _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
+            if (generation == streamLoadGeneration) {
+                _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
+            }
         }
     }
 
@@ -539,6 +532,7 @@ class WatchViewModel(
         }
 
         loadJob?.cancel()
+        streamLoadGeneration++
         pendingQualitySelection = quality
         _uiState.update {
             it.copy(
@@ -576,6 +570,7 @@ class WatchViewModel(
 
     fun setServer(server: String) {
         loadJob?.cancel()
+        streamLoadGeneration++
         cachedStreamSection = null
         _uiState.update { 
             it.copy(
@@ -603,6 +598,7 @@ class WatchViewModel(
         targetSubtitleLangCode: String? = null
     ) {
         loadJob?.cancel()
+        streamLoadGeneration++
         cachedStreamSection = null
         _uiState.update { 
             it.copy(
@@ -658,8 +654,34 @@ class WatchViewModel(
         _uiState.update { it.copy(isFullscreen = fullscreen) }
     }
 
+    /**
+     * Auto-next / natural EOF only — ignores mpv end-of-file from failed streams (Suzu token expiry, etc.).
+     */
+    fun tryAutoAdvanceToNextEpisode(positionSec: Double, durationSec: Double): Boolean {
+        if (!_uiState.value.autoNext) return false
+        if (_uiState.value.offlinePath != null) return false
+        if (!watchedEnoughForAutoNext(positionSec, durationSec)) return false
+        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        if (now - lastAutoEpisodeAdvanceMs < 8_000) return false
+        val nextEp = _uiState.value.episodeData?.episodes
+            ?.filter { it.number > _uiState.value.currentEpisodeNumber }
+            ?.minByOrNull { it.number }
+            ?: return false
+        lastAutoEpisodeAdvanceMs = now
+        println("[WatchVM] auto-advance ep ${_uiState.value.currentEpisodeNumber} → ${nextEp.number} (pos=$positionSec dur=$durationSec)")
+        onEpisodeSelected(nextEp.number)
+        return true
+    }
+
     fun onEpisodeSelected(episodeNumber: Int) {
+        val state = _uiState.value
+        if (episodeNumber == state.currentEpisodeNumber &&
+            (state.isLoading || state.isLoadingVideo)
+        ) {
+            return
+        }
         loadJob?.cancel()
+        streamLoadGeneration++
         cachedStreamSection = null
         _uiState.update { 
             it.copy(
