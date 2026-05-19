@@ -402,7 +402,23 @@ class WatchViewModel(
         _uiState.update { it.copy(isLoadingVideo = true, currentServer = serverName, loadingMessage = "Fetching streaming URL...") }
 
         try {
-            val response = infoService.getVideoStream(anilistId, episodeNum, apiSource)
+            val scrapeSource = apiSource
+            var response = infoService.getVideoStream(anilistId, episodeNum, scrapeSource)
+            if (
+                response == null ||
+                (response.sub?.streams.isNullOrEmpty() == true &&
+                    response.dub?.streams.isNullOrEmpty() == true)
+            ) {
+                val fallback = when {
+                    scrapeSource.equals("anitaku-2", ignoreCase = true) -> "anitaku"
+                    scrapeSource.equals("anitaku-1", ignoreCase = true) -> "anitaku"
+                    else -> null
+                }
+                if (fallback != null && !fallback.equals(scrapeSource, ignoreCase = true)) {
+                    println("[WatchVM] batch_scrape empty for $scrapeSource, retrying source=$fallback")
+                    response = infoService.getVideoStream(anilistId, episodeNum, fallback)
+                }
+            }
 
             if (!coroutineContext.isActive || generation != streamLoadGeneration) return
 
@@ -468,6 +484,9 @@ class WatchViewModel(
                     requestedQuality != null && qualities.any { it.first == requestedQuality } -> requestedQuality
                     apiSource.equals("suzu", ignoreCase = true) &&
                         qualities.any { it.first.equals("HardSub", ignoreCase = true) } -> "HardSub"
+                    apiSource.startsWith("anitaku", ignoreCase = true) &&
+                        qualities.any { it.first.equals("HD-2", ignoreCase = true) } &&
+                        !qualities.any { it.first.equals("HD-1", ignoreCase = true) } -> "HD-2"
                     else -> qualities.firstOrNull()?.first ?: "Auto"
                 }
                 pendingQualitySelection = null
@@ -477,9 +496,6 @@ class WatchViewModel(
                     defaultQuality,
                 )
                 val selectedSubUrl = to.kuudere.anisuge.utils.BatchSubtitleExtract.defaultUrl(subtitles)
-                println(
-                    "[AnisugeSubs] WatchVM server=$serverName quality=$defaultQuality subs=${subtitles.size} default=${selectedSubUrl?.take(96)}",
-                )
 
                 val skipIntro = currState.introSkip
                 val skipOutro = currState.outroSkip
@@ -496,10 +512,6 @@ class WatchViewModel(
                     outro = skipOutro,
                 )
 
-                qualities.firstOrNull { it.first == defaultQuality }?.second?.let { streamUrl ->
-                    viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
-                }
-
                 if (generation != streamLoadGeneration) return
 
                 _uiState.update { state ->
@@ -514,6 +526,10 @@ class WatchViewModel(
                         subtitlesDisabled = false,
                         offlinePath = null,
                     )
+                }
+
+                qualities.firstOrNull { it.first == defaultQuality }?.second?.let { streamUrl ->
+                    viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
                 }
 
                 attachAniskipTimes(
