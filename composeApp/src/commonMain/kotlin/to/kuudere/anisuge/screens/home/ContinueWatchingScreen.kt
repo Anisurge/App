@@ -127,7 +127,13 @@ fun ContinueWatchingScreen(
                             ContinueWatchingGridCard(
                                 item = item,
                                 onClick = {
-                                    onWatchClick(item.animeId, item.language ?: "sub", item.displayEpisode, item.server, item.progress)
+                                    onWatchClick(
+                                        item.effectiveAnimeId.ifBlank { item.animeId },
+                                        item.language ?: "sub",
+                                        item.displayEpisode.coerceAtLeast(1),
+                                        item.server,
+                                        item.progress,
+                                    )
                                 }
                             )
                         }

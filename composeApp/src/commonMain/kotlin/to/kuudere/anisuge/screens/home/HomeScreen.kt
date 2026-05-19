@@ -1413,15 +1413,16 @@ private fun ContinueWatchingRow(
         itemsIndexed(items) { _, item ->
             val inter = remember { MutableInteractionSource() }
             val hovered by inter.collectIsHoveredAsState()
-            val animeId = item.animeId
+            val animeId = item.effectiveAnimeId.ifBlank { item.animeId }
             val lang    = item.language ?: "sub"
             val server  = item.server
+            val episode = item.displayEpisode.coerceAtLeast(1)
 
             Column(
                 Modifier
                     .width(190.dp)
                     .hoverable(inter)
-                    .clickable { onWatchClick(animeId, lang, item.displayEpisode, server, item.progress) }
+                    .clickable { onWatchClick(animeId, lang, episode, server, item.progress) }
             ) {
                 Box(
                     Modifier
@@ -1488,7 +1489,7 @@ private fun ContinueWatchingRow(
                             .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("EP ${item.displayEpisode}", color = Color.White, fontSize = 12.sp)
+                        Text("EP $episode", color = Color.White, fontSize = 12.sp)
                     }
 
                     // Bottom Right Time badge
