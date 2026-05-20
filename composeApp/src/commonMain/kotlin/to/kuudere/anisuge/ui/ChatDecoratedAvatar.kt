@@ -15,12 +15,17 @@ fun ChatDecoratedAvatar(
     modifier: Modifier = Modifier,
     avatarSize: Dp = 36.dp,
     contentDescription: String? = null,
+    /** Used to warm frame cache for this chatter's ring frame. */
+    userId: String? = null,
 ) {
+    val uid = userId?.takeIf { it.isNotBlank() }
     ProfileAvatar(
         url = avatarUrl,
         avatarSize = avatarSize,
         frameUrl = frameUrl,
         outerFrameUrl = outerFrameUrl,
+        frameCacheKey = uid?.let { "${it}-ring" },
+        outerFrameCacheKey = uid?.let { "${it}-outer" },
         modifier = modifier,
         contentDescription = contentDescription,
         showBundledTestFrame = false,

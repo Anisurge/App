@@ -34,6 +34,7 @@ fun ProfileFramePickerSection(
     ownedFrames: List<BffShopItem>,
     selectedItemId: String?,
     isSaving: Boolean,
+    isLoadingOwned: Boolean = false,
     onSelectFrame: (BffShopItem?) -> Unit,
 ) {
     Column(
@@ -51,6 +52,17 @@ fun ProfileFramePickerSection(
             fontSize = 11.sp,
             lineHeight = 16.sp,
         )
+
+        if (isLoadingOwned && ownedFrames.isEmpty()) {
+            CircularProgressIndicator(
+                color = Color.White,
+                modifier = Modifier
+                    .size(28.dp)
+                    .align(Alignment.CenterHorizontally),
+                strokeWidth = 2.dp,
+            )
+            return@Column
+        }
 
         if (ownedFrames.isEmpty()) {
             Text(

@@ -34,6 +34,10 @@ class BffShopService(
         "/shop/me?catalogLimit=$catalogLimit&catalogOffset=$catalogOffset",
     ) { it.body() }
 
+    /** Owned frames only — fast path for profile picker after install / login. */
+    suspend fun fetchOwned(): Result<to.kuudere.anisuge.data.models.BffShopOwnedResponse> =
+        authedGet("/shop/owned") { it.body() }
+
     suspend fun redeem(code: String): Result<BffShopRedeemResponse> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
         return try {
