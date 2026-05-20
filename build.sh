@@ -43,7 +43,7 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
 fi
 # macOS DMG on macOS hosts
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    BUILD_TASKS="$BUILD_TASKS packageDmg"
+    BUILD_TASKS="$BUILD_TASKS packageDistributionForCurrentOS"
 fi
 
 ./gradlew $BUILD_TASKS --no-daemon \

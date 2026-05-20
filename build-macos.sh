@@ -17,7 +17,7 @@ BUILD_NUMBER="${2:-$(grep '^app-buildNumber' gradle/libs.versions.toml | sed 's/
 
 echo "Building Anisurge $VERSION_NAME+$BUILD_NUMBER for macOS..."
 chmod +x gradlew
-./gradlew :composeApp:packageDmg :composeApp:createPortableZip --no-daemon \
+./gradlew :composeApp:packageDistributionForCurrentOS :composeApp:createPortableZip --no-daemon \
   -PappVersion="$VERSION_NAME" \
   -PappBuildNumber="$BUILD_NUMBER"
 

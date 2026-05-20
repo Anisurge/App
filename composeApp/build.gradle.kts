@@ -393,7 +393,19 @@ compose.desktop {
         )
 
         nativeDistributions {
-            targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg)
+            // Compose registers AppImage when the `linux { }` DSL runs — even on macOS CI hosts.
+            // Gate formats AND platform blocks by host OS (see compose-multiplatform #3814).
+            val hostOs = System.getProperty("os.name").lowercase()
+            val onMac = "mac" in hostOs || "darwin" in hostOs
+            val onLinux = "linux" in hostOs
+            val onWindows = "win" in hostOs
+
+            when {
+                onMac -> targetFormats(TargetFormat.Dmg)
+                onLinux -> targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.AppImage)
+                onWindows -> targetFormats(TargetFormat.Msi, TargetFormat.Exe)
+            }
+
             packageName = "Anisurge"
             packageVersion = appVersionName
             description = "Anisurge — Multi-Platform Edition"
@@ -402,35 +414,32 @@ compose.desktop {
 
             modules("jdk.security.auth", "java.sql", "java.naming", "jdk.crypto.ec", "java.desktop", "java.management", "jdk.unsupported")
 
-            linux {
-                iconFile.set(project.file("src/desktopMain/resources/logo.png"))
-                // Combine version and build number for Linux (e.g., 0.9.9.12)
-                packageVersion = "${appVersionName.replace("-", ".")}.$appBuildNum"
-                
-                shortcut = true
-                appCategory = "AudioVideo;Video;Entertainment;"
+            if (onLinux) {
+                linux {
+                    iconFile.set(project.file("src/desktopMain/resources/logo.png"))
+                    packageVersion = "${appVersionName.replace("-", ".")}.$appBuildNum"
+                    shortcut = true
+                    appCategory = "AudioVideo;Video;Entertainment;"
+                }
             }
 
-            windows {
-                iconFile.set(project.file("src/desktopMain/resources/logo.ico"))
-                // MSI version must be MAJOR.MINOR.BUILD (max 3 segments)
-                packageVersion = windowsVersion
-                upgradeUuid = "d7e9b1a0-3f2d-4e9b-8a1c-5d6e7f8a9b0c" // Stable UUID for updates
-                
-                shortcut = true
-                menu = true
-                menuGroup = "Anisurge"
-                
-                // Note: Signing is now handled via project properties in the CI workflow
-                // by passing -Pcompose.desktop.signing.sign=true etc.
-                // This avoids DSL compilation issues.
+            if (onWindows) {
+                windows {
+                    iconFile.set(project.file("src/desktopMain/resources/logo.ico"))
+                    packageVersion = windowsVersion
+                    upgradeUuid = "d7e9b1a0-3f2d-4e9b-8a1c-5d6e7f8a9b0c"
+                    shortcut = true
+                    menu = true
+                    menuGroup = "Anisurge"
+                }
             }
 
-            macOS {
-                iconFile.set(project.file("src/desktopMain/resources/logo.icns"))
-                packageVersion = macosVersion
-                bundleID = "to.kuudere.anisuge"
-                // Unsigned build — no signing configuration
+            if (onMac) {
+                macOS {
+                    iconFile.set(project.file("src/desktopMain/resources/logo.icns"))
+                    packageVersion = macosVersion
+                    bundleID = "to.kuudere.anisuge"
+                }
             }
         }
     }

@@ -20,10 +20,10 @@ on:
         description: 'Upload artifacts to a GitHub Release (tag pushes always release)'
         type: boolean
         default: false
-      skip_ios:
-        description: 'Skip unsigned iOS IPA build'
+      build_ios:
+        description: 'Build unsigned iOS IPA (off by default — iOS KMP targets are not enabled in Gradle yet)'
         type: boolean
-        default: true
+        default: false
 
 jobs:
   resolve-version:
@@ -295,7 +295,7 @@ jobs:
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
           chmod +x gradlew
-          ./gradlew :composeApp:packageDmg :composeApp:createPortableZip --no-daemon \
+          ./gradlew :composeApp:packageDistributionForCurrentOS :composeApp:createPortableZip --no-daemon \
             -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
             -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}"
 
@@ -309,7 +309,7 @@ jobs:
           ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
 
           if [[ -z "$DMG_FILE" ]]; then
-            echo "::error::No .dmg produced — check packageDmg logs"
+            echo "::error::No .dmg produced — check packageDistributionForCurrentOS logs"
             exit 1
           fi
           cp "$DMG_FILE" "dist/Anisurge-${VER}.${BUILD}-macos.dmg"
@@ -323,9 +323,10 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # iOS is opt-in only. Tag pushes do NOT build iOS (composeApp ios* targets are commented out in build.gradle.kts).
   build-ios:
     needs: resolve-version
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip_ios }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_ios }}
     runs-on: macos-latest
     continue-on-error: true
     steps:
