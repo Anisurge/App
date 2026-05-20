@@ -6,13 +6,17 @@ import to.kuudere.anisuge.data.models.ContinueWatchingItem
 private fun ContinueWatchingItem.sortKey(): String = updatedAt.orEmpty()
 
 /**
- * One card per series on home: keep the most recently updated episode per [ContinueWatchingItem.animeId].
- * All rows stay in the database; this is display-only.
+ * One card per series on home: resume the furthest in-progress episode (highest ep number, then
+ * most playback), not whichever row ReAnime touched last (often a stale ep-1).
  */
 fun List<ContinueWatchingItem>.latestPerAnime(): List<ContinueWatchingItem> =
-    groupBy { it.animeId.ifBlank { it.effectiveAnimeId } }
+    groupBy { it.effectiveAnimeId.ifBlank { it.animeId } }
         .mapNotNull { (_, episodes) ->
-            episodes.maxWithOrNull(compareBy<ContinueWatchingItem> { it.sortKey() })
+            episodes.maxWithOrNull(
+                compareBy<ContinueWatchingItem> { it.displayEpisode }
+                    .thenBy { it.progress }
+                    .thenBy { it.sortKey() },
+            )
         }
         .sortedByDescending { it.sortKey() }
 

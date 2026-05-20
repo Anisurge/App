@@ -154,10 +154,15 @@ class InfoService(
             if (response.status.value in 200..299) {
                 response.body<BffWatchProgressResponse>()
             } else {
+                val errBody = runCatching { response.body<String>() }.getOrNull()
+                println(
+                    "[InfoService] saveProgress failed HTTP ${response.status.value} " +
+                        "anime=$animeId $episodeId: $errBody",
+                )
                 null
             }
         } catch (e: Exception) {
-            println("[InfoService] saveProgress error: ${e.message}")
+            println("[InfoService] saveProgress error anime=$animeId $episodeId: ${e.message}")
             null
         }
     }
