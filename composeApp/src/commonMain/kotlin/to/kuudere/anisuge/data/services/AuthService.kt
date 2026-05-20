@@ -11,9 +11,13 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -45,6 +49,7 @@ class AuthService(
     private val _authState = MutableStateFlow<SessionCheckResult>(SessionCheckResult.NoSession)
     val authState: StateFlow<SessionCheckResult> = _authState.asStateFlow()
     private val bffErrorJson = Json { ignoreUnknownKeys = true }
+    private val authScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     suspend fun login(identifier: String, password: String): SessionInfo =
         withAuthRetry { loginOnce(identifier, password) }
@@ -229,9 +234,11 @@ class AuthService(
         val body: BffAuthResponse = response.body()
         val session = sessionFromBff(body)
         sessionStore.save(session)
-        integrationsSyncService.restoreFromServer()
         val user = body.user?.toUserProfile()
-        return SessionCheckResult.Valid(session, user).also { _authState.value = it }
+        val result = SessionCheckResult.Valid(session, user)
+        _authState.value = result
+        authScope.launch { integrationsSyncService.restoreFromServer() }
+        return result
     }
 
     private suspend fun fetchMe(stored: SessionInfo): SessionCheckResult {
@@ -240,11 +247,11 @@ class AuthService(
                 applyAnisurgeAuth(stored)
             }
             if (response.status == HttpStatusCode.OK) {
-                integrationsSyncService.restoreFromServer()
                 val body: BffMeResponse = response.body()
-                SessionCheckResult.Valid(stored, body.user.toUserProfile()).also {
-                    _authState.value = it
-                }
+                val result = SessionCheckResult.Valid(stored, body.user.toUserProfile())
+                _authState.value = result
+                authScope.launch { integrationsSyncService.restoreFromServer() }
+                result
             } else if (response.status == HttpStatusCode.Unauthorized) {
                 SessionCheckResult.Expired.also { _authState.value = it }
             } else {
@@ -265,12 +272,14 @@ class AuthService(
         }
         val session = sessionFromBff(body)
         sessionStore.save(session)
-        integrationsSyncService.restoreFromServer()
-        if (status == HttpStatusCode.Created) {
-            librarySyncService.syncWithReanime(force = true)
-        }
         val user = body.user?.toUserProfile()
         _authState.value = SessionCheckResult.Valid(session, user)
+        authScope.launch {
+            integrationsSyncService.restoreFromServer()
+            if (status == HttpStatusCode.Created) {
+                librarySyncService.syncWithReanime(force = true)
+            }
+        }
         return session
     }
 

@@ -119,10 +119,12 @@ class HomeViewModel(
         } catch (e: Exception) {
             println("[HomeVM] Failed to fetch continue watching: ${e.message}")
         }
+    }
 
-        // Merge with ReAnime in the background; do not block the UI on sync (it can pull stale rows).
+    /** Pull ReAnime library merge then refresh continue (watchlist screen / explicit refresh). */
+    fun syncLibraryAndRefreshContinue() {
         scope.launch {
-            val synced = librarySyncService.syncWithReanime()
+            val synced = librarySyncService.syncWithReanime(force = true)
             if (synced) {
                 try {
                     val all = homeService.fetchAllContinueWatching().sortedByRecent()
@@ -166,7 +168,11 @@ class HomeViewModel(
                 when (val authResult = authCheck.await()) {
                     is SessionCheckResult.Valid -> {
                         _uiState.update { it.copy(userProfile = authResult.user) }
-                        loadContinueWatching()
+                        if (force) {
+                            syncLibraryAndRefreshContinue()
+                        } else {
+                            loadContinueWatching()
+                        }
                     }
                     else -> Unit
                 }
