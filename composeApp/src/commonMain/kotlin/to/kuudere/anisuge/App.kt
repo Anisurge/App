@@ -439,7 +439,10 @@ fun App(
                         offlineTitle = offlineTitle,
                         resumeAtSeconds = resumeAtSeconds,
                         viewModel = watchVm,
-                        onBack = { navController.popBackStack() },
+                        onBack = {
+                            homeVm.refreshContinueWatching()
+                            navController.popBackStack()
+                        },
                         onExit = onAppExit
                     )
                 }

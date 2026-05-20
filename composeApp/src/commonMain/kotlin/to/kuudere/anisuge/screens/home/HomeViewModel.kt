@@ -113,18 +113,33 @@ class HomeViewModel(
             return
         }
 
-        librarySyncService.syncWithReanime()
-
         try {
             val all = homeService.fetchAllContinueWatching().sortedByRecent()
-            _uiState.update {
-                it.copy(
-                    continueWatchingAll = all,
-                    continueWatching = all.latestPerAnime(),
-                )
-            }
+            applyContinueWatching(all)
         } catch (e: Exception) {
             println("[HomeVM] Failed to fetch continue watching: ${e.message}")
+        }
+
+        // Merge with ReAnime in the background; do not block the UI on sync (it can pull stale rows).
+        scope.launch {
+            val synced = librarySyncService.syncWithReanime()
+            if (synced) {
+                try {
+                    val all = homeService.fetchAllContinueWatching().sortedByRecent()
+                    applyContinueWatching(all)
+                } catch (e: Exception) {
+                    println("[HomeVM] Failed to refresh continue after sync: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun applyContinueWatching(all: List<ContinueWatchingItem>) {
+        _uiState.update {
+            it.copy(
+                continueWatchingAll = all,
+                continueWatching = all.latestPerAnime(),
+            )
         }
     }
 

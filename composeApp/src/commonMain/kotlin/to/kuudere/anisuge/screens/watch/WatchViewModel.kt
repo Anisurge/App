@@ -100,6 +100,10 @@ class WatchViewModel(
     private var cachedStreamSection: BatchScrapeStreamData? = null
     private var skipTimesJob: kotlinx.coroutines.Job? = null
     private var lastSkipEpisodeLengthSec = 0.0
+    private var lastKnownDurationSec = 0.0
+    private var lastPlaybackPositionSec = 0.0
+    private var lastPlaybackLanguage = "sub"
+    private var lastSavedProgressKey: String? = null
     /** Server explicitly chosen in player settings (not the Settings → priority list default). */
     private var userPinnedStreamServer: String? = null
 
@@ -129,6 +133,9 @@ class WatchViewModel(
 
         val newAnime = animeId != currentAnimeId
         currentAnimeId = animeId
+        lastKnownDurationSec = 0.0
+        lastPlaybackPositionSec = 0.0
+        lastSavedProgressKey = null
         if (newAnime) {
             userPinnedStreamServer = null
         }
@@ -736,6 +743,11 @@ class WatchViewModel(
         ) {
             return
         }
+        if (episodeNumber != state.currentEpisodeNumber) {
+            lastKnownDurationSec = 0.0
+            lastPlaybackPositionSec = 0.0
+            lastSavedProgressKey = null
+        }
         loadJob?.cancel()
         streamLoadGeneration++
         cachedStreamSection = null
@@ -766,17 +778,34 @@ class WatchViewModel(
 
     fun saveProgress(currentTime: Double, duration: Double, language: String = "sub") {
         val currState = _uiState.value
-        val episodeId = "ep-${currState.currentEpisodeNumber}"
-        val server = currState.currentServer
+        if (currState.offlinePath != null) return
 
-        if (currentAnimeId.isEmpty() || duration <= 0) return
+        val episodeId = "ep-${currState.currentEpisodeNumber}"
+        val animeId = currState.episodeData?.anime?.animeId?.takeIf { it.isNotBlank() }
+            ?: currentAnimeId
+        val server = currState.currentServer.ifBlank { userPinnedStreamServer.orEmpty() }.ifBlank { "suzu" }
+        val effectiveDuration = when {
+            duration > 0 -> duration.also { lastKnownDurationSec = it }
+            lastKnownDurationSec > 0 -> lastKnownDurationSec
+            currentTime >= 5.0 -> (currentTime + 120.0).also { lastKnownDurationSec = it }
+            else -> return
+        }
+
+        if (animeId.isBlank() || currentTime < 5.0) return
+
+        lastPlaybackPositionSec = currentTime
+        lastPlaybackLanguage = language
+
+        val progressKey = "$animeId|$episodeId|${currentTime.toInt()}"
+        if (progressKey == lastSavedProgressKey) return
+        lastSavedProgressKey = progressKey
 
         viewModelScope.launch {
             val result = infoService.saveProgress(
-                animeId = currentAnimeId,
+                animeId = animeId,
                 episodeId = episodeId,
                 currentTime = currentTime,
-                duration = duration,
+                duration = effectiveDuration,
                 server = server,
                 language = language,
             )
@@ -791,6 +820,19 @@ class WatchViewModel(
 
     fun dismissBerriesToast() {
         _uiState.update { it.copy(berriesToast = null) }
+    }
+
+    /** Call when leaving the player so continue-watching is updated even if playback paused. */
+    fun flushWatchProgress(position: Double, duration: Double, language: String = "sub") {
+        lastSavedProgressKey = null
+        saveProgress(position, duration, language)
+    }
+
+    fun flushLatestWatchProgress() {
+        if (lastPlaybackPositionSec < 5.0) return
+        val duration = lastKnownDurationSec.takeIf { it > 0 }
+            ?: (lastPlaybackPositionSec + 120.0)
+        flushWatchProgress(lastPlaybackPositionSec, duration, lastPlaybackLanguage)
     }
 
     /**

@@ -97,6 +97,7 @@ fun WatchScreen(
     to.kuudere.anisuge.platform.SyncFullscreen(uiState.isFullscreen)
 
     val handleBack = {
+        viewModel.flushLatestWatchProgress()
         isLandscape = false
         onBack()
     }
@@ -1168,9 +1169,6 @@ fun WatchVideoPlayer(
             val playbackUrl = remember(currentUrl, streamHeaderKey) {
                 StreamProxy.proxyUrl(currentUrl, streamHeaders)
             }
-            DisposableEffect(playbackUrl) {
-                onDispose { StreamProxy.release(currentUrl) }
-            }
 
             // Desktop: We now use our custom Compose PlayerControls instead of mpv's OSC
             val useOsc = false
@@ -1188,6 +1186,27 @@ fun WatchVideoPlayer(
                 subtitleSize = uiState.subtitleSize,
                 headers = streamHeaders
             )
+
+            DisposableEffect(playbackUrl, uiState.currentEpisodeNumber) {
+                onDispose {
+                    if (uiState.offlinePath == null && playerState.position >= 5.0) {
+                        val audioLabel = playerState.audioTracks
+                            .firstOrNull { it.first == playerState.selectedAudioTrack }
+                            ?.second
+                            ?.lowercase()
+                            .orEmpty()
+                        val trackLang = if (audioLabel.contains("eng")) "dub" else "sub"
+                        val duration = playerState.duration.takeIf { it > 0 }
+                            ?: (playerState.position + 120.0)
+                        viewModel.flushWatchProgress(
+                            playerState.position,
+                            duration,
+                            trackLang,
+                        )
+                    }
+                    StreamProxy.release(currentUrl)
+                }
+            }
 
             val skipIntro = uiState.effectiveIntroSkip()
             val skipOutro = uiState.effectiveOutroSkip()
@@ -1373,10 +1392,12 @@ fun WatchVideoPlayer(
             LaunchedEffect(playerState.isPlaying, playerState.isPaused) {
                 while (playerState.isPlaying && !playerState.isPaused) {
                     kotlinx.coroutines.delay(5000)
-                    if (playerState.duration > 0) {
+                    if (playerState.position >= 5.0) {
                         val currentAudioLabel = playerState.audioTracks.firstOrNull { it.first == playerState.selectedAudioTrack }?.second?.lowercase() ?: ""
                         val trackLang = if (currentAudioLabel.contains("eng")) "dub" else "sub"
-                        viewModel.saveProgress(playerState.position, playerState.duration, language = trackLang)
+                        val duration = playerState.duration.takeIf { it > 0 }
+                            ?: (playerState.position + 120.0)
+                        viewModel.saveProgress(playerState.position, duration, language = trackLang)
                     }
                 }
             }
