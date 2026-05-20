@@ -49,6 +49,7 @@ fun ChatMemberSheet(
                 avatarUrl = member.avatarUrl,
                 frameUrl = member.avatarFrameUrl,
                 outerFrameUrl = member.avatarOuterUrl,
+                userId = member.userId,
                 avatarSize = 72.dp,
                 contentDescription = member.username,
             )

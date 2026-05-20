@@ -3717,6 +3717,7 @@ private fun ProfileSummaryCard(
                 url = user.effectiveAvatar,
                 avatarSize = 64.dp,
                 frameUrl = user.equippedFrameUrl,
+                frameCacheKey = user.equippedFrameItemId,
                 showBundledTestFrame = false,
                 contentDescription = user.displayName,
             )
@@ -3784,6 +3785,7 @@ private fun ProfilePfpAndFramesSection(
                         url = user.effectiveAvatar,
                         avatarSize = 96.dp,
                         frameUrl = user.equippedFrameUrl,
+                        frameCacheKey = user.equippedFrameItemId,
                         showBundledTestFrame = false,
                         contentDescription = user.displayName,
                     )
@@ -3823,6 +3825,7 @@ private fun ProfilePfpAndFramesSection(
             ownedFrames = uiState.shopOwned,
             selectedItemId = user.equippedFrameItemId,
             isSaving = uiState.isSavingEquippedFrame,
+            isLoadingOwned = uiState.isLoadingOwnedFrames,
             onSelectFrame = onEquipFrame,
         )
     }
@@ -4235,6 +4238,7 @@ private fun MobileProfileContent(
                         url = user.effectiveAvatar,
                         avatarSize = 120.dp,
                         frameUrl = user.equippedFrameUrl,
+                        frameCacheKey = user.equippedFrameItemId,
                         showBundledTestFrame = false,
                         contentDescription = user.displayName,
                     )

@@ -19,7 +19,7 @@ import to.kuudere.anisuge.utils.getCacheDirectory
 
 /** In-memory + disk cache for animated shop/chat frame bytes (APNG served as PNG). */
 object AnimatedFrameBytesCache {
-    private const val MAX_MEMORY_ENTRIES = 96
+    private const val MAX_MEMORY_ENTRIES = 160
     private val memoryLock = Any()
     private val memory = object : LinkedHashMap<String, ByteArray>(MAX_MEMORY_ENTRIES, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?): Boolean =
@@ -120,7 +120,7 @@ object AnimatedFrameBytesCache {
 
     suspend fun prefetchEntries(
         entries: List<Pair<String, String?>>,
-        concurrency: Int = 12,
+        concurrency: Int = 20,
     ) {
         val pending = entries
             .mapNotNull { (rawUrl, itemId) ->

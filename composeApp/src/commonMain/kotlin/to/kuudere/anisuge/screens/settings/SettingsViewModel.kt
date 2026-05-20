@@ -39,6 +39,7 @@ import to.kuudere.anisuge.platform.clearSyncProgressNotification
 import to.kuudere.anisuge.platform.updateSyncProgressNotification
 import to.kuudere.anisuge.utils.isNetworkError
 import to.kuudere.anisuge.data.models.BffShopItem
+import to.kuudere.anisuge.data.models.UserProfile
 import to.kuudere.anisuge.data.models.toUserProfile
 import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 import to.kuudere.anisuge.ui.isAnimatedFrameAssetUrl
@@ -147,6 +148,7 @@ data class SettingsUiState(
     val shopCoins: Int = 0,
     val shopCatalog: List<to.kuudere.anisuge.data.models.BffShopItem> = emptyList(),
     val shopOwned: List<to.kuudere.anisuge.data.models.BffShopItem> = emptyList(),
+    val isLoadingOwnedFrames: Boolean = false,
     val isLoadingShop: Boolean = false,
     val isLoadingMoreShop: Boolean = false,
     val shopCatalogHasMore: Boolean = false,
@@ -215,6 +217,8 @@ class SettingsViewModel(
                     }
                     loadSettings()
                     loadTrackingState()
+                    loadShopInventory()
+                    prefetchEquippedFrame(result.user)
                 } else if (result is SessionCheckResult.NoSession || result is SessionCheckResult.Expired) {
                     _uiState.update { it.copy(userProfile = null, isSignedIn = false) }
                 }
@@ -320,6 +324,7 @@ class SettingsViewModel(
             if (result is SessionCheckResult.Valid) {
                 _uiState.update { it.copy(isSignedIn = true) }
                 loadUserProfile()
+                loadShopInventory()
             }
             _uiState.update { it.copy(isLoadingProfile = false, isLoading = false) }
         }
@@ -401,6 +406,10 @@ class SettingsViewModel(
                             isOffline = false,
                             usernameDraft = if (it.showProfileAccount) it.usernameDraft else profile.username.orEmpty(),
                         )
+                    }
+                    prefetchEquippedFrame(profile)
+                    if (_uiState.value.shopOwned.isEmpty()) {
+                        loadShopInventory()
                     }
                 },
                 onFailure = { e ->
@@ -536,7 +545,7 @@ class SettingsViewModel(
             _uiState.update { it.copy(isLoadingShop = true) }
             bffShopService.fetchShopMe(catalogLimit = SHOP_PAGE_SIZE, catalogOffset = 0).fold(
                 onSuccess = { body ->
-                    prefetchShopFrameAnimations(body.catalog)
+                    prefetchShopFrameAnimations(body.owned, body.catalog)
                     _uiState.update {
                         it.copy(
                             isLoadingShop = false,
@@ -571,7 +580,7 @@ class SettingsViewModel(
             ).fold(
                 onSuccess = { body ->
                     val merged = (state.shopCatalog + body.catalog).distinctBy { it.id }
-                    prefetchShopFrameAnimations(body.catalog)
+                    prefetchShopFrameAnimations(body.owned, body.catalog)
                     _uiState.update { current ->
                         current.copy(
                             isLoadingMoreShop = false,
@@ -595,7 +604,11 @@ class SettingsViewModel(
         }
     }
 
-    private suspend fun prefetchShopFrameAnimations(items: List<BffShopItem>) {
+    private suspend fun prefetchShopFrameAnimations(
+        owned: List<to.kuudere.anisuge.data.models.BffShopItem>,
+        catalog: List<to.kuudere.anisuge.data.models.BffShopItem> = emptyList(),
+    ) {
+        val items = (owned + catalog).distinctBy { it.id }
         if (items.isEmpty()) return
         val entries = items.mapNotNull { item ->
             val url = resolveProfileMediaUrl(item.assetUrl) ?: return@mapNotNull null
@@ -603,20 +616,37 @@ class SettingsViewModel(
         }
         if (entries.isEmpty()) return
         withContext(Dispatchers.Default) {
-            AnimatedFrameBytesCache.prefetchEntries(entries, concurrency = 16)
+            AnimatedFrameBytesCache.prefetchEntries(entries, concurrency = 24)
+        }
+    }
+
+    private fun prefetchEquippedFrame(profile: UserProfile?) {
+        if (profile == null) return
+        val url = resolveProfileMediaUrl(profile.equippedFrameUrl) ?: return
+        viewModelScope.launch(Dispatchers.Default) {
+            AnimatedFrameBytesCache.load(url, itemId = profile.equippedFrameItemId)
         }
     }
 
     fun loadShopInventory() {
         viewModelScope.launch {
-            bffShopService.fetchShopMe().onSuccess { body ->
-                _uiState.update {
-                    it.copy(
-                        shopCoins = body.coins,
-                        shopOwned = body.owned,
-                    )
-                }
-            }
+            _uiState.update { it.copy(isLoadingOwnedFrames = true) }
+            bffShopService.fetchOwned().fold(
+                onSuccess = { body ->
+                    viewModelScope.launch {
+                        prefetchShopFrameAnimations(body.owned)
+                    }
+                    _uiState.update {
+                        it.copy(
+                            shopOwned = body.owned,
+                            isLoadingOwnedFrames = false,
+                        )
+                    }
+                },
+                onFailure = {
+                    _uiState.update { it.copy(isLoadingOwnedFrames = false) }
+                },
+            )
         }
     }
 
@@ -680,6 +710,7 @@ class SettingsViewModel(
                             successMessage = "Purchased ${body.item.name}",
                         )
                     }
+                    prefetchShopFrameAnimations(listOf(body.item))
                 },
                 onFailure = { e ->
                     _uiState.update {

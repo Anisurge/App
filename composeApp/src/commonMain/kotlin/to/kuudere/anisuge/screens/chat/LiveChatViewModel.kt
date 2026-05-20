@@ -16,6 +16,7 @@ import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.ChatService
 import to.kuudere.anisuge.navigation.Screen
+import to.kuudere.anisuge.ui.ChatFramePrefetch
 
 enum class LiveChatConnectionState {
     Connecting,
@@ -63,6 +64,13 @@ class LiveChatViewModel(
     }
 
     private fun applyCurrentUserProfile(profile: to.kuudere.anisuge.data.models.UserProfile?) {
+        prefetchChatFrameEntries(
+            ChatFramePrefetch.entriesFromProfile(
+                frameUrl = profile?.equippedFrameUrl,
+                outerFrameUrl = profile?.equippedOuterFrameUrl,
+                userId = profile?.effectiveId,
+            ),
+        )
         _uiState.update { state ->
             val next = state.copy(
                 currentUserId = profile?.effectiveId,
@@ -73,6 +81,16 @@ class LiveChatViewModel(
             )
             next.copy(messages = next.messages.map { enrichOwnMessage(it, next) })
         }
+    }
+
+    private fun prefetchChatFrames(messages: List<ChatMessage>) {
+        if (messages.isEmpty()) return
+        viewModelScope.launch { ChatFramePrefetch.prefetch(messages) }
+    }
+
+    private fun prefetchChatFrameEntries(entries: List<Pair<String, String?>>) {
+        if (entries.isEmpty()) return
+        viewModelScope.launch { ChatFramePrefetch.prefetchEntries(entries) }
     }
 
     private fun enrichOwnMessage(message: ChatMessage, state: LiveChatUiState): ChatMessage {
@@ -142,13 +160,16 @@ class LiveChatViewModel(
 
             val room = chatService.fetchRoom()
             val history = chatService.fetchHistory(limit = 50)
+            val historyMessages = (history?.messages ?: emptyList())
+                .map { enrichOwnMessage(it, _uiState.value) }
+            prefetchChatFrames(historyMessages)
 
             _uiState.update {
                 it.copy(
                     isLoading = false,
                     roomName = room?.name ?: Screen.LiveChat.displayName,
                     onlineCount = room?.onlineCount ?: 0,
-                    messages = (history?.messages ?: emptyList()).map { enrichOwnMessage(it, _uiState.value) },
+                    messages = historyMessages,
                     hasMoreOlder = history?.hasMore == true,
                     error = if (history == null) {
                         "Could not load chat history. Pull to refresh after the server is updated."
@@ -201,10 +222,12 @@ class LiveChatViewModel(
             } else {
                 state.messages
             }
+            val enriched = merged.map { enrichOwnMessage(it, state) }
+            prefetchChatFrames(enriched)
             state.copy(
                 roomName = room?.name ?: state.roomName,
                 onlineCount = room?.onlineCount ?: state.onlineCount,
-                messages = merged.map { enrichOwnMessage(it, state) },
+                messages = enriched,
                 hasMoreOlder = history?.hasMore ?: state.hasMoreOlder,
             )
         }
@@ -234,6 +257,7 @@ class LiveChatViewModel(
                         ),
                         snapshot,
                     )
+                    prefetchChatFrames(listOf(enriched))
                     _uiState.update { state ->
                         val merged = mergeMessages(state.messages, listOf(enriched))
                         state.copy(
@@ -271,10 +295,12 @@ class LiveChatViewModel(
                 return@launch
             }
             _uiState.update { current ->
+                val merged = mergeMessages(current.messages, page.messages)
+                prefetchChatFrames(merged)
                 current.copy(
                     isLoadingOlder = false,
                     hasMoreOlder = page.hasMore,
-                    messages = mergeMessages(current.messages, page.messages),
+                    messages = merged,
                 )
             }
         }
@@ -352,8 +378,10 @@ class LiveChatViewModel(
                         scheduleReconnect()
                     }
                     is ChatLiveEvent.Message -> {
+                        val snapshot = _uiState.value
+                        val incoming = enrichOwnMessage(event.message, snapshot)
+                        prefetchChatFrames(listOf(incoming))
                         _uiState.update { state ->
-                            val incoming = enrichOwnMessage(event.message, state)
                             state.copy(
                                 messages = mergeMessages(state.messages, listOf(incoming)),
                                 error = null,

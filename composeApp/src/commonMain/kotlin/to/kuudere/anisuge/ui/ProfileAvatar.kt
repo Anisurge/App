@@ -26,8 +26,9 @@ fun ProfileAvatar(
     avatarSize: Dp = 36.dp,
     frameUrl: String? = null,
     outerFrameUrl: String? = null,
-    /** Shop item id — warms [AnimatedFrameBytesCache] and offline [ShopFrameCache]. */
+    /** Shop item id or chat `{userId}-ring` — warms [AnimatedFrameBytesCache] and offline [ShopFrameCache]. */
     frameCacheKey: String? = null,
+    outerFrameCacheKey: String? = null,
     contentDescription: String? = null,
     placeholderTint: Color = Color.White.copy(alpha = 0.45f),
     backgroundColor: Color = Color(0xFF222222),
@@ -57,7 +58,7 @@ fun ProfileAvatar(
                 if (!outerFrameUrl.isNullOrBlank()) {
                     AnimatedProfileOverlay(
                         url = outerFrameUrl,
-                        cacheKey = frameCacheKey,
+                        cacheKey = outerFrameCacheKey ?: frameCacheKey,
                         modifier = Modifier.size(outerSize),
                         contentDescription = null,
                     )
