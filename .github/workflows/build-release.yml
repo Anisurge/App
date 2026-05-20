@@ -288,6 +288,9 @@ jobs:
       - name: Install MPV (playback on desktop)
         run: brew install mpv
 
+      - name: Generate macOS app icon (.icns)
+        run: bash scripts/generate-macos-icon.sh
+
       - name: Build macOS DMG and portable zip
         env:
           DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
