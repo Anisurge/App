@@ -3,6 +3,8 @@
 /build
 /composeApp/build/
 /iosApp/build/
+/iosApp/iosApp.xcodeproj/
+/iosApp/*.xcworkspace/
 /Anisurge-V2-site/
 # Kotlin / KMP
 .kotlin

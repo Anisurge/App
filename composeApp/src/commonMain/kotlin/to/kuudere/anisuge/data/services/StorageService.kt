@@ -4,13 +4,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okio.FileSystem
+import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
-import java.io.File
 import to.kuudere.anisuge.data.models.AnimeFolderInfo
 import to.kuudere.anisuge.data.models.DownloadStorageInfo
 import to.kuudere.anisuge.data.models.StorageCategory
 import to.kuudere.anisuge.data.models.StorageInfo
+import to.kuudere.anisuge.platform.KmpFileSystem
 import to.kuudere.anisuge.utils.DownloadManager
 import to.kuudere.anisuge.utils.getDownloadsDirectory
 import to.kuudere.anisuge.utils.formatFileSize
@@ -24,6 +25,7 @@ expect fun getFreeDiskSpace(): Long
 
 class StorageService {
     private val json = Json { ignoreUnknownKeys = true }
+    private val fs = FileSystem.SYSTEM
 
     suspend fun getStorageInfo(): StorageInfo = withContext(Dispatchers.Default) {
         val downloadsDir = getDownloadsDirectory()
@@ -50,7 +52,7 @@ class StorageService {
         val downloadsDir = getDownloadsDirectory()
         val basePath = downloadsDir.toPath()
 
-        if (!FileSystem.SYSTEM.exists(basePath)) {
+        if (!fs.exists(basePath)) {
             return@withContext DownloadStorageInfo()
         }
 
@@ -58,18 +60,18 @@ class StorageService {
         var totalEpisodes = 0
         var totalSize = 0L
 
-        // Read tasks.json to get anime titles
         val tasksFile = "$downloadsDir/tasks.json".toPath()
-        val tasks = if (FileSystem.SYSTEM.exists(tasksFile)) {
+        val tasks = if (fs.exists(tasksFile)) {
             try {
-                val content = FileSystem.SYSTEM.read(tasksFile) { readUtf8() }
+                val content = fs.read(tasksFile) { readUtf8() }
                 json.decodeFromString<List<DownloadTaskInfo>>(content)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 emptyList()
             }
-        } else emptyList()
+        } else {
+            emptyList()
+        }
 
-        // Group tasks by animeId to get titles
         val animeTitles = tasks.groupBy { it.animeId }.mapValues { entry ->
             entry.value.firstOrNull()?.title ?: entry.key
         }
@@ -78,31 +80,34 @@ class StorageService {
             entry.value.firstOrNull()?.coverImage
         }
 
-        // Scan anime folders
-        File(downloadsDir).listFiles()?.filter { it.isDirectory }?.forEach { animeDir ->
-            val animeId = animeDir.name.replace("_", "-")
+        fs.list(basePath).forEach { entry ->
+            val animePath = basePath / entry
+            val meta = fs.metadataOrNull(animePath) ?: return@forEach
+            if (!meta.isDirectory) return@forEach
+
+            val animeId = entry.toString().replace("_", "-")
             var episodeCount = 0
             var folderSize = 0L
 
-            animeDir.listFiles()?.filter { it.isDirectory }?.forEach { epDir ->
-                if (epDir.name.startsWith("ep_")) {
-                    episodeCount++
-                    epDir.listFiles()?.forEach { file ->
-                        if (file.isFile) {
-                            folderSize += file.length()
-                        }
-                    }
-                }
+            fs.list(animePath).forEach { epEntry ->
+                val epPath = animePath / epEntry
+                val epMeta = fs.metadataOrNull(epPath) ?: return@forEach
+                if (!epMeta.isDirectory || !epEntry.toString().startsWith("ep_")) return@forEach
+
+                episodeCount++
+                folderSize += directorySize(epPath)
             }
 
             if (episodeCount > 0) {
-                animeFolders.add(AnimeFolderInfo(
-                    animeId = animeId,
-                    title = animeTitles[animeId] ?: animeDir.name.replace("_", " "),
-                    episodeCount = episodeCount,
-                    size = folderSize,
-                    coverImage = coverImages[animeId]
-                ))
+                animeFolders.add(
+                    AnimeFolderInfo(
+                        animeId = animeId,
+                        title = animeTitles[animeId] ?: entry.toString().replace("_", " "),
+                        episodeCount = episodeCount,
+                        size = folderSize,
+                        coverImage = coverImages[animeId],
+                    ),
+                )
                 totalEpisodes += episodeCount
                 totalSize += folderSize
             }
@@ -111,47 +116,57 @@ class StorageService {
         DownloadStorageInfo(
             animeFolders = animeFolders.sortedByDescending { it.size },
             totalEpisodes = totalEpisodes,
-            totalSize = totalSize
+            totalSize = totalSize,
         )
     }
 
+    private fun directorySize(path: Path): Long {
+        var size = 0L
+        walkFiles(path) { filePath ->
+            size += fs.metadataOrNull(filePath)?.size ?: 0L
+        }
+        return size
+    }
+
+    private fun walkFiles(path: Path, onFile: (Path) -> Unit) {
+        val meta = fs.metadataOrNull(path) ?: return
+        if (meta.isDirectory) {
+            fs.list(path).forEach { child -> walkFiles(path / child, onFile) }
+        } else if (meta.isRegularFile) {
+            onFile(path)
+        }
+    }
+
     private fun scanDirectory(path: String, name: String): StorageCategory {
-        val file = File(path)
-        if (!file.exists()) {
+        val okPath = path.toPath()
+        if (!fs.exists(okPath)) {
             return StorageCategory(name = name, path = path)
         }
 
         var size = 0L
         var fileCount = 0
-
-        if (file.isDirectory) {
-            file.walkTopDown().forEach { f ->
-                if (f.isFile) {
-                    size += f.length()
-                    fileCount++
-                }
-            }
-        } else {
-            size = file.length()
-            fileCount = 1
+        walkFiles(okPath) { filePath ->
+            size += fs.metadataOrNull(filePath)?.size ?: 0L
+            fileCount++
         }
 
         return StorageCategory(
             name = name,
             size = size,
             fileCount = fileCount,
-            path = path
+            path = path,
         )
     }
 
     suspend fun clearFontCache(): Boolean = withContext(Dispatchers.Default) {
         try {
-            val fontDir = File(getFontCacheDirectory())
-            if (fontDir.exists()) {
-                fontDir.listFiles()?.forEach { it.delete() }
+            val fontPath = getFontCacheDirectory().toPath()
+            if (!fs.exists(fontPath)) return@withContext true
+            fs.list(fontPath).forEach { entry ->
+                KmpFileSystem.delete((fontPath / entry).toString(), mustExist = false)
             }
             true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -160,19 +175,18 @@ class StorageService {
         try {
             val downloadsDir = getDownloadsDirectory()
             val safeId = animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
-            val animeDir = File(downloadsDir, safeId)
-            if (animeDir.exists()) {
-                animeDir.deleteRecursively()
+            val animeDir = "$downloadsDir/$safeId"
+            if (KmpFileSystem.exists(animeDir)) {
+                deleteTree(animeDir)
             }
 
-            // Also remove from DownloadManager tasks
             val tasksToRemove = DownloadManager.tasks.value.filter { it.animeId == animeId }
             tasksToRemove.forEach { task ->
                 DownloadManager.removeTask(task.id)
             }
 
             true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -181,19 +195,35 @@ class StorageService {
         try {
             val downloadsDir = getDownloadsDirectory()
             val safeId = animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
-            val epDir = File(downloadsDir, "$safeId/ep_$episodeNumber")
-            if (epDir.exists()) {
-                epDir.deleteRecursively()
+            val epDir = "$downloadsDir/$safeId/ep_$episodeNumber"
+            if (KmpFileSystem.exists(epDir)) {
+                deleteTree(epDir)
             }
 
-            // Remove from DownloadManager
             val taskId = "${animeId}_$episodeNumber"
             DownloadManager.removeTask(taskId)
 
             true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
+    }
+
+    private fun deleteTree(path: String) {
+        val root = path.toPath()
+        if (!fs.exists(root)) return
+
+        fun walkDelete(dir: Path) {
+            fs.list(dir).forEach { entry ->
+                val child = dir / entry
+                if (fs.metadataOrNull(child)?.isDirectory == true) {
+                    walkDelete(child)
+                }
+                KmpFileSystem.delete(child.toString(), mustExist = false)
+            }
+        }
+        walkDelete(root)
+        KmpFileSystem.delete(path, mustExist = false)
     }
 
     fun formatBytes(bytes: Long): String {
@@ -222,5 +252,5 @@ private data class DownloadTaskInfo(
     val title: String,
     val episodeNumber: Int,
     val coverImage: String? = null,
-    val status: String = ""
+    val status: String = "",
 )

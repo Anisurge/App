@@ -4,36 +4,81 @@ on:
   push:
     tags:
       - 'v*'
-      # Semver tags without v prefix (e.g. 0.9.23)
+      # Semver without v prefix (e.g. 0.10.0, 0.9.25)
       - '*.*.*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'App version (empty = app-version from gradle/libs.versions.toml)'
+        required: false
+        default: ''
+      build_number:
+        description: 'Android versionCode / build suffix (empty = max(toml build, 15+run#))'
+        required: false
+        default: ''
+      create_release:
+        description: 'Upload artifacts to a GitHub Release (tag pushes always release)'
+        type: boolean
+        default: false
+      skip_ios:
+        description: 'Skip unsigned iOS IPA build'
+        type: boolean
+        default: true
 
 jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.version.outputs.version_name }}
+      build_num: ${{ steps.version.outputs.build_num }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version and build number
+        id: version
+        run: |
+          set -euo pipefail
+          TOML_VERSION=$(grep '^app-version' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
+          TOML_BUILD=$(grep '^app-buildNumber' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
+          OFFSET=15
+          CI_BUILD=$((OFFSET + GITHUB_RUN_NUMBER))
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION_NAME="${{ inputs.version }}"
+            [[ -z "$VERSION_NAME" ]] && VERSION_NAME="$TOML_VERSION"
+            BUILD_INPUT="${{ inputs.build_number }}"
+            if [[ -n "$BUILD_INPUT" ]]; then
+              BUILD_NUMBER="$BUILD_INPUT"
+            else
+              BUILD_NUMBER=$(( TOML_BUILD > CI_BUILD ? TOML_BUILD : CI_BUILD ))
+            fi
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION_NAME="${GITHUB_REF#refs/tags/v}"
+            BUILD_NUMBER="$CI_BUILD"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION_NAME="${GITHUB_REF#refs/tags/}"
+            BUILD_NUMBER="$CI_BUILD"
+          else
+            VERSION_NAME="$TOML_VERSION"
+            BUILD_NUMBER="$CI_BUILD"
+          fi
+
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "build_num=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "## Build **${VERSION_NAME}+${BUILD_NUMBER}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: \`gradle/libs.versions.toml\` → $TOML_VERSION+$TOML_BUILD" >> "$GITHUB_STEP_SUMMARY"
+          echo "- CI build number: $CI_BUILD" >> "$GITHUB_STEP_SUMMARY"
+
   build-android:
+    needs: resolve-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-          
-      - name: Generate Versioning
-        id: version
-        run: |
-          OFFSET=15
-          BUILD_NUMBER=$((OFFSET + GITHUB_RUN_NUMBER))
-          echo "build_num=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/v}"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/}"
-          else
-            VERSION_NAME=$(grep '^app-version' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
-          fi
-          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
 
       - name: Decode Keystore
         run: |
@@ -87,20 +132,32 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :composeApp:assemblePhoneRelease --no-daemon \
-            -PappVersion=${{ steps.version.outputs.version_name }} \
-            -PappBuildNumber=${{ steps.version.outputs.build_num }} \
+            -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
+            -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}" \
             -PcrashReporterUrl="$CRASH_REPORTER_URL" \
             -PcrashReporterAppName="$CRASH_REPORTER_APP_NAME" \
             -PcrashReporterApiKey="$CRASH_REPORTER_API_KEY"
+
+      - name: Collect Android APKs
+        run: |
+          mkdir -p dist
+          VER="${{ needs.resolve-version.outputs.version_name }}"
+          BUILD="${{ needs.resolve-version.outputs.build_num }}"
+          for apk in composeApp/build/outputs/apk/phone/release/*.apk; do
+            base=$(basename "$apk")
+            cp "$apk" "dist/Anisurge-${VER}.${BUILD}-${base}"
+          done
+          ls -lh dist/
 
       - name: Upload Android APKs
         uses: actions/upload-artifact@v4
         with:
           name: android-apks
-          path: composeApp/build/outputs/apk/phone/release/*.apk
+          path: dist/
           if-no-files-found: error
 
   build-linux:
+    needs: resolve-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -110,32 +167,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Generate Versioning
-        id: version
-        run: |
-          OFFSET=15
-          BUILD_NUMBER=$((OFFSET + GITHUB_RUN_NUMBER))
-          echo "build_num=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/v}"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/}"
-          else
-            VERSION_NAME=$(grep '^app-version' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
-          fi
-          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
-          
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y dpkg-dev rpm desktop-file-utils fakeroot p7zip-full
-
-      - name: Download and Bundle MPV Library
-        run: |
-          mkdir -p composeApp/src/desktopMain/resources/native
-          # MPV for Linux - using system library is preferred, but we can bundle if needed
-          # For now, skip bundling as most Linux systems have libmpv installed
-          echo "Linux will use system libmpv library"
 
       - name: Build Linux Distributions
         env:
@@ -144,24 +179,25 @@ jobs:
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
           chmod +x gradlew
-          ./gradlew :composeApp:packageDeb :composeApp:packageRpm :composeApp:packageAppImage :composeApp:createPortableZip --no-daemon -PappVersion="${{ steps.version.outputs.version_name }}" -PappBuildNumber="${{ steps.version.outputs.build_num }}"
+          ./gradlew :composeApp:packageDeb :composeApp:packageRpm :composeApp:packageAppImage :composeApp:createPortableZip --no-daemon \
+            -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
+            -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}"
 
       - name: Collect Linux Artifacts
         run: |
           mkdir -p dist
-          LINUX_ARCH="amd64"
+          VER="${{ needs.resolve-version.outputs.version_name }}"
+          BUILD="${{ needs.resolve-version.outputs.build_num }}"
+          ARCH="amd64"
           DEB_FILE=$(find composeApp/build/compose/binaries/main/deb/ -name '*.deb' | head -n 1 || true)
           RPM_FILE=$(find composeApp/build/compose/binaries/main/rpm/ -name '*.rpm' | head -n 1 || true)
           APPIMAGE_FILE=$(find composeApp/build/compose/binaries/main/app/ -name '*.AppImage' | head -n 1 || true)
-          ZIP_FILE=$(find composeApp/build/distributions/ -name '*linux*portable*.zip' | head -n 1 || true)
-          if [[ -z "$ZIP_FILE" ]]; then
-            ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
-          fi
+          ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
 
-          [[ -n "$DEB_FILE" ]] && cp "$DEB_FILE" "dist/Anisurge-linux-${LINUX_ARCH}.deb"
-          [[ -n "$RPM_FILE" ]] && cp "$RPM_FILE" "dist/Anisurge-linux-${LINUX_ARCH}.rpm"
-          [[ -n "$APPIMAGE_FILE" ]] && cp "$APPIMAGE_FILE" "dist/Anisurge-linux-${LINUX_ARCH}.AppImage"
-          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-linux-${LINUX_ARCH}-portable.zip"
+          [[ -n "$DEB_FILE" ]] && cp "$DEB_FILE" "dist/Anisurge-${VER}.${BUILD}-linux-${ARCH}.deb"
+          [[ -n "$RPM_FILE" ]] && cp "$RPM_FILE" "dist/Anisurge-${VER}.${BUILD}-linux-${ARCH}.rpm"
+          [[ -n "$APPIMAGE_FILE" ]] && cp "$APPIMAGE_FILE" "dist/Anisurge-${VER}.${BUILD}-linux-${ARCH}.AppImage"
+          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-${VER}.${BUILD}-linux-${ARCH}-portable.zip"
           ls -lh dist/
 
       - name: Upload Linux Artifacts
@@ -172,6 +208,7 @@ jobs:
           if-no-files-found: error
 
   build-windows:
+    needs: resolve-version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -180,22 +217,6 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-
-      - name: Generate Versioning
-        id: version
-        shell: bash
-        run: |
-          OFFSET=15
-          BUILD_NUMBER=$((OFFSET + GITHUB_RUN_NUMBER))
-          echo "build_num=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/v}"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/}"
-          else
-            VERSION_NAME=$(grep '^app-version' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
-          fi
-          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
 
       - name: Download and Bundle MPV Library
         shell: pwsh
@@ -225,21 +246,25 @@ jobs:
           DISCORD_LARGE_IMAGE_KEY: ${{ vars.DISCORD_LARGE_IMAGE_KEY }}
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
-          ./gradlew :composeApp:packageMsi :composeApp:packageExe :composeApp:createPortableZip --no-daemon "-PappVersion=${{ steps.version.outputs.version_name }}" "-PappBuildNumber=${{ steps.version.outputs.build_num }}" "-Pcompose.desktop.signing.sign=true" "-Pcompose.desktop.signing.certificateFile=../signing/windows.pfx" "-Pcompose.desktop.signing.keyPassword=${{ secrets.KEYSTORE_PASSWORD }}"
+          ./gradlew :composeApp:packageMsi :composeApp:packageExe :composeApp:createPortableZip --no-daemon `
+            "-PappVersion=${{ needs.resolve-version.outputs.version_name }}" `
+            "-PappBuildNumber=${{ needs.resolve-version.outputs.build_num }}" `
+            "-Pcompose.desktop.signing.sign=true" `
+            "-Pcompose.desktop.signing.certificateFile=../signing/windows.pfx" `
+            "-Pcompose.desktop.signing.keyPassword=${{ secrets.KEYSTORE_PASSWORD }}"
 
       - name: Collect Windows Artifacts
         shell: bash
         run: |
           mkdir -p dist
-          WIN_ARCH="x86_64"
+          VER="${{ needs.resolve-version.outputs.version_name }}"
+          BUILD="${{ needs.resolve-version.outputs.build_num }}"
+          ARCH="x86_64"
           MSI_FILE=$(find composeApp/build/compose/binaries/main/msi/ -name '*.msi' | head -n 1 || true)
-          ZIP_FILE=$(find composeApp/build/distributions/ -name '*windows*portable*.zip' | head -n 1 || true)
-          if [[ -z "$ZIP_FILE" ]]; then
-            ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
-          fi
+          ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
 
-          [[ -n "$MSI_FILE" ]] && cp "$MSI_FILE" "dist/Anisurge-win-${WIN_ARCH}.msi"
-          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-win-${WIN_ARCH}-portable.zip"
+          [[ -n "$MSI_FILE" ]] && cp "$MSI_FILE" "dist/Anisurge-${VER}.${BUILD}-win-${ARCH}.msi"
+          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-${VER}.${BUILD}-win-${ARCH}-portable.zip"
           ls -lh dist/
 
       - name: Upload Windows Artifacts
@@ -250,6 +275,7 @@ jobs:
           if-no-files-found: error
 
   build-macos:
+    needs: resolve-version
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -259,22 +285,10 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Generate Versioning
-        id: version
-        run: |
-          OFFSET=15
-          BUILD_NUMBER=$((OFFSET + GITHUB_RUN_NUMBER))
-          echo "build_num=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/v}"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/}"
-          else
-            VERSION_NAME=$(grep '^app-version' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
-          fi
-          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+      - name: Install MPV (playback on desktop)
+        run: brew install mpv
 
-      - name: Build macOS DMG (Unsigned)
+      - name: Build macOS DMG and portable zip
         env:
           DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
           DISCORD_LARGE_IMAGE_KEY: ${{ vars.DISCORD_LARGE_IMAGE_KEY }}
@@ -282,19 +296,24 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :composeApp:packageDmg :composeApp:createPortableZip --no-daemon \
-            -PappVersion="${{ steps.version.outputs.version_name }}" \
-            -PappBuildNumber="${{ steps.version.outputs.build_num }}"
+            -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
+            -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}"
 
       - name: Collect macOS Artifacts
         run: |
+          set -euo pipefail
           mkdir -p dist
+          VER="${{ needs.resolve-version.outputs.version_name }}"
+          BUILD="${{ needs.resolve-version.outputs.build_num }}"
           DMG_FILE=$(find composeApp/build/compose/binaries/main/dmg/ -name '*.dmg' | head -n 1 || true)
-          ZIP_FILE=$(find composeApp/build/distributions/ -name '*macos*portable*.zip' | head -n 1 || true)
-          if [[ -z "$ZIP_FILE" ]]; then
-            ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
+          ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
+
+          if [[ -z "$DMG_FILE" ]]; then
+            echo "::error::No .dmg produced — check packageDmg logs"
+            exit 1
           fi
-          [[ -n "$DMG_FILE" ]] && cp "$DMG_FILE" "dist/Anisurge-macos-universal.dmg"
-          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-macos-universal-portable.zip"
+          cp "$DMG_FILE" "dist/Anisurge-${VER}.${BUILD}-macos.dmg"
+          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-${VER}.${BUILD}-macos-portable.zip"
           ls -lh dist/
 
       - name: Upload macOS Artifacts
@@ -305,7 +324,10 @@ jobs:
           if-no-files-found: error
 
   build-ios:
+    needs: resolve-version
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.skip_ios }}
     runs-on: macos-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 21
@@ -313,21 +335,6 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-
-      - name: Generate Versioning
-        id: version
-        run: |
-          OFFSET=15
-          BUILD_NUMBER=$((OFFSET + GITHUB_RUN_NUMBER))
-          echo "build_num=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/v}"
-          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION_NAME="${GITHUB_REF#refs/tags/}"
-          else
-            VERSION_NAME=$(grep '^app-version' gradle/libs.versions.toml | sed 's/.*= *"\(.*\)"/\1/')
-          fi
-          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
 
       - name: Build iOS Framework
         env:
@@ -337,25 +344,25 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :composeApp:linkPodReleaseFrameworkIosArm64 :composeApp:linkPodReleaseFrameworkIosSimulatorArm64 --no-daemon \
-            -PappVersion="${{ steps.version.outputs.version_name }}" \
-            -PappBuildNumber="${{ steps.version.outputs.build_num }}"
+            -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
+            -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}"
 
       - name: Build iOS App (Unsigned IPA)
         run: |
           mkdir -p dist
-          # Build the iOS app via xcodebuild using the generated framework
           cd iosApp
           xcodebuild -project iosApp.xcodeproj -scheme iosApp -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath ../build/ios.xcarchive \
             archive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
-          # Create unsigned IPA from archive
-          mkdir -p Payload
-          cp -R ../build/ios.xcarchive/Products/Applications/iosApp.app Payload/
-          zip -r ../dist/Anisurge-ios-unsigned.ipa Payload
-          rm -rf Payload
           cd ..
+          mkdir -p Payload
+          cp -R build/ios.xcarchive/Products/Applications/iosApp.app Payload/
+          VER="${{ needs.resolve-version.outputs.version_name }}"
+          BUILD="${{ needs.resolve-version.outputs.build_num }}"
+          zip -r "dist/Anisurge-${VER}.${BUILD}-ios-unsigned.ipa" Payload
+          rm -rf Payload
           ls -lh dist/
 
       - name: Upload iOS Artifacts
@@ -366,32 +373,44 @@ jobs:
           if-no-files-found: warn
 
   create-release:
-    needs: [build-android, build-linux, build-windows, build-macos, build-ios]
-    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - resolve-version
+      - build-android
+      - build-linux
+      - build-windows
+      - build-macos
+    if: >-
+      startsWith(github.ref, 'refs/tags/') ||
+      (github.event_name == 'workflow_dispatch' && inputs.create_release)
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-      - name: List Artifacts (Debug)
-        run: ls -R .
+      - name: Stage release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( \
+            -name '*.apk' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o \
+            -name '*.zip' -o -name '*.msi' -o -name '*.dmg' -o -name '*.ipa' \
+          \) -exec cp {} release/ \;
+          echo "Release bundle:"
+          ls -lh release/
+          if [[ -z "$(ls -A release 2>/dev/null)" ]]; then
+            echo "::error::No release artifacts found"
+            exit 1
+          fi
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            android-apks/*.apk
-            linux-distributions/*.deb
-            linux-distributions/*.rpm
-            linux-distributions/*.AppImage
-            linux-distributions/*.zip
-            windows-distributions/*.msi
-            windows-distributions/*.zip
-            macos-distributions/*.dmg
-            macos-distributions/*.zip
-            ios-distributions/*.ipa
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || needs.resolve-version.outputs.version_name }}
+          name: Anisurge ${{ needs.resolve-version.outputs.version_name }} (${{ needs.resolve-version.outputs.build_num }})
+          files: release/*
           generate_release_notes: true
           draft: false
           prerelease: false
