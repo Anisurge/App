@@ -361,13 +361,19 @@ fun SettingsScreen(
                     VerticalDivider(thickness = 1.dp, color = BORDER)
 
                     // Content Area - Centered with max width
+                    val isShopTab = selectedTab is SettingsTab.Shop
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(rememberScrollState()),
-                        contentAlignment = Alignment.TopCenter
+                            .then(
+                                if (!isShopTab) Modifier.verticalScroll(rememberScrollState()) else Modifier,
+                            ),
+                        contentAlignment = Alignment.TopCenter,
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            modifier = if (isShopTab) Modifier.fillMaxSize() else Modifier,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
                             Box(Modifier.fillMaxWidth()) {
                                 to.kuudere.anisuge.platform.WindowManagementButtons(
                                     onClose = onExit,
@@ -381,8 +387,16 @@ fun SettingsScreen(
                                 onLogout = onLogout,
                                 viewModel = viewModel,
                                 modifier = Modifier
-                                    .widthIn(max = 900.dp)
-                                    .padding(horizontal = 48.dp, vertical = 40.dp)
+                                    .then(
+                                        if (isShopTab) {
+                                            Modifier
+                                                .weight(1f)
+                                                .fillMaxWidth()
+                                        } else {
+                                            Modifier.widthIn(max = 900.dp)
+                                        },
+                                    )
+                                    .padding(horizontal = 48.dp, vertical = if (isShopTab) 16.dp else 40.dp),
                             )
                         }
                     }
@@ -897,12 +911,15 @@ private fun MobileSettingsDetail(
     val navItem = navItems.find { it.tab == tab }
     val uriHandler = LocalUriHandler.current
     val pickPfp = to.kuudere.anisuge.platform.rememberProfileImagePicker(viewModel::onCustomPfpPicked)
+    val isShopTab = tab is SettingsTab.Shop
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BG)
-            .verticalScroll(rememberScrollState())
+            .then(
+                if (!isShopTab) Modifier.verticalScroll(rememberScrollState()) else Modifier,
+            ),
     ) {
         // Header with back
         Row(
@@ -929,9 +946,17 @@ private fun MobileSettingsDetail(
         // Content
         Box(
             modifier = Modifier
-                .fillMaxWidth()
+                .then(
+                    if (isShopTab) {
+                        Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    } else {
+                        Modifier.fillMaxWidth()
+                    },
+                )
                 .padding(horizontal = 20.dp)
-                .padding(top = 8.dp, bottom = 156.dp)
+                .padding(top = 8.dp, bottom = if (isShopTab) 24.dp else 156.dp),
         ) {
             when (tab) {
                 is SettingsTab.Profile -> MobileProfileContent(
@@ -945,6 +970,7 @@ private fun MobileSettingsDetail(
                     onRefresh = viewModel::loadShop,
                     onLoadMore = viewModel::loadMoreShop,
                     onPurchase = viewModel::purchaseShopItem,
+                    modifier = Modifier.fillMaxSize(),
                 )
                 is SettingsTab.Berries -> BerriesSettingsTab(
                     uiState = uiState,
@@ -1066,6 +1092,7 @@ private fun SettingsContent(
                 onRefresh = viewModel::loadShop,
                 onLoadMore = viewModel::loadMoreShop,
                 onPurchase = viewModel::purchaseShopItem,
+                modifier = modifier.fillMaxSize(),
             )
             is SettingsTab.Berries -> BerriesSettingsTab(
                 uiState = uiState,

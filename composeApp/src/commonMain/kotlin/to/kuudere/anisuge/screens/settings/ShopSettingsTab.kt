@@ -3,14 +3,20 @@ package to.kuudere.anisuge.screens.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -18,17 +24,18 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.flow.distinctUntilChanged
 import to.kuudere.anisuge.data.models.BffShopItem
 import to.kuudere.anisuge.ui.ProfileAvatar
 
@@ -36,18 +43,119 @@ private val BG_CARD = Color(0xFF141414)
 private val TEXT = Color.White
 private val MUTED = Color(0xFF9E9E9E)
 private val ACCENT = Color(0xFFE50914)
+
 @Composable
 fun ShopSettingsTab(
     uiState: SettingsUiState,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
     onPurchase: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 24.dp),
+    val gridState = rememberLazyGridState()
+
+    LaunchedEffect(
+        gridState,
+        uiState.shopCatalog.size,
+        uiState.shopCatalogHasMore,
+        uiState.isLoadingShop,
+        uiState.isLoadingMoreShop,
     ) {
+        snapshotFlow {
+            val info = gridState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total = info.totalItemsCount
+            Triple(lastVisible, total, gridState.canScrollForward)
+        }
+            .distinctUntilChanged()
+            .collect { (lastVisible, total, canScrollForward) ->
+                if (
+                    canScrollForward &&
+                    total > 0 &&
+                    lastVisible >= total - 3 &&
+                    uiState.shopCatalogHasMore &&
+                    !uiState.isLoadingShop &&
+                    !uiState.isLoadingMoreShop
+                ) {
+                    onLoadMore()
+                }
+            }
+    }
+
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 168.dp),
+        state = gridState,
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            ShopHeader(
+                balance = uiState.shopCoins,
+                onRefresh = onRefresh,
+                isRefreshing = uiState.isLoadingShop,
+            )
+        }
+
+        when {
+            uiState.isLoadingShop && uiState.shopCatalog.isEmpty() -> {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(160.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(color = Color.White)
+                    }
+                }
+            }
+            uiState.shopCatalog.isEmpty() -> {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        "No frames in the store yet.",
+                        color = MUTED,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+                    )
+                }
+            }
+            else -> {
+                items(
+                    items = uiState.shopCatalog,
+                    key = { it.id },
+                ) { item ->
+                    ShopItemCard(
+                        item = item,
+                        pfpUrl = uiState.userProfile?.effectiveAvatar,
+                        balance = uiState.shopCoins,
+                        isPurchasing = uiState.shopPurchasingId == item.id,
+                        onPurchase = { onPurchase(item.id) },
+                    )
+                }
+
+                if (uiState.shopCatalogHasMore || uiState.isLoadingMoreShop) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        ShopLoadMoreFooter(
+                            isLoading = uiState.isLoadingMoreShop,
+                            shown = uiState.shopCatalog.size,
+                            total = uiState.shopCatalogTotal,
+                            onLoadMore = onLoadMore,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShopHeader(
+    balance: Int,
+    onRefresh: () -> Unit,
+    isRefreshing: Boolean,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             "Store",
             color = TEXT,
@@ -61,7 +169,6 @@ fun ShopSettingsTab(
             lineHeight = 17.sp,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
         )
-
         Row(
             modifier = Modifier.padding(bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -69,81 +176,58 @@ fun ShopSettingsTab(
         ) {
             BerryIcon(size = 22.dp)
             Text(
-                "Balance: ${formatBerries(uiState.shopCoins)} Berries",
+                "Balance: ${formatBerries(balance)} Berries",
                 color = ShopBerryGoldDim,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
         }
-
         OutlinedButton(
             onClick = onRefresh,
-            enabled = !uiState.isLoadingShop,
+            enabled = !isRefreshing,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Refresh store", maxLines = 1)
         }
+        Spacer(Modifier.height(8.dp))
+    }
+}
 
-        Spacer(Modifier.height(16.dp))
-
-        when {
-            uiState.isLoadingShop -> {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 48.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(color = Color.White)
-                }
+@Composable
+private fun ShopLoadMoreFooter(
+    isLoading: Boolean,
+    shown: Int,
+    total: Int,
+    onLoadMore: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = Color.White,
+                modifier = Modifier.size(28.dp),
+                strokeWidth = 2.dp,
+            )
+        } else {
+            OutlinedButton(
+                onClick = onLoadMore,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Load more")
             }
-            uiState.shopCatalog.isEmpty() -> {
-                Text(
-                    "No frames in the store yet.",
-                    color = MUTED,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            else -> {
-                ShopItemGrid(
-                    items = uiState.shopCatalog,
-                    pfpUrl = uiState.userProfile?.effectiveAvatar,
-                    purchasingId = uiState.shopPurchasingId,
-                    balance = uiState.shopCoins,
-                    onPurchase = onPurchase,
-                )
-                if (uiState.shopCatalogHasMore) {
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = onLoadMore,
-                        enabled = !uiState.isLoadingMoreShop,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        if (uiState.isLoadingMoreShop) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Text("Load more")
-                        }
-                    }
-                    val shown = uiState.shopCatalog.size
-                    val total = uiState.shopCatalogTotal
-                    if (total > 0) {
-                        Text(
-                            "Showing $shown of $total",
-                            color = MUTED,
-                            fontSize = 11.sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 6.dp),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
-            }
+        }
+        if (total > 0) {
+            Text(
+                "Showing $shown of $total",
+                color = MUTED,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 6.dp),
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -151,46 +235,6 @@ fun ShopSettingsTab(
 private fun berryLabel(amount: Int): String {
     val word = if (amount == 1) "Berry" else "Berries"
     return "${formatBerries(amount)} $word"
-}
-
-@Composable
-private fun ShopItemGrid(
-    items: List<BffShopItem>,
-    pfpUrl: String?,
-    purchasingId: String?,
-    balance: Int,
-    onPurchase: (String) -> Unit,
-) {
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val minCell = 168.dp
-        val columns = maxOf(1, (maxWidth / minCell).toInt().coerceAtMost(4))
-        val rows = items.chunked(columns)
-
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            rows.forEach { rowItems ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    rowItems.forEach { item ->
-                        key(item.id) {
-                            ShopItemCard(
-                                item = item,
-                                pfpUrl = pfpUrl,
-                                balance = balance,
-                                isPurchasing = purchasingId == item.id,
-                                onPurchase = { onPurchase(item.id) },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
-                    repeat(columns - rowItems.size) {
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
