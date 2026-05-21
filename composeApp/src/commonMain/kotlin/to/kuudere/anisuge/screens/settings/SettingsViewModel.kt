@@ -196,7 +196,8 @@ class SettingsViewModel(
 ) : ViewModel() {
 
     private companion object {
-        const val SHOP_PAGE_SIZE = 25
+        const val SHOP_PAGE_SIZE = 15
+        const val SHOP_PREFETCH_CONCURRENCY = 6
     }
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -545,7 +546,6 @@ class SettingsViewModel(
             _uiState.update { it.copy(isLoadingShop = true) }
             bffShopService.fetchShopMe(catalogLimit = SHOP_PAGE_SIZE, catalogOffset = 0).fold(
                 onSuccess = { body ->
-                    prefetchShopFrameAnimations(body.owned, body.catalog)
                     _uiState.update {
                         it.copy(
                             isLoadingShop = false,
@@ -556,6 +556,7 @@ class SettingsViewModel(
                             shopCatalogTotal = body.catalogTotal,
                         )
                     }
+                    prefetchShopCatalogFrames(body.catalog)
                 },
                 onFailure = { e ->
                     _uiState.update {
@@ -580,7 +581,6 @@ class SettingsViewModel(
             ).fold(
                 onSuccess = { body ->
                     val merged = (state.shopCatalog + body.catalog).distinctBy { it.id }
-                    prefetchShopFrameAnimations(body.owned, body.catalog)
                     _uiState.update { current ->
                         current.copy(
                             isLoadingMoreShop = false,
@@ -591,6 +591,7 @@ class SettingsViewModel(
                             shopCatalogTotal = body.catalogTotal,
                         )
                     }
+                    prefetchShopCatalogFrames(body.catalog)
                 },
                 onFailure = { e ->
                     _uiState.update {
@@ -601,6 +602,19 @@ class SettingsViewModel(
                     }
                 },
             )
+        }
+    }
+
+    /** Store tab only — catalog page bytes; does not block UI (owned frames prefetched via [loadShopInventory]). */
+    private fun prefetchShopCatalogFrames(catalog: List<to.kuudere.anisuge.data.models.BffShopItem>) {
+        if (catalog.isEmpty()) return
+        val entries = catalog.mapNotNull { item ->
+            val url = resolveProfileMediaUrl(item.assetUrl) ?: return@mapNotNull null
+            url to item.id
+        }
+        if (entries.isEmpty()) return
+        viewModelScope.launch(Dispatchers.Default) {
+            AnimatedFrameBytesCache.prefetchEntries(entries, concurrency = SHOP_PREFETCH_CONCURRENCY)
         }
     }
 
@@ -616,7 +630,7 @@ class SettingsViewModel(
         }
         if (entries.isEmpty()) return
         withContext(Dispatchers.Default) {
-            AnimatedFrameBytesCache.prefetchEntries(entries, concurrency = 24)
+            AnimatedFrameBytesCache.prefetchEntries(entries, concurrency = SHOP_PREFETCH_CONCURRENCY)
         }
     }
 
@@ -710,7 +724,7 @@ class SettingsViewModel(
                             successMessage = "Purchased ${body.item.name}",
                         )
                     }
-                    prefetchShopFrameAnimations(listOf(body.item))
+                    prefetchShopCatalogFrames(listOf(body.item))
                 },
                 onFailure = { e ->
                     _uiState.update {
