@@ -221,7 +221,8 @@ jobs:
       - name: Download and Bundle MPV Library
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "composeApp\src\desktopMain\resources\native"
+          $nativeDir = "composeApp\src\desktopMain\resources\native"
+          New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
           Invoke-WebRequest -Uri "https://www.7-zip.org/a/7zr.exe" -OutFile "7zr.exe"
           $headers = @{ "User-Agent" = "Mozilla/5.0" }
           $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" -Headers $headers
@@ -229,15 +230,18 @@ jobs:
           if (-not $asset) { throw "Could not find an mpv-dev x86_64 release asset" }
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "mpv-dev.7z" -Headers $headers
           .\7zr.exe x mpv-dev.7z -ompv-extracted
-          $dll = Get-ChildItem -Path "mpv-extracted" -Recurse -Filter "libmpv-2.dll" | Select-Object -First 1
-          if (-not $dll) { throw "libmpv-2.dll was not found in the extracted MPV archive" }
-          Copy-Item $dll.FullName "composeApp\src\desktopMain\resources\native\mpv-2.dll"
-
-      - name: Decode Signing Certificate
-        shell: pwsh
-        run: |
-          mkdir signing -Force
-          [System.IO.File]::WriteAllBytes("signing/windows.pfx", [System.Convert]::FromBase64String("${{ secrets.WINDOWS_PFX_BASE64 }}"))
+          $dlls = Get-ChildItem -Path "mpv-extracted" -Recurse -Filter "*.dll"
+          if (-not $dlls) { throw "No DLLs were found in the extracted MPV archive" }
+          foreach ($dll in $dlls) {
+            Copy-Item $dll.FullName (Join-Path $nativeDir $dll.Name) -Force
+          }
+          $libMpv = Join-Path $nativeDir "libmpv-2.dll"
+          $mpv2 = Join-Path $nativeDir "mpv-2.dll"
+          if ((Test-Path $libMpv) -and -not (Test-Path $mpv2)) {
+            Copy-Item $libMpv $mpv2 -Force
+          }
+          if (-not (Test-Path $mpv2)) { throw "mpv-2.dll was not found after bundling MPV dependencies" }
+          Write-Host "Bundled MPV DLLs:"; Get-ChildItem $nativeDir -Filter "*.dll" | ForEach-Object { $_.Name }
 
       - name: Build Windows Distributions
         shell: pwsh
@@ -246,12 +250,34 @@ jobs:
           DISCORD_LARGE_IMAGE_KEY: ${{ vars.DISCORD_LARGE_IMAGE_KEY }}
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
-          ./gradlew :composeApp:packageMsi :composeApp:packageExe :composeApp:createPortableZip --no-daemon `
-            "-PappVersion=${{ needs.resolve-version.outputs.version_name }}" `
-            "-PappBuildNumber=${{ needs.resolve-version.outputs.build_num }}" `
-            "-Pcompose.desktop.signing.sign=true" `
-            "-Pcompose.desktop.signing.certificateFile=../signing/windows.pfx" `
-            "-Pcompose.desktop.signing.keyPassword=${{ secrets.KEYSTORE_PASSWORD }}"
+          $gradleCommon = @(
+            "--no-daemon",
+            "--no-parallel",
+            "-PappVersion=${{ needs.resolve-version.outputs.version_name }}",
+            "-PappBuildNumber=${{ needs.resolve-version.outputs.build_num }}"
+          )
+          # Package MSI and EXE separately — running both in one Gradle invocation can corrupt the shared app image.
+          ./gradlew @gradleCommon :composeApp:packageMsi
+          ./gradlew @gradleCommon :composeApp:packageExe
+          ./gradlew @gradleCommon :composeApp:createPortableZip
+
+      - name: Validate Windows MSI (smoke test)
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "composeApp\build\compose\binaries\main\msi" -Filter "*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $msi) { throw "No MSI produced under composeApp/build/compose/binaries/main/msi" }
+          $target = Join-Path $env:RUNNER_TEMP "anisurge-msi-smoke"
+          if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          $args = @("/a", "`"$($msi.FullName)`"", "TARGETDIR=`"$target`"", "/qn", "/l*v", "`"$env:RUNNER_TEMP\anisurge-msi-smoke.log`"")
+          $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList $args -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -ne 0) {
+            Get-Content "$env:RUNNER_TEMP\anisurge-msi-smoke.log" -ErrorAction SilentlyContinue | Select-Object -Last 40
+            throw "MSI administrative install failed with exit code $($proc.ExitCode) (user installs often see 2318 when this fails)"
+          }
+          $appDir = Get-ChildItem -Path $target -Recurse -Directory -Filter "Anisurge" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $appDir) { throw "MSI extracted but Anisurge app folder was not found under $target" }
+          Write-Host "MSI smoke test OK — extracted to $($appDir.FullName)"
 
       - name: Collect Windows Artifacts
         shell: bash
@@ -261,9 +287,11 @@ jobs:
           BUILD="${{ needs.resolve-version.outputs.build_num }}"
           ARCH="x86_64"
           MSI_FILE=$(find composeApp/build/compose/binaries/main/msi/ -name '*.msi' | head -n 1 || true)
+          EXE_FILE=$(find composeApp/build/compose/binaries/main/exe/ -name '*.exe' | head -n 1 || true)
           ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
 
           [[ -n "$MSI_FILE" ]] && cp "$MSI_FILE" "dist/Anisurge-${VER}.${BUILD}-win-${ARCH}.msi"
+          [[ -n "$EXE_FILE" ]] && cp "$EXE_FILE" "dist/Anisurge-${VER}.${BUILD}-win-${ARCH}-setup.exe"
           [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-${VER}.${BUILD}-win-${ARCH}-portable.zip"
           ls -lh dist/
 
@@ -400,7 +428,7 @@ jobs:
           mkdir -p release
           find artifacts -type f \( \
             -name '*.apk' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o \
-            -name '*.zip' -o -name '*.msi' -o -name '*.dmg' -o -name '*.ipa' \
+            -name '*.zip' -o -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' -o -name '*.ipa' \
           \) -exec cp {} release/ \;
           echo "Release bundle:"
           ls -lh release/

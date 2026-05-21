@@ -427,6 +427,10 @@ compose.desktop {
                 windows {
                     iconFile.set(project.file("src/desktopMain/resources/logo.ico"))
                     packageVersion = windowsVersion
+                    msiPackageVersion = windowsVersion
+                    exePackageVersion = windowsVersion
+                    // Per-user install avoids MSI 2318 ("file does not exist") when users lack admin rights.
+                    perUserInstall = true
                     upgradeUuid = "d7e9b1a0-3f2d-4e9b-8a1c-5d6e7f8a9b0c"
                     shortcut = true
                     menu = true

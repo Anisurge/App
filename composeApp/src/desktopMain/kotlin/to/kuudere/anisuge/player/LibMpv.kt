@@ -108,14 +108,41 @@ internal interface LibMpv : Library {
                 "mac"    in osName -> "libmpv.dylib"
                 else               -> return null
             }
-            val resourcePath = "native/$libName"
-            val stream = LibMpv::class.java.classLoader
-                ?.getResourceAsStream(resourcePath) ?: return null
-
             return try {
-                val tmp = java.io.File.createTempFile("libmpv_", "_$libName").also { it.deleteOnExit() }
-                tmp.outputStream().use { out -> stream.copyTo(out) }
-                tryLoad(tmp.absolutePath)
+                val loader = LibMpv::class.java.classLoader ?: return null
+                val nativePrefix = "native/"
+                val tmpDir = java.io.File(
+                    System.getProperty("java.io.tmpdir"),
+                    "anisurge-libmpv-${ProcessHandle.current().pid()}"
+                ).also { it.mkdirs() }
+
+                fun extractEntry(entryName: String) {
+                    val fileName = entryName.removePrefix(nativePrefix)
+                    if (!fileName.endsWith(".dll", ignoreCase = true)) return
+                    val stream = loader.getResourceAsStream(entryName) ?: return
+                    val outFile = java.io.File(tmpDir, fileName)
+                    stream.use { input -> outFile.outputStream().use { input.copyTo(it) } }
+                }
+
+                val nativeRoot = loader.getResource(nativePrefix)
+                if (nativeRoot?.protocol == "jar") {
+                    val jarConn = nativeRoot.openConnection() as java.net.JarURLConnection
+                    jarConn.jarFile.use { jar ->
+                        jar.entries().asSequence()
+                            .filter { !it.isDirectory && it.name.startsWith(nativePrefix) }
+                            .forEach { extractEntry(it.name) }
+                    }
+                } else if (nativeRoot != null) {
+                    java.io.File(nativeRoot.toURI()).listFiles()
+                        ?.filter { it.isFile && it.name.endsWith(".dll", ignoreCase = true) }
+                        ?.forEach { dll -> dll.copyTo(java.io.File(tmpDir, dll.name), overwrite = true) }
+                } else {
+                    extractEntry("$nativePrefix$libName")
+                }
+
+                val primary = java.io.File(tmpDir, libName)
+                if (!primary.isFile) return null
+                tryLoad(primary.absolutePath)
             } catch (e: Exception) {
                 null
             }
