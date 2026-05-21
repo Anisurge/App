@@ -1,6 +1,6 @@
 # AniSurge 0.10.1 — Build 36
 
-**Full Changelog**: [v0.10.0...0.10.1](https://github.com/Anisurge/App/compare/v0.10.0...v0.10.1)
+**Full Changelog**: [v0.10.0...0.10.1](https://github.com/Anisurge/App/compare/v0.9.25...v0.10.1)
 
 ## Shop frames & chat avatars
 
