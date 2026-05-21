@@ -414,7 +414,10 @@ jobs:
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || needs.resolve-version.outputs.version_name }}
           name: Anisurge ${{ needs.resolve-version.outputs.version_name }} (${{ needs.resolve-version.outputs.build_num }})
-          files: release/*
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
+          files: |
+            release/*
+            ad.mp4
+          generate_release_notes: false
           draft: false
           prerelease: false

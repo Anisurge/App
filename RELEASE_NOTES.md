@@ -2,6 +2,13 @@
 
 **Full Changelog**: [v0.10.0...0.10.1](https://github.com/Anisurge/App/compare/v0.9.25...v0.10.1)
 
+<p align="center">
+  <video controls playsinline width="100%" style="max-width: 960px; border-radius: 12px;">
+    <source src="https://raw.githubusercontent.com/Anisurge/App/main/ad.mp4" type="video/mp4" />
+    <a href="https://raw.githubusercontent.com/Anisurge/App/main/ad.mp4">Watch the AniSurge promo</a>
+  </video>
+</p>
+
 ## Shop frames & chat avatars
 
 - Prefetch owned shop APNG frames after login and when opening Settings / Store
