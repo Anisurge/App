@@ -41,7 +41,23 @@ private fun readChatImageFile(file: File): ChatImagePick? {
         "gif" -> "image/gif"
         "webp" -> "image/webp"
         "jpg", "jpeg" -> "image/jpeg"
+        "bmp" -> "image/bmp"
         else -> return null
     }
-    return ChatImagePick(file.readBytes(), mime, file.name, size)
+    val raw = file.readBytes()
+    // Re-encode JPEGs through ImageIO so CMYK / odd ICC profiles never hit Skia's libjpeg on Windows.
+    val normalizedJpeg = if (mime == "image/jpeg") {
+        decodeImageBitmap(raw)?.let { encodeJpeg(it, quality = 92) }
+    } else {
+        null
+    }
+    val bytes = normalizedJpeg ?: raw
+    if (bytes.isEmpty() || bytes.size > CHAT_IMAGE_MAX_BYTES) return null
+    val outMime = if (normalizedJpeg != null) "image/jpeg" else mime
+    val outName = if (normalizedJpeg != null) {
+        file.name.substringBeforeLast('.').ifBlank { "image" } + ".jpg"
+    } else {
+        file.name
+    }
+    return ChatImagePick(bytes, outMime, outName, bytes.size.toLong())
 }
