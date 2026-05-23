@@ -149,17 +149,18 @@ import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.screens.settings.SettingsTab
 import to.kuudere.anisuge.platform.openUrl
+import to.kuudere.anisuge.theme.AppThemeId
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 
 // ── Colors ── Black & white theme ────────────────────────────────────────────────
-private val BG       = Color(0xFF000000)
-private val BG_CARD  = Color(0xFF0A0A0A)
+private val BG = Color(0xFF000000)
+private val BG_CARD = Color(0xFF0A0A0A)
 private val BG_HOVER = Color(0xFF141414)
-private val BORDER   = Color.White.copy(alpha = 0.08f)
-private val MUTED    = Color.White.copy(alpha = 0.5f)
-private val TEXT     = Color.White
+private val BORDER = Color.White.copy(alpha = 0.08f)
+private val MUTED = Color.White.copy(alpha = 0.5f)
+private val TEXT = Color.White
 
 private const val ANISURGE_DISCORD_URL = "https://discord.gg/yR4T2dbeCx"
 private const val ANISURGE_TELEGRAM_URL = "https://t.me/anisurge"
@@ -297,7 +298,8 @@ fun SettingsScreen(
             viewModel.clearMessages()
             // Refresh global session on success for security/profile stuff
             if (it.contains("Password", ignoreCase = true) ||
-                it.contains("Profile", ignoreCase = true)) {
+                it.contains("Profile", ignoreCase = true)
+            ) {
                 onRefresh()
             }
         }
@@ -424,6 +426,7 @@ fun SettingsScreen(
                             viewModel = viewModel,
                             onBack = { viewModel.closeProfileAccount() },
                         )
+
                         is MobileSettingsTarget.Detail -> MobileSettingsDetail(
                             tab = screen.tab,
                             navItems = navItems,
@@ -432,6 +435,7 @@ fun SettingsScreen(
                             onLogout = onLogout,
                             viewModel = viewModel,
                         )
+
                         MobileSettingsTarget.List -> MobileSettingsList(
                             navItems = navItems.filter { it.tab != SettingsTab.Profile },
                             uiState = uiState,
@@ -561,9 +565,9 @@ private fun Sidebar(
                 )
             }
         }
-        
+
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         // Logout
         Row(
             modifier = Modifier
@@ -594,9 +598,9 @@ private fun Sidebar(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-        
+
         val uriHandler = LocalUriHandler.current
-        
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -626,7 +630,7 @@ private fun Sidebar(
         // App Stats
         val displayPlatform = PlatformName
             .let { p ->
-                if (p.lowercase() == "macos") "macOS" 
+                if (p.lowercase() == "macos") "macOS"
                 else p.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
             }
 
@@ -816,7 +820,7 @@ private fun MobileSettingsList(
         )
 
         val uriHandler = LocalUriHandler.current
-        
+
         MobileSettingsItem(
             icon = Icons.Default.Favorite,
             label = "Donate",
@@ -965,6 +969,7 @@ private fun MobileSettingsDetail(
                     onPickCustomPfp = pickPfp,
                     onEquipFrame = viewModel::equipShopFrame,
                 )
+
                 is SettingsTab.Shop -> ShopSettingsTab(
                     uiState = uiState,
                     onRefresh = viewModel::loadShop,
@@ -972,12 +977,14 @@ private fun MobileSettingsDetail(
                     onPurchase = viewModel::purchaseShopItem,
                     modifier = Modifier.fillMaxSize(),
                 )
+
                 is SettingsTab.Berries -> BerriesSettingsTab(
                     uiState = uiState,
                     onCodeChange = viewModel::setRedeemCodeDraft,
                     onRedeem = viewModel::redeemShopCode,
                     onClaimDaily = viewModel::claimDailyReward,
                 )
+
                 is SettingsTab.Preferences -> MobilePreferencesContent(
                     uiState = uiState,
                     onAutoPlayChange = viewModel::setAutoPlay,
@@ -991,13 +998,16 @@ private fun MobileSettingsDetail(
                     onAppLocaleChange = viewModel::setAppLocale,
                     onSave = viewModel::saveSettings
                 )
+
                 is SettingsTab.Appearance -> AppearanceTab(
                     uiState = uiState,
                     onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                     onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
                     onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                     onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
+                    onThemeSelected = viewModel::setThemeId,
                 )
+
                 is SettingsTab.Sync -> SyncTab(
                     uiState = uiState,
                     onConnectMal = { viewModel.connectMal { url -> openUrl(url) } },
@@ -1008,6 +1018,7 @@ private fun MobileSettingsDetail(
                     onSyncToMAL = viewModel::syncAllToMAL,
                     onSyncToAniList = viewModel::syncAllToAniList,
                 )
+
                 is SettingsTab.Community -> {
                     // Community tab hidden — not yet ready (restore CommunityTab when shipping)
                     Box(Modifier.fillMaxSize())
@@ -1034,6 +1045,7 @@ private fun MobileSettingsDetail(
                         onDismissFullscreenImage = viewModel::dismissCommunityFullscreenImage,
                     ) */
                 }
+
                 is SettingsTab.Storage -> MobileStorageContent(
                     uiState = uiState,
                     onRefresh = viewModel::loadStorageInfo,
@@ -1044,12 +1056,14 @@ private fun MobileSettingsDetail(
                     formatBytes = viewModel::formatBytes,
                     formatBytesCompact = viewModel::formatBytesCompact
                 )
+
                 is SettingsTab.Servers -> MobileServersContent(
                     uiState = uiState,
                     onReorder = viewModel::updateServerPriority,
                     onSave = viewModel::saveServerPriority,
                     onReset = viewModel::resetServerPriority
                 )
+
                 is SettingsTab.Notifications -> NotificationsTab(
                     enabled = uiState.notificationsEnabled,
                     hasChanges = uiState.hasNotificationPrefsChanges,
@@ -1089,6 +1103,7 @@ private fun SettingsContent(
                 onSaveUsername = viewModel::saveUsername,
                 onEquipFrame = viewModel::equipShopFrame,
             )
+
             is SettingsTab.Shop -> ShopSettingsTab(
                 uiState = uiState,
                 onRefresh = viewModel::loadShop,
@@ -1096,12 +1111,14 @@ private fun SettingsContent(
                 onPurchase = viewModel::purchaseShopItem,
                 modifier = modifier.fillMaxSize(),
             )
+
             is SettingsTab.Berries -> BerriesSettingsTab(
                 uiState = uiState,
                 onCodeChange = viewModel::setRedeemCodeDraft,
                 onRedeem = viewModel::redeemShopCode,
                 onClaimDaily = viewModel::claimDailyReward,
             )
+
             is SettingsTab.Preferences -> PreferencesTab(
                 uiState = uiState,
                 onAutoPlayChange = viewModel::setAutoPlay,
@@ -1115,13 +1132,16 @@ private fun SettingsContent(
                 onAppLocaleChange = viewModel::setAppLocale,
                 onSave = viewModel::saveSettings
             )
+
             is SettingsTab.Appearance -> AppearanceTab(
                 uiState = uiState,
                 onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                 onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
                 onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                 onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
+                onThemeSelected = viewModel::setThemeId,
             )
+
             is SettingsTab.Sync -> SyncTab(
                 uiState = uiState,
                 onConnectMal = { viewModel.connectMal { url -> openUrl(url) } },
@@ -1129,9 +1149,10 @@ private fun SettingsContent(
                 onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                 onDisconnectAnilist = viewModel::disconnectAnilist,
                 onWatchHistorySync = viewModel::startWatchHistorySync,
-                    onSyncToMAL = viewModel::syncAllToMAL,
-                    onSyncToAniList = viewModel::syncAllToAniList,
+                onSyncToMAL = viewModel::syncAllToMAL,
+                onSyncToAniList = viewModel::syncAllToAniList,
             )
+
             is SettingsTab.Community -> {
                 Box(Modifier.fillMaxSize())
                 /* CommunityTab(
@@ -1157,6 +1178,7 @@ private fun SettingsContent(
                     onDismissFullscreenImage = viewModel::dismissCommunityFullscreenImage,
                 ) */
             }
+
             is SettingsTab.Storage -> StorageTab(
                 uiState = uiState,
                 onRefresh = viewModel::loadStorageInfo,
@@ -1167,12 +1189,14 @@ private fun SettingsContent(
                 formatBytes = viewModel::formatBytes,
                 formatBytesCompact = viewModel::formatBytesCompact
             )
+
             is SettingsTab.Servers -> ServersTab(
                 uiState = uiState,
                 onReorder = viewModel::updateServerPriority,
                 onSave = viewModel::saveServerPriority,
                 onReset = viewModel::resetServerPriority
             )
+
             is SettingsTab.Notifications -> NotificationsTab(
                 enabled = uiState.notificationsEnabled,
                 hasChanges = uiState.hasNotificationPrefsChanges,
@@ -1191,6 +1215,7 @@ private fun AppearanceTab(
     onLiquidGlassBottomNavChange: (Boolean) -> Unit,
     onExpandedHeroCarouselChange: (Boolean) -> Unit,
     onPreferRomajiAnimeTitlesChange: (Boolean) -> Unit,
+    onThemeSelected: (AppThemeId) -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1201,6 +1226,27 @@ private fun AppearanceTab(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 32.dp)
         )
+
+        SettingCard(
+            title = "Theme presets",
+            description = "Pick a built-in color preset. Some legacy screens still use fixed black surfaces, but Material controls update instantly.",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AppThemeId.entries.forEach { theme ->
+                    ThemePresetChip(
+                        theme = theme,
+                        selected = uiState.themeId == theme,
+                        onClick = { onThemeSelected(theme) },
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         SettingCard(
             title = strings.animeTitlesDisplay,
@@ -1263,6 +1309,50 @@ private fun AppearanceTab(
 }
 
 @Composable
+private fun ThemePresetChip(
+    theme: AppThemeId,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (selected) Color.White else BG_HOVER)
+            .border(
+                width = 1.dp,
+                color = if (selected) Color.White else BORDER,
+                shape = RoundedCornerShape(999.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(14.dp)
+                .clip(CircleShape)
+                .background(themePreviewColor(theme))
+                .border(1.dp, Color.Black.copy(alpha = 0.18f), CircleShape)
+        )
+        Text(
+            theme.label,
+            color = if (selected) Color.Black else TEXT,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+private fun themePreviewColor(theme: AppThemeId): Color = when (theme) {
+    AppThemeId.Default -> Color.White
+    AppThemeId.Amoled -> Color(0xFF2A2A2A)
+    AppThemeId.Purple -> Color(0xFFBF80FF)
+    AppThemeId.Red -> Color(0xFFE50914)
+    AppThemeId.HighContrast -> Color(0xFFFFFF00)
+}
+
+@Composable
 private fun SyncTab(
     uiState: SettingsUiState,
     onConnectMal: () -> Unit,
@@ -1304,10 +1394,10 @@ private fun SyncTab(
             uiState.isSignedIn && (anyTrackingLinked || uiState.isWatchHistorySyncing)
         val syncLibraryEnabled =
             anyTrackingLinked &&
-                !uiState.isWatchHistorySyncing &&
-                !uiState.isSyncingMal &&
-                !uiState.isSyncingAnilist &&
-                !uiState.isOffline
+                    !uiState.isWatchHistorySyncing &&
+                    !uiState.isSyncingMal &&
+                    !uiState.isSyncingAnilist &&
+                    !uiState.isOffline
 
         if (uiState.isSignedIn) {
             if (showLibraryImportCard) {
@@ -1494,14 +1584,24 @@ private fun CommunityTab(
                 description = "Users online now",
                 modifier = Modifier.weight(1f),
             ) {
-                Text("${uiState.communityStats?.onlineCount ?: 0}", color = TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "${uiState.communityStats?.onlineCount ?: 0}",
+                    color = TEXT,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
             SettingCard(
                 title = "Members",
                 description = "Community members",
                 modifier = Modifier.weight(1f),
             ) {
-                Text("${uiState.communityStats?.members ?: 0}", color = TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "${uiState.communityStats?.members ?: 0}",
+                    color = TEXT,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
             SettingCard(
                 title = "Unread",
@@ -1553,7 +1653,10 @@ private fun CommunityTab(
                 }
 
                 val categories = listOf("all") + uiState.communityCategories.map { it.slug }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     categories.forEach { slug ->
                         val selected = uiState.communityCategory == slug
                         Box(
@@ -1626,7 +1729,11 @@ private fun CommunityTab(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (uiState.isCreatingCommunityPost) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
                     } else {
                         Text("Create Community Post")
                     }
@@ -1670,7 +1777,11 @@ private fun CommunityTab(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("#${user.rank} ${user.displayName ?: user.name}", color = Color.White, fontSize = 13.sp)
+                            Text(
+                                "#${user.rank} ${user.displayName ?: user.name}",
+                                color = Color.White,
+                                fontSize = 13.sp
+                            )
                             Text("${user.aura} aura", color = MUTED, fontSize = 12.sp)
                         }
                     }
@@ -1714,7 +1825,10 @@ private fun CommunityTab(
                                 color = MUTED,
                                 fontSize = 11.sp,
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 val voting = uiState.isVotingCommunityPostIds.contains(post.id)
                                 OutlinedButton(
                                     onClick = { onVote(post.id, 1) },
@@ -1739,7 +1853,11 @@ private fun CommunityTab(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         if (uiState.isLoadingCommunityMore) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
                         } else {
                             Text("Load More")
                         }
@@ -1858,7 +1976,10 @@ private fun CommunityPostDetailDialog(
                                         Text("▲ ${post.votes}")
                                     }
                                     OutlinedButton(onClick = { onVote(postId, -1) }, enabled = !voting) { Text("▼") }
-                                    OutlinedButton(onClick = { onVote(postId, 0) }, enabled = !voting) { Text("Clear vote") }
+                                    OutlinedButton(
+                                        onClick = { onVote(postId, 0) },
+                                        enabled = !voting
+                                    ) { Text("Clear vote") }
                                 }
                                 CommunityPostContent(
                                     rawContent = post.content,
@@ -2030,10 +2151,10 @@ private fun PreferencesTab(
 ) {
     val strings = LocalAppStrings.current
     val directoryPickerLauncher = rememberDirectoryPickerLauncher {
-        it?.let { dir -> 
+        it?.let { dir ->
             val path = dir.absolutePath()
             to.kuudere.anisuge.platform.persistFolderPermission(path)
-            onDownloadPathChange(path) 
+            onDownloadPathChange(path)
         }
     }
 
@@ -2147,7 +2268,12 @@ private fun PreferencesTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("${uiState.settings.syncPercentage}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        "${uiState.settings.syncPercentage}%",
+                        color = TEXT,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Slider(
@@ -2198,52 +2324,52 @@ private fun PreferencesTab(
             description = strings.downloadPathDescription,
             modifier = Modifier.fillMaxWidth()
         ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.Black)
-                .border(1.dp, BORDER, RoundedCornerShape(12.dp))
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val isPathValid = remember(uiState.downloadPath) {
-                if (uiState.downloadPath.isBlank()) true
-                else to.kuudere.anisuge.platform.isFolderWritable(uiState.downloadPath)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (isPathValid) to.kuudere.anisuge.platform.formatDisplayPath(uiState.downloadPath) else strings.locationUnavailable,
-                    color = if (uiState.downloadPath.isBlank() || !isPathValid) MUTED else TEXT,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (!isPathValid) {
-                    Text(
-                        strings.chooseWritableFolder,
-                        color = Color.Red.copy(alpha = 0.8f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            Text(
-                text = strings.change,
-                color = Color.Black,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
+            Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White)
-                    .clickable { directoryPickerLauncher.launch() }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            )
-        }
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black)
+                    .border(1.dp, BORDER, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val isPathValid = remember(uiState.downloadPath) {
+                    if (uiState.downloadPath.isBlank()) true
+                    else to.kuudere.anisuge.platform.isFolderWritable(uiState.downloadPath)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (isPathValid) to.kuudere.anisuge.platform.formatDisplayPath(uiState.downloadPath) else strings.locationUnavailable,
+                        color = if (uiState.downloadPath.isBlank() || !isPathValid) MUTED else TEXT,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (!isPathValid) {
+                        Text(
+                            strings.chooseWritableFolder,
+                            color = Color.Red.copy(alpha = 0.8f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Text(
+                    text = strings.change,
+                    color = Color.Black,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White)
+                        .clickable { directoryPickerLauncher.launch() }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
         }
 
         // Save Button
@@ -2508,10 +2634,10 @@ private fun MobilePreferencesContent(
 ) {
     val strings = LocalAppStrings.current
     val directoryPickerLauncher = rememberDirectoryPickerLauncher {
-        it?.let { dir -> 
+        it?.let { dir ->
             val path = dir.absolutePath()
             to.kuudere.anisuge.platform.persistFolderPermission(path)
-            onDownloadPathChange(path) 
+            onDownloadPathChange(path)
         }
     }
 
@@ -2681,9 +2807,9 @@ private fun MobilePreferencesContent(
                     )
                 }
             }
-            
+
             Spacer(modifier = Modifier.width(12.dp))
-            
+
             Text(
                 text = "Change",
                 color = Color.Black,
@@ -2956,7 +3082,11 @@ private fun StorageTab(
                         onClick = onClearFontCache,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE50914)),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFE50914).copy(alpha = 0.5f))),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            brush = androidx.compose.ui.graphics.SolidColor(
+                                Color(0xFFE50914).copy(alpha = 0.5f)
+                            )
+                        ),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Clear Font Cache (${formatBytesCompact(storageInfo.fontCache.size)})")
@@ -3211,11 +3341,15 @@ private fun MobileStorageContent(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Cache Actions
-                 OutlinedButton(
+                OutlinedButton(
                     onClick = onClearFontCache,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE50914)),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFE50914).copy(alpha = 0.5f))),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(
+                            Color(0xFFE50914).copy(alpha = 0.5f)
+                        )
+                    ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Clear Font Cache (${formatBytesCompact(storageInfo.fontCache.size)})")
@@ -3348,7 +3482,13 @@ private fun ServersTab(
             OutlinedButton(
                 onClick = onReset,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color.White.copy(alpha = 0.3f))),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(
+                        Color.White.copy(
+                            alpha = 0.3f
+                        )
+                    )
+                ),
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text("Reset", fontWeight = FontWeight.SemiBold)
@@ -3679,7 +3819,13 @@ private fun MobileServersContent(
             onClick = onReset,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color.White.copy(alpha = 0.3f))),
+            border = ButtonDefaults.outlinedButtonBorder.copy(
+                brush = androidx.compose.ui.graphics.SolidColor(
+                    Color.White.copy(
+                        alpha = 0.3f
+                    )
+                )
+            ),
             shape = RoundedCornerShape(8.dp)
         ) {
             Text("Reset to Defaults", fontWeight = FontWeight.SemiBold)
@@ -4358,7 +4504,9 @@ private fun MobileProfileContent(
                 Column {
                     MobileProfileInfoItem("Email", user.email ?: "Not provided")
                     HorizontalDivider(color = BORDER, modifier = Modifier.padding(horizontal = 16.dp))
-                    MobileProfileInfoItem("Joined", user.joinDate?.let { it.split("T").first() } ?: user.ago ?: "Unknown")
+                    MobileProfileInfoItem(
+                        "Joined",
+                        user.joinDate?.let { it.split("T").first() } ?: user.ago ?: "Unknown")
                 }
             }
 

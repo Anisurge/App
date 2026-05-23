@@ -36,6 +36,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
         val PREFER_ROMAJI_ANIME_TITLES_KEY = booleanPreferencesKey("prefer_romaji_anime_titles")
         val VIDEO_SCALE_MODE_KEY = stringPreferencesKey("video_scale_mode")
+        val THEME_ID_KEY = stringPreferencesKey("theme_id")
 
         // MAL tokens
         val MAL_ACCESS_TOKEN_KEY = stringPreferencesKey("mal_access_token")
@@ -70,6 +71,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val videoScaleModeFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[VIDEO_SCALE_MODE_KEY]?.takeIf { it == "Fit" || it == "Zoom" } ?: "Fit"
     }
+    val themeIdFlow: Flow<String> = dataStore.data.map { it[THEME_ID_KEY] ?: "default" }
 
     val serverPriorityFlow: Flow<List<String>> = dataStore.data.map { preferences ->
         val jsonStr = preferences[SERVER_PRIORITY_KEY]
@@ -169,6 +171,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setVideoScaleMode(mode: String) {
         dataStore.edit { it[VIDEO_SCALE_MODE_KEY] = if (mode == "Zoom") "Zoom" else "Fit" }
+    }
+
+    suspend fun setThemeId(themeId: String) {
+        dataStore.edit { it[THEME_ID_KEY] = themeId }
     }
 
     suspend fun getOrCreateAnalyticsInstallId(): String {

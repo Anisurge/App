@@ -48,6 +48,7 @@ import to.kuudere.anisuge.platform.DiscordRichPresenceManager
 import to.kuudere.anisuge.platform.LockScreenOrientation
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
+import to.kuudere.anisuge.platform.rememberPipManager
 import to.kuudere.anisuge.player.PlayerControls
 import to.kuudere.anisuge.player.StreamProxy
 import to.kuudere.anisuge.player.VideoPlayerState
@@ -1601,6 +1602,8 @@ fun WatchVideoPlayer(
                     }
             }
 
+            val pipManager = rememberPipManager()
+
             Box(
                 modifier = modifier
                     .background(Color.Black)
@@ -1832,6 +1835,7 @@ fun WatchVideoPlayer(
                     } else null,
                     isSyncingMAL = uiState.isSyncingMal,
                     isSyncingAniList = uiState.isSyncingAnilist,
+                    pipManager = pipManager,
                     modifier = Modifier.fillMaxSize()
                 )
 

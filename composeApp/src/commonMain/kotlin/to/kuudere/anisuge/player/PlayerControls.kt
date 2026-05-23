@@ -46,6 +46,7 @@ import kotlinx.datetime.Clock
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
+import to.kuudere.anisuge.platform.PipManager
 
 /**
  * Shared cross-platform player controls overlay.
@@ -80,6 +81,7 @@ fun PlayerControls(
     onSyncAniListClick: (() -> Unit)? = null,
     isSyncingMAL: Boolean = false,
     isSyncingAniList: Boolean = false,
+    pipManager: PipManager? = null,
     modifier: Modifier = Modifier,
 ) {
     val hideDelayMillis = 1500L
@@ -886,6 +888,23 @@ fun PlayerControls(
                                             )
                                         }
                                     }
+                                    if (pipManager?.isAvailable == true && !pipManager.isActive) {
+                                        IconButton(
+                                            onClick = {
+                                                pipManager.requestPip(16, 9)
+                                                recordInteraction(forceShow = false)
+                                            },
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Icon(
+                                                getPictureInPictureIcon(),
+                                                contentDescription = "Picture in picture",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
+
                                 }
                             }
                         }
@@ -1002,6 +1021,39 @@ private fun DoubleTapSeekOverlay(
 }
 
 private fun formatDuration(seconds: Double): String = to.kuudere.anisuge.utils.formatDuration(seconds)
+
+private fun getPictureInPictureIcon(): ImageVector {
+    return ImageVector.Builder(
+        name = "PictureInPictureCustom",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        path(
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            moveTo(4f, 6f)
+            horizontalLineTo(20f)
+            arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 2f, 2f)
+            verticalLineTo(16f)
+            arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, -2f, 2f)
+            horizontalLineTo(4f)
+            arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, -2f, -2f)
+            verticalLineTo(8f)
+            arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 2f, -2f)
+            close()
+            moveTo(13f, 12f)
+            horizontalLineTo(19f)
+            verticalLineTo(16f)
+            horizontalLineTo(13f)
+            close()
+        }
+    }.build()
+}
 
 private fun getCCIcon(): ImageVector {
     return ImageVector.Builder(

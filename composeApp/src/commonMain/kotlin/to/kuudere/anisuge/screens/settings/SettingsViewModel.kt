@@ -45,6 +45,7 @@ import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 import to.kuudere.anisuge.ui.isAnimatedFrameAssetUrl
 import to.kuudere.anisuge.ui.resolveProfileMediaUrl
 import to.kuudere.anisuge.i18n.AppLocale
+import to.kuudere.anisuge.theme.AppThemeId
 
 data class SettingsUiState(
     val isLoading: Boolean = false,
@@ -84,6 +85,7 @@ data class SettingsUiState(
     val expandedHeroCarousel: Boolean = false,
     val appLocale: AppLocale = AppLocale.default,
     val preferRomajiAnimeTitles: Boolean = false,
+    val themeId: AppThemeId = AppThemeId.Default,
 
     val notificationsEnabled: Boolean = true,
     val hasNotificationPrefsChanges: Boolean = false,
@@ -284,10 +286,55 @@ class SettingsViewModel(
 
         viewModelScope.launch { settingsStore.downloadPathFlow.collect { v -> _uiState.update { it.copy(downloadPath = v) } } }
         viewModelScope.launch { settingsStore.subtitleSizeFlow.collect { v -> _uiState.update { it.copy(subtitleSize = v) } } }
-        viewModelScope.launch { settingsStore.floatingBottomNavFlow.collect { v -> _uiState.update { it.copy(floatingBottomNav = v) } } }
-        viewModelScope.launch { settingsStore.liquidGlassBottomNavFlow.collect { v -> _uiState.update { it.copy(liquidGlassBottomNav = v) } } }
-        viewModelScope.launch { settingsStore.expandedHeroCarouselFlow.collect { v -> _uiState.update { it.copy(expandedHeroCarousel = v) } } }
-        viewModelScope.launch { settingsStore.appLocaleFlow.collect { code -> _uiState.update { it.copy(appLocale = AppLocale.fromCode(code)) } } }
+        viewModelScope.launch {
+            settingsStore.floatingBottomNavFlow.collect { v ->
+                _uiState.update {
+                    it.copy(
+                        floatingBottomNav = v
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.liquidGlassBottomNavFlow.collect { v ->
+                _uiState.update {
+                    it.copy(
+                        liquidGlassBottomNav = v
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.expandedHeroCarouselFlow.collect { v ->
+                _uiState.update {
+                    it.copy(
+                        expandedHeroCarousel = v
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.appLocaleFlow.collect { code ->
+                _uiState.update {
+                    it.copy(
+                        appLocale = AppLocale.fromCode(
+                            code
+                        )
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.themeIdFlow.collect { id ->
+                _uiState.update {
+                    it.copy(
+                        themeId = AppThemeId.fromId(
+                            id
+                        )
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             settingsStore.preferRomajiAnimeTitlesFlow.collect { v ->
                 _uiState.update { it.copy(preferRomajiAnimeTitles = v) }
@@ -349,23 +396,27 @@ class SettingsViewModel(
                 loadUserProfile()
                 loadShopInventory()
             }
+
             is SettingsTab.Shop -> {
                 loadShop()
                 if (_uiState.value.userProfile == null) {
                     loadUserProfile()
                 }
             }
+
             is SettingsTab.Berries -> {
                 loadUserProfile()
                 loadShopInventory()
                 loadRewardsStatus()
             }
+
             is SettingsTab.Sync -> {
                 loadTrackingState()
                 if (_uiState.value.userProfile == null && authService.authState.value is SessionCheckResult.Valid) {
                     loadUserProfile()
                 }
             }
+
             is SettingsTab.Servers -> loadServerPriority()
             is SettingsTab.Notifications -> loadNotificationPreferences()
             // is SettingsTab.Community -> loadCommunityInitial()
@@ -393,6 +444,10 @@ class SettingsViewModel(
         viewModelScope.launch { settingsStore.setPreferRomajiAnimeTitles(enabled) }
     }
 
+    fun setThemeId(themeId: AppThemeId) {
+        viewModelScope.launch { settingsStore.setThemeId(themeId.id) }
+    }
+
     // Profile
     fun loadUserProfile() {
         viewModelScope.launch {
@@ -418,7 +473,8 @@ class SettingsViewModel(
                         it.copy(
                             isLoadingProfile = false,
                             isOffline = e.isNetworkError(),
-                            errorMessage = if (e.isNetworkError()) null else (e.message ?: "Failed to load user profile"),
+                            errorMessage = if (e.isNetworkError()) null else (e.message
+                                ?: "Failed to load user profile"),
                         )
                     }
                 },
@@ -452,10 +508,12 @@ class SettingsViewModel(
                 closeProfileAccount()
                 true
             }
+
             state.mobileSettingsDetailTab != null -> {
                 closeMobileSettingsDetail()
                 true
             }
+
             else -> false
         }
     }
@@ -821,12 +879,23 @@ class SettingsViewModel(
             _uiState.update { it.copy(isLoadingServers = true) }
             val priority = serverRepository.userPriority.value
             originalServerPriority = priority
-            _uiState.update { it.copy(serverPriority = priority, hasServerPriorityChanges = false, isLoadingServers = false) }
+            _uiState.update {
+                it.copy(
+                    serverPriority = priority,
+                    hasServerPriorityChanges = false,
+                    isLoadingServers = false
+                )
+            }
         }
     }
 
     fun updateServerPriority(newPriority: List<String>) {
-        _uiState.update { it.copy(serverPriority = newPriority, hasServerPriorityChanges = newPriority != originalServerPriority) }
+        _uiState.update {
+            it.copy(
+                serverPriority = newPriority,
+                hasServerPriorityChanges = newPriority != originalServerPriority
+            )
+        }
     }
 
     fun saveServerPriority() {
@@ -842,7 +911,13 @@ class SettingsViewModel(
         viewModelScope.launch {
             serverRepository.resetUserPriority()
             originalServerPriority = emptyList()
-            _uiState.update { it.copy(serverPriority = emptyList(), hasServerPriorityChanges = false, successMessage = "Reset to default priority") }
+            _uiState.update {
+                it.copy(
+                    serverPriority = emptyList(),
+                    hasServerPriorityChanges = false,
+                    successMessage = "Reset to default priority"
+                )
+            }
         }
     }
 
@@ -985,12 +1060,22 @@ class SettingsViewModel(
         }
     }
 
-    fun setDownloadPath(path: String) { viewModelScope.launch { settingsStore.setDownloadPath(path) } }
-    fun setSubtitleSize(sizePercent: Int) { viewModelScope.launch { settingsStore.setSubtitleSize(sizePercent) } }
+    fun setDownloadPath(path: String) {
+        viewModelScope.launch { settingsStore.setDownloadPath(path) }
+    }
+
+    fun setSubtitleSize(sizePercent: Int) {
+        viewModelScope.launch { settingsStore.setSubtitleSize(sizePercent) }
+    }
 
     // Password Change
-    fun setCurrentPassword(password: String) { _uiState.update { it.copy(currentPassword = password) } }
-    fun setNewPassword(password: String) { _uiState.update { it.copy(newPassword = password) } }
+    fun setCurrentPassword(password: String) {
+        _uiState.update { it.copy(currentPassword = password) }
+    }
+
+    fun setNewPassword(password: String) {
+        _uiState.update { it.copy(newPassword = password) }
+    }
 
     fun changePassword(onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
@@ -1002,10 +1087,22 @@ class SettingsViewModel(
             _uiState.update { it.copy(isChangingPassword = true) }
             val response = settingsService.changePassword(state.currentPassword, state.newPassword)
             if (response?.success != false) {
-                _uiState.update { it.copy(isChangingPassword = false, currentPassword = "", newPassword = "", successMessage = "Password changed successfully") }
+                _uiState.update {
+                    it.copy(
+                        isChangingPassword = false,
+                        currentPassword = "",
+                        newPassword = "",
+                        successMessage = "Password changed successfully"
+                    )
+                }
                 onSuccess()
             } else {
-                _uiState.update { it.copy(isChangingPassword = false, errorMessage = response?.message ?: "Failed to change password") }
+                _uiState.update {
+                    it.copy(
+                        isChangingPassword = false,
+                        errorMessage = response?.message ?: "Failed to change password"
+                    )
+                }
             }
         }
     }
@@ -1098,7 +1195,12 @@ class SettingsViewModel(
             } else {
                 to.kuudere.anisuge.platform.stopNotificationListenerService()
             }
-            _uiState.update { it.copy(hasNotificationPrefsChanges = false, successMessage = "Notification preferences saved") }
+            _uiState.update {
+                it.copy(
+                    hasNotificationPrefsChanges = false,
+                    successMessage = "Notification preferences saved"
+                )
+            }
         }
     }
 
@@ -1126,7 +1228,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             val token = settingsStore.getMalAccessToken()
             if (token != null) {
-                val username = try { trackingService.fetchMalUsername() } catch (_: Exception) { null }
+                val username = try {
+                    trackingService.fetchMalUsername()
+                } catch (_: Exception) {
+                    null
+                }
                 if (username != null) {
                     settingsStore.saveMalUsername(username)
                 }
@@ -1159,7 +1265,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             val token = settingsStore.getAnilistAccessToken()
             if (token != null) {
-                val username = try { trackingService.fetchAnilistUsername() } catch (_: Exception) { null }
+                val username = try {
+                    trackingService.fetchAnilistUsername()
+                } catch (_: Exception) {
+                    null
+                }
                 if (username != null) {
                     settingsStore.saveAnilistUsername(username)
                 }
@@ -1262,7 +1372,8 @@ class SettingsViewModel(
                 val statsDeferred = async { communityService.getStats() }
                 val categoriesDeferred = async { communityService.getCategories() }
                 val trendingDeferred = async { communityService.getTrending() }
-                val postsDeferred = async { communityService.getPosts(sort = sort, category = category, limit = 10, offset = 0) }
+                val postsDeferred =
+                    async { communityService.getPosts(sort = sort, category = category, limit = 10, offset = 0) }
                 val leaderboardDeferred = async { communityService.getLeaderboard(period) }
                 val unreadDeferred = async { communityService.getUnreadCount() }
                 awaitAll(
@@ -1284,6 +1395,7 @@ class SettingsViewModel(
                 val resolvedDraftCategory = when {
                     categories.none { it.slug == _uiState.value.communityDraftCategory } ->
                         categories.firstOrNull()?.slug ?: _uiState.value.communityDraftCategory
+
                     else -> _uiState.value.communityDraftCategory
                 }
 
@@ -1632,7 +1744,12 @@ class SettingsViewModel(
                 val missingIds = results.size - eligible.size
                 updateSyncProgressNotification(
                     title = "Syncing to MyAnimeList",
-                    statusText = "Pushing episode progress for ${eligible.size} entries.\n0 / ${maxOf(1, eligible.size)}",
+                    statusText = "Pushing episode progress for ${eligible.size} entries.\n0 / ${
+                        maxOf(
+                            1,
+                            eligible.size
+                        )
+                    }",
                     progressCurrent = 0,
                     progressMax = maxOf(1, eligible.size),
                 )
@@ -1692,7 +1809,12 @@ class SettingsViewModel(
                 val missingIds = results.size - eligible.size
                 updateSyncProgressNotification(
                     title = "Syncing to AniList",
-                    statusText = "Pushing episode progress for ${eligible.size} entries.\n0 / ${maxOf(1, eligible.size)}",
+                    statusText = "Pushing episode progress for ${eligible.size} entries.\n0 / ${
+                        maxOf(
+                            1,
+                            eligible.size
+                        )
+                    }",
                     progressCurrent = 0,
                     progressMax = maxOf(1, eligible.size),
                 )
