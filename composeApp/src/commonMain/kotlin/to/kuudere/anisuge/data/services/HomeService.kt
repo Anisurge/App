@@ -2,6 +2,7 @@ package to.kuudere.anisuge.data.services
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -69,6 +70,19 @@ class HomeService(
             if (page.data.size < pageSize) break
         }
         return all
+    }
+
+    suspend fun deleteContinueWatching(animeId: String, episodeId: String): Boolean {
+        val stored = sessionStore.get() ?: return false
+        return try {
+            httpClient.delete("${AnisurgeApi.v1Base}/watch/continue/$animeId/$episodeId") {
+                applyAnisurgeAuth(stored)
+            }
+            true
+        } catch (e: Exception) {
+            println("[HomeService] deleteContinueWatching error: ${e.message}")
+            false
+        }
     }
 
     suspend fun fetchLatestAired(

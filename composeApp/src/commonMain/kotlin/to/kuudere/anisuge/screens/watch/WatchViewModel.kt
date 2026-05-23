@@ -48,6 +48,8 @@ data class WatchUiState(
     val subtitlesDisabled: Boolean = false,
     val currentFontsDir: String? = null,
     val playbackSpeed: Double = 1.0,
+    val videoScaleMode: String = "Fit",
+    val isBoostSpeedActive: Boolean = false,
     val savedWatchPosition: Double = 0.0,
     val showSettingsOverlay: Boolean = false,
     val initialSettingsPage: SettingsMenuPage? = SettingsMenuPage.MAIN,
@@ -76,7 +78,7 @@ data class WatchUiState(
     val syncSnackbar: String? = null,
     val berriesToast: String? = null,
 )
-    
+
 class WatchViewModel(
     private val infoService: InfoService,
     private val watchlistService: WatchlistService,
@@ -92,10 +94,12 @@ class WatchViewModel(
 
     private var currentAnimeId: String = ""
     private var loadJob: kotlinx.coroutines.Job? = null
+
     /** Bumps when a new stream fetch starts; stale loads must not publish UI state. */
     private var streamLoadGeneration = 0
     private var lastAutoEpisodeAdvanceMs = 0L
     private var pendingQualitySelection: String? = null
+
     /** Last batch_scrape section (for per-stream subtitles when switching quality). */
     private var cachedStreamSection: BatchScrapeStreamData? = null
     private var skipTimesJob: kotlinx.coroutines.Job? = null
@@ -104,6 +108,7 @@ class WatchViewModel(
     private var lastPlaybackPositionSec = 0.0
     private var lastPlaybackLanguage = "sub"
     private var lastSavedProgressKey: String? = null
+
     /** Server explicitly chosen in player settings (not the Settings → priority list default). */
     private var userPinnedStreamServer: String? = null
 
@@ -115,6 +120,7 @@ class WatchViewModel(
         viewModelScope.launch { settingsStore.defaultLangFlow.collect { v -> _uiState.update { it.copy(defaultLang = v) } } }
         viewModelScope.launch { settingsStore.syncPercentageFlow.collect { v -> _uiState.update { it.copy(syncPercentage = v) } } }
         viewModelScope.launch { settingsStore.subtitleSizeFlow.collect { v -> _uiState.update { it.copy(subtitleSize = v) } } }
+        viewModelScope.launch { settingsStore.videoScaleModeFlow.collect { v -> _uiState.update { it.copy(videoScaleMode = v) } } }
     }
 
     fun initialize(
@@ -200,14 +206,19 @@ class WatchViewModel(
             try {
                 val entries = KmpFileSystem.listDir(dir)
                 entries.forEach { name ->
-                    if (name.startsWith("subtitle") && (name.endsWith(".ass") || name.endsWith(".vtt") || name.endsWith(".srt"))) {
+                    if (name.startsWith("subtitle") && (name.endsWith(".ass") || name.endsWith(".vtt") || name.endsWith(
+                            ".srt"
+                        ))
+                    ) {
                         val label = name.substringAfter("subtitle_", "").substringBeforeLast(".").ifEmpty { "Default" }
                         val fileUrl = to.kuudere.anisuge.utils.MediaPaths.toFileUri("$dir/$name")
-                        subs.add(to.kuudere.anisuge.data.models.SubtitleData(
-                            languageName = label,
-                            url = fileUrl,
-                            format = name.substringAfterLast(".")
-                        ))
+                        subs.add(
+                            to.kuudere.anisuge.data.models.SubtitleData(
+                                languageName = label,
+                                url = fileUrl,
+                                format = name.substringAfterLast(".")
+                            )
+                        )
                     }
                 }
             } catch (e: Exception) {
@@ -215,19 +226,23 @@ class WatchViewModel(
             }
         }
 
-        val defaultSub = subs.find { it.url?.contains("subtitle.ass") == true || it.url?.contains("subtitle.vtt") == true } ?: subs.firstOrNull()
-        
-        _uiState.update { it.copy(
-            isLoading = false,
-            isLoadingVideo = false,
-            currentQuality = "Offline",
-            availableQualities = listOf("Offline" to normalizedPath),
-            availableSubtitles = subs,
-            currentSubtitleUrl = defaultSub?.url,
-            currentFontsDir = dir,
-            streamingData = null,
-            currentServer = "offline"
-        ) }
+        val defaultSub =
+            subs.find { it.url?.contains("subtitle.ass") == true || it.url?.contains("subtitle.vtt") == true }
+                ?: subs.firstOrNull()
+
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                isLoadingVideo = false,
+                currentQuality = "Offline",
+                availableQualities = listOf("Offline" to normalizedPath),
+                availableSubtitles = subs,
+                currentSubtitleUrl = defaultSub?.url,
+                currentFontsDir = dir,
+                streamingData = null,
+                currentServer = "offline"
+            )
+        }
     }
 
     private suspend fun fetchEpisodeData(episodeNumber: Int, reqServer: String? = null, reqLang: String? = null) {
@@ -405,7 +420,13 @@ class WatchViewModel(
             else -> currState.targetLang == "dub"
         }
 
-        _uiState.update { it.copy(isLoadingVideo = true, currentServer = serverName, loadingMessage = "Fetching streaming URL...") }
+        _uiState.update {
+            it.copy(
+                isLoadingVideo = true,
+                currentServer = serverName,
+                loadingMessage = "Fetching streaming URL..."
+            )
+        }
 
         try {
             val scrapeSource = apiSource
@@ -413,7 +434,7 @@ class WatchViewModel(
             if (
                 response == null ||
                 (response.sub?.streams.isNullOrEmpty() == true &&
-                    response.dub?.streams.isNullOrEmpty() == true)
+                        response.dub?.streams.isNullOrEmpty() == true)
             ) {
                 val fallback = when {
                     scrapeSource.equals("anitaku-2", ignoreCase = true) -> "anitaku"
@@ -439,7 +460,9 @@ class WatchViewModel(
                     val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
                     if (embedStreams != null && embedStreams.isNotEmpty()) {
                         val referer = try {
-                            val schemeHost = embedUrl.substringBefore("://", "") + "://" + embedUrl.substringAfter("://").substringBefore("/")
+                            val schemeHost =
+                                embedUrl.substringBefore("://", "") + "://" + embedUrl.substringAfter("://")
+                                    .substringBefore("/")
                             if (schemeHost.contains("://")) schemeHost else "https://senshi.live"
                         } catch (_: Exception) {
                             "https://senshi.live"
@@ -459,10 +482,14 @@ class WatchViewModel(
                         val subEmbedStreams = freshStreams.filter { !it.quality.equals("Dub", ignoreCase = true) }
 
                         if (subEmbedStreams.isNotEmpty()) {
-                            subStreams = (subStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(streams = subEmbedStreams)
+                            subStreams = (subStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(
+                                streams = subEmbedStreams
+                            )
                         }
                         if (dubEmbedStreams.isNotEmpty()) {
-                            dubStreams = (dubStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(streams = dubEmbedStreams)
+                            dubStreams = (dubStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(
+                                streams = dubEmbedStreams
+                            )
                         }
                     }
                 }
@@ -489,10 +516,12 @@ class WatchViewModel(
                 val defaultQuality = when {
                     requestedQuality != null && qualities.any { it.first == requestedQuality } -> requestedQuality
                     apiSource.equals("suzu", ignoreCase = true) &&
-                        qualities.any { it.first.equals("HardSub", ignoreCase = true) } -> "HardSub"
+                            qualities.any { it.first.equals("HardSub", ignoreCase = true) } -> "HardSub"
+
                     apiSource.startsWith("anitaku", ignoreCase = true) &&
-                        qualities.any { it.first.equals("HD-2", ignoreCase = true) } &&
-                        !qualities.any { it.first.equals("HD-1", ignoreCase = true) } -> "HD-2"
+                            qualities.any { it.first.equals("HD-2", ignoreCase = true) } &&
+                            !qualities.any { it.first.equals("HD-1", ignoreCase = true) } -> "HD-2"
+
                     else -> qualities.firstOrNull()?.first ?: "Auto"
                 }
                 pendingQualitySelection = null
@@ -566,7 +595,7 @@ class WatchViewModel(
     fun setQuality(quality: String) {
         val server = _uiState.value.currentServer
         val shouldRefreshStream = server.equals("animepahe", ignoreCase = true) ||
-            server.equals("animepahe-dub", ignoreCase = true)
+                server.equals("animepahe-dub", ignoreCase = true)
 
         if (!shouldRefreshStream) {
             val subtitles = to.kuudere.anisuge.utils.BatchSubtitleExtract.forPlayback(
@@ -608,18 +637,28 @@ class WatchViewModel(
     }
 
     fun setSubtitle(url: String?, subtitleLang: String? = null) {
-        _uiState.update { 
+        _uiState.update {
             it.copy(
                 currentSubtitleUrl = url,
                 subtitlesDisabled = url == null,
                 targetSubtitleLang = subtitleLang ?: it.targetSubtitleLang,
                 showSettingsOverlay = false
-            ) 
+            )
         }
     }
 
     fun setSpeed(speed: Double) {
-         _uiState.update { it.copy(playbackSpeed = speed) }
+        _uiState.update { it.copy(playbackSpeed = speed, isBoostSpeedActive = false) }
+    }
+
+    fun setVideoScaleMode(mode: String) {
+        val normalized = if (mode == "Zoom") "Zoom" else "Fit"
+        _uiState.update { it.copy(videoScaleMode = normalized) }
+        viewModelScope.launch { settingsStore.setVideoScaleMode(normalized) }
+    }
+
+    fun setBoostSpeedActive(active: Boolean) {
+        _uiState.update { it.copy(isBoostSpeedActive = active) }
     }
 
     fun setServer(server: String) {
@@ -627,7 +666,7 @@ class WatchViewModel(
         loadJob?.cancel()
         streamLoadGeneration++
         cachedStreamSection = null
-        _uiState.update { 
+        _uiState.update {
             it.copy(
                 showSettingsOverlay = false,
                 isLoadingVideo = true,
@@ -638,7 +677,7 @@ class WatchViewModel(
                 currentSubtitleUrl = null,
                 subtitlesDisabled = false,
                 currentFontsDir = null
-            ) 
+            )
         }
         loadJob = viewModelScope.launch {
             loadVideoStream(server)
@@ -646,9 +685,9 @@ class WatchViewModel(
     }
 
     fun changeServerWithState(
-        newServer: String, 
-        position: Double, 
-        targetAudioLang: String?, 
+        newServer: String,
+        position: Double,
+        targetAudioLang: String?,
         targetSubtitleLang: String?,
         targetSubtitleLangCode: String? = null
     ) {
@@ -656,7 +695,7 @@ class WatchViewModel(
         loadJob?.cancel()
         streamLoadGeneration++
         cachedStreamSection = null
-        _uiState.update { 
+        _uiState.update {
             it.copy(
                 savedWatchPosition = position,
                 targetLang = targetAudioLang,
@@ -671,7 +710,7 @@ class WatchViewModel(
                 currentSubtitleUrl = null,
                 subtitlesDisabled = false,
                 currentFontsDir = null
-            ) 
+            )
         }
         loadJob = viewModelScope.launch {
             loadVideoStream(newServer)
@@ -694,11 +733,11 @@ class WatchViewModel(
     }
 
     fun toggleSettingsOverlay(page: SettingsMenuPage? = null) {
-        _uiState.update { 
+        _uiState.update {
             it.copy(
                 showSettingsOverlay = !it.showSettingsOverlay,
                 initialSettingsPage = page ?: SettingsMenuPage.MAIN
-            ) 
+            )
         }
     }
 
@@ -750,11 +789,11 @@ class WatchViewModel(
         loadJob?.cancel()
         streamLoadGeneration++
         cachedStreamSection = null
-        _uiState.update { 
+        _uiState.update {
             it.copy(
-                currentEpisodeNumber = episodeNumber, 
-                activeSidePanel = null, 
-                didMarkWatched = false, 
+                currentEpisodeNumber = episodeNumber,
+                activeSidePanel = null,
+                didMarkWatched = false,
                 offlinePath = null,
                 isLoading = true,
                 isLoadingVideo = false,
@@ -768,7 +807,7 @@ class WatchViewModel(
                 subtitlesDisabled = false,
                 currentFontsDir = null,
                 savedWatchPosition = 0.0  // always start new episode from beginning
-            ) 
+            )
         }
         loadJob = viewModelScope.launch {
             fetchEpisodeData(episodeNumber)
@@ -1062,7 +1101,7 @@ class WatchViewModel(
             try {
                 val current = settingsService.getSettings()
                 val baseSettings = current ?: to.kuudere.anisuge.data.models.UserSettings()
-                
+
                 val updated = baseSettings.copy(
                     autoPlay = state.autoPlay,
                     autoNext = state.autoNext,

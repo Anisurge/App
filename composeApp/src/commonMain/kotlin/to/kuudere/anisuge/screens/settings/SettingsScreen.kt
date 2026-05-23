@@ -1005,6 +1005,8 @@ private fun MobileSettingsDetail(
                     onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                     onDisconnectAnilist = viewModel::disconnectAnilist,
                     onWatchHistorySync = viewModel::startWatchHistorySync,
+                    onSyncToMAL = viewModel::syncAllToMAL,
+                    onSyncToAniList = viewModel::syncAllToAniList,
                 )
                 is SettingsTab.Community -> {
                     // Community tab hidden — not yet ready (restore CommunityTab when shipping)
@@ -1127,6 +1129,8 @@ private fun SettingsContent(
                 onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                 onDisconnectAnilist = viewModel::disconnectAnilist,
                 onWatchHistorySync = viewModel::startWatchHistorySync,
+                    onSyncToMAL = viewModel::syncAllToMAL,
+                    onSyncToAniList = viewModel::syncAllToAniList,
             )
             is SettingsTab.Community -> {
                 Box(Modifier.fillMaxSize())
@@ -1266,6 +1270,8 @@ private fun SyncTab(
     onConnectAnilist: () -> Unit,
     onDisconnectAnilist: () -> Unit,
     onWatchHistorySync: () -> Unit,
+    onSyncToMAL: () -> Unit,
+    onSyncToAniList: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {

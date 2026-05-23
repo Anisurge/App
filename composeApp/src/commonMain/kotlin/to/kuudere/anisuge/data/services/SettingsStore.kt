@@ -35,6 +35,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val EXPANDED_HERO_CAROUSEL_KEY = booleanPreferencesKey("expanded_hero_carousel")
         val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
         val PREFER_ROMAJI_ANIME_TITLES_KEY = booleanPreferencesKey("prefer_romaji_anime_titles")
+        val VIDEO_SCALE_MODE_KEY = stringPreferencesKey("video_scale_mode")
 
         // MAL tokens
         val MAL_ACCESS_TOKEN_KEY = stringPreferencesKey("mal_access_token")
@@ -66,20 +67,35 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val expandedHeroCarouselFlow: Flow<Boolean> = dataStore.data.map { it[EXPANDED_HERO_CAROUSEL_KEY] ?: false }
     val appLocaleFlow: Flow<String> = dataStore.data.map { it[APP_LOCALE_KEY] ?: "en" }
     val preferRomajiAnimeTitlesFlow: Flow<Boolean> = dataStore.data.map { it[PREFER_ROMAJI_ANIME_TITLES_KEY] ?: false }
+    val videoScaleModeFlow: Flow<String> = dataStore.data.map { preferences ->
+        preferences[VIDEO_SCALE_MODE_KEY]?.takeIf { it == "Fit" || it == "Zoom" } ?: "Fit"
+    }
 
     val serverPriorityFlow: Flow<List<String>> = dataStore.data.map { preferences ->
         val jsonStr = preferences[SERVER_PRIORITY_KEY]
         if (jsonStr != null) {
-            try { json.decodeFromString<List<String>>(jsonStr) } catch (e: Exception) { emptyList() }
-        } else { emptyList() }
+            try {
+                json.decodeFromString<List<String>>(jsonStr)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } else {
+            emptyList()
+        }
     }
 
     suspend fun getServerPriority(): List<String> {
         return dataStore.data.map { preferences ->
             val jsonStr = preferences[SERVER_PRIORITY_KEY]
             if (jsonStr != null) {
-                try { json.decodeFromString<List<String>>(jsonStr) } catch (e: Exception) { emptyList() }
-            } else { emptyList() }
+                try {
+                    json.decodeFromString<List<String>>(jsonStr)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            } else {
+                emptyList()
+            }
         }.first()
     }
 
@@ -87,22 +103,73 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[SERVER_PRIORITY_KEY] = json.encodeToString(priority) }
     }
 
-    suspend fun setAutoPlay(enabled: Boolean) { dataStore.edit { it[AUTO_PLAY_KEY] = enabled } }
-    suspend fun setAutoNext(enabled: Boolean) { dataStore.edit { it[AUTO_NEXT_KEY] = enabled } }
-    suspend fun setAutoSkipIntro(enabled: Boolean) { dataStore.edit { it[AUTO_SKIP_INTRO_KEY] = enabled } }
-    suspend fun setAutoSkipOutro(enabled: Boolean) { dataStore.edit { it[AUTO_SKIP_OUTRO_KEY] = enabled } }
-    suspend fun setDefaultLang(enabled: Boolean) { dataStore.edit { it[DEFAULT_LANG_KEY] = enabled } }
-    suspend fun setSyncPercentage(percentage: Int) { dataStore.edit { it[SYNC_PERCENTAGE_KEY] = percentage } }
-    suspend fun setSubtitleSize(sizePercent: Int) { dataStore.edit { it[SUBTITLE_SIZE_KEY] = sizePercent.coerceIn(60, 200) } }
-    suspend fun setDownloadPath(path: String) { dataStore.edit { it[DOWNLOAD_PATH_KEY] = path } }
-    suspend fun setNotificationsEnabled(enabled: Boolean) { dataStore.edit { it[NOTIFICATIONS_ENABLED_KEY] = enabled } }
-    suspend fun setNotificationsNewEpisode(enabled: Boolean) { dataStore.edit { it[NOTIFICATIONS_NEW_EPISODE_KEY] = enabled } }
-    suspend fun setNotificationsAnnouncement(enabled: Boolean) { dataStore.edit { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] = enabled } }
-    suspend fun setFloatingBottomNav(enabled: Boolean) { dataStore.edit { it[FLOATING_BOTTOM_NAV_KEY] = enabled } }
-    suspend fun setLiquidGlassBottomNav(enabled: Boolean) { dataStore.edit { it[LIQUID_GLASS_BOTTOM_NAV_KEY] = enabled } }
-    suspend fun setExpandedHeroCarousel(enabled: Boolean) { dataStore.edit { it[EXPANDED_HERO_CAROUSEL_KEY] = enabled } }
-    suspend fun setAppLocale(localeCode: String) { dataStore.edit { it[APP_LOCALE_KEY] = localeCode } }
-    suspend fun setPreferRomajiAnimeTitles(enabled: Boolean) { dataStore.edit { it[PREFER_ROMAJI_ANIME_TITLES_KEY] = enabled } }
+    suspend fun setAutoPlay(enabled: Boolean) {
+        dataStore.edit { it[AUTO_PLAY_KEY] = enabled }
+    }
+
+    suspend fun setAutoNext(enabled: Boolean) {
+        dataStore.edit { it[AUTO_NEXT_KEY] = enabled }
+    }
+
+    suspend fun setAutoSkipIntro(enabled: Boolean) {
+        dataStore.edit { it[AUTO_SKIP_INTRO_KEY] = enabled }
+    }
+
+    suspend fun setAutoSkipOutro(enabled: Boolean) {
+        dataStore.edit { it[AUTO_SKIP_OUTRO_KEY] = enabled }
+    }
+
+    suspend fun setDefaultLang(enabled: Boolean) {
+        dataStore.edit { it[DEFAULT_LANG_KEY] = enabled }
+    }
+
+    suspend fun setSyncPercentage(percentage: Int) {
+        dataStore.edit { it[SYNC_PERCENTAGE_KEY] = percentage }
+    }
+
+    suspend fun setSubtitleSize(sizePercent: Int) {
+        dataStore.edit { it[SUBTITLE_SIZE_KEY] = sizePercent.coerceIn(60, 200) }
+    }
+
+    suspend fun setDownloadPath(path: String) {
+        dataStore.edit { it[DOWNLOAD_PATH_KEY] = path }
+    }
+
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
+        dataStore.edit { it[NOTIFICATIONS_ENABLED_KEY] = enabled }
+    }
+
+    suspend fun setNotificationsNewEpisode(enabled: Boolean) {
+        dataStore.edit { it[NOTIFICATIONS_NEW_EPISODE_KEY] = enabled }
+    }
+
+    suspend fun setNotificationsAnnouncement(enabled: Boolean) {
+        dataStore.edit { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] = enabled }
+    }
+
+    suspend fun setFloatingBottomNav(enabled: Boolean) {
+        dataStore.edit { it[FLOATING_BOTTOM_NAV_KEY] = enabled }
+    }
+
+    suspend fun setLiquidGlassBottomNav(enabled: Boolean) {
+        dataStore.edit { it[LIQUID_GLASS_BOTTOM_NAV_KEY] = enabled }
+    }
+
+    suspend fun setExpandedHeroCarousel(enabled: Boolean) {
+        dataStore.edit { it[EXPANDED_HERO_CAROUSEL_KEY] = enabled }
+    }
+
+    suspend fun setAppLocale(localeCode: String) {
+        dataStore.edit { it[APP_LOCALE_KEY] = localeCode }
+    }
+
+    suspend fun setPreferRomajiAnimeTitles(enabled: Boolean) {
+        dataStore.edit { it[PREFER_ROMAJI_ANIME_TITLES_KEY] = enabled }
+    }
+
+    suspend fun setVideoScaleMode(mode: String) {
+        dataStore.edit { it[VIDEO_SCALE_MODE_KEY] = if (mode == "Zoom") "Zoom" else "Fit" }
+    }
 
     suspend fun getOrCreateAnalyticsInstallId(): String {
         val prefs = dataStore.data.first()

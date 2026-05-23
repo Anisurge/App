@@ -22,19 +22,19 @@ import to.kuudere.anisuge.utils.latestPerAnime
 import to.kuudere.anisuge.utils.sortedByRecent
 
 data class HomeUiState(
-    val isLoading:        Boolean              = true,
-    val isLoggingOut:     Boolean              = false,
-    val isOffline:        Boolean              = false,
-    val userProfile:      UserProfile?         = null,
-    val latestAired:      List<AnimeItem>       = emptyList(),
-    val newOnSite:        List<AnimeItem>       = emptyList(),
-    val upcoming:         List<AnimeItem>       = emptyList(),
+    val isLoading: Boolean = true,
+    val isLoggingOut: Boolean = false,
+    val isOffline: Boolean = false,
+    val userProfile: UserProfile? = null,
+    val latestAired: List<AnimeItem> = emptyList(),
+    val newOnSite: List<AnimeItem> = emptyList(),
+    val upcoming: List<AnimeItem> = emptyList(),
     /** Home row: one entry per anime (latest episode). */
     val continueWatching: List<ContinueWatchingItem> = emptyList(),
-    /** Full list screen: every saved episode row. */
+    /** Full list screen source: every saved episode row from BFF. */
     val continueWatchingAll: List<ContinueWatchingItem> = emptyList(),
-    val isUpdatingWatchlist: Boolean            = false,
-    val error:            String?               = null,
+    val isUpdatingWatchlist: Boolean = false,
+    val error: String? = null,
 )
 
 class HomeViewModel(
@@ -70,8 +70,8 @@ class HomeViewModel(
     private fun itHasHomeContent(): Boolean {
         val state = _uiState.value
         return state.latestAired.isNotEmpty() ||
-            state.newOnSite.isNotEmpty() ||
-            state.upcoming.isNotEmpty()
+                state.newOnSite.isNotEmpty() ||
+                state.upcoming.isNotEmpty()
     }
 
     private fun loadHomeData(force: Boolean = false, showLoading: Boolean = false) {
@@ -85,12 +85,12 @@ class HomeViewModel(
                 val homeData = homeService.fetchHomeData(forceRefresh = force)
                 _uiState.update {
                     it.copy(
-                        isLoading        = false,
-                        isOffline        = false,
-                        error            = null,
-                        latestAired      = homeData?.latestAired  ?: emptyList(),
-                        newOnSite        = homeData?.newOnSite   ?: emptyList(),
-                        upcoming         = homeData?.upcoming     ?: emptyList(),
+                        isLoading = false,
+                        isOffline = false,
+                        error = null,
+                        latestAired = homeData?.latestAired ?: emptyList(),
+                        newOnSite = homeData?.newOnSite ?: emptyList(),
+                        upcoming = homeData?.upcoming ?: emptyList(),
                     )
                 }
             } catch (e: Exception) {
@@ -145,6 +145,25 @@ class HomeViewModel(
         }
     }
 
+    fun removeContinueItem(item: ContinueWatchingItem) {
+        val animeId = item.effectiveAnimeId.ifBlank { item.animeId }
+        val episodeId = item.episodeId.ifBlank { item.displayEpisode.toString() }
+        val previous = _uiState.value.continueWatchingAll
+        applyContinueWatching(previous.filterNot { existing ->
+            val existingAnimeId = existing.effectiveAnimeId.ifBlank { existing.animeId }
+            val existingEpisodeId = existing.episodeId.ifBlank { existing.displayEpisode.toString() }
+            existingAnimeId == animeId && existingEpisodeId == episodeId
+        })
+        scope.launch {
+            val deleted = homeService.deleteContinueWatching(animeId, episodeId)
+            if (!deleted) {
+                applyContinueWatching(previous)
+            } else {
+                loadContinueWatching()
+            }
+        }
+    }
+
     fun refresh(force: Boolean = false) {
         scope.launch {
             _uiState.update { it.copy(isLoading = true, isOffline = false, error = null) }
@@ -155,12 +174,12 @@ class HomeViewModel(
                 homeData.await()?.let { data ->
                     _uiState.update {
                         it.copy(
-                            isLoading        = false,
-                            isOffline        = false,
-                            error            = null,
-                            latestAired      = data.latestAired,
-                            newOnSite        = data.newOnSite,
-                            upcoming         = data.upcoming,
+                            isLoading = false,
+                            isOffline = false,
+                            error = null,
+                            latestAired = data.latestAired,
+                            newOnSite = data.newOnSite,
+                            upcoming = data.upcoming,
                         )
                     }
                 } ?: _uiState.update { it.copy(isLoading = false) }
@@ -174,6 +193,7 @@ class HomeViewModel(
                             loadContinueWatching()
                         }
                     }
+
                     else -> Unit
                 }
             } catch (e: Exception) {
@@ -186,15 +206,21 @@ class HomeViewModel(
         val isNetworkError = generateSequence(e as Throwable) { it.cause }.any { cause ->
             val msg = cause.message ?: ""
             msg.contains("UnknownHostException", ignoreCase = true)
-                || msg.contains("ConnectException", ignoreCase = true)
-                || msg.contains("SocketTimeoutException", ignoreCase = true)
-                || msg.contains("NoRouteToHostException", ignoreCase = true)
-                || msg.contains("Unable to resolve host", ignoreCase = true)
-                || msg.contains("Failed to connect", ignoreCase = true)
-                || msg.contains("timeout", ignoreCase = true)
-                || msg.contains("Network is unreachable", ignoreCase = true)
+                    || msg.contains("ConnectException", ignoreCase = true)
+                    || msg.contains("SocketTimeoutException", ignoreCase = true)
+                    || msg.contains("NoRouteToHostException", ignoreCase = true)
+                    || msg.contains("Unable to resolve host", ignoreCase = true)
+                    || msg.contains("Failed to connect", ignoreCase = true)
+                    || msg.contains("timeout", ignoreCase = true)
+                    || msg.contains("Network is unreachable", ignoreCase = true)
         }
-        _uiState.update { it.copy(isLoading = false, isOffline = isNetworkError, error = if (isNetworkError) null else e.message) }
+        _uiState.update {
+            it.copy(
+                isLoading = false,
+                isOffline = isNetworkError,
+                error = if (isNetworkError) null else e.message
+            )
+        }
     }
 
     fun updateWatchlist(animeId: String, folder: String) {

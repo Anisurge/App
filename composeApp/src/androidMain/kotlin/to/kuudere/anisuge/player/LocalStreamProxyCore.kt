@@ -18,7 +18,8 @@ import to.kuudere.anisuge.utils.HlsPngTsStrip
 
 internal class LocalStreamProxy {
     private companion object {
-        const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        const val DEFAULT_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     private data class Session(val headers: Map<String, String>)
@@ -27,8 +28,10 @@ internal class LocalStreamProxy {
     private val urls = ConcurrentHashMap<String, String>()
     private val targets = ConcurrentHashMap<String, String>()
 
-    @Volatile private var serverSocket: ServerSocket? = null
-    @Volatile private var serverPort: Int = 0
+    @Volatile
+    private var serverSocket: ServerSocket? = null
+    @Volatile
+    private var serverPort: Int = 0
 
     fun proxyUrl(url: String, headers: Map<String, String>?): String {
         if (headers.isNullOrEmpty()) return url
@@ -103,7 +106,8 @@ internal class LocalStreamProxy {
                 if (line.isEmpty()) break
                 val separator = line.indexOf(':')
                 if (separator > 0) {
-                    requestHeaders[line.substring(0, separator).trim().lowercase()] = line.substring(separator + 1).trim()
+                    requestHeaders[line.substring(0, separator).trim().lowercase()] =
+                        line.substring(separator + 1).trim()
                 }
             }
 
@@ -122,7 +126,13 @@ internal class LocalStreamProxy {
         }
     }
 
-    private fun proxyRequest(output: BufferedOutputStream, targetUrl: String, sessionId: String, session: Session, range: String?) {
+    private fun proxyRequest(
+        output: BufferedOutputStream,
+        targetUrl: String,
+        sessionId: String,
+        session: Session,
+        range: String?
+    ) {
         val connection = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 15_000
@@ -158,24 +168,57 @@ internal class LocalStreamProxy {
                 writeHeaders(output, 200, "OK", "application/vnd.apple.mpegurl", bytes.size.toLong())
                 output.write(bytes)
             } else if (HlsPngTsStrip.isDisguisedTsCdnHost(targetUrl)) {
-                val raw = source.use { it.readBytes() }
-                val payload = HlsPngTsStrip.stripPngTsWrapper(raw)
-                val slice = sliceForClientRange(payload, range)
-                val responseHeaders = buildSegmentResponseHeaders(
-                    upstreamStatus = status,
-                    clientRange = range,
-                    payloadSize = payload.size,
-                    upstreamAcceptRanges = connection.getHeaderField("Accept-Ranges"),
-                )
-                writeHeaders(
-                    output,
-                    responseHeaders.status,
-                    responseHeaders.message,
-                    proxiedContentType(targetUrl, contentType),
-                    slice.size.toLong(),
-                    responseHeaders.extra,
-                )
-                output.write(slice)
+                if (range.isNullOrBlank() && connection.contentLengthLong > 0) {
+                    val headBuffer = ByteArray(16384)
+                    var headBytesRead = 0
+                    source.use { src ->
+                        while (headBytesRead < headBuffer.size) {
+                            val r = src.read(headBuffer, headBytesRead, headBuffer.size - headBytesRead)
+                            if (r < 0) break
+                            headBytesRead += r
+                        }
+                        val tsOffset = HlsPngTsStrip.findTsStartOffset(headBuffer, headBytesRead)
+                        val adjustedLength = connection.contentLengthLong - tsOffset
+                        writeHeaders(
+                            output,
+                            status,
+                            connection.responseMessage ?: "OK",
+                            proxiedContentType(targetUrl, contentType),
+                            adjustedLength,
+                            listOfNotNull(
+                                connection.getHeaderField("Accept-Ranges")?.let { "Accept-Ranges" to it }
+                            )
+                        )
+                        if (headBytesRead > tsOffset) {
+                            output.write(headBuffer, tsOffset, headBytesRead - tsOffset)
+                        }
+                        val transferBuffer = ByteArray(16384)
+                        while (true) {
+                            val r = src.read(transferBuffer)
+                            if (r < 0) break
+                            output.write(transferBuffer, 0, r)
+                        }
+                    }
+                } else {
+                    val raw = source.use { it.readBytes() }
+                    val payload = HlsPngTsStrip.stripPngTsWrapper(raw)
+                    val slice = sliceForClientRange(payload, range)
+                    val responseHeaders = buildSegmentResponseHeaders(
+                        upstreamStatus = status,
+                        clientRange = range,
+                        payloadSize = payload.size,
+                        upstreamAcceptRanges = connection.getHeaderField("Accept-Ranges"),
+                    )
+                    writeHeaders(
+                        output,
+                        responseHeaders.status,
+                        responseHeaders.message,
+                        proxiedContentType(targetUrl, contentType),
+                        slice.size.toLong(),
+                        responseHeaders.extra,
+                    )
+                    output.write(slice)
+                }
             } else {
                 val responseHeaders = listOfNotNull(
                     connection.getHeaderField("Content-Range")?.let { "Content-Range" to it },

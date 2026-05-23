@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
+import to.kuudere.anisuge.utils.latestPerAnime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +96,7 @@ fun ContinueWatchingScreen(
             val columns = if (isSmall) GridCells.Fixed(1) else GridCells.Adaptive(minSize = 280.dp)
             val hPadding = if (isSmall) 16.dp else 24.dp
             val spacing = if (isSmall) 14.dp else 18.dp
+            val latestItems = state.continueWatchingAll.latestPerAnime()
 
             when {
                 state.isLoading && state.continueWatchingAll.isEmpty() -> {
@@ -101,7 +104,8 @@ fun ContinueWatchingScreen(
                         CircularProgressIndicator(color = Color.White)
                     }
                 }
-                state.continueWatchingAll.isEmpty() -> {
+
+                latestItems.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             "Nothing to continue yet",
@@ -110,6 +114,7 @@ fun ContinueWatchingScreen(
                         )
                     }
                 }
+
                 else -> {
                     LazyVerticalGrid(
                         columns = columns,
@@ -123,9 +128,18 @@ fun ContinueWatchingScreen(
                         horizontalArrangement = Arrangement.spacedBy(spacing),
                         verticalArrangement = Arrangement.spacedBy(spacing)
                     ) {
-                        items(state.continueWatchingAll) { item ->
+                        item {
+                            Text(
+                                "Showing latest episode per series",
+                                color = Color.White.copy(alpha = 0.62f),
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            )
+                        }
+                        items(latestItems) { item ->
                             ContinueWatchingGridCard(
                                 item = item,
+                                onDelete = { viewModel.removeContinueItem(item) },
                                 onClick = {
                                     onWatchClick(
                                         item.effectiveAnimeId.ifBlank { item.animeId },
@@ -147,6 +161,7 @@ fun ContinueWatchingScreen(
 @Composable
 private fun ContinueWatchingGridCard(
     item: ContinueWatchingItem,
+    onDelete: () -> Unit,
     onClick: () -> Unit,
 ) {
     Column(
@@ -193,6 +208,23 @@ private fun ContinueWatchingGridCard(
                         .fillMaxWidth(parseProgressFraction(item.progress, item.duration))
                         .height(4.dp)
                         .background(Color(0xFFE50914))
+                )
+            }
+
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.72f))
+                    .size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Remove",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
                 )
             }
 

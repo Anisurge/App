@@ -240,7 +240,7 @@ fun HomeScreen(
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showDesktopLiveChat by rememberSaveable { mutableStateOf(false) }
     val hazeState = remember { HazeState() }
-    
+
     // Function to switch tabs with history tracking
     val switchTab: (AnisugTab, SettingsTab?) -> Unit = { newTab, initialNested ->
         prevTabIndex = AnisugTab.entries.indexOf(currentTab)
@@ -264,9 +264,9 @@ fun HomeScreen(
 
     val interceptsAppExitBack =
         showDesktopLiveChat ||
-            settingsState.mobileSettingsDetailTab != null ||
-            settingsState.showProfileAccount ||
-            currentTab != AnisugTab.Home
+                settingsState.mobileSettingsDetailTab != null ||
+                settingsState.showProfileAccount ||
+                currentTab != AnisugTab.Home
 
     SideEffect {
         onHomeBackActionChange(
@@ -277,11 +277,13 @@ fun HomeScreen(
                             showDesktopLiveChat = false
                             true
                         }
+
                         settingsViewModel.handleSettingsBack() -> true
                         currentTab != AnisugTab.Home -> {
                             currentTab = AnisugTab.entries.getOrElse(prevTabIndex) { AnisugTab.Home }
                             true
                         }
+
                         else -> false
                     }
                 }
@@ -333,7 +335,9 @@ fun HomeScreen(
                                     val slideOffset = { size: Int -> if (goingDown) size / 6 else -(size / 6) }
                                     val slideOutOffset = { size: Int -> if (goingDown) -(size / 6) else size / 6 }
                                     (slideInVertically(tween(300)) { slideOffset(it) } + fadeIn(tween(300)))
-                                        .togetherWith(slideOutVertically(tween(300)) { slideOutOffset(it) } + fadeOut(tween(200)))
+                                        .togetherWith(slideOutVertically(tween(300)) { slideOutOffset(it) } + fadeOut(
+                                            tween(200)
+                                        ))
                                 }
                             ) { tab ->
                                 TabContent(
@@ -391,8 +395,10 @@ fun HomeScreen(
                                 val toIndex = AnisugTab.entries.indexOf(targetState)
                                 val fromIndex = AnisugTab.entries.indexOf(initialState)
                                 val goingRight = toIndex > fromIndex
-                                val enter = slideInHorizontally(tween(300)) { if (goingRight) it else -it } + fadeIn(tween(300))
-                                val exit  = slideOutHorizontally(tween(300)) { if (goingRight) -it else it } + fadeOut(tween(200))
+                                val enter =
+                                    slideInHorizontally(tween(300)) { if (goingRight) it else -it } + fadeIn(tween(300))
+                                val exit =
+                                    slideOutHorizontally(tween(300)) { if (goingRight) -it else it } + fadeOut(tween(200))
                                 enter.togetherWith(exit)
                             }
                         ) { tab ->
@@ -535,18 +541,31 @@ private fun TabContent(
                             Box(Modifier.fillMaxSize(), Alignment.Center) {
                                 CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
                             }
+
                         homeState.isOffline && homeState.latestAired.isEmpty() ->
-                            to.kuudere.anisuge.ui.OfflineState(onRetry = { homeViewModel.refresh(force = true) }, isLoading = homeState.isLoading)
+                            to.kuudere.anisuge.ui.OfflineState(
+                                onRetry = { homeViewModel.refresh(force = true) },
+                                isLoading = homeState.isLoading
+                            )
+
                         homeState.error != null && homeState.latestAired.isEmpty() ->
                             Box(Modifier.fillMaxSize(), Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    Text(homeState.error!!, color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center)
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Text(
+                                        homeState.error!!,
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        textAlign = TextAlign.Center
+                                    )
                                     Button(
                                         onClick = { homeViewModel.refresh(force = true) },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))
                                     ) { Text("Retry") }
                                 }
                             }
+
                         else -> {
                             val settingsState by settingsViewModel.uiState.collectAsState()
                             HomeContent(
@@ -559,12 +578,14 @@ private fun TabContent(
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onViewLatestEpisodesMore = onViewLatestEpisodesMore,
                                 onViewNewOnAppMore = onViewNewOnAppMore,
-                                onExit = onExit
+                                onExit = onExit,
+                                onRemoveContinueItem = { homeViewModel.removeContinueItem(it) }
                             )
                         }
                     }
                 }
             }
+
             AnisugTab.Search -> SearchScreen(searchViewModel, onAnimeClick, onExit = onExit)
             AnisugTab.Bookmarks -> WatchlistScreen(watchlistViewModel, onAnimeClick)
             AnisugTab.Calendar -> ScheduleScreen(scheduleViewModel, onAnimeClick, onExit = onExit)
@@ -572,7 +593,7 @@ private fun TabContent(
             AnisugTab.Settings -> SettingsScreen(
                 viewModel = settingsViewModel,
                 onLogout = onLogout,
-                 onRefresh = { homeViewModel.refresh(force = true) },
+                onRefresh = { homeViewModel.refresh(force = true) },
                 isLoggingOut = homeState.isLoggingOut,
                 initialTab = initialSettingsTab,
                 onExit = onExit
@@ -594,72 +615,74 @@ private fun HomeContent(
     onViewLatestEpisodesMore: () -> Unit = {},
     onViewNewOnAppMore: () -> Unit = {},
     onExit: () -> Unit = {},
+    onRemoveContinueItem: (ContinueWatchingItem) -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
-    
+
     val innerContent: @Composable () -> Unit = {
         Column(Modifier.fillMaxSize().verticalScroll(scrollState)) {
-        Box(Modifier.fillMaxWidth()) {
-            // ── Hero Carousel ──────────────────────────────────────────────
-            if (state.latestAired.isNotEmpty()) {
-                HeroCarousel(
-                    items = state.latestAired,
-                    onAnimeClick = { onAnimeClick(it.activeSlug) },
-                    onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null, null) },
-                    onWatchlistClick = onWatchlistClick,
-                    expandedCarousel = expandedHeroCarousel
+            Box(Modifier.fillMaxWidth()) {
+                // ── Hero Carousel ──────────────────────────────────────────────
+                if (state.latestAired.isNotEmpty()) {
+                    HeroCarousel(
+                        items = state.latestAired,
+                        onAnimeClick = { onAnimeClick(it.activeSlug) },
+                        onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null, null) },
+                        onWatchlistClick = onWatchlistClick,
+                        expandedCarousel = expandedHeroCarousel
+                    )
+                }
+
+                to.kuudere.anisuge.platform.WindowManagementButtons(
+                    onClose = onExit,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
                 )
             }
 
-            to.kuudere.anisuge.platform.WindowManagementButtons(
-                onClose = onExit,
-                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
-            )
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        // ── Continue Watching ──────────────────────────────────────────
-        if (state.continueWatching.isNotEmpty()) {
-            SectionHeader(title = "Continue Watching", onViewMore = onViewContinueWatchingMore)
-            ContinueWatchingRow(
-                items = state.continueWatching,
-                onWatchClick = onWatchClick,
-            )
             Spacer(Modifier.height(24.dp))
-        }
 
-        // ── Latest Episodes (releases) ─────────────────────────────────
-        if (state.latestAired.isNotEmpty()) {
-            AnimeSection(
-                title = "Latest Episodes",
-                items = state.latestAired,
-                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                onViewMoreClick = onViewLatestEpisodesMore,
-            )
-        }
+            // ── Continue Watching ──────────────────────────────────────────
+            if (state.continueWatching.isNotEmpty()) {
+                SectionHeader(title = "Continue Watching", onViewMore = onViewContinueWatchingMore)
+                ContinueWatchingRow(
+                    items = state.continueWatching,
+                    onWatchClick = onWatchClick,
+                    onRemove = onRemoveContinueItem,
+                )
+                Spacer(Modifier.height(24.dp))
+            }
 
-        // ── New Additions ────────────────────────────────────────────────
-        if (state.newOnSite.isNotEmpty()) {
-            AnimeSection(
-                title = "New on App",
-                items = state.newOnSite,
-                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                onViewMoreClick = onViewNewOnAppMore,
-            )
-        }
+            // ── Latest Episodes (releases) ─────────────────────────────────
+            if (state.latestAired.isNotEmpty()) {
+                AnimeSection(
+                    title = "Latest Episodes",
+                    items = state.latestAired,
+                    onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                    onViewMoreClick = onViewLatestEpisodesMore,
+                )
+            }
 
-        // ── Upcoming ───────────────────────────────────────────────
-        if (state.upcoming.isNotEmpty()) {
-            AnimeSection(
-                title = "Upcoming",
-                items = state.upcoming,
-                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                showViewMore = false,
-            )
-        }
+            // ── New Additions ────────────────────────────────────────────────
+            if (state.newOnSite.isNotEmpty()) {
+                AnimeSection(
+                    title = "New on App",
+                    items = state.newOnSite,
+                    onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                    onViewMoreClick = onViewNewOnAppMore,
+                )
+            }
 
-        Spacer(Modifier.height(if (isDesktopPlatform) 48.dp else 156.dp))
+            // ── Upcoming ───────────────────────────────────────────────
+            if (state.upcoming.isNotEmpty()) {
+                AnimeSection(
+                    title = "Upcoming",
+                    items = state.upcoming,
+                    onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                    showViewMore = false,
+                )
+            }
+
+            Spacer(Modifier.height(if (isDesktopPlatform) 48.dp else 156.dp))
         }
     }
 
@@ -712,7 +735,7 @@ private fun HeroCarousel(
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val isDesktop = maxWidth >= 1024.dp
         val isLargeDevice = maxWidth >= 1300.dp
-        
+
         val posterWidth = if (isLargeDevice) 240.dp else 160.dp
         val bannerWidth = if (isLargeDevice) 360.dp else 240.dp
         val titleSize = if (isLargeDevice) 44.sp else 32.sp
@@ -753,204 +776,240 @@ private fun HeroCarousel(
                 AnimatedContent(
                     targetState = currentIndex,
                     transitionSpec = {
-                        (fadeIn(animationSpec = tween(400)) + slideInHorizontally(animationSpec = tween(400), initialOffsetX = { 200 })) togetherWith
-                        fadeOut(animationSpec = tween(400))
+                        (fadeIn(animationSpec = tween(400)) + slideInHorizontally(
+                            animationSpec = tween(400),
+                            initialOffsetX = { 200 })) togetherWith
+                                fadeOut(animationSpec = tween(400))
                     },
                     modifier = Modifier.fillMaxSize()
                 ) { targetIndex ->
                     val animItem = items[targetIndex]
                     val imageUrl = animItem.bannerUrl ?: animItem.imageUrl
                     Box(Modifier.fillMaxSize()) {
-                        
+
                         AsyncImage(
                             model = imageUrl,
                             contentDescription = animItem.resolveDisplayTitle(),
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
                         )
-                        
+
                         // Slide continues...
 
 
-
-                Box(
-                    Modifier.fillMaxSize().drawWithCache {
-                        val verticalGradient = Brush.verticalGradient(
-                            0.3f to Color.Transparent,
-                            0.7f to bgColor.copy(alpha = 0.5f),
-                            0.95f to bgColor.copy(alpha = 0.98f),
-                            1.0f to bgColor
-                        )
-                        val horizontalGradient = Brush.horizontalGradient(
-                            0.0f to bgColor.copy(alpha = 0.9f),
-                            0.5f to bgColor.copy(alpha = 0.4f),
-                            1.0f to bgColor.copy(alpha = 0.1f)
-                        )
-                        onDrawBehind {
-                            drawRect(brush = horizontalGradient, size = size)
-                            drawRect(brush = verticalGradient, size = size)
-                        }
-                    }
-                )
-
-                Row(
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .padding(start = paddingAmount, bottom = paddingAmount, end = paddingAmount),
-                    horizontalArrangement = Arrangement.spacedBy(rowSpacing),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Left: Vertical Poster
-                    AsyncImage(
-                        model = if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://api.reanime.to/img/poster/${animItem.imageUrl}",
-                        contentDescription = animItem.resolveDisplayTitle(),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .width(posterWidth)
-                            .aspectRatio(0.7f)
-                            .clip(RoundedCornerShape(12.dp))
-                    )
-
-                    // Middle: Text Info
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = animItem.resolveDisplayTitle(),
-                            color = Color.White,
-                            fontSize = titleSize,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = titleLineHeight,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        
-                        Spacer(Modifier.height(16.dp))
-
-                        // Meta Row
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val genresText = animItem.genres?.take(4)?.joinToString(" • ")
-                            if (!genresText.isNullOrEmpty()) {
-                                Text(genresText, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                            }
-                            
-                            if (animItem.malScore != null && animItem.malScore > 0) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.BookmarkBorder, contentDescription = "Score", tint = Color.White.copy(alpha=0.6f), modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(animItem.malScore.toString(), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Box(
+                            Modifier.fillMaxSize().drawWithCache {
+                                val verticalGradient = Brush.verticalGradient(
+                                    0.3f to Color.Transparent,
+                                    0.7f to bgColor.copy(alpha = 0.5f),
+                                    0.95f to bgColor.copy(alpha = 0.98f),
+                                    1.0f to bgColor
+                                )
+                                val horizontalGradient = Brush.horizontalGradient(
+                                    0.0f to bgColor.copy(alpha = 0.9f),
+                                    0.5f to bgColor.copy(alpha = 0.4f),
+                                    1.0f to bgColor.copy(alpha = 0.1f)
+                                )
+                                onDrawBehind {
+                                    drawRect(brush = horizontalGradient, size = size)
+                                    drawRect(brush = verticalGradient, size = size)
                                 }
                             }
-                        }
-
-                        Spacer(Modifier.height(24.dp))
-
-                        Text(
-                            text = stripHtmlTags(animItem.description ?: "").replace("\n", " ").replace("  ", " ").trim(),
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 15.sp,
-                            lineHeight = 24.sp,
-                            maxLines = descLines,
-                            overflow = TextOverflow.Ellipsis
                         )
 
-                        Spacer(Modifier.height(32.dp))
-
-                        // Preview / Buttons
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .padding(start = paddingAmount, bottom = paddingAmount, end = paddingAmount),
+                            horizontalArrangement = Arrangement.spacedBy(rowSpacing),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Button(
-                                onClick = { onAnimeClick(animItem) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.15f), contentColor = Color.White),
-                                shape = RoundedCornerShape(24.dp),
-                                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Outlined.Info, contentDescription = "Info", modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Info", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            // Left: Vertical Poster
+                            AsyncImage(
+                                model = if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://api.reanime.to/img/poster/${animItem.imageUrl}",
+                                contentDescription = animItem.resolveDisplayTitle(),
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .width(posterWidth)
+                                    .aspectRatio(0.7f)
+                                    .clip(RoundedCornerShape(12.dp))
+                            )
+
+                            // Middle: Text Info
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = animItem.resolveDisplayTitle(),
+                                    color = Color.White,
+                                    fontSize = titleSize,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = titleLineHeight,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(Modifier.height(16.dp))
+
+                                // Meta Row
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val genresText = animItem.genres?.take(4)?.joinToString(" • ")
+                                    if (!genresText.isNullOrEmpty()) {
+                                        Text(
+                                            genresText,
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+
+                                    if (animItem.malScore != null && animItem.malScore > 0) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Outlined.BookmarkBorder,
+                                                contentDescription = "Score",
+                                                tint = Color.White.copy(alpha = 0.6f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(
+                                                animItem.malScore.toString(),
+                                                color = Color.White,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(24.dp))
+
+                                Text(
+                                    text = stripHtmlTags(animItem.description ?: "").replace("\n", " ")
+                                        .replace("  ", " ").trim(),
+                                    color = Color.White.copy(alpha = 0.7f),
+                                    fontSize = 15.sp,
+                                    lineHeight = 24.sp,
+                                    maxLines = descLines,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(Modifier.height(32.dp))
+
+                                // Preview / Buttons
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Button(
+                                        onClick = { onAnimeClick(animItem) },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color.White.copy(alpha = 0.15f),
+                                            contentColor = Color.White
+                                        ),
+                                        shape = RoundedCornerShape(24.dp),
+                                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Outlined.Info,
+                                                contentDescription = "Info",
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Info", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(46.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White.copy(alpha = 0.15f))
+                                            .clickable { onWatchlistClick(animItem) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = "Watchlist",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
                                 }
                             }
-                            
+
+                            // Right: Episode Landscape Thumbnail
                             Box(
                                 modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.15f))
-                                    .clickable { onWatchlistClick(animItem) },
-                                contentAlignment = Alignment.Center
+                                    .width(bannerWidth)
+                                    .aspectRatio(16f / 9f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                    .clickable { onWatchClick(animItem, "sub", 1) }
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = "Watchlist", tint = Color.White, modifier = Modifier.size(22.dp))
+                                AsyncImage(
+                                    model = animItem.bannerUrl
+                                        ?: (if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://api.reanime.to/img/poster/${animItem.imageUrl}"),
+                                    contentDescription = "Episode",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                // Gradient Overlay for Text Visibility and Darker overall tint
+                                Box(
+                                    Modifier.fillMaxSize().background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.Black.copy(alpha = 0.2f),
+                                                Color.Black.copy(alpha = 0.95f)
+                                            ),
+                                            startY = 0f
+                                        )
+                                    )
+                                )
+
+                                // Centered Play Button
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .size(56.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.4f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.PlayArrow,
+                                        contentDescription = "Play",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(32.dp)
+                                            .offset(x = 2.dp) // Offset slightly so triangle appears centered
+                                    )
+                                }
+                                Column(
+                                    Modifier.align(Alignment.BottomStart).padding(20.dp)
+                                ) {
+
+                                    Text(
+                                        "Episode 1" + if (animItem.epCount != null && animItem.epCount!! > 0) " / ${animItem.epCount}" else "",
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontSize = 14.sp
+                                    )
+                                }
+
+                                // Time badge bottom right
+                                Box(
+                                    Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(end = 16.dp, bottom = 16.dp)
+                                ) {
+                                    Text("24m", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                                }
                             }
-                        }
-                    }
-
-                    // Right: Episode Landscape Thumbnail
-                    Box(
-                        modifier = Modifier
-                            .width(bannerWidth)
-                            .aspectRatio(16f/9f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                            .clickable { onWatchClick(animItem, "sub", 1) }
-                    ) {
-                        AsyncImage(
-                            model = animItem.bannerUrl ?: (if (animItem.imageUrl.startsWith("http")) animItem.imageUrl else "https://api.reanime.to/img/poster/${animItem.imageUrl}"),
-                            contentDescription = "Episode",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        // Gradient Overlay for Text Visibility and Darker overall tint
-                        Box(Modifier.fillMaxSize().background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Black.copy(alpha = 0.2f), Color.Black.copy(alpha = 0.95f)),
-                                startY = 0f
-                            )
-                        ))
-                        
-                        // Centered Play Button
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.4f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.PlayArrow, 
-                                contentDescription = "Play", 
-                                tint = Color.White, 
-                                modifier = Modifier.size(32.dp).offset(x = 2.dp) // Offset slightly so triangle appears centered
-                            )
-                        }
-                        Column(
-                            Modifier.align(Alignment.BottomStart).padding(20.dp)
-                        ) {
-
-                            Text(
-                                "Episode 1" + if (animItem.epCount != null && animItem.epCount!! > 0) " / ${animItem.epCount}" else "",
-                                color = Color.White.copy(alpha = 0.7f),
-                                fontSize = 14.sp
-                            )
-                        }
-                        
-                        // Time badge bottom right
-                        Box(
-                            Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 16.dp, bottom = 16.dp)
-                        ) {
-                        Text("24m", color = Color.White.copy(alpha=0.7f), fontSize = 13.sp)
                         }
                     }
                 }
-            }
-        }
 
                 Row(
                     Modifier.align(Alignment.BottomEnd).padding(end = paddingAmount, bottom = paddingAmount),
@@ -973,7 +1032,8 @@ private fun HeroCarousel(
                     items.forEachIndexed { index, _ ->
                         val isSelected = index == currentIndex
                         val width = animateDpAsState(if (isSelected) 24.dp else 8.dp).value
-                        val color = animateColorAsState(if (isSelected) Color.White else Color.White.copy(alpha = 0.3f)).value
+                        val color =
+                            animateColorAsState(if (isSelected) Color.White else Color.White.copy(alpha = 0.3f)).value
                         Box(
                             Modifier
                                 .height(8.dp)
@@ -1044,13 +1104,13 @@ private fun HeroCarouselExpanded(
             modifier = Modifier.fillMaxWidth().height(heroHeight)
         ) { fakePage ->
             val pageOffset = (
-                (pagerState.currentPage - fakePage) + pagerState.currentPageOffsetFraction
-            ).absoluteValue
+                    (pagerState.currentPage - fakePage) + pagerState.currentPageOffsetFraction
+                    ).absoluteValue
             val contentAlpha = (1f - pageOffset * 1.8f).coerceIn(0f, 1f)
             val item = items[realIndex(fakePage)]
             val heroUrl = item.bannerUrl?.takeIf { it.isNotBlank() }
                 ?: if (item.imageUrl.startsWith("http")) item.imageUrl
-                   else "https://api.reanime.to/img/poster/${item.imageUrl}"
+                else "https://api.reanime.to/img/poster/${item.imageUrl}"
 
             Box(
                 Modifier
@@ -1092,7 +1152,12 @@ private fun HeroCarouselExpanded(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Default.Layers, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(12.dp))
+                        Icon(
+                            Icons.Default.Layers,
+                            null,
+                            tint = Color.White.copy(alpha = 0.8f),
+                            modifier = Modifier.size(12.dp)
+                        )
                         Text("EP $subCount", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
@@ -1117,7 +1182,12 @@ private fun HeroCarouselExpanded(
                                     .background(Color.White.copy(alpha = 0.18f))
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
-                                Text(item.type!!, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    item.type!!,
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                         if ((item.score ?: 0) > 0) {
@@ -1129,8 +1199,18 @@ private fun HeroCarouselExpanded(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
-                                Icon(Icons.Default.Star, null, tint = Color(0xFFfbbf24), modifier = Modifier.size(11.dp))
-                                Text(formatFloat(item.score?.toDouble() ?: 0.0, 1), color = Color(0xFFfbbf24), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Icon(
+                                    Icons.Default.Star,
+                                    null,
+                                    tint = Color(0xFFfbbf24),
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Text(
+                                    formatFloat(item.score?.toDouble() ?: 0.0, 1),
+                                    color = Color(0xFFfbbf24),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
@@ -1170,14 +1250,22 @@ private fun HeroCarouselExpanded(
                     ) {
                         Button(
                             onClick = { onWatchClick(item, "sub", 1) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color.Black
+                            ),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f).height(44.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp)
                         ) {
                             Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Watch Now", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, letterSpacing = 0.3.sp)
+                            Text(
+                                "Watch Now",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 13.sp,
+                                letterSpacing = 0.3.sp
+                            )
                         }
 
                         Box(
@@ -1189,7 +1277,10 @@ private fun HeroCarouselExpanded(
                                 .padding(horizontal = 14.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
                                 Icon(Icons.Outlined.Info, null, tint = Color.White, modifier = Modifier.size(17.dp))
                                 Text("Details", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             }
@@ -1203,7 +1294,12 @@ private fun HeroCarouselExpanded(
                                 .clickable { onWatchlistClick(item) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Outlined.BookmarkBorder, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            Icon(
+                                Icons.Outlined.BookmarkBorder,
+                                null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
                 }
@@ -1237,8 +1333,6 @@ private fun HeroCarouselExpanded(
         }
     }
 }
-
-
 
 
 // ── Default fan/poster carousel ───────────────────────────────────────────
@@ -1295,8 +1389,8 @@ private fun FanCarousel(
             modifier = Modifier.fillMaxWidth().height(cardHeight)
         ) { fakePage ->
             val pageOffset = (
-                (pagerState.currentPage - fakePage) + pagerState.currentPageOffsetFraction
-            ).absoluteValue
+                    (pagerState.currentPage - fakePage) + pagerState.currentPageOffsetFraction
+                    ).absoluteValue
             val scale = 1f - (pageOffset.coerceIn(0f, 1f) * 0.15f)
             val alpha = 1f - (pageOffset.coerceIn(0f, 1f) * 0.4f)
             val item = items[realIndex(fakePage)]
@@ -1309,7 +1403,7 @@ private fun FanCarousel(
             ) {
                 AsyncImage(
                     model = if (item.imageUrl.startsWith("http")) item.imageUrl
-                            else "https://api.reanime.to/img/poster/${item.imageUrl}",
+                    else "https://api.reanime.to/img/poster/${item.imageUrl}",
                     contentDescription = item.resolveDisplayTitle(),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
@@ -1358,7 +1452,12 @@ private fun FanCarousel(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(56.dp).clickable { onAnimeClick(activeItem) }.padding(vertical = 4.dp)
             ) {
-                Icon(Icons.Outlined.Info, contentDescription = "Detail", tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(
+                    Icons.Outlined.Info,
+                    contentDescription = "Detail",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
                 Spacer(Modifier.height(4.dp))
                 Text("Detail", color = Color.White, fontSize = 11.sp)
             }
@@ -1378,7 +1477,12 @@ private fun FanCarousel(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(56.dp).clickable { onWatchlistClick(activeItem) }.padding(vertical = 4.dp)
             ) {
-                Icon(Icons.Outlined.BookmarkBorder, contentDescription = "Add List", tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(
+                    Icons.Outlined.BookmarkBorder,
+                    contentDescription = "Add List",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
                 Spacer(Modifier.height(4.dp))
                 Text("Add List", color = Color.White, fontSize = 11.sp)
             }
@@ -1394,12 +1498,13 @@ private fun FanCarousel(
 private fun ContinueWatchingRow(
     items: List<ContinueWatchingItem>,
     onWatchClick: (String, String, Int, String?, Double?) -> Unit,
+    onRemove: (ContinueWatchingItem) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     LazyRow(
         state = listState,
-        contentPadding    = PaddingValues(horizontal = 16.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.draggable(
             orientation = Orientation.Horizontal,
@@ -1414,8 +1519,8 @@ private fun ContinueWatchingRow(
             val inter = remember { MutableInteractionSource() }
             val hovered by inter.collectIsHoveredAsState()
             val animeId = item.effectiveAnimeId.ifBlank { item.animeId }
-            val lang    = item.language ?: "sub"
-            val server  = item.server
+            val lang = item.language ?: "sub"
+            val server = item.server
             val episode = item.displayEpisode.coerceAtLeast(1)
 
             Column(
@@ -1431,13 +1536,14 @@ private fun ContinueWatchingRow(
                         .clip(RoundedCornerShape(8.dp))
                 ) {
                     AsyncImage(
-                        model             = item.imageUrl,
+                        model = item.imageUrl,
                         contentDescription = item.resolveDisplayTitle(),
-                        contentScale      = ContentScale.Crop,
-                        modifier          = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
                     )
                     // Progress bar
-                    val progress = if (item.duration > 0) (item.progress / item.duration).toFloat().coerceIn(0f, 1f) else 0f
+                    val progress =
+                        if (item.duration > 0) (item.progress / item.duration).toFloat().coerceIn(0f, 1f) else 0f
                     Box(
                         Modifier
                             .align(Alignment.BottomStart)
@@ -1473,14 +1579,14 @@ private fun ContinueWatchingRow(
                                 Modifier.align(Alignment.TopEnd)
                                     .padding(8.dp)
                                     .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
-                                    .clickable { /* Handle delete later */ }
+                                    .clickable { onRemove(item) }
                                     .padding(6.dp)
                             ) {
                                 Text("X", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
-                    
+
                     // Bottom Left Episode badge
                     Box(
                         Modifier
@@ -1500,15 +1606,19 @@ private fun ContinueWatchingRow(
                             .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("${formatDuration(item.progress)}/${formatDuration(item.duration)}", color = Color.White, fontSize = 12.sp)
+                        Text(
+                            "${formatDuration(item.progress)}/${formatDuration(item.duration)}",
+                            color = Color.White,
+                            fontSize = 12.sp
+                        )
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    item.resolveDisplayTitle(), 
-                    color = Color.White, 
-                    fontSize = 14.sp, 
-                    maxLines = 1, 
+                    item.resolveDisplayTitle(),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Medium
                 )
@@ -1535,7 +1645,7 @@ private fun AnimeSection(
             val coroutineScope = rememberCoroutineScope()
             LazyRow(
                 state = listState,
-                contentPadding        = PaddingValues(horizontal = 16.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.draggable(
                     orientation = Orientation.Horizontal,
@@ -1548,7 +1658,7 @@ private fun AnimeSection(
             ) {
                 itemsIndexed(items) { _, item ->
                     to.kuudere.anisuge.ui.AnimeCard(
-                        item    = item,
+                        item = item,
                         modifier = Modifier.width(if (isXlScreen) 200.dp else 155.dp),
                         onClick = { onItemClick(item) }
                     )
@@ -1660,9 +1770,9 @@ private fun CarouselNavBtn(icon: androidx.compose.ui.graphics.vector.ImageVector
 // ── HTML Stripper ──────────────────────────────────────────────────────────
 
 private fun stripHtmlTags(htmlContent: String): String {
-    val br    = htmlContent.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-    val p     = br.replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n\n")
-    val div   = p.replace(Regex("</div>", RegexOption.IGNORE_CASE), "\n")
+    val br = htmlContent.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+    val p = br.replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n\n")
+    val div = p.replace(Regex("</div>", RegexOption.IGNORE_CASE), "\n")
     return div.replace(Regex("<[^>]*>"), "").trim()
 }
 
@@ -1728,26 +1838,26 @@ private fun AnisugSidebar(
                     contentDescription = strings.userAvatar,
                 )
                 Spacer(Modifier.height(48.dp))
-                
+
                 // Icons
                 SidebarIcon(
-                    Icons.Outlined.CalendarToday, 
+                    Icons.Outlined.CalendarToday,
                     isSelected = selectedTab == AnisugTab.Calendar,
                     onClick = { onTabSelect(AnisugTab.Calendar, null) }
                 )
                 SidebarIcon(
-                    Icons.Outlined.Home, 
-                    isSelected = selectedTab == AnisugTab.Home, 
+                    Icons.Outlined.Home,
+                    isSelected = selectedTab == AnisugTab.Home,
                     selectedTint = Color.White,
                     onClick = { onTabSelect(AnisugTab.Home, null) }
                 )
                 SidebarIcon(
-                    Icons.Default.Search, 
-                    isSelected = selectedTab == AnisugTab.Search, 
+                    Icons.Default.Search,
+                    isSelected = selectedTab == AnisugTab.Search,
                     onClick = { onTabSelect(AnisugTab.Search, null) }
                 )
                 SidebarIcon(
-                    Icons.Outlined.Bookmarks, 
+                    Icons.Outlined.Bookmarks,
                     isSelected = selectedTab == AnisugTab.Bookmarks,
                     onClick = { onTabSelect(AnisugTab.Bookmarks, null) }
                 )
@@ -1767,12 +1877,12 @@ private fun AnisugSidebar(
                     onClick = onLiveChatClick,
                 )
                 SidebarIcon(
-                    Icons.Outlined.Settings, 
+                    Icons.Outlined.Settings,
                     isSelected = selectedTab == AnisugTab.Settings,
                     onClick = { onTabSelect(AnisugTab.Settings, null) }
                 )
             }
-            
+
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 val uriHandler = LocalUriHandler.current
                 DonateButton(onClick = { uriHandler.openUri("https://anisurge.lol/donate") })
@@ -1812,7 +1922,10 @@ private fun SidebarIcon(
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null, tint = animatedTint, modifier = Modifier.size(22.dp))
-            DownloadCountBadge(count = badgeCount, modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = 2.dp))
+            DownloadCountBadge(
+                count = badgeCount,
+                modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = 2.dp)
+            )
         }
         // Active dot indicator
         Box(
@@ -2169,11 +2282,27 @@ private fun NormalAnisugBottomBar(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BottomNavItem(Icons.Outlined.CalendarToday, "Schedule", selectedTab == AnisugTab.Calendar) { onTabSelect(AnisugTab.Calendar) }
+            BottomNavItem(Icons.Outlined.CalendarToday, "Schedule", selectedTab == AnisugTab.Calendar) {
+                onTabSelect(
+                    AnisugTab.Calendar
+                )
+            }
             BottomNavItem(Icons.Outlined.Home, "Home", selectedTab == AnisugTab.Home) { onTabSelect(AnisugTab.Home) }
-            BottomNavItem(Icons.Default.Search, "Search", selectedTab == AnisugTab.Search) { onTabSelect(AnisugTab.Search) }
-            BottomNavItem(Icons.Outlined.Bookmarks, "Watchlist", selectedTab == AnisugTab.Bookmarks) { onTabSelect(AnisugTab.Bookmarks) }
-            BottomNavItem(Icons.Outlined.Settings, "Settings", selectedTab == AnisugTab.Settings) { onTabSelect(AnisugTab.Settings) }
+            BottomNavItem(
+                Icons.Default.Search,
+                "Search",
+                selectedTab == AnisugTab.Search
+            ) { onTabSelect(AnisugTab.Search) }
+            BottomNavItem(Icons.Outlined.Bookmarks, "Watchlist", selectedTab == AnisugTab.Bookmarks) {
+                onTabSelect(
+                    AnisugTab.Bookmarks
+                )
+            }
+            BottomNavItem(Icons.Outlined.Settings, "Settings", selectedTab == AnisugTab.Settings) {
+                onTabSelect(
+                    AnisugTab.Settings
+                )
+            }
         }
     }
 }
@@ -2360,7 +2489,7 @@ fun DownloadsTab(
             val cols = when {
                 maxWidth >= 900.dp -> 3
                 maxWidth >= 580.dp -> 2
-                else               -> 1
+                else -> 1
             }
 
             androidx.compose.foundation.lazy.LazyColumn(
@@ -2575,6 +2704,7 @@ private fun DownloadTaskCard(
             append(task.downloadSpeed)
             if (task.eta.isNotEmpty()) append(" • ${task.eta}")
         }
+
         isTaskFinishedStatus(task.status) -> "Stored locally and ready to watch offline."
         task.status.startsWith("Failed") -> task.status
         task.isPaused -> "Resume anytime without losing progress."
@@ -2713,7 +2843,16 @@ private fun DownloadTaskCard(
                     label = "Play",
                     isPrimary = true,
                     modifier = Modifier.weight(1f),
-                    onClick = { task.localPath?.let { onWatchOffline(task.animeId, task.episodeNumber, it, task.title) } },
+                    onClick = {
+                        task.localPath?.let {
+                            onWatchOffline(
+                                task.animeId,
+                                task.episodeNumber,
+                                it,
+                                task.title
+                            )
+                        }
+                    },
                 )
             } else {
                 // Pause / Resume button

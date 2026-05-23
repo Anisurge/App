@@ -70,6 +70,7 @@ fun PlayerControls(
     onEpisodesClick: () -> Unit = {},
     onCommentsClick: () -> Unit = {},
     onWatchlistClick: () -> Unit = {},
+    onBoostSpeedChange: (Boolean) -> Unit = {},
     isInWatchlist: Boolean = false,
     currentFolder: String? = null,
     isOffline: Boolean = false,
@@ -91,8 +92,9 @@ fun PlayerControls(
     var lastInteractionAt by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     var lastPointerMoveWakeAt by remember { mutableStateOf(0L) }
 
-    val isLoading = playerState.isBuffering || (!playerState.isPlaying && playerState.duration <= 0.0) || expectedPosition != null
-    
+    val isLoading =
+        playerState.isBuffering || (!playerState.isPlaying && playerState.duration <= 0.0) || expectedPosition != null
+
     fun shouldKeepControlsVisible(): Boolean = playerState.isLocked || isSeeking || isLoading
     fun recordInteraction(forceShow: Boolean = true) {
         lastInteractionAt = Clock.System.now().toEpochMilliseconds()
@@ -116,7 +118,7 @@ fun PlayerControls(
     }
 
     // Show controls initially, then let idle timer handle auto-hide.
-    LaunchedEffect(Unit) { 
+    LaunchedEffect(Unit) {
         controlsVisible = true
         recordInteraction(forceShow = false)
     }
@@ -203,6 +205,20 @@ fun PlayerControls(
             }
             .pointerInput(playerState.isLocked) {
                 detectTapGestures(
+                    onPress = {
+                        if (!playerState.isLocked && !isLoading) {
+                            val pressStart = Clock.System.now().toEpochMilliseconds()
+                            tryAwaitRelease()
+                            val heldForMs = Clock.System.now().toEpochMilliseconds() - pressStart
+                            if (heldForMs >= 350L) onBoostSpeedChange(false)
+                        }
+                    },
+                    onLongPress = {
+                        if (!playerState.isLocked && !isLoading) {
+                            onBoostSpeedChange(true)
+                            recordInteraction(forceShow = false)
+                        }
+                    },
                     onTap = {
                         if (playerState.isLocked) {
                             controlsVisible = !controlsVisible
@@ -213,8 +229,8 @@ fun PlayerControls(
                         // If double tap is "warm", treat tap on same side as additional seek
                         val warmSide = doubleTapSide
                         if (warmSide != null) {
-                            // Tapping while animation is active? 
-                            // detectTapGestures doesn't easily let us capture individual taps after double tap 
+                            // Tapping while animation is active?
+                            // detectTapGestures doesn't easily let us capture individual taps after double tap
                             // But for now, we'll keep the standard behavior.
                         }
 
@@ -229,9 +245,9 @@ fun PlayerControls(
                     onDoubleTap = { offset ->
                         if (playerState.isLocked) return@detectTapGestures
                         val width = size.width
-                        val side = if (offset.x < width / 3) "left" 
-                                  else if (offset.x > width * 2 / 3) "right"
-                                  else "center"
+                        val side = if (offset.x < width / 3) "left"
+                        else if (offset.x > width * 2 / 3) "right"
+                        else "center"
 
                         if (side == "left") {
                             doubleTapSide = "left"
@@ -240,7 +256,7 @@ fun PlayerControls(
                             val newPos = (playerState.position - 10.0).coerceAtLeast(0.0)
                             playerState.seekTarget = newPos
                             expectedPosition = newPos
-                            
+
                             doubleTapResetJob?.cancel()
                             doubleTapResetJob = scope.launch {
                                 delay(650)
@@ -265,7 +281,7 @@ fun PlayerControls(
                             // Center double tap toggles play/pause
                             playerState.pauseRequested = !playerState.isPaused
                         }
-                        
+
                         controlsVisible = true
                         recordInteraction(forceShow = false)
                     }
@@ -276,7 +292,7 @@ fun PlayerControls(
                 var startVolume = 100.0
                 var startBrightness = 0.0
                 var isVolumeDrag = false
-                
+
                 detectVerticalDragGestures(
                     onDragStart = { offset ->
                         if (to.kuudere.anisuge.platform.isDesktopPlatform) {
@@ -349,7 +365,7 @@ fun PlayerControls(
             modifier = Modifier.align(Alignment.Center).padding(bottom = 64.dp)
         ) {
             Box(
-                Modifier.background(Color.Black.copy(alpha=0.6f), RoundedCornerShape(24.dp))
+                Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(24.dp))
                     .padding(horizontal = 24.dp, vertical = 12.dp)
             ) {
                 Text(
@@ -360,7 +376,7 @@ fun PlayerControls(
                 )
             }
         }
-        
+
         AnimatedVisibility(
             visible = controlsVisible,
             enter = fadeIn(),
@@ -380,61 +396,61 @@ fun PlayerControls(
                                 )
                             )
                             .align(Alignment.TopCenter)
-                            .padding(bottom = 24.dp) 
+                            .padding(bottom = 24.dp)
                     ) {
-                    to.kuudere.anisuge.platform.DraggableWindowArea(
-                        modifier = Modifier.fillMaxWidth().wrapContentHeight()
-                    ) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .then(if (isFullscreen) Modifier.windowInsetsPadding(WindowInsets.safeDrawing) else Modifier)
-                                .padding(horizontal = 8.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        to.kuudere.anisuge.platform.DraggableWindowArea(
+                            modifier = Modifier.fillMaxWidth().wrapContentHeight()
                         ) {
-                            IconButton(onClick = onBack) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(28.dp)
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .then(if (isFullscreen) Modifier.windowInsetsPadding(WindowInsets.safeDrawing) else Modifier)
+                                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = onBack) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                                if (title.isNotEmpty()) {
+                                    Text(
+                                        text = title,
+                                        color = Color.White,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+                                    )
+                                } else {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                                IconButton(onClick = onCaptionsClick) {
+                                    Icon(
+                                        getCCIcon(),
+                                        contentDescription = "Captions",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+                                IconButton(onClick = onSettingsClick) {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        contentDescription = "Settings",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+
+                                to.kuudere.anisuge.platform.WindowManagementButtons(
+                                    onClose = onExit
                                 )
                             }
-                            if (title.isNotEmpty()) {
-                                Text(
-                                    text = title,
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
-                                )
-                            } else {
-                                Spacer(Modifier.weight(1f))
-                            }
-                            IconButton(onClick = onCaptionsClick) {
-                                Icon(
-                                    getCCIcon(),
-                                    contentDescription = "Captions",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                            IconButton(onClick = onSettingsClick) {
-                                Icon(
-                                    Icons.Default.Settings,
-                                    contentDescription = "Settings",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                            
-                            to.kuudere.anisuge.platform.WindowManagementButtons(
-                                onClose = onExit
-                            )
                         }
-                    }
                     }
                 }
 
@@ -442,9 +458,9 @@ fun PlayerControls(
                 if (isLoading) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.align(Alignment.Center).size(60.dp)) {
                         val infiniteTransition = rememberInfiniteTransition()
-                        
+
                         val rotateCW by infiniteTransition.animateFloat(
-                            initialValue = 0f, 
+                            initialValue = 0f,
                             targetValue = 360f,
                             animationSpec = infiniteRepeatable(
                                 animation = tween(800, easing = LinearEasing)
@@ -452,11 +468,11 @@ fun PlayerControls(
                             label = "OuterRotate"
                         )
                         val rotateCCW by infiniteTransition.animateFloat(
-                            initialValue = 360f, 
+                            initialValue = 360f,
                             targetValue = 0f,
                             animationSpec = infiniteRepeatable(
                                 animation = tween(600, easing = LinearEasing)
-                                ),
+                            ),
                             label = "InnerRotate"
                         )
 
@@ -502,7 +518,7 @@ fun PlayerControls(
                         ) {
                             IconButton(
                                 onClick = { playerState.isLocked = false; recordInteraction(forceShow = false) },
-                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha=0.5f), CircleShape)
+                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
                             ) {
                                 Icon(Icons.Default.Lock, null, tint = Color.White, modifier = Modifier.size(32.dp))
                             }
@@ -511,8 +527,10 @@ fun PlayerControls(
                         Column(Modifier.fillMaxWidth().padding(bottom = 0.dp)) {
                             // 1. Progress Bar Row
                             val duration = playerState.duration
-                            val activePosition = if (isSeeking) seekValue.toDouble() else expectedPosition ?: playerState.position
-                            val progress = if (duration > 0) (activePosition / duration).toFloat().coerceIn(0f, 1f) else 0f
+                            val activePosition =
+                                if (isSeeking) seekValue.toDouble() else expectedPosition ?: playerState.position
+                            val progress =
+                                if (duration > 0) (activePosition / duration).toFloat().coerceIn(0f, 1f) else 0f
                             val introRange = introMarker ?: streamingData?.intro
                             val outroRange = outroMarker ?: streamingData?.outro
 
@@ -537,7 +555,8 @@ fun PlayerControls(
                                             detectTapGestures(
                                                 onTap = { offset ->
                                                     if (duration <= 0) return@detectTapGestures
-                                                    val tapValue = ((offset.x / size.width) * duration).coerceIn(0.0, duration)
+                                                    val tapValue =
+                                                        ((offset.x / size.width) * duration).coerceIn(0.0, duration)
                                                     playerState.seekTarget = tapValue
                                                     expectedPosition = tapValue
                                                     recordInteraction(forceShow = false)
@@ -551,11 +570,13 @@ fun PlayerControls(
                                                     isSeeking = true
                                                     controlsVisible = true
                                                     recordInteraction(forceShow = false)
-                                                    seekValue = ((offset.x / size.width) * duration).toFloat().coerceIn(0f, duration.toFloat())
+                                                    seekValue = ((offset.x / size.width) * duration).toFloat()
+                                                        .coerceIn(0f, duration.toFloat())
                                                 },
                                                 onDrag = { change, _ ->
                                                     if (duration <= 0) return@detectDragGestures
-                                                    seekValue = ((change.position.x / size.width) * duration).toFloat().coerceIn(0f, duration.toFloat())
+                                                    seekValue = ((change.position.x / size.width) * duration).toFloat()
+                                                        .coerceIn(0f, duration.toFloat())
                                                 },
                                                 onDragEnd = {
                                                     if (duration > 0) {
@@ -565,20 +586,32 @@ fun PlayerControls(
                                                         recordInteraction(forceShow = false)
                                                     }
                                                 },
-                                                onDragCancel = { isSeeking = false; recordInteraction(forceShow = false) }
+                                                onDragCancel = {
+                                                    isSeeking = false; recordInteraction(forceShow = false)
+                                                }
                                             )
                                         },
                                     contentAlignment = Alignment.CenterStart
                                 ) {
-                                    val bufferedProgress = if (duration > 0) (playerState.bufferedPosition / duration).toFloat().coerceIn(0f, 1f) else 0f
+                                    val bufferedProgress =
+                                        if (duration > 0) (playerState.bufferedPosition / duration).toFloat()
+                                            .coerceIn(0f, 1f) else 0f
                                     Canvas(Modifier.fillMaxWidth().height(3.dp)) {
                                         val w = size.width
                                         val h = size.height
                                         val corner = CornerRadius(4.dp.toPx())
 
-                                        drawRoundRect(Color.White.copy(alpha = 0.25f), size = size, cornerRadius = corner)
+                                        drawRoundRect(
+                                            Color.White.copy(alpha = 0.25f),
+                                            size = size,
+                                            cornerRadius = corner
+                                        )
                                         if (bufferedProgress > progress) {
-                                            drawRoundRect(Color.White.copy(alpha = 0.5f), size = Size(w * bufferedProgress, h), cornerRadius = corner)
+                                            drawRoundRect(
+                                                Color.White.copy(alpha = 0.5f),
+                                                size = Size(w * bufferedProgress, h),
+                                                cornerRadius = corner
+                                            )
                                         }
 
                                         fun drawSkipSpan(startSec: Double, endSec: Double, color: Color) {
@@ -594,17 +627,29 @@ fun PlayerControls(
 
                                         // Draw skip regions on top so outro at end of timeline stays visible
                                         if (introRange?.start != null && introRange.end != null) {
-                                            drawSkipSpan(introRange.start, introRange.end, Color.Yellow.copy(alpha = 0.9f))
+                                            drawSkipSpan(
+                                                introRange.start,
+                                                introRange.end,
+                                                Color.Yellow.copy(alpha = 0.9f)
+                                            )
                                         }
                                         if (outroRange?.start != null && outroRange.end != null) {
-                                            drawSkipSpan(outroRange.start, outroRange.end, Color(0xFFFF8A80).copy(alpha = 0.9f))
+                                            drawSkipSpan(
+                                                outroRange.start,
+                                                outroRange.end,
+                                                Color(0xFFFF8A80).copy(alpha = 0.9f)
+                                            )
                                         }
 
                                         streamingData?.chapters?.forEach { ch ->
                                             if (ch.start_time != null && ch.start_time > 0 && duration > 0) {
                                                 val x = (ch.start_time / duration).toFloat() * w
                                                 if (x > 1f && x < w - 1f) {
-                                                    drawRect(Color.Black.copy(alpha = 0.8f), Offset(x - 1.dp.toPx(), 0f), Size(2.dp.toPx(), h))
+                                                    drawRect(
+                                                        Color.Black.copy(alpha = 0.8f),
+                                                        Offset(x - 1.dp.toPx(), 0f),
+                                                        Size(2.dp.toPx(), h)
+                                                    )
                                                 }
                                             }
                                         }
@@ -618,7 +663,7 @@ fun PlayerControls(
 
                                 Text(
                                     text = formatDuration(duration),
-                                    color = Color.White.copy(alpha=0.8f),
+                                    color = Color.White.copy(alpha = 0.8f),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -632,17 +677,35 @@ fun PlayerControls(
                             ) {
                                 // Left actions: Lock, Volume, Watchlist
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { playerState.isLocked = true; recordInteraction(forceShow = false) }, modifier = Modifier.size(36.dp)) {
-                                        Icon(Icons.Default.LockOpen, null, tint = Color.White, modifier = Modifier.size(20.dp))
-                                    }
-                                    IconButton(onClick = { playerState.isMuted = !playerState.isMuted; recordInteraction(forceShow = false) }, modifier = Modifier.size(38.dp)) {
-                                        Icon(if (playerState.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, null, tint = Color.White, modifier = Modifier.size(24.dp))
-                                    }
-                                    IconButton(onClick = { if (!isOffline) onWatchlistClick(); recordInteraction(forceShow = false) }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
+                                    IconButton(onClick = {
+                                        playerState.isLocked = true; recordInteraction(forceShow = false)
+                                    }, modifier = Modifier.size(36.dp)) {
                                         Icon(
-                                            if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, 
-                                            null, 
-                                            tint = if (isOffline) Color.Gray else Color.White, 
+                                            Icons.Default.LockOpen,
+                                            null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        playerState.isMuted = !playerState.isMuted; recordInteraction(forceShow = false)
+                                    }, modifier = Modifier.size(38.dp)) {
+                                        Icon(
+                                            if (playerState.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                                            null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        if (!isOffline) onWatchlistClick(); recordInteraction(
+                                        forceShow = false
+                                    )
+                                    }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
+                                        Icon(
+                                            if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                            null,
+                                            tint = if (isOffline) Color.Gray else Color.White,
                                             modifier = Modifier.size(22.dp)
                                         )
                                     }
@@ -652,26 +715,39 @@ fun PlayerControls(
 
                                 // Main Playback controls
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { 
+                                    IconButton(onClick = {
                                         val nPos = (playerState.position - 10).coerceAtLeast(0.0)
-                                        playerState.seekTarget = nPos; expectedPosition = nPos; recordInteraction(forceShow = false) 
+                                        playerState.seekTarget = nPos; expectedPosition = nPos; recordInteraction(
+                                        forceShow = false
+                                    )
                                     }, modifier = Modifier.size(40.dp)) {
-                                        Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                                        Icon(
+                                            Icons.Default.Replay10,
+                                            null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
                                     }
                                     IconButton(
-                                        onClick = { onPrevEpisode(); recordInteraction(forceShow = false) }, 
+                                        onClick = { onPrevEpisode(); recordInteraction(forceShow = false) },
                                         enabled = playerState.hasPrevEpisode,
                                         modifier = Modifier.size(40.dp)
                                     ) {
-                                        Icon(Icons.Default.SkipPrevious, null, tint = if (playerState.hasPrevEpisode) Color.White else Color.Gray, modifier = Modifier.size(26.dp))
+                                        Icon(
+                                            Icons.Default.SkipPrevious,
+                                            null,
+                                            tint = if (playerState.hasPrevEpisode) Color.White else Color.Gray,
+                                            modifier = Modifier.size(26.dp)
+                                        )
                                     }
-                                    
+
                                     // BIG PLAY BUTTON
                                     Box(
-                                        Modifier.size(54.dp).padding(4.dp).clip(CircleShape).background(Color.White).clickable { 
-                                            playerState.pauseRequested = !playerState.isPaused
-                                            recordInteraction(forceShow = false)
-                                        },
+                                        Modifier.size(54.dp).padding(4.dp).clip(CircleShape).background(Color.White)
+                                            .clickable {
+                                                playerState.pauseRequested = !playerState.isPaused
+                                                recordInteraction(forceShow = false)
+                                            },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
@@ -683,17 +759,29 @@ fun PlayerControls(
                                     }
 
                                     IconButton(
-                                        onClick = { onNextEpisode(); recordInteraction(forceShow = false) }, 
+                                        onClick = { onNextEpisode(); recordInteraction(forceShow = false) },
                                         enabled = playerState.hasNextEpisode,
                                         modifier = Modifier.size(40.dp)
                                     ) {
-                                        Icon(Icons.Default.SkipNext, null, tint = if (playerState.hasNextEpisode) Color.White else Color.Gray, modifier = Modifier.size(26.dp))
+                                        Icon(
+                                            Icons.Default.SkipNext,
+                                            null,
+                                            tint = if (playerState.hasNextEpisode) Color.White else Color.Gray,
+                                            modifier = Modifier.size(26.dp)
+                                        )
                                     }
-                                    IconButton(onClick = { 
+                                    IconButton(onClick = {
                                         val nPos = (playerState.position + 10).coerceAtMost(duration)
-                                        playerState.seekTarget = nPos; expectedPosition = nPos; recordInteraction(forceShow = false) 
+                                        playerState.seekTarget = nPos; expectedPosition = nPos; recordInteraction(
+                                        forceShow = false
+                                    )
                                     }, modifier = Modifier.size(40.dp)) {
-                                        Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                                        Icon(
+                                            Icons.Default.Forward10,
+                                            null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
                                     }
                                 }
 
@@ -701,14 +789,41 @@ fun PlayerControls(
 
                                 // Right actions: Info, Episodes, Comments, [Fullscreen on Desktop]
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = { if (!isOffline) onInfoClick(); recordInteraction(forceShow = false) }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
-                                        Icon(Icons.Default.Info, null, tint = if (isOffline) Color.Gray else Color.White, modifier = Modifier.size(22.dp))
+                                    IconButton(
+                                        onClick = { if (!isOffline) onInfoClick(); recordInteraction(forceShow = false) },
+                                        modifier = Modifier.size(38.dp),
+                                        enabled = !isOffline
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Info,
+                                            null,
+                                            tint = if (isOffline) Color.Gray else Color.White,
+                                            modifier = Modifier.size(22.dp)
+                                        )
                                     }
-                                    IconButton(onClick = { if (!isOffline) onEpisodesClick(); recordInteraction(forceShow = false) }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
-                                        Icon(Icons.AutoMirrored.Filled.FormatListBulleted, null, tint = if (isOffline) Color.Gray else Color.White, modifier = Modifier.size(22.dp))
+                                    IconButton(onClick = {
+                                        if (!isOffline) onEpisodesClick(); recordInteraction(
+                                        forceShow = false
+                                    )
+                                    }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.FormatListBulleted,
+                                            null,
+                                            tint = if (isOffline) Color.Gray else Color.White,
+                                            modifier = Modifier.size(22.dp)
+                                        )
                                     }
-                                    IconButton(onClick = { if (!isOffline) onCommentsClick(); recordInteraction(forceShow = false) }, modifier = Modifier.size(40.dp), enabled = !isOffline) {
-                                        Icon(Icons.Default.ChatBubbleOutline, null, tint = if (isOffline) Color.Gray else Color.White, modifier = Modifier.size(22.dp))
+                                    IconButton(onClick = {
+                                        if (!isOffline) onCommentsClick(); recordInteraction(
+                                        forceShow = false
+                                    )
+                                    }, modifier = Modifier.size(40.dp), enabled = !isOffline) {
+                                        Icon(
+                                            Icons.Default.ChatBubbleOutline,
+                                            null,
+                                            tint = if (isOffline) Color.Gray else Color.White,
+                                            modifier = Modifier.size(22.dp)
+                                        )
                                     }
                                     // MAL Sync button
                                     if (onSyncMALClick != null) {
@@ -759,11 +874,14 @@ fun PlayerControls(
                                         }
                                     }
                                     if (to.kuudere.anisuge.platform.isDesktopPlatform) {
-                                        IconButton(onClick = { onFullscreenToggle(); recordInteraction(forceShow = false) }, modifier = Modifier.size(40.dp)) {
+                                        IconButton(
+                                            onClick = { onFullscreenToggle(); recordInteraction(forceShow = false) },
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
                                             Icon(
-                                                if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, 
-                                                null, 
-                                                tint = Color.White, 
+                                                if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                                null,
+                                                tint = Color.White,
                                                 modifier = Modifier.size(26.dp)
                                             )
                                         }
@@ -789,7 +907,7 @@ private fun DoubleTapSeekOverlay(
     val isLeft = side == "left"
     val alpha = remember { Animatable(0f) }
     val scale = remember { Animatable(0.95f) }
-    
+
     // Icon sequence animation
     val arrow1Alpha = remember { Animatable(0f) }
     val arrow2Alpha = remember { Animatable(0f) }
@@ -797,7 +915,7 @@ private fun DoubleTapSeekOverlay(
 
     LaunchedEffect(counter) {
         // Reset and run animations
-        launch { 
+        launch {
             alpha.snapTo(0.4f)
             alpha.animateTo(0f, tween(600, easing = LinearOutSlowInEasing))
         }
@@ -805,7 +923,7 @@ private fun DoubleTapSeekOverlay(
             scale.snapTo(0.95f)
             scale.animateTo(1.05f, tween(600, easing = LinearOutSlowInEasing))
         }
-        
+
         // Sequenced arrows like YT
         val arrowTween = 150
         launch {
@@ -903,7 +1021,7 @@ private fun getCCIcon(): ImageVector {
             arcToRelative(3f, 3f, 0f, isMoreThanHalf = true, isPositiveArc = false, 0f, 5.66f)
             moveTo(17f, 9.17f)
             arcToRelative(3f, 3f, 0f, isMoreThanHalf = true, isPositiveArc = false, 0f, 5.66f)
-            
+
             moveTo(4f, 5f)
             horizontalLineToRelative(16f)
             arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 2f, 2f)

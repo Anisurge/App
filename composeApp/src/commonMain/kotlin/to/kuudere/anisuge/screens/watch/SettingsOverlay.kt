@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 enum class SettingsMenuPage {
-    MAIN, SERVER, QUALITY, SUBTITLES, SPEED, WATCHLIST, AUTOPLAY
+    MAIN, SERVER, QUALITY, SUBTITLES, SPEED, SCALE, WATCHLIST, AUTOPLAY
 }
 
 @Composable
@@ -61,7 +61,8 @@ fun SettingsOverlay(
     onAutoPlayToggle: (Boolean) -> Unit = {},
     onAutoNextToggle: (Boolean) -> Unit = {},
     onAutoSkipIntroToggle: (Boolean) -> Unit = {},
-    onAutoSkipOutroToggle: (Boolean) -> Unit = {}
+    onAutoSkipOutroToggle: (Boolean) -> Unit = {},
+    onVideoScaleModeSelected: (String) -> Unit = {},
 ) {
     var currentPage by remember { mutableStateOf(uiState.initialSettingsPage ?: SettingsMenuPage.MAIN) }
     var isSubtitleSizeDragging by remember { mutableStateOf(false) }
@@ -115,14 +116,24 @@ fun SettingsOverlay(
                     SettingsMenuPage.MAIN -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             // Top Drag Handle indicator
-                            Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp), contentAlignment = Alignment.Center) {
-                                Box(modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.DarkGray))
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp))
+                                        .background(Color.DarkGray)
+                                )
                             }
 
-                            Column(modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState())) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp)
+                                    .verticalScroll(rememberScrollState())
+                            ) {
                                 // 1. Server
                                 if (servers.isNotEmpty()) {
-                                    val currentServerLabel = servers.find { it.id == uiState.currentServer }?.label ?: uiState.currentServer
+                                    val currentServerLabel =
+                                        servers.find { it.id == uiState.currentServer }?.label ?: uiState.currentServer
                                     SettingsMenuItem(
                                         icon = { Icon(getServerIcon(), contentDescription = null, tint = Color.White) },
                                         title = "Server",
@@ -130,7 +141,7 @@ fun SettingsOverlay(
                                         onClick = { currentPage = SettingsMenuPage.SERVER }
                                     )
                                 }
-                                
+
                                 // 2. Quality
                                 if (uiState.availableQualities.size > 1 || (servers.isNotEmpty() && uiState.availableQualities.isNotEmpty())) {
                                     SettingsMenuItem(
@@ -143,9 +154,16 @@ fun SettingsOverlay(
 
                                 // 3. Audio Track
                                 if (audioTracks.isNotEmpty()) {
-                                    val currentLabel = audioTracks.firstOrNull { it.first == selectedAudioTrack }?.second ?: "Default"
+                                    val currentLabel =
+                                        audioTracks.firstOrNull { it.first == selectedAudioTrack }?.second ?: "Default"
                                     SettingsMenuItem(
-                                        icon = { Icon(getLanguagesIcon(), contentDescription = null, tint = Color.White) },
+                                        icon = {
+                                            Icon(
+                                                getLanguagesIcon(),
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
                                         title = "Audio Track",
                                         subtitle = currentLabel,
                                         onClick = onCycleAudio
@@ -153,24 +171,38 @@ fun SettingsOverlay(
                                 }
 
                                 // 4. Playback settings
-                                val isAutoplayOn = uiState.autoPlay || uiState.autoNext || uiState.autoSkipIntro || uiState.autoSkipOutro
+                                val isAutoplayOn =
+                                    uiState.autoPlay || uiState.autoNext || uiState.autoSkipIntro || uiState.autoSkipOutro
                                 SettingsMenuItem(
-                                    icon = { Icon(Icons.Default.PlayCircleFilled, contentDescription = null, tint = Color.White) },
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.PlayCircleFilled,
+                                            contentDescription = null,
+                                            tint = Color.White
+                                        )
+                                    },
                                     title = "Playback settings",
                                     subtitle = if (isAutoplayOn) "On" else "Off",
                                     onClick = { currentPage = SettingsMenuPage.AUTOPLAY }
                                 )
-                                
+
                                 // 5. Captions
                                 if (uiState.availableSubtitles.isNotEmpty() || subtitleTracks.isNotEmpty()) {
                                     val currentLabel = if (subtitleTracks.isNotEmpty()) {
                                         subtitleTracks.find { it.first == selectedSubtitleTrack }?.second ?: "Off"
                                     } else {
-                                        val selectedSub = uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }
+                                        val selectedSub =
+                                            uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }
                                         selectedSub?.title ?: selectedSub?.resolvedLang ?: "Off"
                                     }
                                     SettingsMenuItem(
-                                        icon = { Icon(getClosedCaptionIcon(), contentDescription = null, tint = Color.White) },
+                                        icon = {
+                                            Icon(
+                                                getClosedCaptionIcon(),
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
                                         title = "Captions",
                                         subtitle = "$currentLabel • ${uiState.subtitleSize}%",
                                         onClick = { currentPage = SettingsMenuPage.SUBTITLES }
@@ -185,49 +217,84 @@ fun SettingsOverlay(
                                     onClick = { currentPage = SettingsMenuPage.SPEED }
                                 )
 
-                                // 7. Watchlist
+                                // 7. Screen fit/fill
+                                SettingsMenuItem(
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.AspectRatio,
+                                            contentDescription = null,
+                                            tint = Color.White
+                                        )
+                                    },
+                                    title = "Screen mode",
+                                    subtitle = if (uiState.videoScaleMode == "Zoom") "Screen fill" else "Screen fit",
+                                    onClick = { currentPage = SettingsMenuPage.SCALE }
+                                )
+
+                                // 8. Watchlist
                                 if (servers.isNotEmpty()) {
                                     uiState.episodeData?.let { data ->
                                         SettingsMenuItem(
-                                            icon = { 
+                                            icon = {
                                                 if (uiState.isUpdatingWatchlist) {
-                                                     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(20.dp)) {
-                                                         val infiniteTransition = rememberInfiniteTransition()
-                                                         val rotateCW by infiniteTransition.animateFloat(0f, 360f, infiniteRepeatable(tween(800, easing = LinearEasing)))
-                                                         val rotateCCW by infiniteTransition.animateFloat(360f, 0f, infiniteRepeatable(tween(600, easing = LinearEasing)))
+                                                    Box(
+                                                        contentAlignment = Alignment.Center,
+                                                        modifier = Modifier.size(20.dp)
+                                                    ) {
+                                                        val infiniteTransition = rememberInfiniteTransition()
+                                                        val rotateCW by infiniteTransition.animateFloat(
+                                                            0f,
+                                                            360f,
+                                                            infiniteRepeatable(tween(800, easing = LinearEasing))
+                                                        )
+                                                        val rotateCCW by infiniteTransition.animateFloat(
+                                                            360f,
+                                                            0f,
+                                                            infiniteRepeatable(tween(600, easing = LinearEasing))
+                                                        )
 
-                                                         CircularProgressIndicator(
-                                                             progress = { 0.75f },
-                                                             modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = rotateCW },
-                                                             color = Color.White,
-                                                             strokeWidth = 1.dp,
-                                                             trackColor = Color.White.copy(alpha = 0.1f),
-                                                             strokeCap = StrokeCap.Round
-                                                         )
-                                                         CircularProgressIndicator(
-                                                             progress = { 0.6f },
-                                                             modifier = Modifier.size(10.dp).graphicsLayer { rotationZ = rotateCCW },
-                                                             color = Color.White.copy(alpha = 0.6f),
-                                                             strokeWidth = 1.dp,
-                                                             trackColor = Color.White.copy(alpha = 0.05f),
-                                                             strokeCap = StrokeCap.Round
-                                                         )
-                                                     }
-                                                 } else {
-                                                    Icon(getBookmarkIcon(data.folder != null), contentDescription = null, tint = Color.White) 
+                                                        CircularProgressIndicator(
+                                                            progress = { 0.75f },
+                                                            modifier = Modifier.size(18.dp)
+                                                                .graphicsLayer { rotationZ = rotateCW },
+                                                            color = Color.White,
+                                                            strokeWidth = 1.dp,
+                                                            trackColor = Color.White.copy(alpha = 0.1f),
+                                                            strokeCap = StrokeCap.Round
+                                                        )
+                                                        CircularProgressIndicator(
+                                                            progress = { 0.6f },
+                                                            modifier = Modifier.size(10.dp)
+                                                                .graphicsLayer { rotationZ = rotateCCW },
+                                                            color = Color.White.copy(alpha = 0.6f),
+                                                            strokeWidth = 1.dp,
+                                                            trackColor = Color.White.copy(alpha = 0.05f),
+                                                            strokeCap = StrokeCap.Round
+                                                        )
+                                                    }
+                                                } else {
+                                                    Icon(
+                                                        getBookmarkIcon(data.folder != null),
+                                                        contentDescription = null,
+                                                        tint = Color.White
+                                                    )
                                                 }
                                             },
                                             title = "Watchlist",
                                             subtitle = data.folder ?: "Not in list",
-                                            onClick = { if (!uiState.isUpdatingWatchlist) currentPage = SettingsMenuPage.WATCHLIST }
+                                            onClick = {
+                                                if (!uiState.isUpdatingWatchlist) currentPage =
+                                                    SettingsMenuPage.WATCHLIST
+                                            }
                                         )
                                     }
                                 }
-                                
+
                                 Spacer(Modifier.height(8.dp))
                             }
                         }
                     }
+
                     SettingsMenuPage.SERVER -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             SubMenuHeader("Server") { currentPage = SettingsMenuPage.MAIN }
@@ -242,6 +309,7 @@ fun SettingsOverlay(
                             }
                         }
                     }
+
                     SettingsMenuPage.QUALITY -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             SubMenuHeader("Quality") { currentPage = SettingsMenuPage.MAIN }
@@ -256,6 +324,7 @@ fun SettingsOverlay(
                             }
                         }
                     }
+
                     SettingsMenuPage.SPEED -> {
                         val speeds = listOf(0.5, 0.75, 1.0, 1.25, 1.5, 2.0)
                         Column(modifier = Modifier.fillMaxWidth()) {
@@ -272,6 +341,23 @@ fun SettingsOverlay(
                             }
                         }
                     }
+
+                    SettingsMenuPage.SCALE -> {
+                        val modes = listOf("Fit" to "Screen fit", "Zoom" to "Screen fill")
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Screen mode") { currentPage = SettingsMenuPage.MAIN }
+                            LazyColumn(modifier = Modifier.heightIn(max = 220.dp).fillMaxWidth()) {
+                                items(modes) { (mode, label) ->
+                                    SubMenuItem(
+                                        title = label,
+                                        isSelected = mode == uiState.videoScaleMode,
+                                        onClick = { onVideoScaleModeSelected(mode); onDismiss() }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     SettingsMenuPage.SUBTITLES -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             SubMenuHeader("Captions") { currentPage = SettingsMenuPage.MAIN }
@@ -287,7 +373,12 @@ fun SettingsOverlay(
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text("Size", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                            Text(
+                                                "Size",
+                                                color = Color.White,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
                                             Text("${uiState.subtitleSize}%", color = Color.Gray, fontSize = 14.sp)
                                         }
                                         val subtitleSizeInteractionSource = remember { MutableInteractionSource() }
@@ -315,10 +406,10 @@ fun SettingsOverlay(
                                     SubMenuItem(
                                         title = "Off",
                                         isSelected = if (subtitleTracks.isNotEmpty()) selectedSubtitleTrack == null else uiState.currentSubtitleUrl == null,
-                                        onClick = { 
+                                        onClick = {
                                             if (subtitleTracks.isNotEmpty()) onSubtitleTrackSelected(null)
                                             else onSubtitleSelected(null)
-                                            onDismiss() 
+                                            onDismiss()
                                         }
                                     )
                                 }
@@ -344,6 +435,7 @@ fun SettingsOverlay(
                             }
                         }
                     }
+
                     SettingsMenuPage.WATCHLIST -> {
                         val folders = listOf("Watching", "On Hold", "Plan To Watch", "Dropped", "Completed", "Remove")
                         val currentFolder = uiState.episodeData?.folder
@@ -360,13 +452,20 @@ fun SettingsOverlay(
                             }
                         }
                     }
+
                     SettingsMenuPage.AUTOPLAY -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             SubMenuHeader("Playback settings") { currentPage = SettingsMenuPage.MAIN }
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 item {
                                     ToggleMenuItem(
-                                        icon = { Icon(Icons.Default.PlayCircleFilled, contentDescription = null, tint = Color.White) },
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.PlayCircleFilled,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
                                         title = "Auto Play",
                                         isChecked = uiState.autoPlay,
                                         onToggle = { onAutoPlayToggle(it) }
@@ -374,7 +473,13 @@ fun SettingsOverlay(
                                 }
                                 item {
                                     ToggleMenuItem(
-                                        icon = { Icon(Icons.Default.SkipNext, contentDescription = null, tint = Color.White) },
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.SkipNext,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
                                         title = "Auto next",
                                         isChecked = uiState.autoNext,
                                         onToggle = { onAutoNextToggle(it) }
@@ -382,7 +487,13 @@ fun SettingsOverlay(
                                 }
                                 item {
                                     ToggleMenuItem(
-                                        icon = { Icon(Icons.Default.FastForward, contentDescription = null, tint = Color.White) },
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.FastForward,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
                                         title = "Skip intro",
                                         isChecked = uiState.autoSkipIntro,
                                         onToggle = { onAutoSkipIntroToggle(it) }
@@ -390,7 +501,13 @@ fun SettingsOverlay(
                                 }
                                 item {
                                     ToggleMenuItem(
-                                        icon = { Icon(Icons.Default.FastForward, contentDescription = null, tint = Color.White) },
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.FastForward,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
                                         title = "Skip outro",
                                         isChecked = uiState.autoSkipOutro,
                                         onToggle = { onAutoSkipOutroToggle(it) }
@@ -442,7 +559,12 @@ private fun SettingsMenuItem(
             Text(title, color = Color.White, fontSize = 16.sp, maxLines = 1, modifier = Modifier.weight(1f))
             Text(subtitle, color = Color.Gray, fontSize = 14.sp, maxLines = 1)
             Spacer(modifier = Modifier.width(8.dp))
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(24.dp))
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color.Gray,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }
@@ -459,9 +581,20 @@ private fun SubMenuHeader(title: String, onBack: () -> Unit) {
             onClick = onBack,
             modifier = Modifier.size(32.dp)
         ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(24.dp))
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
         }
-        Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp))
+        Text(
+            title,
+            color = Color.White,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 12.dp)
+        )
     }
 }
 
@@ -497,7 +630,12 @@ private fun SubMenuItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isSelected) {
-                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
                 Spacer(modifier = Modifier.width(16.dp))
             } else {
                 Spacer(modifier = Modifier.width(40.dp))
@@ -601,7 +739,7 @@ private fun getClosedCaptionIcon(): ImageVector {
             arcToRelative(3f, 3f, 0f, isMoreThanHalf = true, isPositiveArc = false, 0f, 5.66f)
             moveTo(17f, 9.17f)
             arcToRelative(3f, 3f, 0f, isMoreThanHalf = true, isPositiveArc = false, 0f, 5.66f)
-            
+
             moveTo(4f, 5f)
             horizontalLineToRelative(16f)
             arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 2f, 2f)
@@ -685,7 +823,7 @@ private fun getServerIcon(): ImageVector {
             verticalLineToRelative(-4f)
             arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 2f, -2f)
             close()
-            
+
             moveTo(4f, 14f)
             horizontalLineToRelative(16f)
             arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 2f, 2f)
@@ -696,7 +834,7 @@ private fun getServerIcon(): ImageVector {
             verticalLineToRelative(-4f)
             arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 2f, -2f)
             close()
-            
+
             moveTo(6f, 6f); lineToRelative(0.01f, 0f)
             moveTo(6f, 18f); lineToRelative(0.01f, 0f)
         }

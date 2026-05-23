@@ -66,19 +66,27 @@ object HlsPngTsStrip {
 
     fun stripPngTsWrapper(raw: ByteArray): ByteArray {
         if (raw.size < 12 || !raw.hasPngSignature()) return raw
+        val offset = findTsStartOffset(raw, raw.size)
+        if (offset > 0) {
+            return raw.copyOfRange(offset, raw.size)
+        }
+        return raw
+    }
+
+    fun findTsStartOffset(raw: ByteArray, size: Int): Int {
+        if (size < 12 || !raw.hasPngSignature()) return 0
         var pos = 8
-        while (pos + 12 <= raw.size) {
+        while (pos + 12 <= size) {
             val chunkLen = readUInt32Be(raw, pos)
-            if (chunkLen < 0 || pos + 12L + chunkLen > raw.size) return raw
+            if (chunkLen < 0 || pos + 12L + chunkLen > size) return 0
             val chunkType = raw.decodeToString(pos + 4, pos + 8)
             pos += 12 + chunkLen
             if (chunkType == "IEND") {
-                if (pos >= raw.size) return raw
-                val ts = raw.copyOfRange(pos, raw.size)
-                return if (ts.size >= 188 && ts[0] == 0x47.toByte()) ts else raw
+                if (pos >= size) return 0
+                return if (pos < size && raw[pos] == 0x47.toByte()) pos else 0
             }
         }
-        return raw
+        return 0
     }
 
     private fun ByteArray.hasPngSignature(): Boolean {
@@ -89,8 +97,8 @@ object HlsPngTsStrip {
     private fun readUInt32Be(data: ByteArray, offset: Int): Int {
         if (offset + 4 > data.size) return -1
         return ((data[offset].toInt() and 0xFF) shl 24) or
-            ((data[offset + 1].toInt() and 0xFF) shl 16) or
-            ((data[offset + 2].toInt() and 0xFF) shl 8) or
-            (data[offset + 3].toInt() and 0xFF)
+                ((data[offset + 1].toInt() and 0xFF) shl 16) or
+                ((data[offset + 2].toInt() and 0xFF) shl 8) or
+                (data[offset + 3].toInt() and 0xFF)
     }
 }
