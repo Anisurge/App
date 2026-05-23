@@ -1,21 +1,23 @@
 package to.kuudere.anisuge.data.services
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
+import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.AnimeFolderInfo
 import to.kuudere.anisuge.data.models.DownloadStorageInfo
 import to.kuudere.anisuge.data.models.StorageCategory
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.platform.KmpFileSystem
 import to.kuudere.anisuge.utils.DownloadManager
+import to.kuudere.anisuge.utils.DownloadTask
+import to.kuudere.anisuge.utils.getCacheDirectory
 import to.kuudere.anisuge.utils.getDownloadsDirectory
-import to.kuudere.anisuge.utils.formatFileSize
-import to.kuudere.anisuge.utils.formatFileSizeCompact
 import to.kuudere.anisuge.utils.formatFloat
 
 expect fun getFontCacheDirectory(): String
@@ -28,96 +30,124 @@ class StorageService {
     private val fs = FileSystem.SYSTEM
 
     suspend fun getStorageInfo(): StorageInfo = withContext(Dispatchers.Default) {
-        val downloadsDir = getDownloadsDirectory()
-        val fontCacheDir = getFontCacheDirectory()
-        val settingsDir = getSettingsDirectory()
+        try {
+            val downloadsDir = resolveDownloadsDirectory()
+            val fontCacheDir = getFontCacheDirectory()
+            val settingsDir = getSettingsDirectory()
 
-        val downloadsInfo = scanDirectory(downloadsDir, "Downloads")
-        val fontCacheInfo = scanDirectory(fontCacheDir, "Font Cache")
-        val settingsInfo = scanDirectory(settingsDir, "Settings")
+            val downloadsInfo = scanDirectory(downloadsDir, "Downloads")
+            val fontCacheInfo = scanDirectory(fontCacheDir, "Font Cache")
+            val settingsInfo = scanDirectory(settingsDir, "Settings")
 
-        val totalUsed = downloadsInfo.size + fontCacheInfo.size + settingsInfo.size
-        val freeSpace = getFreeDiskSpace()
+            val totalUsed = downloadsInfo.size + fontCacheInfo.size + settingsInfo.size
+            val freeSpace = getFreeDiskSpace()
 
-        StorageInfo(
-            downloads = downloadsInfo,
-            fontCache = fontCacheInfo,
-            settings = settingsInfo,
-            totalUsed = totalUsed,
-            freeSpace = freeSpace
-        )
+            StorageInfo(
+                downloads = downloadsInfo,
+                fontCache = fontCacheInfo,
+                settings = settingsInfo,
+                totalUsed = totalUsed,
+                freeSpace = freeSpace,
+            )
+        } catch (_: Exception) {
+            StorageInfo(freeSpace = getFreeDiskSpace())
+        }
     }
 
     suspend fun getDownloadStorageInfo(): DownloadStorageInfo = withContext(Dispatchers.Default) {
-        val downloadsDir = getDownloadsDirectory()
-        val basePath = downloadsDir.toPath()
+        try {
+            val downloadsDir = resolveDownloadsDirectory()
+            val basePath = downloadsDir.toPath()
 
-        if (!fs.exists(basePath)) {
-            return@withContext DownloadStorageInfo()
-        }
+            if (!fs.exists(basePath)) {
+                return@withContext DownloadStorageInfo()
+            }
 
-        val animeFolders = mutableListOf<AnimeFolderInfo>()
-        var totalEpisodes = 0
-        var totalSize = 0L
+            val animeFolders = mutableListOf<AnimeFolderInfo>()
+            var totalEpisodes = 0
+            var totalSize = 0L
 
-        val tasksFile = "$downloadsDir/tasks.json".toPath()
-        val tasks = if (fs.exists(tasksFile)) {
-            try {
-                val content = fs.read(tasksFile) { readUtf8() }
-                json.decodeFromString<List<DownloadTaskInfo>>(content)
+            val tasksFile = "${getCacheDirectory()}/tasks.json".toPath()
+            val tasks = if (fs.exists(tasksFile)) {
+                try {
+                    val content = fs.read(tasksFile) { readUtf8() }
+                    json.decodeFromString<List<DownloadTask>>(content)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } else {
+                emptyList()
+            }
+
+            val animeTitles = tasks.groupBy { it.animeId }.mapValues { entry ->
+                entry.value.firstOrNull()?.title ?: entry.key
+            }
+
+            val coverImages = tasks.groupBy { it.animeId }.mapValues { entry ->
+                entry.value.firstOrNull()?.coverImage
+            }
+
+            val entries = try {
+                fs.list(basePath)
             } catch (_: Exception) {
                 emptyList()
             }
-        } else {
-            emptyList()
-        }
 
-        val animeTitles = tasks.groupBy { it.animeId }.mapValues { entry ->
-            entry.value.firstOrNull()?.title ?: entry.key
-        }
+            entries.forEach { entry ->
+                val animePath = basePath / entry
+                val meta = fs.metadataOrNull(animePath) ?: return@forEach
+                if (!meta.isDirectory) return@forEach
 
-        val coverImages = tasks.groupBy { it.animeId }.mapValues { entry ->
-            entry.value.firstOrNull()?.coverImage
-        }
+                val folderName = entry.name
+                val animeId = folderName.replace("_", "-")
+                var episodeCount = 0
+                var folderSize = 0L
 
-        fs.list(basePath).forEach { entry ->
-            val animePath = basePath / entry
-            val meta = fs.metadataOrNull(animePath) ?: return@forEach
-            if (!meta.isDirectory) return@forEach
+                val epEntries = try {
+                    fs.list(animePath)
+                } catch (_: Exception) {
+                    emptyList()
+                }
 
-            val animeId = entry.toString().replace("_", "-")
-            var episodeCount = 0
-            var folderSize = 0L
+                epEntries.forEach { epEntry ->
+                    val epPath = animePath / epEntry
+                    val epMeta = fs.metadataOrNull(epPath) ?: return@forEach
+                    if (!epMeta.isDirectory || !epEntry.name.startsWith("ep_")) return@forEach
 
-            fs.list(animePath).forEach { epEntry ->
-                val epPath = animePath / epEntry
-                val epMeta = fs.metadataOrNull(epPath) ?: return@forEach
-                if (!epMeta.isDirectory || !epEntry.toString().startsWith("ep_")) return@forEach
+                    episodeCount++
+                    folderSize += directorySize(epPath)
+                }
 
-                episodeCount++
-                folderSize += directorySize(epPath)
+                if (episodeCount > 0) {
+                    animeFolders.add(
+                        AnimeFolderInfo(
+                            animeId = animeId,
+                            title = animeTitles[animeId]
+                                ?: animeTitles[folderName]
+                                ?: folderName.replace("_", " "),
+                            episodeCount = episodeCount,
+                            size = folderSize,
+                            coverImage = coverImages[animeId] ?: coverImages[folderName],
+                        ),
+                    )
+                    totalEpisodes += episodeCount
+                    totalSize += folderSize
+                }
             }
 
-            if (episodeCount > 0) {
-                animeFolders.add(
-                    AnimeFolderInfo(
-                        animeId = animeId,
-                        title = animeTitles[animeId] ?: entry.toString().replace("_", " "),
-                        episodeCount = episodeCount,
-                        size = folderSize,
-                        coverImage = coverImages[animeId],
-                    ),
-                )
-                totalEpisodes += episodeCount
-                totalSize += folderSize
-            }
+            DownloadStorageInfo(
+                animeFolders = animeFolders.sortedByDescending { it.size },
+                totalEpisodes = totalEpisodes,
+                totalSize = totalSize,
+            )
+        } catch (_: Exception) {
+            DownloadStorageInfo()
         }
+    }
 
-        DownloadStorageInfo(
-            animeFolders = animeFolders.sortedByDescending { it.size },
-            totalEpisodes = totalEpisodes,
-            totalSize = totalSize,
-        )
+    private suspend fun resolveDownloadsDirectory(): String {
+        val custom = AppComponent.settingsStore.downloadPathFlow.first()
+        return custom.takeIf { it.isNotBlank() } ?: getDownloadsDirectory()
     }
 
     private fun directorySize(path: Path): Long {
@@ -129,15 +159,34 @@ class StorageService {
     }
 
     private fun walkFiles(path: Path, onFile: (Path) -> Unit) {
-        val meta = fs.metadataOrNull(path) ?: return
-        if (meta.isDirectory) {
-            fs.list(path).forEach { child -> walkFiles(path / child, onFile) }
-        } else if (meta.isRegularFile) {
-            onFile(path)
+        try {
+            val meta = fs.metadataOrNull(path) ?: return
+            if (meta.isDirectory) {
+                val children = try {
+                    fs.list(path)
+                } catch (_: Exception) {
+                    return
+                }
+                children.forEach { child ->
+                    try {
+                        walkFiles(path / child, onFile)
+                    } catch (_: Exception) {
+                        // Skip unreadable entries (permissions, broken symlinks).
+                    }
+                }
+            } else if (meta.isRegularFile) {
+                onFile(path)
+            }
+        } catch (_: Exception) {
+            // Skip unreadable paths.
         }
     }
 
     private fun scanDirectory(path: String, name: String): StorageCategory {
+        if (path.isBlank()) {
+            return StorageCategory(name = name, path = path)
+        }
+
         val okPath = path.toPath()
         if (!fs.exists(okPath)) {
             return StorageCategory(name = name, path = path)
@@ -173,7 +222,7 @@ class StorageService {
 
     suspend fun deleteAnimeDownloads(animeId: String): Boolean = withContext(Dispatchers.Default) {
         try {
-            val downloadsDir = getDownloadsDirectory()
+            val downloadsDir = resolveDownloadsDirectory()
             val safeId = animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
             val animeDir = "$downloadsDir/$safeId"
             if (KmpFileSystem.exists(animeDir)) {
@@ -193,7 +242,7 @@ class StorageService {
 
     suspend fun deleteEpisodeDownload(animeId: String, episodeNumber: Int): Boolean = withContext(Dispatchers.Default) {
         try {
-            val downloadsDir = getDownloadsDirectory()
+            val downloadsDir = resolveDownloadsDirectory()
             val safeId = animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
             val epDir = "$downloadsDir/$safeId/ep_$episodeNumber"
             if (KmpFileSystem.exists(epDir)) {
@@ -244,13 +293,3 @@ class StorageService {
         }
     }
 }
-
-@kotlinx.serialization.Serializable
-private data class DownloadTaskInfo(
-    val id: String,
-    val animeId: String,
-    val title: String,
-    val episodeNumber: Int,
-    val coverImage: String? = null,
-    val status: String = "",
-)

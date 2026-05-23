@@ -1,5 +1,7 @@
 package to.kuudere.anisuge.navigation
 
+import io.ktor.http.encodeURLParameter
+
 /** All navigation destinations in the app */
 sealed class Screen(val route: String) {
     data object Splash : Screen("splash")
@@ -37,8 +39,8 @@ sealed class Screen(val route: String) {
             val params = mutableListOf<String>()
             if (server != null) params.add("server=$server")
             if (lang != null) params.add("lang=$lang")
-            if (offlinePath != null) params.add("offlinePath=$offlinePath")
-            if (offlineTitle != null) params.add("offlineTitle=$offlineTitle")
+            if (offlinePath != null) params.add("offlinePath=${offlinePath.encodeURLParameter()}")
+            if (offlineTitle != null) params.add("offlineTitle=${offlineTitle.encodeURLParameter()}")
             if (resumeAtSeconds != null && resumeAtSeconds >= 1.0) {
                 params.add("resumeAt=$resumeAtSeconds")
             }

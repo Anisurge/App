@@ -190,8 +190,7 @@ class WatchViewModel(
             return
         }
 
-        // Normalize path separators to forward slash (okio standard)
-        val normalizedPath = path.replace('\\', '/')
+        val normalizedPath = to.kuudere.anisuge.utils.MediaPaths.normalizeSeparators(path)
 
         // Check for local subs/fonts in same dir
         val dir = normalizedPath.substringBeforeLast('/', "")
@@ -203,7 +202,7 @@ class WatchViewModel(
                 entries.forEach { name ->
                     if (name.startsWith("subtitle") && (name.endsWith(".ass") || name.endsWith(".vtt") || name.endsWith(".srt"))) {
                         val label = name.substringAfter("subtitle_", "").substringBeforeLast(".").ifEmpty { "Default" }
-                        val fileUrl = "file://$dir/$name"
+                        val fileUrl = to.kuudere.anisuge.utils.MediaPaths.toFileUri("$dir/$name")
                         subs.add(to.kuudere.anisuge.data.models.SubtitleData(
                             languageName = label,
                             url = fileUrl,

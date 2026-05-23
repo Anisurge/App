@@ -17,7 +17,7 @@
 **/bin/
 .claude/
 api.md
-AnimeTV/
+AniSurge/
 services/anisurge-api/
 # Signing & Secrets
 key.properties

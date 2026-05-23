@@ -1014,9 +1014,24 @@ class SettingsViewModel(
     fun loadStorageInfo() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingStorage = true) }
-            val info = storageService.getStorageInfo()
-            val downloadInfo = storageService.getDownloadStorageInfo()
-            _uiState.update { it.copy(storageInfo = info, downloadStorageInfo = downloadInfo, isLoadingStorage = false) }
+            try {
+                val info = storageService.getStorageInfo()
+                val downloadInfo = storageService.getDownloadStorageInfo()
+                _uiState.update {
+                    it.copy(
+                        storageInfo = info,
+                        downloadStorageInfo = downloadInfo,
+                        isLoadingStorage = false,
+                    )
+                }
+            } catch (_: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingStorage = false,
+                        errorMessage = "Could not load storage info",
+                    )
+                }
+            }
         }
     }
 

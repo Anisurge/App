@@ -56,26 +56,7 @@ actual fun VideoPlayerSurface(
 
     // ── Resolve URL (resource or absolute path) ──────────────────────────────
     val resolvedUrl = remember(state.config.url) {
-        val url = state.config.url
-        when {
-            // HTTP/HTTPS URLs
-            url.startsWith("http://") || url.startsWith("https://") -> url
-            // Unix absolute paths
-            url.startsWith("/") -> url
-            // Windows absolute paths (C:\, D:\, etc.)
-            url.matches(Regex("^[A-Za-z]:\\\\.*")) -> url
-            // Resource file
-            else -> {
-                val stream = Thread.currentThread().contextClassLoader
-                    ?.getResourceAsStream(url)
-                if (stream != null) {
-                    val ext = url.substringAfterLast('.', "mp4")
-                    val tmp = java.io.File.createTempFile("mpv_res_", ".$ext").also { it.deleteOnExit() }
-                    tmp.outputStream().use { out -> stream.copyTo(out) }
-                    tmp.absolutePath
-                } else ""
-            }
-        }
+        resolveDesktopPlaybackPath(state.config.url)
     }
 
     // ── Start playback ───────────────────────────────────────────────────────
@@ -169,4 +150,32 @@ actual fun VideoPlayerSurface(
         }
         // ← Drop your Compose controls/overlay here, on top of the video
     }
+}
+
+/** Resolves stream URLs and local paths for libmpv (Windows `C:/…` and `file://` included). */
+internal fun resolveDesktopPlaybackPath(url: String): String {
+    when {
+        url.startsWith("http://") || url.startsWith("https://") -> return url
+        url.startsWith("file://") -> {
+            return try {
+                java.io.File(java.net.URI(url)).absolutePath
+            } catch (e: Exception) {
+                println("[VideoPlayerSurface] Invalid file URI: $url (${e.message})")
+                ""
+            }
+        }
+        url.startsWith("/") -> return url
+        url.matches(Regex("^[A-Za-z]:[/\\\\].*")) -> {
+            return url.replace('/', java.io.File.separatorChar)
+        }
+    }
+
+    val stream = Thread.currentThread().contextClassLoader?.getResourceAsStream(url)
+    if (stream != null) {
+        val ext = url.substringAfterLast('.', "mp4")
+        val tmp = java.io.File.createTempFile("mpv_res_", ".$ext").also { it.deleteOnExit() }
+        tmp.outputStream().use { out -> stream.copyTo(out) }
+        return tmp.absolutePath
+    }
+    return ""
 }

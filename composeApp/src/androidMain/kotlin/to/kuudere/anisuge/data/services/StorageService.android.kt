@@ -1,18 +1,21 @@
 package to.kuudere.anisuge.data.services
 
-import android.content.Context
 import android.os.StatFs
 import android.os.Environment
+import to.kuudere.anisuge.platform.androidAppContext
 import java.io.File
 
 actual fun getFontCacheDirectory(): String {
-    // Android implementation would use app's cache dir
-    return ""
+    val tmp = System.getProperty("java.io.tmpdir") ?: return ""
+    val dir = File(tmp, "sub-fonts")
+    if (!dir.exists()) dir.mkdirs()
+    return dir.absolutePath
 }
 
 actual fun getSettingsDirectory(): String {
-    // Android uses DataStore, not files
-    return ""
+    // DataStore files only — avoid scanning cache or external storage.
+    val dir = File(androidAppContext.filesDir, "datastore")
+    return dir.absolutePath
 }
 
 actual fun getTotalDiskSpace(): Long {

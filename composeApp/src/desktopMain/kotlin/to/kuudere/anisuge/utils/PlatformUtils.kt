@@ -88,8 +88,19 @@ actual suspend fun muxToMkv(
             }
         }
 
+        val localTsVideo = videoPath.endsWith(".ts", ignoreCase = true) &&
+            !videoPath.startsWith("http", ignoreCase = true)
+        val localTsAudio = audioPath?.endsWith(".ts", ignoreCase = true) == true &&
+            !audioPath.startsWith("http", ignoreCase = true)
+
+        if (localTsVideo) {
+            args.add("-f"); args.add("mpegts")
+        }
         args.add("-i"); args.add(videoPath)
         if (audioPath != null) {
+            if (localTsAudio) {
+                args.add("-f"); args.add("mpegts")
+            }
             args.add("-i"); args.add(audioPath)
         }
         subtitles.forEach { (path, _) ->
@@ -127,34 +138,55 @@ actual suspend fun muxToMkv(
             args.add("-metadata:s:s:$i"); args.add("title=$label")
         }
 
-        args.add("-c"); args.add("copy")
+        args.add("-c:v"); args.add("copy")
+        args.add("-c:a"); args.add("copy")
+        if (subtitles.isNotEmpty()) {
+            args.add("-c:s"); args.add("copy")
+        }
         args.add(outputPath)
 
-        val process = ProcessBuilder(args)
-            .redirectErrorStream(true)
-            .start()
-        
-        // Consume output stream to prevent blocking on Windows
-        val outputReader = Thread {
-            try {
-                process.inputStream.bufferedReader().forEachLine { line ->
-                    println("[FFmpeg] $line")
-                }
-            } catch (e: Exception) {
-                // Stream closed, ignore
-            }
-        }
-        outputReader.start()
-        
-        val exitCode = process.waitFor()
-        outputReader.join(1000) // Wait up to 1 second for output thread to finish
-        
+        val exitCode = runFfmpeg(args)
         if (exitCode != 0) {
             println("[FFmpeg] Process exited with code $exitCode")
         }
-        exitCode == 0
+        if (exitCode == 0) return@withContext true
+
+        // Fallback: remux without embedded subs when sidecar .vtt mux fails (player loads subs from ep folder).
+        if (localTsVideo && subtitles.isNotEmpty()) {
+            val fallbackArgs = mutableListOf(ffmpegPath, "-y", "-f", "mpegts", "-i", videoPath)
+            if (audioPath != null) {
+                if (localTsAudio) {
+                    fallbackArgs.add("-f"); fallbackArgs.add("mpegts")
+                }
+                fallbackArgs.add("-i"); fallbackArgs.add(audioPath)
+                fallbackArgs.addAll(listOf("-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "copy", outputPath))
+            } else {
+                fallbackArgs.addAll(listOf("-map", "0:v", "-map", "0:a?", "-c:v", "copy", "-c:a", "copy", outputPath))
+            }
+            val fallbackExit = runFfmpeg(fallbackArgs)
+            if (fallbackExit == 0) return@withContext true
+        }
+        return@withContext false
     } catch (e: Exception) {
         println("[FFmpeg] Process failed: ${e.message}")
-        false
+        return@withContext false
     }
+}
+
+private fun runFfmpeg(args: List<String>): Int {
+    val process = ProcessBuilder(args)
+        .redirectErrorStream(true)
+        .start()
+    val outputReader = Thread {
+        try {
+            process.inputStream.bufferedReader().forEachLine { line ->
+                println("[FFmpeg] $line")
+            }
+        } catch (_: Exception) {
+        }
+    }
+    outputReader.start()
+    val exitCode = process.waitFor()
+    outputReader.join(1000)
+    return exitCode
 }
