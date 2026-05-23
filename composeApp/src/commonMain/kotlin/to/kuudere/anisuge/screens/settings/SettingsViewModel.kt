@@ -86,6 +86,7 @@ data class SettingsUiState(
     val appLocale: AppLocale = AppLocale.default,
     val preferRomajiAnimeTitles: Boolean = false,
     val themeId: AppThemeId = AppThemeId.Default,
+    val legacyScheduleUi: Boolean = false,
 
     val notificationsEnabled: Boolean = true,
     val hasNotificationPrefsChanges: Boolean = false,
@@ -340,6 +341,11 @@ class SettingsViewModel(
                 _uiState.update { it.copy(preferRomajiAnimeTitles = v) }
             }
         }
+        viewModelScope.launch {
+            settingsStore.legacyScheduleUiFlow.collect { v ->
+                _uiState.update { it.copy(legacyScheduleUi = v) }
+            }
+        }
 
         // Load tracking state
         loadTrackingState()
@@ -446,6 +452,10 @@ class SettingsViewModel(
 
     fun setThemeId(themeId: AppThemeId) {
         viewModelScope.launch { settingsStore.setThemeId(themeId.id) }
+    }
+
+    fun setLegacyScheduleUi(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setLegacyScheduleUi(enabled) }
     }
 
     // Profile

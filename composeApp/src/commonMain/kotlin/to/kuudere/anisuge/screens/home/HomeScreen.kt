@@ -588,7 +588,16 @@ private fun TabContent(
 
             AnisugTab.Search -> SearchScreen(searchViewModel, onAnimeClick, onExit = onExit)
             AnisugTab.Bookmarks -> WatchlistScreen(watchlistViewModel, onAnimeClick)
-            AnisugTab.Calendar -> ScheduleScreen(scheduleViewModel, onAnimeClick, onExit = onExit)
+            AnisugTab.Calendar -> {
+                val settingsState by settingsViewModel.uiState.collectAsState()
+                ScheduleScreen(
+                    viewModel = scheduleViewModel,
+                    onAnimeClick = onAnimeClick,
+                    onExit = onExit,
+                    useLegacyUi = settingsState.legacyScheduleUi,
+                )
+            }
+
             AnisugTab.Downloads -> DownloadsTab(onWatchOffline, onExit = onExit)
             AnisugTab.Settings -> SettingsScreen(
                 viewModel = settingsViewModel,

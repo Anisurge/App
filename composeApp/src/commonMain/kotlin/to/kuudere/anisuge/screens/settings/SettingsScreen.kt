@@ -1005,6 +1005,7 @@ private fun MobileSettingsDetail(
                     onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
                     onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                     onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
+                    onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                     onThemeSelected = viewModel::setThemeId,
                 )
 
@@ -1139,6 +1140,7 @@ private fun SettingsContent(
                 onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
                 onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                 onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
+                onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                 onThemeSelected = viewModel::setThemeId,
             )
 
@@ -1215,6 +1217,7 @@ private fun AppearanceTab(
     onLiquidGlassBottomNavChange: (Boolean) -> Unit,
     onExpandedHeroCarouselChange: (Boolean) -> Unit,
     onPreferRomajiAnimeTitlesChange: (Boolean) -> Unit,
+    onLegacyScheduleUiChange: (Boolean) -> Unit,
     onThemeSelected: (AppThemeId) -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -1264,14 +1267,27 @@ private fun AppearanceTab(
 
         SettingCard(
             title = "Home Screen",
-            description = "Customize how the home screen looks on mobile.",
+            description = "Customize how the home screen and schedule tab look.",
             modifier = Modifier.fillMaxWidth()
         ) {
-            SettingToggle(
-                checked = uiState.expandedHeroCarousel,
-                onCheckedChange = onExpandedHeroCarouselChange,
-                label = strings.expandedHeroCarousel
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SettingToggle(
+                    checked = uiState.expandedHeroCarousel,
+                    onCheckedChange = onExpandedHeroCarouselChange,
+                    label = strings.expandedHeroCarousel
+                )
+                SettingToggle(
+                    checked = uiState.legacyScheduleUi,
+                    onCheckedChange = onLegacyScheduleUiChange,
+                    label = "Use old schedule layout"
+                )
+                Text(
+                    text = if (uiState.legacyScheduleUi) "Calendar uses the classic compact list." else "Calendar uses the new release-guide layout.",
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

@@ -20,48 +20,47 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CalendarToday
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
-import kotlinx.datetime.DatePeriod
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.plus
-import kotlinx.datetime.toLocalDateTime
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateSetOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -70,28 +69,36 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import to.kuudere.anisuge.data.models.ScheduleAnime
+import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.OfflineState
 import to.kuudere.anisuge.ui.tvFocusableClick
-import to.kuudere.anisuge.i18n.LocalAppStrings
 
-// ── Colours ── Black & white only ─────────────────────────────────────────────
-
-private val BG     = Color(0xFF000000)
+private val BG = Color(0xFF000000)
+private val CARD = Color(0xFF0A0A0A)
+private val CARD_HOVER = Color(0xFF121212)
 private val BORDER = Color.White.copy(alpha = 0.10f)
-private val MUTED  = Color.White.copy(alpha = 0.50f)
-private val CARD   = Color.White.copy(alpha = 0.03f)
-private val CARD_H = Color.White.copy(alpha = 0.07f)
+private val MUTED = Color.White.copy(alpha = 0.55f)
+private val DIM = Color.White.copy(alpha = 0.34f)
+private val ACCENT = Color(0xFFBF80FF)
 
-// ── Date helpers ──────────────────────────────────────────────────────────────
-
-private val DOW_NAMES = arrayOf("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")
+private val DOW_NAMES = arrayOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
+private val DOW_SHORT = arrayOf("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
 
 private fun dayOfWeek(y: Int, m: Int, d: Int): Int {
     val ay = if (m < 3) y - 1 else y
     val am = if (m < 3) m + 12 else m
-    val k = ay % 100; val j = ay / 100
+    val k = ay % 100
+    val j = ay / 100
     return ((d + (13 * (am + 1)) / 5 + k + k / 4 + j / 4 - 2 * j) % 7 + 5) % 7
 }
 
@@ -100,210 +107,213 @@ private fun todayString(timezone: String = "UTC"): String {
     return Clock.System.now().toLocalDateTime(tz).date.toString()
 }
 
-private fun formatDateHeader(dateStr: String, today: String): String {
+private fun tomorrowString(today: String): String? = runCatching {
+    LocalDate.parse(today).plus(DatePeriod(days = 1)).toString()
+}.getOrNull()
+
+private fun dateParts(dateStr: String): Triple<Int, Int, Int>? = runCatching {
     val (ys, ms, ds) = dateStr.split("-")
-    val y = ys.toInt(); val m = ms.toInt(); val d = ds.toInt()
+    Triple(ys.toInt(), ms.toInt(), ds.toInt())
+}.getOrNull()
+
+private fun formatDateHeader(dateStr: String, today: String): String {
+    val (y, m, d) = dateParts(dateStr) ?: return dateStr
     val dow = DOW_NAMES[dayOfWeek(y, m, d)]
-    val fmt = "${ms}/${ds}/${ys}"
-    val tomorrowStr = runCatching {
-        LocalDate.parse(today).plus(DatePeriod(days = 1)).toString()
-    }.getOrNull()
+    val fmt = "${m.toString().padStart(2, '0')}/${d.toString().padStart(2, '0')}/$y"
     return when (dateStr) {
-        today       -> "Today ($fmt)"
-        tomorrowStr -> "Tomorrow ($fmt)"
-        else        -> "$dow ($fmt)"
+        today -> "Today • $fmt"
+        tomorrowString(today) -> "Tomorrow • $fmt"
+        else -> "$dow • $fmt"
     }
 }
 
-// ── Screen ────────────────────────────────────────────────────────────────────
+private fun formatDayChip(dateStr: String, today: String): Pair<String, String> {
+    val (y, m, d) = dateParts(dateStr) ?: return dateStr to ""
+    val label = when (dateStr) {
+        today -> "TODAY"
+        tomorrowString(today) -> "TMRW"
+        else -> DOW_SHORT[dayOfWeek(y, m, d)]
+    }
+    return label to d.toString().padStart(2, '0')
+}
 
 @Composable
 fun ScheduleScreen(
     viewModel: ScheduleViewModel,
     onAnimeClick: (String) -> Unit,
-    onExit: () -> Unit = {}
+    onExit: () -> Unit = {},
+    useLegacyUi: Boolean = false,
 ) {
     val state by viewModel.uiState.collectAsState()
     val strings = LocalAppStrings.current
 
     Box(Modifier.fillMaxSize().background(BG)) {
         when {
-            state.isLoading && state.schedule.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(36.dp))
+            state.isLoading && state.schedule.isEmpty() -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(36.dp))
+                }
             }
 
-            state.isOffline && state.schedule.isEmpty() -> OfflineState(onRetry = { viewModel.refresh() }, isLoading = state.isLoading)
+            state.isOffline && state.schedule.isEmpty() -> {
+                OfflineState(onRetry = { viewModel.refresh() }, isLoading = state.isLoading)
+            }
 
-            state.error != null && state.schedule.isEmpty() -> Column(
-                Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Icon(Icons.Outlined.CalendarToday, null, tint = MUTED, modifier = Modifier.size(48.dp))
-                Spacer(Modifier.height(12.dp))
-                Text(strings.failedToLoadSchedule, color = MUTED, fontSize = 16.sp)
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = { viewModel.refresh() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                ) { Text(strings.retry, color = Color.Black) }
+            state.error != null && state.schedule.isEmpty() -> {
+                EmptyScheduleError(onRetry = { viewModel.refresh() })
             }
 
             else -> {
+                if (useLegacyUi) {
+                    LegacyScheduleContent(
+                        schedule = state.schedule,
+                        timezone = state.timezone,
+                        isRefreshing = state.isLoading,
+                        onAnimeClick = onAnimeClick,
+                        onExit = onExit,
+                    )
+                    return@Box
+                }
+
                 val today = remember(state.timezone) { todayString(state.timezone) }
                 val sortedDates = remember(state.schedule) { state.schedule.keys.sorted() }
                 val visibleDates = remember(sortedDates, today) {
-                    val datesFromToday = sortedDates.filter { it >= today }
-                    if (datesFromToday.isNotEmpty()) datesFromToday else sortedDates
+                    sortedDates.filter { it >= today }.ifEmpty { sortedDates }
                 }
+                var selectedDate by remember(visibleDates) { mutableStateOf(visibleDates.firstOrNull() ?: today) }
+                val selectedEpisodes = state.schedule[selectedDate].orEmpty()
                 val listState = rememberLazyListState()
-                // Keys of items that have already played their enter animation
-                val animatedKeys = remember { mutableStateSetOf<String>() }
-
-                // ── Sentinel: trigger loadMore when near the end ───────────
-                val nearEnd by remember {
-                    derivedStateOf {
-                        val info = listState.layoutInfo
-                        val last = info.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
-                        last >= info.totalItemsCount - 4
-                    }
-                }
-                LaunchedEffect(nearEnd) {
-                    // Schedule uses date-based navigation, not pagination
-                }
+                val coroutineScope = rememberCoroutineScope()
 
                 BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val cols = when {
-                        maxWidth >= 900.dp -> 3
-                        maxWidth >= 580.dp -> 2
-                        else               -> 1
+                    val isCompact = maxWidth < 700.dp
+                    val columns = when {
+                        maxWidth >= 1280.dp -> 3
+                        maxWidth >= 760.dp -> 2
+                        else -> 1
                     }
+                    val horizontalPadding = if (isCompact) 16.dp else 28.dp
+                    val bottomPadding = if (isCompact) 156.dp else 28.dp
 
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = if (maxWidth < 800.dp) 156.dp else 20.dp),
+                        contentPadding = PaddingValues(
+                            start = horizontalPadding,
+                            end = horizontalPadding,
+                            top = 20.dp,
+                            bottom = bottomPadding,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
-                        item {
-                           Box(Modifier.fillMaxWidth()) {
-                                to.kuudere.anisuge.platform.WindowManagementButtons(
-                                    onClose = onExit,
-                                    modifier = Modifier.align(Alignment.TopEnd)
-                                )
-                           }
+                        item(key = "header") {
+                            ScheduleHeader(
+                                selectedDate = selectedDate,
+                                today = today,
+                                totalDays = visibleDates.size,
+                                totalEpisodes = visibleDates.sumOf { state.schedule[it].orEmpty().size },
+                                timezone = state.timezone,
+                                onExit = onExit,
+                            )
                         }
 
-                        visibleDates.forEachIndexed { dateIdx, dateStr ->
-                            val animeList = state.schedule[dateStr] ?: return@forEachIndexed
-                            val isToday = dateStr == today
+                        item(key = "day-strip") {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                contentPadding = PaddingValues(vertical = 2.dp),
+                            ) {
+                                items(visibleDates, key = { it }) { date ->
+                                    DayChip(
+                                        date = date,
+                                        today = today,
+                                        count = state.schedule[date].orEmpty().size,
+                                        selected = date == selectedDate,
+                                        onClick = {
+                                            selectedDate = date
+                                            coroutineScope.launch { listState.animateScrollToItem(0) }
+                                        },
+                                    )
+                                }
+                            }
+                        }
 
-                            // ── Date header ───────────────────────────────
-                            item(key = "hdr-$dateStr") {
-                                AnimatedEntry(
-                                    itemKey = "hdr-$dateStr",
-                                    animatedKeys = animatedKeys,
-                                    delayMs = (dateIdx * 60).coerceAtMost(300)
-                                ) {
-                                    Column {
-                                        if (dateIdx > 0) Spacer(Modifier.height(28.dp))
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (isToday) {
-                                                Box(
-                                                    Modifier
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                                                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                                                ) {
-                                                    Text(strings.today, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                }
-                                                Spacer(Modifier.width(10.dp))
-                                            }
-                                            Text(
-                                                formatDateHeader(dateStr, today),
-                                                color = Color.White,
-                                                fontSize = 18.sp,
-                                                fontWeight = FontWeight.Bold,
+                        item(key = "section-title") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column {
+                                    Text(
+                                        formatDateHeader(selectedDate, today),
+                                        color = Color.White,
+                                        fontSize = if (isCompact) 24.sp else 30.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                    )
+                                    Text(
+                                        "${selectedEpisodes.size} scheduled release${if (selectedEpisodes.size == 1) "" else "s"}",
+                                        color = MUTED,
+                                        fontSize = 13.sp,
+                                    )
+                                }
+                                if (selectedDate == today) {
+                                    Pill("LIVE DAY", selected = true)
+                                }
+                            }
+                        }
+
+                        if (selectedEpisodes.isEmpty()) {
+                            item(key = "empty-day") {
+                                EmptyDayCard()
+                            }
+                        } else {
+                            selectedEpisodes.chunked(columns).forEachIndexed { rowIndex, row ->
+                                item(key = "row-$selectedDate-$rowIndex") {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                    ) {
+                                        row.forEach { anime ->
+                                            ScheduleReleaseCard(
+                                                anime = anime,
+                                                onClick = { onAnimeClick(anime.activeSlug) },
+                                                modifier = Modifier.weight(1f),
+                                                compact = isCompact,
                                             )
                                         }
-                                        Spacer(Modifier.height(12.dp))
-                                        // thin separator under header
-                                        Box(Modifier.fillMaxWidth().height(1.dp).background(BORDER))
-                                        Spacer(Modifier.height(12.dp))
-                                    }
-                                }
-                            }
-
-                            // ── Card rows ─────────────────────────────────
-                            val rows = animeList.chunked(cols)
-                            rows.forEachIndexed { rowIdx, row ->
-                                item(key = "${dateStr}-r$rowIdx") {
-                                    AnimatedEntry(
-                                        itemKey = "${dateStr}-r$rowIdx",
-                                        animatedKeys = animatedKeys,
-                                        delayMs = (dateIdx * 60 + rowIdx * 40).coerceAtMost(400)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                        ) {
-                                            row.forEach { anime ->
-                                                AnimeScheduleCard(
-                                                    anime = anime,
-                                                    onClick = { onAnimeClick(anime.activeSlug) },
-                                                    modifier = Modifier.weight(1f),
-                                                )
-                                            }
-                                            repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
-                                        }
+                                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                                     }
                                 }
                             }
                         }
 
-                        // ── Skeleton placeholder while loading more ────────
                         if (state.isLoading) {
-                            item(key = "skeleton") {
-                                Column {
-                                    Spacer(Modifier.height(28.dp))
-                                    // Skeleton header
-                                    SkeletonBox(Modifier.width(200.dp).height(22.dp))
-                                    Spacer(Modifier.height(12.dp))
-                                    Box(Modifier.fillMaxWidth().height(1.dp).background(BORDER))
-                                    Spacer(Modifier.height(12.dp))
-                                    // Skeleton cards
-                                    Row(
-                                        Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        repeat(3) {
-                                            SkeletonBox(Modifier.weight(1f).height(110.dp).clip(RoundedCornerShape(10.dp)))
-                                        }
-                                    }
-                                    Spacer(Modifier.height(80.dp))
+                            item(key = "refreshing") {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("Refreshing schedule…", color = MUTED, fontSize = 13.sp)
                                 }
                             }
                         }
+                    }
 
-                        item { Spacer(Modifier.height(80.dp)) }
-                    }
-                    // ── Scroll to top FAB ─────────────────────────────────
-                    val showScrollTop by remember {
-                        derivedStateOf { listState.firstVisibleItemIndex > 0 }
-                    }
-                    val coroutineScope = rememberCoroutineScope()
+                    val showScrollTop by remember { derivedStateOf { listState.firstVisibleItemIndex > 1 } }
                     AnimatedVisibility(
                         visible = showScrollTop,
-                        enter = fadeIn(tween(250)),
-                        exit  = fadeOut(tween(250)),
+                        enter = fadeIn(tween(200)),
+                        exit = fadeOut(tween(200)),
                         modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
                     ) {
                         ScrollToTopButton {
-                            coroutineScope.launch {
-                                // Jump close first so the animated portion is short (visible range only)
-                                if (listState.firstVisibleItemIndex > 4) {
-                                    listState.scrollToItem(4)
-                                }
-                                listState.animateScrollToItem(0)
-                            }
+                            coroutineScope.launch { listState.animateScrollToItem(0) }
                         }
                     }
                 }
@@ -312,196 +322,493 @@ fun ScheduleScreen(
     }
 }
 
-// ── Scroll to top button ──────────────────────────────────────────────────────
-
 @Composable
-private fun ScrollToTopButton(onClick: () -> Unit) {
-    val strings = LocalAppStrings.current
-    val inter = remember { MutableInteractionSource() }
-    val hovered by inter.collectIsHoveredAsState()
-
-    val bg by animateColorAsState(
-        if (hovered) Color.White else Color.White.copy(alpha = 0.85f),
-        tween(200)
-    )
-    val iconColor by animateColorAsState(
-        if (hovered) Color.Black else Color.Black.copy(alpha = 0.9f),
-        tween(200)
-    )
-
-    Box(
-        Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(bg)
-            .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
-            .hoverable(inter)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            Icons.Outlined.KeyboardArrowUp,
-            contentDescription = strings.scrollToTop,
-            tint = iconColor,
-            modifier = Modifier.size(22.dp),
-        )
-    }
-}
-
-// ── Animated entry wrapper ────────────────────────────────────────────────────
-
-@Composable
-private fun AnimatedEntry(
-    itemKey: String,
-    animatedKeys: MutableSet<String>,
-    delayMs: Int = 0,
-    content: @Composable () -> Unit,
+private fun LegacyScheduleContent(
+    schedule: Map<String, List<ScheduleAnime>>,
+    timezone: String,
+    isRefreshing: Boolean,
+    onAnimeClick: (String) -> Unit,
+    onExit: () -> Unit,
 ) {
-    val alreadySeen = itemKey in animatedKeys
-    var visible by remember(itemKey) { mutableStateOf(alreadySeen) }
-
-    LaunchedEffect(itemKey) {
-        if (!alreadySeen) {
-            delay(delayMs.toLong())
-            visible = true
-            animatedKeys.add(itemKey)
-        }
+    val strings = LocalAppStrings.current
+    val today = remember(timezone) { todayString(timezone) }
+    val dates = remember(schedule, today) {
+        val sorted = schedule.keys.sorted()
+        sorted.filter { it >= today }.ifEmpty { sorted }
     }
-    val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(320))
-    val offsetY by animateFloatAsState(if (visible) 0f else 20f, tween(320))
 
-    Box(
-        Modifier
-            .alpha(alpha)
-            .offset(y = offsetY.dp)
-    ) {
-        content()
+    Box(Modifier.fillMaxSize().background(BG)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item(key = "legacy-header") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column {
+                        Text("Schedule", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+                        Text("Classic release list", color = MUTED, fontSize = 13.sp)
+                    }
+                    to.kuudere.anisuge.platform.WindowManagementButtons(onClose = onExit)
+                }
+            }
+
+            if (isRefreshing) {
+                item(key = "legacy-refreshing") {
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("Refreshing schedule…", color = MUTED, fontSize = 13.sp)
+                    }
+                }
+            }
+
+            dates.forEach { date ->
+                val episodes = schedule[date].orEmpty()
+                item(key = "legacy-date-$date") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            formatDateHeader(date, today),
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            "${episodes.size} ${if (episodes.size == 1) "release" else "releases"}",
+                            color = MUTED,
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+                if (episodes.isEmpty()) {
+                    item(key = "legacy-empty-$date") { EmptyDayCard() }
+                } else {
+                    itemsIndexed(
+                        episodes,
+                        key = { index, anime -> "$date-${anime.activeSlug}-${anime.displayEpisodeNumber}-$index" },
+                    ) { index, anime ->
+                        LegacyScheduleRow(
+                            anime = anime,
+                            onClick = { onAnimeClick(anime.activeSlug) },
+                        )
+                    }
+                }
+            }
+
+            if (dates.isEmpty()) {
+                item(key = "legacy-empty-all") {
+                    EmptyDayCard()
+                }
+            }
+        }
     }
 }
 
-// ── Skeleton shimmer ──────────────────────────────────────────────────────────
-
 @Composable
-private fun SkeletonBox(modifier: Modifier = Modifier) {
-    var pulse by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            pulse = !pulse
-            delay(700)
-        }
-    }
-    val alpha by animateFloatAsState(if (pulse) 0.08f else 0.04f, tween(700))
-    Box(modifier.background(Color.White.copy(alpha = alpha)))
-}
-
-// ── Anime card ────────────────────────────────────────────────────────────────
-
-@Composable
-private fun AnimeScheduleCard(
+private fun LegacyScheduleRow(
     anime: ScheduleAnime,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    val strings = LocalAppStrings.current
-    val inter = remember { MutableInteractionSource() }
-    val hovered by inter.collectIsHoveredAsState()
-
-    val bgColor by animateColorAsState(if (hovered) CARD_H else CARD, tween(300, easing = FastOutSlowInEasing))
-    val borderColor by animateColorAsState(
-        if (hovered) Color.White.copy(alpha = 0.20f) else BORDER, tween(300, easing = FastOutSlowInEasing)
-    )
-    val scale by animateFloatAsState(if (hovered) 1.015f else 1f, tween(300, easing = FastOutSlowInEasing))
-
     Row(
-        modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(10.dp))
-            .background(bgColor)
-            .border(1.dp, borderColor, RoundedCornerShape(10.dp))
-            .hoverable(inter)
-            .tvFocusableClick(shape = RoundedCornerShape(10.dp), onClick = onClick)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(CARD)
+            .border(1.dp, BORDER, RoundedCornerShape(18.dp))
+            .tvFocusableClick(shape = RoundedCornerShape(18.dp), onClick = onClick)
             .padding(10.dp),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // ── Thumbnail ─────────────────────────────────────────────────
         Box(
-            Modifier
-                .width(80.dp)
-                .height(108.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .background(Color.White.copy(alpha = 0.05f))
+            modifier = Modifier
+                .width(82.dp)
+                .height(112.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.06f)),
         ) {
-            if (anime.imageUrl.isNotBlank()) {
+            anime.imageUrl?.takeIf { it.isNotBlank() }?.let { imageUrl ->
                 AsyncImage(
-                    model = anime.imageUrl,
-                    contentDescription = null,
+                    model = imageUrl,
+                    contentDescription = anime.resolveDisplayTitle(),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            // Episode badge — white pill, black text
-            Box(
-                Modifier
-                    .align(Alignment.TopStart)
-                    .padding(4.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color.White)
-                    .padding(horizontal = 5.dp, vertical = 2.dp)
-            ) {
-                Text(strings.episodeShort(anime.displayEpisodeNumber), color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                anime.resolveDisplayTitle(),
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(7.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetaChip(icon = false, text = LocalAppStrings.current.episodeShort(anime.displayEpisodeNumber))
+                MetaChip(icon = true, text = anime.time.ifBlank { anime.airingStatus.ifBlank { "TBA" } })
+            }
+            val format = (anime.type ?: anime.format).ifBlank { "TV" }
+            if (format.isNotBlank()) {
+                Spacer(Modifier.height(7.dp))
+                Text(format, color = DIM, fontSize = 12.sp, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScheduleHeader(
+    selectedDate: String,
+    today: String,
+    totalDays: Int,
+    totalEpisodes: Int,
+    timezone: String,
+    onExit: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(28.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        Color(0xFF1A0D2A),
+                        Color(0xFF080808),
+                        Color.Black,
+                    )
+                )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(28.dp))
+            .padding(22.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(end = 64.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.CalendarToday, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("Release Schedule", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("Track upcoming episodes by day", color = MUTED, fontSize = 13.sp)
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatPill("$totalEpisodes", "Episodes")
+                StatPill("$totalDays", "Days")
+                StatPill(if (selectedDate == today) "Today" else "Upcoming", "Viewing")
+                StatPill(timezone, "Timezone")
             }
         }
 
-        Spacer(Modifier.width(12.dp))
+        to.kuudere.anisuge.platform.WindowManagementButtons(
+            onClose = onExit,
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
+    }
+}
 
-        // ── Info ──────────────────────────────────────────────────────
-        Column(Modifier.weight(1f)) {
-            // Dot + title
-            Row(verticalAlignment = Alignment.Top) {
-                Box(
-                    Modifier
-                        .padding(top = 3.dp)
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.7f))
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    anime.resolveDisplayTitle(),
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 18.sp,
+@Composable
+private fun StatPill(value: String, label: String) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Text(value, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(label, color = MUTED, fontSize = 11.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun DayChip(
+    date: String,
+    today: String,
+    count: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val inter = remember { MutableInteractionSource() }
+    val hovered by inter.collectIsHoveredAsState()
+    val bg by animateColorAsState(
+        targetValue = when {
+            selected -> Color.White
+            hovered -> Color.White.copy(alpha = 0.12f)
+            else -> CARD
+        },
+        animationSpec = tween(180),
+    )
+    val border by animateColorAsState(
+        targetValue = if (selected) Color.White else Color.White.copy(alpha = if (hovered) 0.22f else 0.10f),
+        animationSpec = tween(180),
+    )
+    val (label, day) = formatDayChip(date, today)
+
+    Column(
+        modifier = Modifier
+            .widthIn(min = 82.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(18.dp))
+            .hoverable(inter)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(label, color = if (selected) Color.Black else MUTED, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(3.dp))
+        Text(
+            day,
+            color = if (selected) Color.Black else Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Spacer(Modifier.height(4.dp))
+        Text("$count shows", color = if (selected) Color.Black.copy(alpha = 0.62f) else DIM, fontSize = 10.sp)
+    }
+}
+
+@Composable
+private fun ScheduleReleaseCard(
+    anime: ScheduleAnime,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
+    val strings = LocalAppStrings.current
+    val inter = remember { MutableInteractionSource() }
+    val hovered by inter.collectIsHoveredAsState()
+    val bg by animateColorAsState(if (hovered) CARD_HOVER else CARD, tween(220, easing = FastOutSlowInEasing))
+    val scale by animateFloatAsState(if (hovered) 1.012f else 1f, tween(220, easing = FastOutSlowInEasing))
+
+    Column(
+        modifier = modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(22.dp))
+            .background(bg)
+            .border(1.dp, Color.White.copy(alpha = if (hovered) 0.22f else 0.10f), RoundedCornerShape(22.dp))
+            .hoverable(inter)
+            .tvFocusableClick(shape = RoundedCornerShape(22.dp), onClick = onClick),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(if (compact) 16f / 8.8f else 16f / 7.4f)
+                .background(Color.White.copy(alpha = 0.04f)),
+        ) {
+            val hero = anime.bannerUrl ?: anime.imageUrl
+            if (!hero.isNullOrBlank()) {
+                AsyncImage(
+                    model = hero,
+                    contentDescription = anime.resolveDisplayTitle(),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.12f),
+                        0.55f to Color.Black.copy(alpha = 0.35f),
+                        1f to Color.Black.copy(alpha = 0.92f),
+                    )
+                )
+            )
 
-            Spacer(Modifier.height(5.dp))
+            Row(
+                modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Pill(strings.episodeShort(anime.displayEpisodeNumber), selected = true)
+                anime.airType.takeIf { it.isNotBlank() }?.let { Pill(it.uppercase(), selected = false) }
+            }
 
-            // Time + type
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (anime.time.isNotBlank()) {
-                    Text(anime.time, color = MUTED, fontSize = 12.sp)
-                    Text(" • ", color = MUTED, fontSize = 12.sp)
+            if (anime.averageScore != null && anime.averageScore > 0) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.Black.copy(alpha = 0.62f))
+                        .padding(horizontal = 9.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.Star, null, tint = Color(0xFFFFD166), modifier = Modifier.size(13.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("${anime.averageScore}%", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
-                Text((anime.type ?: anime.format).ifBlank { "TV" }, color = MUTED, fontSize = 12.sp)
             }
 
-            Spacer(Modifier.height(7.dp))
+            Text(
+                anime.resolveDisplayTitle(),
+                color = Color.White,
+                fontSize = if (compact) 18.sp else 21.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = if (compact) 22.sp else 25.sp,
+                modifier = Modifier.align(Alignment.BottomStart).padding(14.dp),
+            )
+        }
 
-            // Description
-            val desc = anime.description.replace(Regex("<[^>]*>"), "").trim()
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MetaChip(icon = true, text = anime.time.ifBlank { anime.airingStatus.ifBlank { "TBA" } })
+                MetaChip(icon = false, text = (anime.type ?: anime.format).ifBlank { "TV" })
+                if (anime.duration.isNotBlank()) MetaChip(icon = false, text = anime.duration)
+            }
+
+            val desc = anime.description.replace(Regex("<[^>]*>"), " ").replace(Regex("\\s+"), " ").trim()
             if (desc.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
                 Text(
                     desc,
-                    color = Color.White.copy(alpha = 0.35f),
-                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = 0.48f),
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = 16.sp,
                 )
             }
+
+            if (anime.genres.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    anime.genres.take(3).forEach { genre ->
+                        Text(
+                            genre,
+                            color = MUTED,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color.White.copy(alpha = 0.06f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun Pill(text: String, selected: Boolean) {
+    Text(
+        text,
+        color = if (selected) Color.Black else Color.White,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.ExtraBold,
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (selected) Color.White else Color.Black.copy(alpha = 0.58f))
+            .border(1.dp, Color.White.copy(alpha = if (selected) 0f else 0.18f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 9.dp, vertical = 5.dp),
+    )
+}
+
+@Composable
+private fun MetaChip(icon: Boolean, text: String) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color.White.copy(alpha = 0.06f))
+            .padding(horizontal = 9.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon) {
+            Icon(Icons.Outlined.Schedule, null, tint = MUTED, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(5.dp))
+        }
+        Text(text, color = MUTED, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+    }
+}
+
+@Composable
+private fun EmptyScheduleError(onRetry: () -> Unit) {
+    val strings = LocalAppStrings.current
+    Column(
+        Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(Icons.Outlined.CalendarToday, null, tint = MUTED, modifier = Modifier.size(52.dp))
+        Spacer(Modifier.height(12.dp))
+        Text(strings.failedToLoadSchedule, color = MUTED, fontSize = 16.sp)
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = Color.White)) {
+            Text(strings.retry, color = Color.Black)
+        }
+    }
+}
+
+@Composable
+private fun EmptyDayCard() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 180.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(CARD)
+            .border(1.dp, BORDER, RoundedCornerShape(24.dp))
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(Icons.Outlined.CalendarToday, null, tint = MUTED, modifier = Modifier.size(36.dp))
+            Spacer(Modifier.height(10.dp))
+            Text("No releases scheduled", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("Pick another day from the timeline above.", color = MUTED, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun ScrollToTopButton(onClick: () -> Unit) {
+    val inter = remember { MutableInteractionSource() }
+    val hovered by inter.collectIsHoveredAsState()
+    val bg by animateColorAsState(if (hovered) Color.White else Color.White.copy(alpha = 0.86f), tween(180))
+
+    Box(
+        Modifier
+            .size(46.dp)
+            .clip(CircleShape)
+            .background(bg)
+            .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
+            .hoverable(inter)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Outlined.KeyboardArrowUp, null, tint = Color.Black, modifier = Modifier.size(24.dp))
     }
 }
