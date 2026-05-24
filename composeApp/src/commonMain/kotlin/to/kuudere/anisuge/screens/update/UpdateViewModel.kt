@@ -30,7 +30,7 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
 
     private fun checkUpdate() = viewModelScope.launch {
         val response = updateService.checkUpdate()
-        
+
         if (response == null || response.success == false) {
             _state.value = _state.value.copy(isUpdateAvailable = false)
             return@launch
@@ -41,10 +41,7 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
         val isAvailable = when (response.updateAvailable) {
             true -> true
             false -> false
-            null -> {
-                val buildBump = remoteBuild != null && remoteBuild > AppBuildNumber
-                buildBump || compareVersions(remoteVersion, AppVersion) > 0
-            }
+            null -> remoteBuild != null && remoteBuild > AppBuildNumber
         }
         val releaseNotes = response.changelog
             ?: response.message
@@ -64,19 +61,3 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
         )
     }
 }
-
-private fun compareVersions(left: String, right: String): Int {
-    val leftParts = left.versionParts()
-    val rightParts = right.versionParts()
-    val size = maxOf(leftParts.size, rightParts.size)
-
-    for (index in 0 until size) {
-        val difference = (leftParts.getOrNull(index) ?: 0) - (rightParts.getOrNull(index) ?: 0)
-        if (difference != 0) return difference
-    }
-
-    return 0
-}
-
-private fun String.versionParts(): List<Int> = split('.', '+', '-')
-    .mapNotNull { part -> part.filter { it.isDigit() }.toIntOrNull() }
