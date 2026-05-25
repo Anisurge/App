@@ -4749,15 +4749,12 @@ private fun ConnectTab(
                             modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF6C4AB6)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("RA", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
+                            ServiceLogo(
+                                model = "https://reanime.to/logo.png",
+                                fallbackText = "RA",
+                                backgroundColor = Color(0xFF6C4AB6),
+                                modifier = Modifier.size(40.dp)
+                            )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
@@ -4832,15 +4829,12 @@ private fun ConnectTab(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(BG_HOVER),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("RA", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
+                        ServiceLogo(
+                            model = "https://reanime.to/logo.png",
+                            fallbackText = "RA",
+                            backgroundColor = BG_HOVER,
+                            modifier = Modifier.size(40.dp)
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text("ReAnime Account", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -4880,15 +4874,12 @@ private fun ConnectTab(
                         modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF2196F3)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("LA", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
+                        ServiceLogo(
+                            model = null,
+                            fallbackText = "LA",
+                            backgroundColor = Color(0xFF2196F3),
+                            modifier = Modifier.size(40.dp)
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
@@ -4941,15 +4932,12 @@ private fun ConnectTab(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(BG_HOVER),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("LA", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
+                        ServiceLogo(
+                            model = null,
+                            fallbackText = "LA",
+                            backgroundColor = BG_HOVER,
+                            modifier = Modifier.size(40.dp)
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text("LunarAnime Account", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -4966,4 +4954,37 @@ private fun ConnectTab(
         }
     }
 }
+
+@Composable
+private fun ServiceLogo(
+    model: String?,
+    fallbackText: String,
+    backgroundColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(backgroundColor),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!model.isNullOrBlank()) {
+            var isError by remember { mutableStateOf(false) }
+            if (!isError) {
+                AsyncImage(
+                    model = model,
+                    contentDescription = fallbackText,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    onError = { isError = true }
+                )
+            } else {
+                Text(fallbackText, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Text(fallbackText, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
 
