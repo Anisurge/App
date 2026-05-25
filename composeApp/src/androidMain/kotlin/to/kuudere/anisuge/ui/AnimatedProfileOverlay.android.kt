@@ -69,9 +69,12 @@ private fun ApngImageDecoderOverlay(
         drawable = decoded
     }
 
-    DisposableEffect(drawable) {
+    var imageViewRef by remember { mutableStateOf<ImageView?>(null) }
+
+    DisposableEffect(drawable, imageViewRef) {
         onDispose {
             (drawable as? AnimatedImageDrawable)?.stop()
+            imageViewRef?.setImageDrawable(null)
         }
     }
 
@@ -80,9 +83,13 @@ private fun ApngImageDecoderOverlay(
             ImageView(ctx).apply {
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 this.contentDescription = contentDescription
+                imageViewRef = this
             }
         },
-        update = { view -> view.setImageDrawable(drawable) },
+        update = { view ->
+            imageViewRef = view
+            view.setImageDrawable(drawable)
+        },
         modifier = modifier,
     )
 }

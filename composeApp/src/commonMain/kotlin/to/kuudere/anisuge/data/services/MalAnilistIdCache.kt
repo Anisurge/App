@@ -40,6 +40,16 @@ class MalAnilistIdCache(private val dataStore: DataStore<Preferences>) {
         }
     }
 
+    suspend fun putAll(mappings: Map<Int, Int>) {
+        if (mappings.isEmpty()) return
+        dataStore.edit { prefs ->
+            val malToAni = parseMap(prefs[MAL_TO_ANILIST_KEY]) + mappings
+            val aniToMal = parseMap(prefs[ANILIST_TO_MAL_KEY]) + mappings.map { it.value to it.key }
+            prefs[MAL_TO_ANILIST_KEY] = json.encodeToString(malToAni.mapKeys { it.key.toString() })
+            prefs[ANILIST_TO_MAL_KEY] = json.encodeToString(aniToMal.mapKeys { it.key.toString() })
+        }
+    }
+
     private fun parseMap(raw: String?): Map<Int, Int> {
         if (raw.isNullOrBlank()) return emptyMap()
         return try {

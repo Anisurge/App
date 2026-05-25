@@ -50,6 +50,13 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val ANILIST_EXPIRES_AT_KEY = longPreferencesKey("anilist_expires_at")
         val ANILIST_USERNAME_KEY = stringPreferencesKey("anilist_username")
 
+        // Lunar tokens
+        val LUNAR_ACCESS_TOKEN_KEY = stringPreferencesKey("lunar_access_token")
+        val LUNAR_REFRESH_TOKEN_KEY = stringPreferencesKey("lunar_refresh_token")
+        val LUNAR_EXPIRES_AT_KEY = longPreferencesKey("lunar_expires_at")
+        val LUNAR_USERNAME_KEY = stringPreferencesKey("lunar_username")
+        val LUNAR_USER_ID_KEY = stringPreferencesKey("lunar_user_id")
+
         private val json = Json { ignoreUnknownKeys = true }
     }
 
@@ -266,6 +273,42 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             it.remove(ANILIST_ACCESS_TOKEN_KEY)
             it.remove(ANILIST_EXPIRES_AT_KEY)
             it.remove(ANILIST_USERNAME_KEY)
+        }
+    }
+
+    // ── Lunar Tokens ────────────────────────────────────────────────────────────
+    suspend fun getLunarAccessToken(): String? = dataStore.data.first()[LUNAR_ACCESS_TOKEN_KEY]
+    suspend fun getLunarRefreshToken(): String? = dataStore.data.first()[LUNAR_REFRESH_TOKEN_KEY]
+    suspend fun getLunarExpiresAt(): Long = dataStore.data.first()[LUNAR_EXPIRES_AT_KEY] ?: 0L
+    suspend fun getLunarUsername(): String? = dataStore.data.first()[LUNAR_USERNAME_KEY]
+    suspend fun getLunarUserId(): String? = dataStore.data.first()[LUNAR_USER_ID_KEY]
+    suspend fun getLunarIsExpired(): Boolean {
+        val expiresAt = getLunarExpiresAt()
+        return expiresAt > 0 && to.kuudere.anisuge.utils.currentTimeMillis() > expiresAt - 60000
+    }
+
+    suspend fun saveLunarTokens(accessToken: String, refreshToken: String, expiresIn: Long) {
+        dataStore.edit {
+            it[LUNAR_ACCESS_TOKEN_KEY] = accessToken
+            it[LUNAR_REFRESH_TOKEN_KEY] = refreshToken
+            it[LUNAR_EXPIRES_AT_KEY] = to.kuudere.anisuge.utils.currentTimeMillis() + (expiresIn * 1000)
+        }
+    }
+
+    suspend fun saveLunarUsernameAndId(username: String, userId: String) {
+        dataStore.edit {
+            it[LUNAR_USERNAME_KEY] = username
+            it[LUNAR_USER_ID_KEY] = userId
+        }
+    }
+
+    suspend fun clearLunarTokens() {
+        dataStore.edit {
+            it.remove(LUNAR_ACCESS_TOKEN_KEY)
+            it.remove(LUNAR_REFRESH_TOKEN_KEY)
+            it.remove(LUNAR_EXPIRES_AT_KEY)
+            it.remove(LUNAR_USERNAME_KEY)
+            it.remove(LUNAR_USER_ID_KEY)
         }
     }
 }

@@ -84,6 +84,8 @@ data class UserProfile(
     val equippedOuterFrameUrl: String? = null,
     val equippedFrameItemId: String? = null,
     val equipped: JsonObject? = null,
+    val reanimeConnected: Boolean = false,
+    val reanimeUsername: String? = null,
 ) {
     val effectiveId: String? get() = id ?: userId
     val effectiveAvatar: String? get() = pfp ?: avatar

@@ -63,6 +63,21 @@ class IntegrationsSyncService(
         )
     }
 
+    suspend fun clearLunarOnServer(): Boolean {
+        val session = sessionStore.get() ?: return false
+        if (!sessionStore.isValid(session)) return false
+        return patch(
+            session,
+            BffIntegrationsPayload(
+                lunarAccessToken = null,
+                lunarRefreshToken = null,
+                lunarExpiresAt = null,
+                lunarUserId = null,
+                lunarUsername = null,
+            ),
+        )
+    }
+
     /**
      * Pull server credentials into local storage. Server wins for each provider:
      * empty server token clears local; non-empty restores local.
@@ -82,11 +97,13 @@ class IntegrationsSyncService(
             val remote = body.integrations
             val localHasMal = !settingsStore.getMalAccessToken().isNullOrBlank()
             val localHasAnilist = !settingsStore.getAnilistAccessToken().isNullOrBlank()
+            val localHasLunar = !settingsStore.getLunarAccessToken().isNullOrBlank()
             val remoteHasMal = !remote.malAccessToken.isNullOrBlank()
             val remoteHasAnilist = !remote.anilistAccessToken.isNullOrBlank()
+            val remoteHasLunar = !remote.lunarAccessToken.isNullOrBlank()
 
             // One-time migration: local links from before server sync → upload instead of wiping.
-            if ((localHasMal && !remoteHasMal) || (localHasAnilist && !remoteHasAnilist)) {
+            if ((localHasMal && !remoteHasMal) || (localHasAnilist && !remoteHasAnilist) || (localHasLunar && !remoteHasLunar)) {
                 pushFromLocal()
                 return true
             }
@@ -131,6 +148,25 @@ class IntegrationsSyncService(
                 settingsStore.saveAnilistUsername(it)
             }
         }
+
+        val lunToken = remote.lunarAccessToken?.trim().orEmpty()
+        if (lunToken.isEmpty()) {
+            settingsStore.clearLunarTokens()
+        } else {
+            val refresh = remote.lunarRefreshToken?.trim().orEmpty()
+            val expiresAt = remote.lunarExpiresAt ?: 0L
+            val expiresInSec = if (expiresAt > 0) {
+                ((expiresAt - to.kuudere.anisuge.utils.currentTimeMillis()) / 1000).coerceAtLeast(0)
+            } else {
+                0L
+            }
+            settingsStore.saveLunarTokens(lunToken, refresh, expiresInSec)
+            val lunUsername = remote.lunarUsername?.trim().orEmpty()
+            val lunUserId = remote.lunarUserId?.trim().orEmpty()
+            if (lunUsername.isNotEmpty() || lunUserId.isNotEmpty()) {
+                settingsStore.saveLunarUsernameAndId(lunUsername, lunUserId)
+            }
+        }
     }
 
     private suspend fun payloadFromLocal(): BffIntegrationsPayload {
@@ -141,6 +177,11 @@ class IntegrationsSyncService(
         val alAccess = settingsStore.getAnilistAccessToken()
         val alExpires = settingsStore.getAnilistExpiresAt().takeIf { it > 0 }
         val alUser = settingsStore.getAnilistUsername()
+        val lunAccess = settingsStore.getLunarAccessToken()
+        val lunRefresh = settingsStore.getLunarRefreshToken()
+        val lunExpires = settingsStore.getLunarExpiresAt().takeIf { it > 0 }
+        val lunUser = settingsStore.getLunarUsername()
+        val lunUserId = settingsStore.getLunarUserId()
         return BffIntegrationsPayload(
             malAccessToken = malAccess,
             malRefreshToken = malRefresh,
@@ -149,6 +190,11 @@ class IntegrationsSyncService(
             anilistAccessToken = alAccess,
             anilistExpiresAt = alExpires,
             anilistUsername = alUser,
+            lunarAccessToken = lunAccess,
+            lunarRefreshToken = lunRefresh,
+            lunarExpiresAt = lunExpires,
+            lunarUsername = lunUser,
+            lunarUserId = lunUserId,
         )
     }
 

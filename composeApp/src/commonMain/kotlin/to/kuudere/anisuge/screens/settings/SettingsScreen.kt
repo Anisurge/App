@@ -70,6 +70,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -317,6 +319,7 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
+        add(SettingsNavItem(SettingsTab.Connect, "Connect", Icons.Default.Link))
         // Community — not ready yet
         // add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
@@ -1020,6 +1023,15 @@ private fun MobileSettingsDetail(
                     onSyncToAniList = viewModel::syncAllToAniList,
                 )
 
+                is SettingsTab.Connect -> ConnectTab(
+                    uiState = uiState,
+                    onConnectReanime = viewModel::connectReanime,
+                    onDisconnectReanime = viewModel::disconnectReanime,
+                    onSyncLibrary = viewModel::syncLibraryWithReanime,
+                    onConnectLunar = { viewModel.connectLunar { url -> openUrl(url) } },
+                    onDisconnectLunar = viewModel::disconnectLunar,
+                )
+
                 is SettingsTab.Community -> {
                     // Community tab hidden — not yet ready (restore CommunityTab when shipping)
                     Box(Modifier.fillMaxSize())
@@ -1153,6 +1165,15 @@ private fun SettingsContent(
                 onWatchHistorySync = viewModel::startWatchHistorySync,
                 onSyncToMAL = viewModel::syncAllToMAL,
                 onSyncToAniList = viewModel::syncAllToAniList,
+            )
+
+            is SettingsTab.Connect -> ConnectTab(
+                uiState = uiState,
+                onConnectReanime = viewModel::connectReanime,
+                onDisconnectReanime = viewModel::disconnectReanime,
+                onSyncLibrary = viewModel::syncLibraryWithReanime,
+                onConnectLunar = { viewModel.connectLunar { url -> openUrl(url) } },
+                onDisconnectLunar = viewModel::disconnectLunar,
             )
 
             is SettingsTab.Community -> {
@@ -4570,3 +4591,379 @@ private fun VerifiedBadge(size: Dp) {
         )
     }
 }
+
+@Composable
+private fun ConnectTab(
+    uiState: SettingsUiState,
+    onConnectReanime: (String, String) -> Unit,
+    onDisconnectReanime: () -> Unit,
+    onSyncLibrary: () -> Unit,
+    onConnectLunar: () -> Unit,
+    onDisconnectLunar: () -> Unit,
+) {
+    var showConnectReanimeDialog by remember { mutableStateOf(false) }
+    var reanimeEmail by remember { mutableStateOf("") }
+    var reanimePassword by remember { mutableStateOf("") }
+
+    LaunchedEffect(uiState.userProfile?.reanimeConnected) {
+        if (uiState.userProfile?.reanimeConnected == true) {
+            showConnectReanimeDialog = false
+            reanimeEmail = ""
+            reanimePassword = ""
+        }
+    }
+
+    if (showConnectReanimeDialog) {
+        Dialog(
+            onDismissRequest = { if (!uiState.isConnectingReanime) showConnectReanimeDialog = false }
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(320.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(BG_CARD)
+                    .border(1.dp, BORDER, RoundedCornerShape(16.dp))
+                    .padding(24.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Connect ReAnime",
+                        color = TEXT,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    Text(
+                        "Enter your ReAnime email/username and password to sync your library.",
+                        color = MUTED,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 20.dp)
+                    )
+                    
+                    OutlinedTextField(
+                        value = reanimeEmail,
+                        onValueChange = { reanimeEmail = it },
+                        placeholder = { Text("Email or Username", color = MUTED) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TEXT,
+                            unfocusedTextColor = TEXT,
+                            focusedBorderColor = BORDER,
+                            unfocusedBorderColor = BORDER,
+                            cursorColor = Color.White,
+                        )
+                    )
+                    
+                    OutlinedTextField(
+                        value = reanimePassword,
+                        onValueChange = { reanimePassword = it },
+                        placeholder = { Text("Password", color = MUTED) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                        visualTransformation = PasswordVisualTransformation(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TEXT,
+                            unfocusedTextColor = TEXT,
+                            focusedBorderColor = BORDER,
+                            unfocusedBorderColor = BORDER,
+                            cursorColor = Color.White,
+                        )
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        TextButton(
+                            onClick = { showConnectReanimeDialog = false },
+                            enabled = !uiState.isConnectingReanime,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Cancel", color = MUTED)
+                        }
+                        
+                        Button(
+                            onClick = { onConnectReanime(reanimeEmail, reanimePassword) },
+                            enabled = !uiState.isConnectingReanime && reanimeEmail.isNotBlank() && reanimePassword.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C4AB6)),
+                            modifier = Modifier.weight(1.5f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            if (uiState.isConnectingReanime) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("Connect", color = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+    ) {
+        Text(
+            "Connect",
+            color = TEXT,
+            fontSize = 42.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Text(
+            "Connect your streaming/catalog accounts to enable cross-device progress sync and list tracking.",
+            color = MUTED,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 32.dp)
+        )
+
+        // ReAnime Section
+        Text(
+            "ReAnime",
+            color = TEXT,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        if (uiState.userProfile?.reanimeConnected == true) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BG_CARD)
+                    .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+                    .padding(16.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF6C4AB6)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("RA", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    "ReAnime Account",
+                                    color = TEXT,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "Connected as @${uiState.userProfile.reanimeUsername ?: uiState.userProfile.username}",
+                                    color = MUTED,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.width(16.dp))
+                        
+                        Button(
+                            onClick = onDisconnectReanime,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914)),
+                            shape = RoundedCornerShape(8.dp),
+                            enabled = !uiState.isDisconnectingReanime
+                        ) {
+                            if (uiState.isDisconnectingReanime) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("Disconnect", color = Color.White, fontSize = 12.sp, maxLines = 1)
+                            }
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = onSyncLibrary,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C4AB6)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            enabled = !uiState.isLoading
+                        ) {
+                            if (uiState.isLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("Sync library (2-way)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BG_CARD)
+                    .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+                    .clickable { showConnectReanimeDialog = true }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(BG_HOVER),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("RA", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("ReAnime Account", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Not connected", color = MUTED, fontSize = 12.sp)
+                        }
+                    }
+                    Text("Connect", color = Color(0xFFBF80FF), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // LunarAnime Section
+        Text(
+            "LunarAnime",
+            color = TEXT,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        if (uiState.lunarConnected) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BG_CARD)
+                    .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2196F3)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("LA", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                "LunarAnime Account",
+                                color = TEXT,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                "Connected as @${uiState.lunarUsername ?: "User"}",
+                                color = MUTED,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    Button(
+                        onClick = onDisconnectLunar,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914)),
+                        shape = RoundedCornerShape(8.dp),
+                        enabled = !uiState.isConnectingLunar
+                    ) {
+                        if (uiState.isConnectingLunar) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text("Disconnect", color = Color.White, fontSize = 12.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BG_CARD)
+                    .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+                    .clickable { if (!uiState.isConnectingLunar) onConnectLunar() }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(BG_HOVER),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("LA", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("LunarAnime Account", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Not connected", color = MUTED, fontSize = 12.sp)
+                        }
+                    }
+                    if (uiState.isConnectingLunar) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("Connect", color = Color(0xFF2196F3), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+}
+

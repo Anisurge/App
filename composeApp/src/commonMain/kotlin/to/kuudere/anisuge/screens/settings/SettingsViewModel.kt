@@ -1,5 +1,6 @@
 package to.kuudere.anisuge.screens.settings
 
+import to.kuudere.anisuge.AppComponent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -106,6 +107,9 @@ data class SettingsUiState(
     val isSavingUsername: Boolean = false,
     val isSyncingMal: Boolean = false,
     val isSyncingAnilist: Boolean = false,
+    val lunarConnected: Boolean = false,
+    val lunarUsername: String? = null,
+    val isConnectingLunar: Boolean = false,
 
     /** Bulk sync from account export to linked MAL / AniList. */
     val isWatchHistorySyncing: Boolean = false,
@@ -167,6 +171,8 @@ data class SettingsUiState(
     val rewardsTodayWatch: Int = 0,
     val rewardsTodayWatchCap: Int = 12,
     val isClaimingDailyReward: Boolean = false,
+    val isConnectingReanime: Boolean = false,
+    val isDisconnectingReanime: Boolean = false,
 )
 
 sealed class SettingsTab {
@@ -175,6 +181,7 @@ sealed class SettingsTab {
     data object Storage : SettingsTab()
     data object Appearance : SettingsTab()
     data object Sync : SettingsTab()
+    data object Connect : SettingsTab()
     data object Community : SettingsTab()
     data object Servers : SettingsTab()
     data object Notifications : SettingsTab()
@@ -358,14 +365,18 @@ class SettingsViewModel(
             }
             val malToken = settingsStore.getMalAccessToken()
             val anilistToken = settingsStore.getAnilistAccessToken()
+            val lunarToken = settingsStore.getLunarAccessToken()
             val malUsername = settingsStore.getMalUsername()
             val anilistUsername = settingsStore.getAnilistUsername()
+            val lunarUsername = settingsStore.getLunarUsername()
             _uiState.update {
                 it.copy(
                     malConnected = malToken != null,
                     malUsername = malUsername,
                     anilistConnected = anilistToken != null,
                     anilistUsername = anilistUsername,
+                    lunarConnected = lunarToken != null,
+                    lunarUsername = lunarUsername,
                 )
             }
         }
@@ -418,6 +429,12 @@ class SettingsViewModel(
 
             is SettingsTab.Sync -> {
                 loadTrackingState()
+                if (_uiState.value.userProfile == null && authService.authState.value is SessionCheckResult.Valid) {
+                    loadUserProfile()
+                }
+            }
+
+            is SettingsTab.Connect -> {
                 if (_uiState.value.userProfile == null && authService.authState.value is SessionCheckResult.Valid) {
                     loadUserProfile()
                 }
@@ -1290,6 +1307,45 @@ class SettingsViewModel(
         }
     }
 
+    fun connectLunar(onOpenUrl: (String) -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isConnectingLunar = true) }
+            val url = trackingService.getLunarLoginUrl()
+            _uiState.update { it.copy(isConnectingLunar = false) }
+            if (url != null) {
+                onOpenUrl(url)
+            }
+        }
+    }
+
+    fun disconnectLunar() {
+        viewModelScope.launch {
+            trackingService.disconnectLunar()
+            _uiState.update { it.copy(lunarConnected = false, lunarUsername = null) }
+        }
+    }
+
+    fun refreshLunarConnection() {
+        viewModelScope.launch {
+            val token = settingsStore.getLunarAccessToken()
+            if (token != null) {
+                val username = try {
+                    val profile = trackingService.fetchLunarProfile(token)
+                    profile?.username
+                } catch (_: Exception) {
+                    null
+                }
+                if (username != null) {
+                    val userId = settingsStore.getLunarUserId() ?: ""
+                    settingsStore.saveLunarUsernameAndId(username, userId)
+                }
+                _uiState.update { it.copy(lunarConnected = true, lunarUsername = username) }
+            } else {
+                _uiState.update { it.copy(lunarConnected = false, lunarUsername = null) }
+            }
+        }
+    }
+
     fun refreshTrackingState() {
         loadTrackingState()
     }
@@ -1974,6 +2030,117 @@ class SettingsViewModel(
                 )
             } finally {
                 clearSyncProgressNotification()
+            }
+        }
+    }
+
+    fun connectReanime(email: String, password: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isConnectingReanime = true, errorMessage = null, successMessage = null) }
+            val result = bffMeService.connectReanime(email, password)
+            result.fold(
+                onSuccess = { updatedProfile ->
+                    _uiState.update {
+                        it.copy(
+                            isConnectingReanime = false,
+                            userProfile = updatedProfile,
+                            successMessage = "ReAnime account connected successfully."
+                        )
+                    }
+                    viewModelScope.launch {
+                        try {
+                            _uiState.update { it.copy(isLoading = true) }
+                            val syncResult = AppComponent.librarySyncService.syncWithReanime(force = true)
+                            if (syncResult) {
+                                _uiState.update {
+                                    it.copy(
+                                        isLoading = false,
+                                        successMessage = "ReAnime account connected and library synchronized."
+                                    )
+                                }
+                            } else {
+                                _uiState.update {
+                                    it.copy(
+                                        isLoading = false,
+                                        errorMessage = "Connected to ReAnime, but library sync failed."
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    errorMessage = "Connected to ReAnime, but library sync failed: ${e.message}"
+                                )
+                            }
+                        }
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isConnectingReanime = false,
+                            errorMessage = e.message ?: "Failed to connect ReAnime account"
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    fun disconnectReanime() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDisconnectingReanime = true, errorMessage = null, successMessage = null) }
+            val result = bffMeService.disconnectReanime()
+            result.fold(
+                onSuccess = { updatedProfile ->
+                    _uiState.update {
+                        it.copy(
+                            isDisconnectingReanime = false,
+                            userProfile = updatedProfile,
+                            successMessage = "ReAnime account disconnected successfully."
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isDisconnectingReanime = false,
+                            errorMessage = e.message ?: "Failed to disconnect ReAnime account"
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    fun syncLibraryWithReanime() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null, successMessage = null) }
+            try {
+                val syncResult = AppComponent.librarySyncService.syncWithReanime(force = true)
+                if (syncResult) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            successMessage = "2-way library sync completed successfully."
+                        )
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            errorMessage = "Library sync failed."
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Library sync failed: ${e.message}"
+                    )
+                }
             }
         }
     }

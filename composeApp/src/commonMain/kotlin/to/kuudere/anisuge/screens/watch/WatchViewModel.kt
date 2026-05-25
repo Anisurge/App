@@ -882,13 +882,16 @@ class WatchViewModel(
         if (_uiState.value.didMarkWatched) return // prevent double-sync
         _uiState.update { it.copy(didMarkWatched = true) }
 
+        val animeTitle = _uiState.value.episodeData?.anime?.title?.displayTitle?.takeIf { it.isNotBlank() }
+
         syncManager?.let { mgr ->
             viewModelScope.launch {
                 mgr.syncEpisodeComplete(
                     malId = malId,
                     anilistId = anilistId,
                     episodeNumber = episodeNumber,
-                    totalEpisodes = totalEpisodes
+                    totalEpisodes = totalEpisodes,
+                    animeTitle = animeTitle
                 )
             }
         }

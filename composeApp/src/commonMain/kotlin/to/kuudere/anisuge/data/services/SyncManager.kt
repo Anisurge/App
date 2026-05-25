@@ -21,8 +21,9 @@ class SyncManager(
         anilistId: Int?,
         episodeNumber: Int,
         totalEpisodes: Int?,
+        animeTitle: String? = null,
     ) {
-        if (malId == null && anilistId == null) return
+        if (malId == null && anilistId == null && animeTitle.isNullOrBlank()) return
 
         coroutineScope {
             if (malId != null) {
@@ -38,6 +39,15 @@ class SyncManager(
                 async {
                     try {
                         trackingService.syncAnilistProgress(anilistId, episodeNumber, totalEpisodes)
+                    } catch (_: Exception) {
+                        // Silently fail
+                    }
+                }
+            }
+            if (!animeTitle.isNullOrBlank()) {
+                async {
+                    try {
+                        trackingService.syncLunarPresence(animeTitle, episodeNumber)
                     } catch (_: Exception) {
                         // Silently fail
                     }

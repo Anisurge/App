@@ -22,6 +22,9 @@ import to.kuudere.anisuge.data.models.BffMeResponse
 import to.kuudere.anisuge.data.models.BffPfpUploadResponse
 import to.kuudere.anisuge.data.models.UserProfile
 import to.kuudere.anisuge.data.models.toUserProfile
+import to.kuudere.anisuge.data.models.BffConnectReanimeRequest
+import to.kuudere.anisuge.data.models.BffConnectReanimeResponse
+import to.kuudere.anisuge.data.models.toUserProfile
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 import to.kuudere.anisuge.platform.ChatImagePick
 
@@ -160,6 +163,54 @@ class BffMeService(
 
     companion object {
         private const val CHAT_IMAGE_MAX_BYTES = (2.5 * 1024 * 1024).toLong()
+    }
+
+    suspend fun connectReanime(email: String, password: String): Result<UserProfile> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/me/connect/reanime") {
+                applyAnisurgeAuth(stored)
+                contentType(ContentType.Application.Json)
+                setBody(BffConnectReanimeRequest(email = email.trim(), password = password))
+            }
+            if (response.status.isSuccess()) {
+                val body: BffConnectReanimeResponse = response.body()
+                if (!body.projectRToken.isNullOrBlank()) {
+                    sessionStore.save(stored.copy(token = body.projectRToken))
+                }
+                Result.success(body.user.toUserProfile())
+            } else {
+                val message = runCatching {
+                    json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+                }.getOrElse { "Failed to connect ReAnime account (${response.status.value})" }
+                Result.failure(Exception(message))
+            }
+        } catch (e: Exception) {
+            println("[BffMeService] connectReanime error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun disconnectReanime(): Result<UserProfile> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/me/disconnect/reanime") {
+                applyAnisurgeAuth(stored)
+            }
+            if (response.status.isSuccess()) {
+                val body: BffMeResponse = response.body()
+                sessionStore.save(stored.copy(token = "project_r_anisurge_offline"))
+                Result.success(body.user.toUserProfile())
+            } else {
+                val message = runCatching {
+                    json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+                }.getOrElse { "Failed to disconnect ReAnime account (${response.status.value})" }
+                Result.failure(Exception(message))
+            }
+        } catch (e: Exception) {
+            println("[BffMeService] disconnectReanime error: ${e.message}")
+            Result.failure(e)
+        }
     }
 }
 

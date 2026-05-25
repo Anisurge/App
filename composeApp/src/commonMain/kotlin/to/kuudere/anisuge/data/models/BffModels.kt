@@ -59,6 +59,8 @@ data class BffPublicUser(
     val coins: Int = 0,
     val equipped: JsonObject? = null,
     val profileExtra: JsonObject? = null,
+    val reanimeConnected: Boolean? = null,
+    val reanimeUsername: String? = null,
 )
 
 fun BffPublicUser.toUserProfile(): UserProfile {
@@ -91,8 +93,23 @@ fun BffPublicUser.toUserProfile(): UserProfile {
         equippedOuterFrameUrl = outerUrl,
         equippedFrameItemId = frameItemId,
         equipped = equippedMap,
+        reanimeConnected = reanimeConnected == true,
+        reanimeUsername = reanimeUsername,
     )
 }
+
+@Serializable
+data class BffConnectReanimeRequest(
+    val email: String,
+    val password: String,
+)
+
+@Serializable
+data class BffConnectReanimeResponse(
+    val success: Boolean,
+    val projectRToken: String? = null,
+    val user: BffPublicUser,
+)
 
 private fun JsonObject?.stringField(key: String): String? =
     (this?.get(key) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }

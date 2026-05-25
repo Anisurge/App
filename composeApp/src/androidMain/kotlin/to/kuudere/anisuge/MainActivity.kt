@@ -108,6 +108,19 @@ class MainActivity : ComponentActivity() {
                     } catch (_: Exception) {}
                     AppComponent.integrationsSyncService.pushFromLocal()
                 }
+                "lunar" -> {
+                    val accessToken = data.getQueryParameter("access_token") ?: return@launch
+                    val refreshToken = data.getQueryParameter("refresh_token") ?: ""
+                    val expiresIn = data.getQueryParameter("expires_in")?.toLongOrNull() ?: 0L
+                    AppComponent.settingsStore.saveLunarTokens(accessToken, refreshToken, expiresIn)
+                    try {
+                        val profile = AppComponent.trackingService.fetchLunarProfile(accessToken)
+                        if (profile != null) {
+                            AppComponent.settingsStore.saveLunarUsernameAndId(profile.username, profile.userId)
+                        }
+                    } catch (_: Exception) {}
+                    AppComponent.integrationsSyncService.pushFromLocal()
+                }
             }
         }
     }

@@ -12,6 +12,11 @@ data class BffIntegrationsPayload(
     val malRefreshToken: String? = null,
     val malExpiresAt: Long? = null,
     val malUsername: String? = null,
+    val lunarAccessToken: String? = null,
+    val lunarRefreshToken: String? = null,
+    val lunarExpiresAt: Long? = null,
+    val lunarUserId: String? = null,
+    val lunarUsername: String? = null,
 )
 
 @Serializable

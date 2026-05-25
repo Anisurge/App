@@ -22,6 +22,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import to.kuudere.anisuge.navigation.Screen
 import to.kuudere.anisuge.navigation.NotificationLaunch
+import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.screens.auth.AuthScreen
 import to.kuudere.anisuge.screens.auth.AuthViewModel
 import to.kuudere.anisuge.screens.splash.SplashScreen
@@ -151,6 +152,22 @@ fun App(
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
         val updateState by updateVm.state.collectAsState()
+        val authState by AppComponent.authService.authState.collectAsState()
+
+        LaunchedEffect(authState) {
+            if (authState is SessionCheckResult.NoSession || authState is SessionCheckResult.Expired) {
+                val current = navController.currentDestination?.route
+                if (current != null &&
+                    current != Screen.Splash.route &&
+                    current != Screen.Auth.route &&
+                    !current.startsWith("update")
+                ) {
+                    navController.navigate(Screen.Auth.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            }
+        }
         val appLocaleCode by AppComponent.settingsStore.appLocaleFlow.collectAsState(initial = AppLocale.default.code)
         val appStrings = appStringsFor(AppLocale.fromCode(appLocaleCode))
         val preferRomajiAnimeTitles by AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(initial = false)

@@ -4,11 +4,10 @@ import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import to.kuudere.anisuge.platform.AppBuildNumber
-import to.kuudere.anisuge.platform.AppVersion
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.services.UpdateService
+import to.kuudere.anisuge.platform.AppVersion
 
 data class UpdateState(
     val currentVersion: String = AppVersion,
@@ -28,6 +27,22 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
         checkUpdate()
     }
 
+    private fun isNewerVersion(remote: String, local: String): Boolean {
+        if (remote.isBlank()) return false
+        val remoteClean = remote.substringBefore('-').trim()
+        val localClean = local.substringBefore('-').trim()
+        val remoteParts = remoteClean.split('.').mapNotNull { it.toIntOrNull() }
+        val localParts = localClean.split('.').mapNotNull { it.toIntOrNull() }
+        val maxLen = maxOf(remoteParts.size, localParts.size)
+        for (i in 0 until maxLen) {
+            val remoteVal = remoteParts.getOrElse(i) { 0 }
+            val localVal = localParts.getOrElse(i) { 0 }
+            if (remoteVal > localVal) return true
+            if (remoteVal < localVal) return false
+        }
+        return false
+    }
+
     private fun checkUpdate() = viewModelScope.launch {
         val response = updateService.checkUpdate()
 
@@ -37,12 +52,7 @@ class UpdateViewModel(private val updateService: UpdateService) : ViewModel() {
         }
 
         val remoteVersion = response.latestVersion ?: response.version ?: ""
-        val remoteBuild = response.buildNumber ?: response.build
-        val isAvailable = when (response.updateAvailable) {
-            true -> true
-            false -> false
-            null -> remoteBuild != null && remoteBuild > AppBuildNumber
-        }
+        val isAvailable = isNewerVersion(remoteVersion, AppVersion)
         val releaseNotes = response.changelog
             ?: response.message
             ?: response.releaseNotes
