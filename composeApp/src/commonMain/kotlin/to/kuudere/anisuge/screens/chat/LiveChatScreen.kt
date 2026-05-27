@@ -110,7 +110,7 @@ fun LiveChatScreen(
         val nearBottom = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
             ?.let { it >= lastIndex - 1 } ?: true
         if (nearBottom) {
-            listState.animateScrollToItem(lastIndex)
+            listState.scrollToItem(lastIndex)
         }
     }
 
@@ -152,6 +152,10 @@ fun LiveChatScreen(
         ChatMemberSheet(
             member = member,
             onDismiss = viewModel::dismissMemberProfile,
+            onAnimeClick = { animeId ->
+                viewModel.dismissMemberProfile()
+                onAction("anisurge://anime/$animeId")
+            },
         )
     }
 
@@ -322,7 +326,11 @@ fun LiveChatScreen(
                                 }
                             }
                         } else {
-                            items(state.messages, key = { it.id }) { message ->
+                            items(
+                                state.messages,
+                                key = { it.id },
+                                contentType = { "chat-message" },
+                            ) { message ->
                                 ChatMessageRow(
                                     message = message,
                                     isMine = message.userId == state.currentUserId,
@@ -444,6 +452,7 @@ private fun ChatMessageRow(
                 modifier = profileClick,
                 avatarSize = 36.dp,
                 contentDescription = message.username,
+                playVideo = false,
             )
             Spacer(Modifier.size(8.dp))
         }
@@ -519,6 +528,7 @@ private fun ChatMessageRow(
                 modifier = profileClick,
                 avatarSize = 36.dp,
                 contentDescription = message.username,
+                playVideo = false,
             )
         }
     }

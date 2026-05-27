@@ -78,14 +78,48 @@ class BffMeService(
         }
     }
 
+    suspend fun updateProfileDetails(bio: String?, website: String?): Result<UserProfile> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.patch("${AnisurgeApi.v1Base}/me") {
+                applyAnisurgeAuth(stored)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    BffPatchProfileDetailsRequest(
+                        bio = bio?.trim()?.takeIf { it.isNotBlank() },
+                        website = website?.trim()?.takeIf { it.isNotBlank() },
+                    ),
+                )
+            }
+            if (response.status.isSuccess()) {
+                val body: BffMeResponse = response.body()
+                Result.success(body.user.toUserProfile())
+            } else {
+                val message = runCatching {
+                    json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+                }.getOrElse { "Failed to update profile (${response.status.value})" }
+                Result.failure(Exception(message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun uploadCustomPfp(pick: ChatImagePick): Result<UserProfile> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
         if (pick.bytes.isEmpty()) {
             return Result.failure(IllegalStateException("Selected image is empty"))
         }
-        if (pick.bytes.size > CHAT_IMAGE_MAX_BYTES) {
-            return Result.failure(IllegalStateException("Image must be less than 2.5 MB"))
+        val isVideo = pick.mimeType == "video/mp4"
+        val maxBytes = if (isVideo) PROFILE_VIDEO_MAX_BYTES else CHAT_IMAGE_MAX_BYTES
+        if (pick.bytes.size > maxBytes) {
+            val message = if (isVideo) {
+                "Video profile pictures must be less than 3 MB"
+            } else {
+                "Image must be less than 2.5 MB"
+            }
+            return Result.failure(IllegalStateException(message))
         }
         return try {
             val safeName = pick.fileName.ifBlank { "image.jpg" }
@@ -161,8 +195,38 @@ class BffMeService(
         }
     }
 
+    suspend fun updateChatProfilePrivacy(hidden: Boolean): Result<UserProfile> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.patch("${AnisurgeApi.v1Base}/me") {
+                applyAnisurgeAuth(stored)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    BffPatchProfileExtraRequest(
+                        profileExtra = JsonObject(
+                            mapOf("chatProfilePrivate" to JsonPrimitive(hidden)),
+                        ),
+                    ),
+                )
+            }
+            if (response.status.isSuccess()) {
+                val body: BffMeResponse = response.body()
+                Result.success(body.user.toUserProfile())
+            } else {
+                val message = runCatching {
+                    json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+                }.getOrElse { "Failed to update privacy (${response.status.value})" }
+                Result.failure(Exception(message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+
     companion object {
         private const val CHAT_IMAGE_MAX_BYTES = (2.5 * 1024 * 1024).toLong()
+        private const val PROFILE_VIDEO_MAX_BYTES = (3 * 1024 * 1024).toLong()
     }
 
     suspend fun connectReanime(email: String, password: String): Result<UserProfile> {
@@ -220,6 +284,12 @@ private data class BffPatchMeRequest(
 )
 
 @Serializable
+private data class BffPatchProfileDetailsRequest(
+    val bio: String? = null,
+    val website: String? = null,
+)
+
+@Serializable
 private data class BffPfpJsonUploadRequest(
     val imageBase64: String,
     val mimeType: String,
@@ -229,4 +299,9 @@ private data class BffPfpJsonUploadRequest(
 @Serializable
 private data class BffPatchEquippedRequest(
     val equipped: JsonObject,
+)
+
+@Serializable
+private data class BffPatchProfileExtraRequest(
+    val profileExtra: JsonObject,
 )

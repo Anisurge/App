@@ -17,6 +17,7 @@ fun ChatDecoratedAvatar(
     contentDescription: String? = null,
     /** Used to warm frame cache for this chatter's ring frame. */
     userId: String? = null,
+    playVideo: Boolean = true,
 ) {
     val uid = userId?.takeIf { it.isNotBlank() }
     ProfileAvatar(
@@ -29,5 +30,6 @@ fun ChatDecoratedAvatar(
         modifier = modifier,
         contentDescription = contentDescription,
         showBundledTestFrame = false,
+        playVideo = playVideo,
     )
 }

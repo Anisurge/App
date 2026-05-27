@@ -3,6 +3,7 @@ package to.kuudere.anisuge.data.models
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
 @Serializable
@@ -57,6 +58,7 @@ data class BffPublicUser(
     val reanimeSettings: JsonObject? = null,
     val customPfpUrl: String? = null,
     val coins: Int = 0,
+    val karmaPoints: Int = 0,
     val equipped: JsonObject? = null,
     val profileExtra: JsonObject? = null,
     val reanimeConnected: Boolean? = null,
@@ -65,6 +67,9 @@ data class BffPublicUser(
 
 fun BffPublicUser.toUserProfile(): UserProfile {
     val ago = (profileExtra?.get("ago") as? JsonPrimitive)?.contentOrNull
+    val isPremium = (profileExtra?.get("isPremium") as? JsonPrimitive)?.booleanOrNull == true
+    val chatProfilePrivate =
+        (profileExtra?.get("chatProfilePrivate") as? JsonPrimitive)?.booleanOrNull == true
     val resolvedAvatar = customPfpUrl?.takeIf { it.isNotBlank() } ?: avatarUrl
     val equippedMap = equipped
     val frameUrl = equippedMap.stringField("chatAvatarFrame")
@@ -89,12 +94,15 @@ fun BffPublicUser.toUserProfile(): UserProfile {
         ago = ago,
         isEmailVerified = emailVerified,
         coins = coins,
+        karmaPoints = karmaPoints,
         equippedFrameUrl = frameUrl,
         equippedOuterFrameUrl = outerUrl,
         equippedFrameItemId = frameItemId,
         equipped = equippedMap,
         reanimeConnected = reanimeConnected == true,
         reanimeUsername = reanimeUsername,
+        isPremium = isPremium,
+        chatProfilePrivate = chatProfilePrivate,
     )
 }
 

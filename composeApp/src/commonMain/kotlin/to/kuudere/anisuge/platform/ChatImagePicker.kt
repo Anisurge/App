@@ -24,8 +24,10 @@ data class ChatImagePick(
 }
 
 const val CHAT_IMAGE_MAX_BYTES: Long = (2.5 * 1024 * 1024).toLong()
+const val PROFILE_VIDEO_MAX_BYTES: Long = (3 * 1024 * 1024).toLong()
 
 @androidx.compose.runtime.Composable
 expect fun rememberChatImagePicker(
+    allowVideo: Boolean = false,
     onResult: (ChatImagePick?) -> Unit,
 ): () -> Unit

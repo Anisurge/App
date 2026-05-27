@@ -110,7 +110,11 @@ data class SettingsUiState(
     /** Mobile settings drill-in (Sync, Preferences, etc.); cleared on back. */
     val mobileSettingsDetailTab: SettingsTab? = null,
     val usernameDraft: String = "",
+    val bioDraft: String = "",
+    val websiteDraft: String = "",
     val isSavingUsername: Boolean = false,
+    val isSavingProfileDetails: Boolean = false,
+    val isSavingChatProfilePrivacy: Boolean = false,
     val isSyncingMal: Boolean = false,
     val isSyncingAnilist: Boolean = false,
     val lunarConnected: Boolean = false,
@@ -533,6 +537,8 @@ class SettingsViewModel(
                             isLoadingProfile = false,
                             isOffline = false,
                             usernameDraft = if (it.showProfileAccount) it.usernameDraft else profile.username.orEmpty(),
+                            bioDraft = if (it.showProfileAccount) it.bioDraft else profile.bio.orEmpty(),
+                            websiteDraft = if (it.showProfileAccount) it.websiteDraft else profile.website.orEmpty(),
                         )
                     }
                     prefetchEquippedFrame(profile)
@@ -556,8 +562,15 @@ class SettingsViewModel(
 
     fun openProfileAccount() {
         loadShopInventory()
-        val username = _uiState.value.userProfile?.username.orEmpty()
-        _uiState.update { it.copy(showProfileAccount = true, usernameDraft = username) }
+        val profile = _uiState.value.userProfile
+        _uiState.update {
+            it.copy(
+                showProfileAccount = true,
+                usernameDraft = profile?.username.orEmpty(),
+                bioDraft = profile?.bio.orEmpty(),
+                websiteDraft = profile?.website.orEmpty(),
+            )
+        }
     }
 
     fun closeProfileAccount() {
@@ -594,6 +607,14 @@ class SettingsViewModel(
         _uiState.update { it.copy(usernameDraft = value) }
     }
 
+    fun setBioDraft(value: String) {
+        _uiState.update { it.copy(bioDraft = value.take(280)) }
+    }
+
+    fun setWebsiteDraft(value: String) {
+        _uiState.update { it.copy(websiteDraft = value.take(180)) }
+    }
+
     fun saveUsername() {
         val draft = _uiState.value.usernameDraft.trim()
         if (draft.length < 3) {
@@ -618,6 +639,73 @@ class SettingsViewModel(
                         it.copy(
                             isSavingUsername = false,
                             errorMessage = e.message ?: "Failed to update username",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun setChatProfilePrivate(hidden: Boolean) {
+        val profile = _uiState.value.userProfile ?: return
+        if (!profile.isPremium) {
+            _uiState.update { it.copy(errorMessage = "Chat profile privacy is a Premium option") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingChatProfilePrivacy = true, errorMessage = null) }
+            bffMeService.updateChatProfilePrivacy(hidden).fold(
+                onSuccess = { updated ->
+                    _uiState.update {
+                        it.copy(
+                            isSavingChatProfilePrivacy = false,
+                            userProfile = updated,
+                            successMessage = if (hidden) {
+                                "Chat profile activity hidden"
+                            } else {
+                                "Chat profile activity visible"
+                            },
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isSavingChatProfilePrivacy = false,
+                            errorMessage = e.message ?: "Failed to update chat profile privacy",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun saveProfileDetails() {
+        val state = _uiState.value
+        val bio = state.bioDraft.trim()
+        val website = state.websiteDraft.trim()
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingProfileDetails = true, errorMessage = null) }
+            bffMeService.updateProfileDetails(
+                bio = bio.takeIf { it.isNotBlank() },
+                website = website.takeIf { it.isNotBlank() },
+            ).fold(
+                onSuccess = { profile ->
+                    _uiState.update {
+                        it.copy(
+                            isSavingProfileDetails = false,
+                            userProfile = profile,
+                            bioDraft = profile.bio.orEmpty(),
+                            websiteDraft = profile.website.orEmpty(),
+                            successMessage = "Profile details updated",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isSavingProfileDetails = false,
+                            errorMessage = e.message ?: "Failed to update profile details",
                         )
                     }
                 },
@@ -1585,6 +1673,11 @@ class SettingsViewModel(
 
     fun onCustomPfpPicked(pick: to.kuudere.anisuge.platform.ChatImagePick?) {
         if (pick == null) return
+        val isVideo = pick.mimeType == "video/mp4"
+        if (isVideo && _uiState.value.userProfile?.isPremium != true) {
+            _uiState.update { it.copy(errorMessage = "MP4 profile pictures are a Premium option") }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isUploadingPfp = true, errorMessage = null) }
             bffMeService.uploadCustomPfp(pick).fold(

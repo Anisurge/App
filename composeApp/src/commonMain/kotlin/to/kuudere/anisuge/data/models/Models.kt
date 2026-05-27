@@ -80,12 +80,15 @@ data class UserProfile(
     val timezone: String? = null,
     val website: String? = null,
     val coins: Int = 0,
+    val karmaPoints: Int = 0,
     val equippedFrameUrl: String? = null,
     val equippedOuterFrameUrl: String? = null,
     val equippedFrameItemId: String? = null,
     val equipped: JsonObject? = null,
     val reanimeConnected: Boolean = false,
     val reanimeUsername: String? = null,
+    val isPremium: Boolean = false,
+    val chatProfilePrivate: Boolean = false,
 ) {
     val effectiveId: String? get() = id ?: userId
     val effectiveAvatar: String? get() = pfp ?: avatar

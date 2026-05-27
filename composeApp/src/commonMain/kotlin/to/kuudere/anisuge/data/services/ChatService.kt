@@ -25,6 +25,7 @@ import to.kuudere.anisuge.data.models.BffErrorResponse
 import to.kuudere.anisuge.data.models.ChatLiveEvent
 import to.kuudere.anisuge.data.models.ChatMessageMetadata
 import to.kuudere.anisuge.data.models.ChatMessage
+import to.kuudere.anisuge.data.models.ChatMemberProfileResponse
 import to.kuudere.anisuge.data.models.ChatMessagesResponse
 import to.kuudere.anisuge.data.models.ChatPostMessageRequest
 import to.kuudere.anisuge.data.models.ChatRoomResponse
@@ -123,6 +124,25 @@ class ChatService(
         } catch (e: Exception) {
             println("[ChatService] postMessage error: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    suspend fun fetchMemberProfile(userId: String): ChatMemberProfileResponse? {
+        val stored = sessionStore.get() ?: return null
+        if (userId.isBlank()) return null
+        return try {
+            val response = httpClient.get("${AnisurgeApi.v1Base}/chat/users/$userId/profile") {
+                applyAnisurgeAuth(stored)
+            }
+            if (response.status.isSuccess()) {
+                response.body()
+            } else {
+                println("[ChatService] fetchMemberProfile HTTP ${response.status.value}: ${parseError(response)}")
+                null
+            }
+        } catch (e: Exception) {
+            println("[ChatService] fetchMemberProfile error: ${e.message}")
+            null
         }
     }
 

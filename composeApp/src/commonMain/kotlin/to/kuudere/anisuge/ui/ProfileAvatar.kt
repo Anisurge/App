@@ -34,6 +34,8 @@ fun ProfileAvatar(
     backgroundColor: Color = Color(0xFF222222),
     /** When false, skips the bundled test APNG (shop previews & owned frames). */
     showBundledTestFrame: Boolean = true,
+    /** Tiny scrolling lists keep this off to avoid spawning many video players. */
+    playVideo: Boolean = true,
 ) {
     val hasEquippedFrame = !frameUrl.isNullOrBlank() || !outerFrameUrl.isNullOrBlank()
     val showTestFrame = USE_TEST_CHAT_FRAME && showBundledTestFrame && !hasEquippedFrame
@@ -69,6 +71,7 @@ fun ProfileAvatar(
                     contentDescription = contentDescription,
                     placeholderTint = placeholderTint,
                     backgroundColor = backgroundColor,
+                    playVideo = playVideo,
                 )
                 if (!frameUrl.isNullOrBlank()) {
                     AnimatedProfileOverlay(
@@ -87,6 +90,7 @@ fun ProfileAvatar(
                     contentDescription = contentDescription,
                     placeholderTint = placeholderTint,
                     backgroundColor = backgroundColor,
+                    playVideo = playVideo,
                 )
                 BundledChatTestFrame(Modifier.size(frameSize))
             }
@@ -97,6 +101,7 @@ fun ProfileAvatar(
                     contentDescription = contentDescription,
                     placeholderTint = placeholderTint,
                     backgroundColor = backgroundColor,
+                    playVideo = playVideo,
                 )
             }
         }
@@ -110,6 +115,7 @@ private fun ProfileAvatarContent(
     contentDescription: String?,
     placeholderTint: Color,
     backgroundColor: Color,
+    playVideo: Boolean,
 ) {
     val resolved = remember(url) { resolveProfileMediaUrl(url) }
     val shapeModifier = modifier.clip(CircleShape).background(backgroundColor)
@@ -124,11 +130,19 @@ private fun ProfileAvatarContent(
                     modifier = Modifier.fillMaxSize(0.55f),
                 )
             }
-            isProfileVideoUrl(resolved) -> {
+            isProfileVideoUrl(resolved) && playVideo -> {
                 ProfileVideoAvatar(
                     url = resolved,
                     modifier = Modifier.fillMaxSize(),
                     contentDescription = contentDescription,
+                )
+            }
+            isProfileVideoUrl(resolved) -> {
+                Icon(
+                    Icons.Default.Person,
+                    contentDescription = contentDescription,
+                    tint = placeholderTint,
+                    modifier = Modifier.fillMaxSize(0.55f),
                 )
             }
             else -> {

@@ -1124,11 +1124,15 @@ private fun SettingsContent(
                 onCloseAccount = viewModel::closeProfileAccount,
                 onUsernameChange = viewModel::setUsernameDraft,
                 onSaveUsername = viewModel::saveUsername,
+                onBioChange = viewModel::setBioDraft,
+                onWebsiteChange = viewModel::setWebsiteDraft,
+                onSaveProfileDetails = viewModel::saveProfileDetails,
                 onCurrentPasswordChange = viewModel::setCurrentPassword,
                 onNewPasswordChange = viewModel::setNewPassword,
                 onConfirmPasswordChange = viewModel::setConfirmPassword,
                 onChangePassword = viewModel::changePassword,
                 onEquipFrame = viewModel::equipShopFrame,
+                onChatProfilePrivacyChange = viewModel::setChatProfilePrivate,
             )
 
             is SettingsTab.Shop -> ShopSettingsTab(
@@ -3982,6 +3986,38 @@ private fun ProfileSummaryCard(
                 user.username?.let {
                     Text("@$it", color = MUTED, fontSize = 13.sp)
                 }
+                if (!user.bio.isNullOrBlank()) {
+                    Text(
+                        user.bio,
+                        color = MUTED,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 5.dp),
+                    )
+                }
+                Row(
+                    modifier = Modifier.padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "${user.karmaPoints} karma",
+                        color = Color(0xFFFFD54F),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    user.website?.takeIf { it.isNotBlank() }?.let {
+                        Text(
+                            it.removePrefix("https://").removePrefix("http://"),
+                            color = MUTED,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
                 user.joinDate?.let {
                     Text(
                         "Joined ${it.split("T").first()}",
@@ -4058,7 +4094,11 @@ private fun ProfilePfpAndFramesSection(
                         onClick = onPickCustomPfp,
                     ),
                 )
-                Text("JPEG, PNG, GIF, WebP · max 2.5 MB", color = MUTED, fontSize = 11.sp)
+                Text(
+                    "JPEG, PNG, GIF, WebP max 2.5 MB · Premium MP4 max 3 MB",
+                    color = MUTED,
+                    fontSize = 11.sp,
+                )
             }
         }
 
@@ -4079,14 +4119,21 @@ private fun ProfileAccountSection(
     onPickCustomPfp: () -> Unit,
     onUsernameChange: (String) -> Unit,
     onSaveUsername: () -> Unit,
+    onBioChange: (String) -> Unit,
+    onWebsiteChange: (String) -> Unit,
+    onSaveProfileDetails: () -> Unit,
     onCurrentPasswordChange: (String) -> Unit,
     onNewPasswordChange: (String) -> Unit,
     onConfirmPasswordChange: (String) -> Unit,
     onChangePassword: () -> Unit,
     onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit,
+    onChatProfilePrivacyChange: (Boolean) -> Unit,
 ) {
     val user = uiState.userProfile ?: return
     val usernameChanged = uiState.usernameDraft.trim() != (user.username.orEmpty())
+    val profileDetailsChanged =
+        uiState.bioDraft.trim() != user.bio.orEmpty() ||
+            uiState.websiteDraft.trim() != user.website.orEmpty()
 
     Column(
         modifier = Modifier
@@ -4110,12 +4157,28 @@ private fun ProfileAccountSection(
         )
 
         ProfileDetailItem("Email", user.email ?: "Not provided")
+        ProfileDetailItem("Chat karma", "${user.karmaPoints} ${if (user.karmaPoints == 1) "point" else "points"}")
 
         ProfilePfpAndFramesSection(
             uiState = uiState,
             onPickCustomPfp = onPickCustomPfp,
             onEquipFrame = onEquipFrame,
         )
+
+        SettingToggle(
+            checked = user.chatProfilePrivate,
+            onCheckedChange = onChatProfilePrivacyChange,
+            label = "Hide chat profile watch activity",
+            enabled = user.isPremium && !uiState.isSavingChatProfilePrivacy,
+        )
+        if (!user.isPremium) {
+            Text(
+                "Premium users can hide watch history and watchlist from chat profiles.",
+                color = MUTED,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+            )
+        }
 
         Column {
             Text("Username", color = MUTED, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -4156,6 +4219,74 @@ private fun ProfileAccountSection(
                         )
                     } else {
                         Text("Save username", color = Color.Black)
+                    }
+                }
+            }
+        }
+
+        Column {
+            Text("Description", color = MUTED, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = uiState.bioDraft,
+                onValueChange = onBioChange,
+                minLines = 3,
+                maxLines = 5,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Tell people what you watch, like, or build", color = MUTED) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = TEXT,
+                    unfocusedTextColor = TEXT,
+                    focusedBorderColor = BORDER,
+                    unfocusedBorderColor = BORDER,
+                    cursorColor = Color.White,
+                ),
+            )
+            Text(
+                "${uiState.bioDraft.length}/280 · optional",
+                color = MUTED,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Spacer(Modifier.height(14.dp))
+            Text("Website", color = MUTED, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = uiState.websiteDraft,
+                onValueChange = onWebsiteChange,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("https://your.site", color = MUTED) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = TEXT,
+                    unfocusedTextColor = TEXT,
+                    focusedBorderColor = BORDER,
+                    unfocusedBorderColor = BORDER,
+                    cursorColor = Color.White,
+                ),
+            )
+            Text(
+                "Optional · shown when people tap your chat profile",
+                color = MUTED,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            if (profileDetailsChanged) {
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = onSaveProfileDetails,
+                    enabled = !uiState.isSavingProfileDetails,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (uiState.isSavingProfileDetails) {
+                        CircularProgressIndicator(
+                            color = Color.Black,
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text("Save profile details", color = Color.Black)
                     }
                 }
             }
@@ -4280,11 +4411,15 @@ private fun MobileProfileAccountDetail(
                     onPickCustomPfp = pickPfp,
                     onUsernameChange = viewModel::setUsernameDraft,
                     onSaveUsername = viewModel::saveUsername,
+                    onBioChange = viewModel::setBioDraft,
+                    onWebsiteChange = viewModel::setWebsiteDraft,
+                    onSaveProfileDetails = viewModel::saveProfileDetails,
                     onCurrentPasswordChange = viewModel::setCurrentPassword,
                     onNewPasswordChange = viewModel::setNewPassword,
                     onConfirmPasswordChange = viewModel::setConfirmPassword,
                     onChangePassword = viewModel::changePassword,
                     onEquipFrame = viewModel::equipShopFrame,
+                    onChatProfilePrivacyChange = viewModel::setChatProfilePrivate,
                 )
             }
         }
@@ -4302,11 +4437,15 @@ private fun ProfileTab(
     onCloseAccount: () -> Unit = {},
     onUsernameChange: (String) -> Unit = {},
     onSaveUsername: () -> Unit = {},
+    onBioChange: (String) -> Unit = {},
+    onWebsiteChange: (String) -> Unit = {},
+    onSaveProfileDetails: () -> Unit = {},
     onCurrentPasswordChange: (String) -> Unit = {},
     onNewPasswordChange: (String) -> Unit = {},
     onConfirmPasswordChange: (String) -> Unit = {},
     onChangePassword: () -> Unit = {},
     onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit = {},
+    onChatProfilePrivacyChange: (Boolean) -> Unit = {},
 ) {
     val pickPfp = to.kuudere.anisuge.platform.rememberProfileImagePicker(onPickCustomPfp)
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -4366,11 +4505,15 @@ private fun ProfileTab(
                 onPickCustomPfp = pickPfp,
                 onUsernameChange = onUsernameChange,
                 onSaveUsername = onSaveUsername,
+                onBioChange = onBioChange,
+                onWebsiteChange = onWebsiteChange,
+                onSaveProfileDetails = onSaveProfileDetails,
                 onCurrentPasswordChange = onCurrentPasswordChange,
                 onNewPasswordChange = onNewPasswordChange,
                 onConfirmPasswordChange = onConfirmPasswordChange,
                 onChangePassword = onChangePassword,
                 onEquipFrame = onEquipFrame,
+                onChatProfilePrivacyChange = onChatProfilePrivacyChange,
             )
         } else {
             val user = uiState.userProfile!!
@@ -4394,7 +4537,7 @@ private fun ProfileTab(
                 showPfpPicker = false,
             )
 
-            if (!user.bio.isNullOrBlank()) {
+            if (!user.bio.isNullOrBlank() || !user.website.isNullOrBlank()) {
                 Spacer(Modifier.height(24.dp))
                 Box(
                     modifier = Modifier
@@ -4406,7 +4549,18 @@ private fun ProfileTab(
                     Column {
                         Text("About", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(8.dp))
-                        Text(user.bio, color = MUTED, fontSize = 14.sp, lineHeight = 20.sp)
+                        if (!user.bio.isNullOrBlank()) {
+                            Text(user.bio, color = MUTED, fontSize = 14.sp, lineHeight = 20.sp)
+                        }
+                        user.website?.takeIf { it.isNotBlank() }?.let {
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                it.removePrefix("https://").removePrefix("http://"),
+                                color = Color(0xFFBF80FF),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
             }
@@ -4638,7 +4792,7 @@ private fun MobileProfileContent(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Bio
-            if (!user.bio.isNullOrBlank()) {
+            if (!user.bio.isNullOrBlank() || !user.website.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -4649,7 +4803,18 @@ private fun MobileProfileContent(
                     Column {
                         Text("About", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(user.bio, color = MUTED, fontSize = 14.sp, lineHeight = 20.sp)
+                        if (!user.bio.isNullOrBlank()) {
+                            Text(user.bio, color = MUTED, fontSize = 14.sp, lineHeight = 20.sp)
+                        }
+                        user.website?.takeIf { it.isNotBlank() }?.let {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                it.removePrefix("https://").removePrefix("http://"),
+                                color = Color(0xFFBF80FF),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -4664,6 +4829,8 @@ private fun MobileProfileContent(
             ) {
                 Column {
                     MobileProfileInfoItem("Email", user.email ?: "Not provided")
+                    HorizontalDivider(color = BORDER, modifier = Modifier.padding(horizontal = 16.dp))
+                    MobileProfileInfoItem("Chat karma", "${user.karmaPoints} ${if (user.karmaPoints == 1) "point" else "points"}")
                     HorizontalDivider(color = BORDER, modifier = Modifier.padding(horizontal = 16.dp))
                     MobileProfileInfoItem(
                         "Joined",

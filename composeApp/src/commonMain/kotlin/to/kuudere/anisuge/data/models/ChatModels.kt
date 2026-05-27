@@ -93,10 +93,70 @@ data class ChatMemberProfile(
     val isPremium: Boolean,
     val nameStyle: ChatNameStyle?,
     val coins: Int = 0,
+    val karmaPoints: Int = 0,
+    val bio: String? = null,
+    val website: String? = null,
     val isBot: Boolean = false,
+    val hidden: Boolean = false,
+    val watchHistory: List<ChatProfileLibraryItem> = emptyList(),
+    val watchlist: List<ChatProfileLibraryItem> = emptyList(),
+    val isLoadingDetails: Boolean = false,
+    val detailError: String? = null,
 ) {
     val effectiveAvatarUrl: String?
         get() = avatarUrl?.takeIf { it.isNotBlank() } ?: if (isBot) SURGE_BOT_AVATAR_URL else null
+}
+
+@Serializable
+data class ChatProfileLibraryItem(
+    @SerialName("animeId") val animeId: String = "",
+    val title: String = "",
+    @SerialName("imageUrl") val imageUrl: String = "",
+    val subtitle: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+)
+
+@Serializable
+data class ChatMemberProfileUserDto(
+    val userId: String = "",
+    val username: String = "",
+    @SerialName("avatarUrl") val avatarUrl: String? = null,
+    @SerialName("avatarFrameUrl") val avatarFrameUrl: String? = null,
+    @SerialName("avatarOuterUrl") val avatarOuterUrl: String? = null,
+    @SerialName("joinedAt") val joinedAt: String? = null,
+    @SerialName("isPremium") val isPremium: Boolean = false,
+    @SerialName("isBot") val isBot: Boolean = false,
+    val coins: Int = 0,
+    @SerialName("karmaPoints") val karmaPoints: Int = 0,
+    val bio: String? = null,
+    val website: String? = null,
+    val hidden: Boolean = false,
+)
+
+@Serializable
+data class ChatMemberProfileResponse(
+    val user: ChatMemberProfileUserDto = ChatMemberProfileUserDto(),
+    val watchHistory: List<ChatProfileLibraryItem> = emptyList(),
+    val watchlist: List<ChatProfileLibraryItem> = emptyList(),
+) {
+    fun toProfile(fallback: ChatMemberProfile? = null): ChatMemberProfile = ChatMemberProfile(
+        userId = user.userId.ifBlank { fallback?.userId.orEmpty() },
+        username = user.username.ifBlank { fallback?.username ?: "User" },
+        avatarUrl = user.avatarUrl ?: fallback?.avatarUrl,
+        avatarFrameUrl = user.avatarFrameUrl ?: fallback?.avatarFrameUrl,
+        avatarOuterUrl = user.avatarOuterUrl ?: fallback?.avatarOuterUrl,
+        joinedAt = user.joinedAt ?: fallback?.joinedAt,
+        isPremium = user.isPremium || fallback?.isPremium == true,
+        nameStyle = fallback?.nameStyle,
+        coins = user.coins,
+        karmaPoints = user.karmaPoints,
+        bio = user.bio,
+        website = user.website,
+        isBot = user.isBot || fallback?.isBot == true,
+        hidden = user.hidden,
+        watchHistory = watchHistory,
+        watchlist = watchlist,
+    )
 }
 
 @Serializable

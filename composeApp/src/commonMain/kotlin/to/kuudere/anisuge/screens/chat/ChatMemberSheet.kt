@@ -1,116 +1,476 @@
 package to.kuudere.anisuge.screens.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.ChatMemberProfile
 import to.kuudere.anisuge.data.models.ChatMessage
-import to.kuudere.anisuge.ui.ChatUsernameLabel
+import to.kuudere.anisuge.data.models.ChatProfileLibraryItem
 import to.kuudere.anisuge.ui.ChatDecoratedAvatar
+import to.kuudere.anisuge.ui.ChatUsernameLabel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatMemberSheet(
     member: ChatMemberProfile,
     onDismiss: () -> Unit,
+    onAnimeClick: (String) -> Unit = {},
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    var watchlistQuery by remember(member.userId) { mutableStateOf("") }
+    val filteredWatchlist by remember(member.watchlist, watchlistQuery) {
+        derivedStateOf {
+            val query = watchlistQuery.trim()
+            if (query.isBlank()) {
+                member.watchlist
+            } else {
+                member.watchlist.filter {
+                    it.title.contains(query, ignoreCase = true) ||
+                        it.animeId.contains(query, ignoreCase = true) ||
+                        (it.subtitle?.contains(query, ignoreCase = true) == true)
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(member.userId) {
+        runCatching { sheetState.partialExpand() }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = Color(0xFF141414),
+        modifier = Modifier.fillMaxHeight(0.92f),
+        dragHandle = {
+            Box(
+                Modifier
+                    .padding(top = 8.dp, bottom = 4.dp)
+                    .width(42.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Color.White.copy(alpha = 0.28f)),
+            )
+        },
     ) {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .padding(horizontal = 24.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            ChatDecoratedAvatar(
-                avatarUrl = member.effectiveAvatarUrl,
-                frameUrl = member.avatarFrameUrl,
-                outerFrameUrl = member.avatarOuterUrl,
-                userId = member.userId,
-                avatarSize = 72.dp,
-                contentDescription = member.username,
+            item {
+                ProfileHeader(member)
+            }
+
+            item { Spacer(Modifier.height(10.dp)) }
+
+            when {
+                member.isLoadingDetails -> item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(96.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                }
+
+                member.detailError != null -> item {
+                    Text(
+                        member.detailError,
+                        color = Color(0xFFFF6B6B),
+                        fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                member.hidden -> item {
+                    EmptyProfileText("Watch activity hidden")
+                }
+
+                !member.isBot -> {
+                    item {
+                        ProfileStatsRow(member)
+                    }
+
+                    item {
+                        ProfileAboutBlock(member)
+                    }
+
+                    item {
+                        ProfileSectionTitle("Watch History", "${member.watchHistory.size} recent")
+                        if (member.watchHistory.isEmpty()) {
+                            EmptyProfileText("No recent watch history")
+                        } else {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                items(
+                                    member.watchHistory,
+                                    key = { "history-${it.animeId}-${it.subtitle}" },
+                                ) { item ->
+                                    ProfileAnimeTile(
+                                        item = item,
+                                        onClick = { onAnimeClick(item.animeId) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item {
+                        ProfileSectionTitle(
+                            "Watchlist",
+                            if (watchlistQuery.isBlank()) {
+                                "${member.watchlist.size} saved"
+                            } else {
+                                "${filteredWatchlist.size}/${member.watchlist.size}"
+                            },
+                        )
+                        OutlinedTextField(
+                            value = watchlistQuery,
+                            onValueChange = { watchlistQuery = it.take(80) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = {
+                                Text("Search ${member.watchlist.size} saved titles", color = Color.White.copy(alpha = 0.38f))
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                cursorColor = Color(0xFFE50914),
+                                focusedBorderColor = Color.White.copy(alpha = 0.24f),
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.14f),
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                        )
+                    }
+
+                    if (filteredWatchlist.isEmpty()) {
+                        item { EmptyProfileText("No watchlist matches") }
+                    } else {
+                        items(
+                            filteredWatchlist,
+                            key = { "watchlist-${it.animeId}-${it.subtitle}-${it.updatedAt}" },
+                            contentType = { "watchlist-row" },
+                        ) { item ->
+                            ProfileWatchlistRow(
+                                item = item,
+                                onClick = { onAnimeClick(item.animeId) },
+                            )
+                        }
+                    }
+                }
+            }
+
+            item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun ProfileHeader(member: ChatMemberProfile) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        ChatDecoratedAvatar(
+            avatarUrl = member.effectiveAvatarUrl,
+            frameUrl = member.avatarFrameUrl,
+            outerFrameUrl = member.avatarOuterUrl,
+            userId = member.userId,
+            avatarSize = 80.dp,
+            contentDescription = member.username,
+        )
+
+        val labelMessage = ChatMessage(
+            userId = member.userId,
+            username = member.username,
+            avatarUrl = member.effectiveAvatarUrl,
+            isPremium = member.isPremium,
+            nameStyle = member.nameStyle,
+        )
+        ChatUsernameLabel(
+            message = labelMessage,
+            isMine = false,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+        )
+
+        if (member.isBot) {
+            ProfileBadge("Anisurge AI Bot", Color(0xFFBF80FF), Color(0xFF241035))
+        }
+        member.joinedAt?.let { joined ->
+            Text(
+                text = "Joined ${formatJoinDate(joined)}",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 13.sp,
             )
+        }
+        if (!member.isBot) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProfileBadge(formatBerries(member.coins), Color(0xFFFFB300), Color(0xFF2A2000))
+                ProfileBadge("${member.karmaPoints} karma", Color(0xFFFFD54F), Color(0xFF2A2200))
+            }
+        }
+        if (member.isPremium) {
+            ProfileBadge("Premium", Color(0xFFFFD54F), Color(0xFF2A2200))
+        }
+    }
+}
 
-            val labelMessage = ChatMessage(
-                userId = member.userId,
-                username = member.username,
-                avatarUrl = member.effectiveAvatarUrl,
-                isPremium = member.isPremium,
-                nameStyle = member.nameStyle,
+@Composable
+private fun ProfileBadge(text: String, color: Color, background: Color) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .background(background, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun ProfileStatsRow(member: ChatMemberProfile) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.045f))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        ProfileMiniStat("Watchlist", member.watchlist.size.toString(), Modifier.weight(1f))
+        ProfileMiniStat("Recent", member.watchHistory.size.toString(), Modifier.weight(1f))
+        ProfileMiniStat("Karma", member.karmaPoints.toString(), Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun ProfileMiniStat(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(value, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun ProfileAboutBlock(member: ChatMemberProfile) {
+    val bio = member.bio?.takeIf { it.isNotBlank() }
+    val website = member.website?.takeIf { it.isNotBlank() }
+    if (bio == null && website == null) return
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.035f))
+            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(14.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("About", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        bio?.let {
+            Text(it, color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp, lineHeight = 18.sp)
+        }
+        website?.let {
+            Text(
+                it.removePrefix("https://").removePrefix("http://"),
+                color = Color(0xFFBF80FF),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
             )
-            ChatUsernameLabel(
-                message = labelMessage,
-                isMine = false,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
+        }
+    }
+}
+
+@Composable
+private fun ProfileSectionTitle(text: String, meta: String? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        meta?.let {
+            Text(
+                it,
+                color = Color.White.copy(alpha = 0.45f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
             )
+        }
+    }
+}
 
-            if (member.isBot) {
-                Text(
-                    text = "Anisurge AI Bot",
-                    color = Color(0xFFBF80FF),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .background(Color(0xFF241035), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                )
+@Composable
+private fun EmptyProfileText(text: String) {
+    Text(
+        text = text,
+        color = Color.White.copy(alpha = 0.5f),
+        fontSize = 13.sp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+    )
+}
+
+@Composable
+private fun ProfileAnimeTile(
+    item: ChatProfileLibraryItem,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(92.dp)
+            .clickable(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        AsyncImage(
+            model = item.imageUrl,
+            contentDescription = item.title,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(124.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.White.copy(alpha = 0.08f)),
+            contentScale = ContentScale.Crop,
+        )
+        Text(
+            item.title,
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+        )
+        item.subtitle?.takeIf { it.isNotBlank() }?.let {
+            Text(it, color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun ProfileWatchlistRow(
+    item: ChatProfileLibraryItem,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.04f))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        AsyncImage(
+            model = item.imageUrl,
+            contentDescription = item.title,
+            modifier = Modifier
+                .width(48.dp)
+                .height(68.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.White.copy(alpha = 0.08f)),
+            contentScale = ContentScale.Crop,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                item.title,
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                item.subtitle?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        it.replaceFirstChar { c -> c.uppercase() },
+                        color = Color(0xFFBF80FF),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+                item.updatedAt?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        "Added ${formatProfileDate(it)}",
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                    )
+                }
             }
-
-            member.joinedAt?.let { joined ->
-                Text(
-                    text = "Joined ${formatJoinDate(joined)}",
-                    color = Color.White.copy(alpha = 0.55f),
-                    fontSize = 13.sp,
-                )
-            }
-
-            if (!member.isBot) {
-                Text(
-                    text = formatBerries(member.coins),
-                    color = Color(0xFFFFB300),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            if (member.isPremium) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Premium",
-                    color = Color(0xFFFFD54F),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .background(Color(0xFF2A2200), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -125,4 +485,8 @@ private fun formatBerries(amount: Int): String {
     val grouped = n.toString().reversed().chunked(3).joinToString(",").reversed()
     val word = if (amount == 1) "Berry" else "Berries"
     return "$grouped $word"
+}
+
+private fun formatProfileDate(iso: String): String {
+    return iso.substringBefore('T').takeIf { it.isNotBlank() } ?: iso
 }

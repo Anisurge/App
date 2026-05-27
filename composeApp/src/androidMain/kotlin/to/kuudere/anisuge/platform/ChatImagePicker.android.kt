@@ -13,6 +13,7 @@ import to.kuudere.anisuge.platform.androidAppContext
 
 @Composable
 actual fun rememberChatImagePicker(
+    allowVideo: Boolean,
     onResult: (ChatImagePick?) -> Unit,
 ): () -> Unit {
     val scope = rememberCoroutineScope()
@@ -24,17 +25,18 @@ actual fun rememberChatImagePicker(
             return@rememberLauncherForActivityResult
         }
         scope.launch {
-            val pick = withContext(Dispatchers.IO) { readChatImage(uri) }
+            val pick = withContext(Dispatchers.IO) { readChatImage(uri, allowVideo) }
             onResult(pick)
         }
     }
-    return { launcher.launch("image/*") }
+    return { launcher.launch(if (allowVideo) "*/*" else "image/*") }
 }
 
-private fun readChatImage(uri: Uri): ChatImagePick? {
+private fun readChatImage(uri: Uri, allowVideo: Boolean): ChatImagePick? {
     val resolver = androidAppContext.contentResolver
     val mime = resolver.getType(uri)?.lowercase() ?: "image/jpeg"
-    if (mime !in setOf("image/jpeg", "image/png", "image/gif", "image/webp")) {
+    val allowedImages = setOf("image/jpeg", "image/png", "image/gif", "image/webp")
+    if (mime !in allowedImages && !(allowVideo && mime == "video/mp4")) {
         return null
     }
 
@@ -49,7 +51,8 @@ private fun readChatImage(uri: Uri): ChatImagePick? {
     }
 
     val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-    if (bytes.isEmpty() || bytes.size.toLong() > CHAT_IMAGE_MAX_BYTES) {
+    val maxBytes = if (mime == "video/mp4") PROFILE_VIDEO_MAX_BYTES else CHAT_IMAGE_MAX_BYTES
+    if (bytes.isEmpty() || bytes.size.toLong() > maxBytes) {
         return null
     }
     return ChatImagePick(bytes, mime, name, bytes.size.toLong())

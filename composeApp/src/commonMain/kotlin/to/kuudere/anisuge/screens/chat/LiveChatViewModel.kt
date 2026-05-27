@@ -118,6 +118,7 @@ class LiveChatViewModel(
     private var loadOlderJob: Job? = null
     private var reconnectJob: Job? = null
     private var animeSearchJob: Job? = null
+    private var memberProfileJob: Job? = null
     private var screenActive = false
     private var hasInitialized = false
 
@@ -422,10 +423,33 @@ class LiveChatViewModel(
     }
 
     fun showMemberProfile(message: ChatMessage) {
-        _uiState.update { it.copy(selectedMember = message.toMemberProfile()) }
+        val snapshot = message.toMemberProfile().copy(isLoadingDetails = true, detailError = null)
+        memberProfileJob?.cancel()
+        _uiState.update { it.copy(selectedMember = snapshot) }
+        memberProfileJob = viewModelScope.launch {
+            val profile = chatService.fetchMemberProfile(snapshot.userId)
+            _uiState.update { state ->
+                if (state.selectedMember?.userId != snapshot.userId) return@update state
+                if (profile == null) {
+                    state.copy(
+                        selectedMember = state.selectedMember.copy(
+                            isLoadingDetails = false,
+                            detailError = "Could not load profile details",
+                        ),
+                    )
+                } else {
+                    state.copy(
+                        selectedMember = profile.toProfile(state.selectedMember)
+                            .copy(isLoadingDetails = false),
+                    )
+                }
+            }
+        }
     }
 
     fun dismissMemberProfile() {
+        memberProfileJob?.cancel()
+        memberProfileJob = null
         _uiState.update { it.copy(selectedMember = null) }
     }
 
@@ -433,6 +457,7 @@ class LiveChatViewModel(
         reconnectJob?.cancel()
         wsJob?.cancel()
         loadOlderJob?.cancel()
+        memberProfileJob?.cancel()
         start()
     }
 
@@ -442,6 +467,7 @@ class LiveChatViewModel(
         wsJob?.cancel()
         loadOlderJob?.cancel()
         animeSearchJob?.cancel()
+        memberProfileJob?.cancel()
         super.onCleared()
     }
 

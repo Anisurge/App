@@ -12,6 +12,7 @@ import java.io.File
 
 @Composable
 actual fun rememberChatImagePicker(
+    allowVideo: Boolean,
     onResult: (ChatImagePick?) -> Unit,
 ): () -> Unit {
     val scope = rememberCoroutineScope()
@@ -24,7 +25,7 @@ actual fun rememberChatImagePicker(
         }
         scope.launch {
             val pick = withContext(Dispatchers.IO) {
-                readChatImageFile(File(platformFile.absolutePath()))
+                readChatImageFile(File(platformFile.absolutePath()), allowVideo)
             }
             onResult(pick)
         }
@@ -32,17 +33,23 @@ actual fun rememberChatImagePicker(
     return { launcher.launch() }
 }
 
-private fun readChatImageFile(file: File): ChatImagePick? {
+private fun readChatImageFile(file: File, allowVideo: Boolean): ChatImagePick? {
     if (!file.exists() || !file.isFile) return null
     val size = file.length()
-    if (size <= 0 || size > CHAT_IMAGE_MAX_BYTES) return null
     val mime = when (file.extension.lowercase()) {
         "png" -> "image/png"
         "gif" -> "image/gif"
         "webp" -> "image/webp"
         "jpg", "jpeg" -> "image/jpeg"
         "bmp" -> "image/bmp"
+        "mp4" -> if (allowVideo) "video/mp4" else return null
         else -> return null
+    }
+    val maxBytes = if (mime == "video/mp4") PROFILE_VIDEO_MAX_BYTES else CHAT_IMAGE_MAX_BYTES
+    if (size <= 0 || size > maxBytes) return null
+    if (mime == "video/mp4") {
+        val bytes = file.readBytes()
+        return ChatImagePick(bytes, mime, file.name, bytes.size.toLong())
     }
     val raw = file.readBytes()
     // Re-encode JPEGs through ImageIO so CMYK / odd ICC profiles never hit Skia's libjpeg on Windows.
