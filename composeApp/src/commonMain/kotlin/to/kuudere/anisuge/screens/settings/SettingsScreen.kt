@@ -4003,7 +4003,7 @@ private fun ProfileSummaryCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "${user.karmaPoints} karma",
+                        "${user.coins} Berries",
                         color = Color(0xFFFFD54F),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -4157,7 +4157,7 @@ private fun ProfileAccountSection(
         )
 
         ProfileDetailItem("Email", user.email ?: "Not provided")
-        ProfileDetailItem("Chat karma", "${user.karmaPoints} ${if (user.karmaPoints == 1) "point" else "points"}")
+        ProfileDetailItem("Berries", user.coins.toString())
 
         ProfilePfpAndFramesSection(
             uiState = uiState,
@@ -4830,7 +4830,7 @@ private fun MobileProfileContent(
                 Column {
                     MobileProfileInfoItem("Email", user.email ?: "Not provided")
                     HorizontalDivider(color = BORDER, modifier = Modifier.padding(horizontal = 16.dp))
-                    MobileProfileInfoItem("Chat karma", "${user.karmaPoints} ${if (user.karmaPoints == 1) "point" else "points"}")
+                    MobileProfileInfoItem("Berries", user.coins.toString())
                     HorizontalDivider(color = BORDER, modifier = Modifier.padding(horizontal = 16.dp))
                     MobileProfileInfoItem(
                         "Joined",

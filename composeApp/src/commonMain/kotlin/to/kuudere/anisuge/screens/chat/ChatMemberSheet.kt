@@ -37,7 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -69,6 +71,9 @@ fun ChatMemberSheet(
                 }
             }
         }
+    }
+    val watchlistRows by remember(filteredWatchlist) {
+        derivedStateOf { filteredWatchlist.chunked(2) }
     }
 
     LaunchedEffect(member.userId) {
@@ -197,14 +202,25 @@ fun ChatMemberSheet(
                         item { EmptyProfileText("No watchlist matches") }
                     } else {
                         items(
-                            filteredWatchlist,
-                            key = { "watchlist-${it.animeId}-${it.subtitle}-${it.updatedAt}" },
-                            contentType = { "watchlist-row" },
-                        ) { item ->
-                            ProfileWatchlistRow(
-                                item = item,
-                                onClick = { onAnimeClick(item.animeId) },
-                            )
+                            watchlistRows,
+                            key = { row -> row.joinToString("|") { "${it.animeId}-${it.updatedAt}" } },
+                            contentType = { "watchlist-grid-row" },
+                        ) { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                row.forEach { item ->
+                                    ProfileWatchlistTile(
+                                        item = item,
+                                        onClick = { onAnimeClick(item.animeId) },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                if (row.size == 1) {
+                                    Spacer(Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
                 }
@@ -311,6 +327,7 @@ private fun ProfileMiniStat(label: String, value: String, modifier: Modifier = M
 
 @Composable
 private fun ProfileAboutBlock(member: ChatMemberProfile) {
+    val uriHandler = LocalUriHandler.current
     val bio = member.bio?.takeIf { it.isNotBlank() }
     val website = member.website?.takeIf { it.isNotBlank() }
     if (bio == null && website == null) return
@@ -335,6 +352,15 @@ private fun ProfileAboutBlock(member: ChatMemberProfile) {
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable {
+                    val target = if (it.startsWith("http://") || it.startsWith("https://")) {
+                        it
+                    } else {
+                        "https://$it"
+                    }
+                    runCatching { uriHandler.openUri(target) }
+                },
             )
         }
     }
@@ -413,63 +439,60 @@ private fun ProfileAnimeTile(
 }
 
 @Composable
-private fun ProfileWatchlistRow(
+private fun ProfileWatchlistTile(
     item: ChatProfileLibraryItem,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
+    Column(
+        modifier = modifier
             .clip(RoundedCornerShape(14.dp))
             .background(Color.White.copy(alpha = 0.04f))
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         AsyncImage(
             model = item.imageUrl,
             contentDescription = item.title,
             modifier = Modifier
-                .width(48.dp)
-                .height(68.dp)
+                .fillMaxWidth()
+                .height(166.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.White.copy(alpha = 0.08f)),
             contentScale = ContentScale.Crop,
         )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+        Text(
+            item.title,
+            color = Color.White,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 15.sp,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                item.title,
-                color = Color.White,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                item.subtitle?.takeIf { it.isNotBlank() }?.let {
-                    Text(
-                        it.replaceFirstChar { c -> c.uppercase() },
-                        color = Color(0xFFBF80FF),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                    )
-                }
-                item.updatedAt?.takeIf { it.isNotBlank() }?.let {
-                    Text(
-                        "Added ${formatProfileDate(it)}",
-                        color = Color.White.copy(alpha = 0.45f),
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                    )
-                }
+            item.subtitle?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    it.replaceFirstChar { c -> c.uppercase() },
+                    color = Color(0xFFBF80FF),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
+            item.updatedAt?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    formatProfileDate(it),
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
