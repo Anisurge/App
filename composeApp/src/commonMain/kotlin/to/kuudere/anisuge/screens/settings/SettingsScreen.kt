@@ -4952,6 +4952,42 @@ private fun ConnectTab(
                             }
                         }
                     }
+
+                    if (uiState.isImportingLunar || uiState.isExportingLunar) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        if (uiState.lunarSyncTotal > 0) {
+                            val progress =
+                                (uiState.lunarSyncCurrent.toFloat() / uiState.lunarSyncTotal.toFloat()).coerceIn(0f, 1f)
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Color(0xFF2196F3),
+                                trackColor = Color.White.copy(alpha = 0.08f),
+                            )
+                            Text(
+                                text = "${uiState.lunarSyncCurrent} / ${uiState.lunarSyncTotal}",
+                                color = MUTED,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        } else {
+                            LinearProgressIndicator(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Color(0xFF2196F3),
+                                trackColor = Color.White.copy(alpha = 0.08f),
+                            )
+                        }
+                        uiState.lunarSyncDetail?.trim()?.takeIf { it.isNotEmpty() }?.let { detail ->
+                            Text(
+                                detail,
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontSize = 12.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    }
                 }
             }
         } else {

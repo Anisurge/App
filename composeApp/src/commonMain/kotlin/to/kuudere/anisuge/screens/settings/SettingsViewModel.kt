@@ -118,6 +118,9 @@ data class SettingsUiState(
     val isConnectingLunar: Boolean = false,
     val isImportingLunar: Boolean = false,
     val isExportingLunar: Boolean = false,
+    val lunarSyncCurrent: Int = 0,
+    val lunarSyncTotal: Int = 0,
+    val lunarSyncDetail: String? = null,
 
     /** Bulk sync from account export to linked MAL / AniList. */
     val isWatchHistorySyncing: Boolean = false,
@@ -1411,14 +1414,48 @@ class SettingsViewModel(
 
     fun importLibraryFromLunar() {
         viewModelScope.launch(Dispatchers.Default) {
-            _uiState.update { it.copy(isImportingLunar = true, errorMessage = null, successMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isImportingLunar = true,
+                    lunarSyncCurrent = 0,
+                    lunarSyncTotal = 0,
+                    lunarSyncDetail = "Fetching LunarAnime watchlist...",
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
             try {
+                updateSyncProgressNotification(
+                    title = "Importing from LunarAnime",
+                    statusText = "Fetching LunarAnime watchlist...",
+                    progressCurrent = 0,
+                    progressMax = 0,
+                )
                 val items = trackingService.fetchLunarWatchlist()
                 var imported = 0
                 var failed = 0
-                for (item in items) {
+                val total = items.size
+                _uiState.update { it.copy(lunarSyncTotal = total) }
+                items.forEachIndexed { index, item ->
                     val slug = item.slug.trim()
-                    if (slug.isEmpty()) continue
+                    if (slug.isEmpty()) {
+                        return@forEachIndexed
+                    }
+                    val step = index + 1
+                    val detail = item.title?.takeIf { it.isNotBlank() } ?: slug
+                    _uiState.update {
+                        it.copy(
+                            lunarSyncCurrent = step,
+                            lunarSyncTotal = total,
+                            lunarSyncDetail = detail,
+                        )
+                    }
+                    updateSyncProgressNotification(
+                        title = "Importing from LunarAnime",
+                        statusText = "$detail\n$step / ${maxOf(1, total)}",
+                        progressCurrent = step,
+                        progressMax = maxOf(1, total),
+                    )
                     val ok = watchlistService.updateStatus(slug, "PLANNING") != null
                     if (ok) imported++ else failed++
                     if ((imported + failed) % 10 == 0) delay(50L)
@@ -1426,6 +1463,9 @@ class SettingsViewModel(
                 _uiState.update {
                     it.copy(
                         isImportingLunar = false,
+                        lunarSyncCurrent = 0,
+                        lunarSyncTotal = 0,
+                        lunarSyncDetail = null,
                         successMessage = if (imported > 0) "Imported $imported LunarAnime items." else null,
                         errorMessage = when {
                             items.isEmpty() -> "No LunarAnime anime watchlist items found."
@@ -1438,34 +1478,71 @@ class SettingsViewModel(
                 _uiState.update {
                     it.copy(
                         isImportingLunar = false,
+                        lunarSyncCurrent = 0,
+                        lunarSyncTotal = 0,
+                        lunarSyncDetail = null,
                         errorMessage = "LunarAnime import failed: ${e.message ?: "Unknown error"}",
                     )
                 }
+            } finally {
+                clearSyncProgressNotification()
             }
         }
     }
 
     fun exportLibraryToLunar() {
         viewModelScope.launch(Dispatchers.Default) {
-            _uiState.update { it.copy(isExportingLunar = true, errorMessage = null, successMessage = null) }
+            _uiState.update {
+                it.copy(
+                    isExportingLunar = true,
+                    lunarSyncCurrent = 0,
+                    lunarSyncTotal = 0,
+                    lunarSyncDetail = "Preparing LunarAnime export...",
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
             try {
+                updateSyncProgressNotification(
+                    title = "Exporting to LunarAnime",
+                    statusText = "Fetching LunarAnime watchlist...",
+                    progressCurrent = 0,
+                    progressMax = 0,
+                )
                 val remoteSlugs = trackingService.fetchLunarWatchlist()
                     .map { it.slug.trim().lowercase() }
                     .filter { it.isNotEmpty() }
                     .toSet()
                 val local = loadAllWatchlistEntries()
+                val total = local.size
                 var exported = 0
                 var skipped = 0
                 var failed = 0
-                for (entry in local) {
+                _uiState.update { it.copy(lunarSyncTotal = total) }
+                local.forEachIndexed { index, entry ->
                     val slug = entry.effectiveAnimeId.trim()
+                    val step = index + 1
+                    val detail = entry.anime.displayTitle.takeIf { it.isNotBlank() } ?: slug.ifBlank { "Unknown item" }
+                    _uiState.update {
+                        it.copy(
+                            lunarSyncCurrent = step,
+                            lunarSyncTotal = total,
+                            lunarSyncDetail = detail,
+                        )
+                    }
+                    updateSyncProgressNotification(
+                        title = "Exporting to LunarAnime",
+                        statusText = "$detail\n$step / ${maxOf(1, total)}",
+                        progressCurrent = step,
+                        progressMax = maxOf(1, total),
+                    )
                     if (slug.isEmpty()) {
                         skipped++
-                        continue
+                        return@forEachIndexed
                     }
                     if (slug.lowercase() in remoteSlugs) {
                         skipped++
-                        continue
+                        return@forEachIndexed
                     }
                     val ok = trackingService.toggleLunarWatchlistAnime(slug)
                     if (ok) exported++ else failed++
@@ -1474,6 +1551,9 @@ class SettingsViewModel(
                 _uiState.update {
                     it.copy(
                         isExportingLunar = false,
+                        lunarSyncCurrent = 0,
+                        lunarSyncTotal = 0,
+                        lunarSyncDetail = null,
                         successMessage = if (exported > 0) "Exported $exported items to LunarAnime." else null,
                         errorMessage = when {
                             local.isEmpty() -> "No Anisurge watchlist items to export."
@@ -1487,9 +1567,14 @@ class SettingsViewModel(
                 _uiState.update {
                     it.copy(
                         isExportingLunar = false,
+                        lunarSyncCurrent = 0,
+                        lunarSyncTotal = 0,
+                        lunarSyncDetail = null,
                         errorMessage = "LunarAnime export failed: ${e.message ?: "Unknown error"}",
                     )
                 }
+            } finally {
+                clearSyncProgressNotification()
             }
         }
     }
