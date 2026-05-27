@@ -108,6 +108,7 @@ class WatchViewModel(
     private var lastPlaybackPositionSec = 0.0
     private var lastPlaybackLanguage = "sub"
     private var lastSavedProgressKey: String? = null
+    private var lastAutoServerFallbackKey: String? = null
 
     /** Server explicitly chosen in player settings (not the Settings → priority list default). */
     private var userPinnedStreamServer: String? = null
@@ -666,6 +667,7 @@ class WatchViewModel(
         loadJob?.cancel()
         streamLoadGeneration++
         cachedStreamSection = null
+        lastAutoServerFallbackKey = null
         _uiState.update {
             it.copy(
                 showSettingsOverlay = false,
@@ -719,6 +721,15 @@ class WatchViewModel(
 
     fun tryNextServerAfterPlaybackFailure(position: Double) {
         val current = _uiState.value.currentServer.lowercase()
+        if (userPinnedStreamServer == current) {
+            println("[WatchVM] playback failed on pinned server=$current; keeping user selection")
+            return
+        }
+        val fallbackKey = "$current:${_uiState.value.currentEpisodeNumber}"
+        if (lastAutoServerFallbackKey == fallbackKey) {
+            println("[WatchVM] playback failed again on $current; not auto-falling back repeatedly")
+            return
+        }
         val failedBase = current.removeSuffix("-dub")
         val servers = getAvailableServers()
             .map { it.id.lowercase() }
@@ -739,6 +750,7 @@ class WatchViewModel(
             servers.first()
         }
 
+        lastAutoServerFallbackKey = fallbackKey
         println("[WatchVM] playback failed on $current, trying next server=$next")
         changeServerWithState(
             newServer = next,
@@ -817,6 +829,7 @@ class WatchViewModel(
             lastKnownDurationSec = 0.0
             lastPlaybackPositionSec = 0.0
             lastSavedProgressKey = null
+            lastAutoServerFallbackKey = null
         }
         loadJob?.cancel()
         streamLoadGeneration++

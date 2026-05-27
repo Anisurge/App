@@ -3,9 +3,16 @@ package to.kuudere.anisuge.data.services
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
+import io.ktor.client.request.parameter
 import kotlinx.datetime.Clock
 import to.kuudere.anisuge.data.models.BffLibrarySyncResponse
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
+
+enum class LibrarySyncDirection(val wireValue: String) {
+    Merge("merge"),
+    Import("import"),
+    Export("export"),
+}
 
 /**
  * Merges watchlist + continue watching with ReAnime via the BFF
@@ -17,7 +24,10 @@ class LibrarySyncService(
 ) {
     private var lastSyncEpochMs: Long = 0L
 
-    suspend fun syncWithReanime(force: Boolean = false): Boolean {
+    suspend fun syncWithReanime(
+        force: Boolean = false,
+        direction: LibrarySyncDirection = LibrarySyncDirection.Merge,
+    ): Boolean {
         val session = sessionStore.get() ?: return false
         if (!sessionStore.isValid(session)) return false
 
@@ -27,6 +37,7 @@ class LibrarySyncService(
         return try {
             val response = httpClient.post("${AnisurgeApi.v1Base}/library/sync") {
                 applyAnisurgeAuth(session)
+                parameter("direction", direction.wireValue)
             }
             if (response.status.value in 200..299) {
                 lastSyncEpochMs = now

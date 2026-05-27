@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,6 +33,7 @@ import to.kuudere.anisuge.data.services.SettingsStore
 import to.kuudere.anisuge.data.services.WatchlistService
 import to.kuudere.anisuge.data.services.StorageService
 import to.kuudere.anisuge.data.services.AuthService
+import to.kuudere.anisuge.data.services.LibrarySyncDirection
 import to.kuudere.anisuge.data.services.TrackingService
 import to.kuudere.anisuge.data.services.WatchHistorySyncProgress
 import to.kuudere.anisuge.data.services.WatchHistorySyncService
@@ -114,6 +116,8 @@ data class SettingsUiState(
     val lunarConnected: Boolean = false,
     val lunarUsername: String? = null,
     val isConnectingLunar: Boolean = false,
+    val isImportingLunar: Boolean = false,
+    val isExportingLunar: Boolean = false,
 
     /** Bulk sync from account export to linked MAL / AniList. */
     val isWatchHistorySyncing: Boolean = false,
@@ -177,6 +181,8 @@ data class SettingsUiState(
     val isClaimingDailyReward: Boolean = false,
     val isConnectingReanime: Boolean = false,
     val isDisconnectingReanime: Boolean = false,
+    val isImportingReanime: Boolean = false,
+    val isExportingReanime: Boolean = false,
 )
 
 sealed class SettingsTab {
@@ -218,6 +224,8 @@ class SettingsViewModel(
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     private var originalSettings: UserSettings = UserSettings()
+    private var playbackSettingsSyncJob: Job? = null
+    private var playbackSettingsSyncGeneration = 0
 
     init {
         viewModelScope.launch {
@@ -1086,16 +1094,22 @@ class SettingsViewModel(
     /** Apply playback prefs locally and to the account immediately (no separate Save tap). */
     private fun persistPlaybackPreference(updater: (UserSettings) -> UserSettings) {
         updateSetting(updater)
+        val prefs = _uiState.value.settings
+        val generation = ++playbackSettingsSyncGeneration
+        playbackSettingsSyncJob?.cancel()
         viewModelScope.launch {
-            val prefs = _uiState.value.settings
             pushPlaybackPrefsToLocalStore(prefs)
-            syncPlaybackSettingsToServer(prefs)
+        }
+        playbackSettingsSyncJob = viewModelScope.launch {
+            delay(250)
+            syncPlaybackSettingsToServer(prefs, generation)
         }
     }
 
-    private suspend fun syncPlaybackSettingsToServer(prefs: UserSettings) {
+    private suspend fun syncPlaybackSettingsToServer(prefs: UserSettings, generation: Int) {
         try {
             val current = settingsService.getSettings()
+            if (generation != playbackSettingsSyncGeneration) return
             val base = current ?: UserSettings()
             val merged = base.copy(
                 autoPlay = prefs.autoPlay,
@@ -1106,6 +1120,7 @@ class SettingsViewModel(
                 syncPercentage = prefs.syncPercentage,
             )
             val saved = settingsService.updateSettings(merged)
+            if (generation != playbackSettingsSyncGeneration) return
             if (saved != null) {
                 originalSettings = saved
                 _uiState.update {
@@ -1385,10 +1400,96 @@ class SettingsViewModel(
                 if (username != null) {
                     val userId = settingsStore.getLunarUserId() ?: ""
                     settingsStore.saveLunarUsernameAndId(username, userId)
+                    integrationsSyncService.pushFromLocal()
                 }
                 _uiState.update { it.copy(lunarConnected = true, lunarUsername = username) }
             } else {
                 _uiState.update { it.copy(lunarConnected = false, lunarUsername = null) }
+            }
+        }
+    }
+
+    fun importLibraryFromLunar() {
+        viewModelScope.launch(Dispatchers.Default) {
+            _uiState.update { it.copy(isImportingLunar = true, errorMessage = null, successMessage = null) }
+            try {
+                val items = trackingService.fetchLunarWatchlist()
+                var imported = 0
+                var failed = 0
+                for (item in items) {
+                    val slug = item.slug.trim()
+                    if (slug.isEmpty()) continue
+                    val ok = watchlistService.updateStatus(slug, "PLANNING") != null
+                    if (ok) imported++ else failed++
+                    if ((imported + failed) % 10 == 0) delay(50L)
+                }
+                _uiState.update {
+                    it.copy(
+                        isImportingLunar = false,
+                        successMessage = if (imported > 0) "Imported $imported LunarAnime items." else null,
+                        errorMessage = when {
+                            items.isEmpty() -> "No LunarAnime anime watchlist items found."
+                            failed > 0 -> "LunarAnime import finished: $imported imported, $failed failed."
+                            else -> null
+                        },
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isImportingLunar = false,
+                        errorMessage = "LunarAnime import failed: ${e.message ?: "Unknown error"}",
+                    )
+                }
+            }
+        }
+    }
+
+    fun exportLibraryToLunar() {
+        viewModelScope.launch(Dispatchers.Default) {
+            _uiState.update { it.copy(isExportingLunar = true, errorMessage = null, successMessage = null) }
+            try {
+                val remoteSlugs = trackingService.fetchLunarWatchlist()
+                    .map { it.slug.trim().lowercase() }
+                    .filter { it.isNotEmpty() }
+                    .toSet()
+                val local = loadAllWatchlistEntries()
+                var exported = 0
+                var skipped = 0
+                var failed = 0
+                for (entry in local) {
+                    val slug = entry.effectiveAnimeId.trim()
+                    if (slug.isEmpty()) {
+                        skipped++
+                        continue
+                    }
+                    if (slug.lowercase() in remoteSlugs) {
+                        skipped++
+                        continue
+                    }
+                    val ok = trackingService.toggleLunarWatchlistAnime(slug)
+                    if (ok) exported++ else failed++
+                    if ((exported + failed) % 10 == 0) delay(80L)
+                }
+                _uiState.update {
+                    it.copy(
+                        isExportingLunar = false,
+                        successMessage = if (exported > 0) "Exported $exported items to LunarAnime." else null,
+                        errorMessage = when {
+                            local.isEmpty() -> "No Anisurge watchlist items to export."
+                            exported == 0 && failed == 0 -> "LunarAnime already has your exported items."
+                            failed > 0 -> "LunarAnime export finished: $exported exported, $failed failed, $skipped skipped."
+                            else -> null
+                        },
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isExportingLunar = false,
+                        errorMessage = "LunarAnime export failed: ${e.message ?: "Unknown error"}",
+                    )
+                }
             }
         }
     }
@@ -2165,7 +2266,10 @@ class SettingsViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null, successMessage = null) }
             try {
-                val syncResult = AppComponent.librarySyncService.syncWithReanime(force = true)
+                val syncResult = AppComponent.librarySyncService.syncWithReanime(
+                    force = true,
+                    direction = LibrarySyncDirection.Merge,
+                )
                 if (syncResult) {
                     _uiState.update {
                         it.copy(
@@ -2187,6 +2291,70 @@ class SettingsViewModel(
                         isLoading = false,
                         errorMessage = "Library sync failed: ${e.message}"
                     )
+                }
+            }
+        }
+    }
+
+    fun importLibraryFromReanime() {
+        syncLibraryWithReanimeDirection(
+            direction = LibrarySyncDirection.Import,
+            success = "Imported ReAnime library into Anisurge.",
+            failure = "ReAnime import failed.",
+        )
+    }
+
+    fun exportLibraryToReanime() {
+        syncLibraryWithReanimeDirection(
+            direction = LibrarySyncDirection.Export,
+            success = "Exported Anisurge library to ReAnime.",
+            failure = "ReAnime export failed.",
+        )
+    }
+
+    private fun syncLibraryWithReanimeDirection(
+        direction: LibrarySyncDirection,
+        success: String,
+        failure: String,
+    ) {
+        viewModelScope.launch {
+            _uiState.update {
+                when (direction) {
+                    LibrarySyncDirection.Import -> it.copy(
+                        isImportingReanime = true,
+                        errorMessage = null,
+                        successMessage = null,
+                    )
+                    LibrarySyncDirection.Export -> it.copy(
+                        isExportingReanime = true,
+                        errorMessage = null,
+                        successMessage = null,
+                    )
+                    LibrarySyncDirection.Merge -> it.copy(isLoading = true, errorMessage = null, successMessage = null)
+                }
+            }
+            try {
+                val ok = AppComponent.librarySyncService.syncWithReanime(force = true, direction = direction)
+                _uiState.update {
+                    val cleared = when (direction) {
+                        LibrarySyncDirection.Import -> it.copy(isImportingReanime = false)
+                        LibrarySyncDirection.Export -> it.copy(isExportingReanime = false)
+                        LibrarySyncDirection.Merge -> it.copy(isLoading = false)
+                    }
+                    if (ok) {
+                        cleared.copy(successMessage = success)
+                    } else {
+                        cleared.copy(errorMessage = failure)
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    val cleared = when (direction) {
+                        LibrarySyncDirection.Import -> it.copy(isImportingReanime = false)
+                        LibrarySyncDirection.Export -> it.copy(isExportingReanime = false)
+                        LibrarySyncDirection.Merge -> it.copy(isLoading = false)
+                    }
+                    cleared.copy(errorMessage = "$failure ${e.message ?: "Unknown error"}")
                 }
             }
         }

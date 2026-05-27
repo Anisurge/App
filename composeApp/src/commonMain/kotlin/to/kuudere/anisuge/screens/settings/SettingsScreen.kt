@@ -1033,8 +1033,12 @@ private fun MobileSettingsDetail(
                     onConnectReanime = viewModel::connectReanime,
                     onDisconnectReanime = viewModel::disconnectReanime,
                     onSyncLibrary = viewModel::syncLibraryWithReanime,
+                    onImportReanime = viewModel::importLibraryFromReanime,
+                    onExportReanime = viewModel::exportLibraryToReanime,
                     onConnectLunar = { viewModel.connectLunar { url -> openUrl(url) } },
                     onDisconnectLunar = viewModel::disconnectLunar,
+                    onImportLunar = viewModel::importLibraryFromLunar,
+                    onExportLunar = viewModel::exportLibraryToLunar,
                 )
 
                 is SettingsTab.Community -> {
@@ -1183,8 +1187,12 @@ private fun SettingsContent(
                 onConnectReanime = viewModel::connectReanime,
                 onDisconnectReanime = viewModel::disconnectReanime,
                 onSyncLibrary = viewModel::syncLibraryWithReanime,
+                onImportReanime = viewModel::importLibraryFromReanime,
+                onExportReanime = viewModel::exportLibraryToReanime,
                 onConnectLunar = { viewModel.connectLunar { url -> openUrl(url) } },
                 onDisconnectLunar = viewModel::disconnectLunar,
+                onImportLunar = viewModel::importLibraryFromLunar,
+                onExportLunar = viewModel::exportLibraryToLunar,
             )
 
             is SettingsTab.Community -> {
@@ -4714,8 +4722,12 @@ private fun ConnectTab(
     onConnectReanime: (String, String) -> Unit,
     onDisconnectReanime: () -> Unit,
     onSyncLibrary: () -> Unit,
+    onImportReanime: () -> Unit,
+    onExportReanime: () -> Unit,
     onConnectLunar: () -> Unit,
     onDisconnectLunar: () -> Unit,
+    onImportLunar: () -> Unit,
+    onExportLunar: () -> Unit,
 ) {
     var showConnectReanimeDialog by remember { mutableStateOf(false) }
     var reanimeEmail by remember { mutableStateOf("") }
@@ -4914,16 +4926,29 @@ private fun ConnectTab(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
-                            onClick = onSyncLibrary,
+                            onClick = onImportReanime,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C4AB6)),
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(8.dp),
-                            enabled = !uiState.isLoading
+                            enabled = !uiState.isLoading && !uiState.isImportingReanime && !uiState.isExportingReanime
                         ) {
-                            if (uiState.isLoading) {
+                            if (uiState.isImportingReanime) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
                             } else {
-                                Text("Sync library (2-way)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text("Import", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Button(
+                            onClick = onExportReanime,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C4AB6)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            enabled = !uiState.isLoading && !uiState.isImportingReanime && !uiState.isExportingReanime
+                        ) {
+                            if (uiState.isExportingReanime) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("Export", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -4981,53 +5006,89 @@ private fun ConnectTab(
                     .border(1.dp, BORDER, RoundedCornerShape(14.dp))
                     .padding(16.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                Column {
                     Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        ServiceLogo(
-                            model = null,
-                            fallbackText = "LA",
-                            backgroundColor = Color(0xFF2196F3),
-                            modifier = Modifier.size(40.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                "LunarAnime Account",
-                                color = TEXT,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ServiceLogo(
+                                model = null,
+                                fallbackText = "LA",
+                                backgroundColor = Color(0xFF2196F3),
+                                modifier = Modifier.size(40.dp)
                             )
-                            Text(
-                                "Connected as @${uiState.lunarUsername ?: "User"}",
-                                color = MUTED,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    "LunarAnime Account",
+                                    color = TEXT,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "Connected as @${uiState.lunarUsername ?: "User"}",
+                                    color = MUTED,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.width(16.dp))
+                        
+                        Button(
+                            onClick = onDisconnectLunar,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914)),
+                            shape = RoundedCornerShape(8.dp),
+                            enabled = !uiState.isConnectingLunar
+                        ) {
+                            if (uiState.isConnectingLunar) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("Disconnect", color = Color.White, fontSize = 12.sp, maxLines = 1)
+                            }
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
-                    
-                    Button(
-                        onClick = onDisconnectLunar,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914)),
-                        shape = RoundedCornerShape(8.dp),
-                        enabled = !uiState.isConnectingLunar
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        if (uiState.isConnectingLunar) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                        } else {
-                            Text("Disconnect", color = Color.White, fontSize = 12.sp, maxLines = 1)
+                        Button(
+                            onClick = onImportLunar,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            enabled = !uiState.isImportingLunar && !uiState.isExportingLunar
+                        ) {
+                            if (uiState.isImportingLunar) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("Import", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Button(
+                            onClick = onExportLunar,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)),
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            enabled = !uiState.isImportingLunar && !uiState.isExportingLunar
+                        ) {
+                            if (uiState.isExportingLunar) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("Export", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }

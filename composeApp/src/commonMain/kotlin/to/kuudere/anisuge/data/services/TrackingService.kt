@@ -12,6 +12,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -448,25 +449,42 @@ class TrackingService(
         }
     }
 
-    suspend fun syncLunarPresence(animeTitle: String, episodeNumber: Int): Boolean {
+    suspend fun fetchLunarWatchlist(): List<LunarWatchlistItem> {
+        if (settingsStore.getLunarIsExpired()) {
+            if (!refreshLunarToken()) return emptyList()
+        }
+        val token = settingsStore.getLunarAccessToken() ?: return emptyList()
+        return try {
+            val response = httpClient.get("https://api.lunaranime.ru/api/oauth2/watchlist") {
+                header("Authorization", "Bearer $token")
+            }
+            if (!response.status.isSuccess()) return emptyList()
+            response.body<LunarWatchlistResponse>().anime
+        } catch (e: Exception) {
+            println("[TrackingService] Lunar watchlist fetch error: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun toggleLunarWatchlistAnime(slug: String): Boolean {
         if (settingsStore.getLunarIsExpired()) {
             if (!refreshLunarToken()) return false
         }
         val token = settingsStore.getLunarAccessToken() ?: return false
         return try {
-            val response = httpClient.post("https://api.lunaranime.ru/api/discord/activity") {
+            val response = httpClient.post("https://api.lunaranime.ru/api/oauth2/watchlist") {
                 header("Authorization", "Bearer $token")
                 contentType(ContentType.Application.Json)
                 setBody(
                     buildJsonObject {
-                        put("activity_type", "watching")
-                        put("name", animeTitle)
-                        put("details", "Episode $episodeNumber")
+                        put("list_type", "anime")
+                        put("slug", slug)
                     }
                 )
             }
             response.status.isSuccess()
         } catch (e: Exception) {
+            println("[TrackingService] Lunar watchlist toggle error: ${e.message}")
             false
         }
     }
@@ -483,6 +501,13 @@ data class LunarProfile(
 )
 
 @Serializable
+data class LunarWatchlistItem(
+    val slug: String,
+    @SerialName("poster_url") val posterUrl: String? = null,
+    val title: String? = null,
+)
+
+@Serializable
 private data class LunarTokenRefreshResponse(
     val access_token: String,
     val refresh_token: String? = null,
@@ -495,6 +520,12 @@ private data class LunarProfileResponse(
     val username: String,
     val avatar_url: String? = null,
     val bio: String? = null,
+)
+
+@Serializable
+private data class LunarWatchlistResponse(
+    val anime: List<LunarWatchlistItem> = emptyList(),
+    val manga: List<LunarWatchlistItem> = emptyList(),
 )
 
 @Serializable

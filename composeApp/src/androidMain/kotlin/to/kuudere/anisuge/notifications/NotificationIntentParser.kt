@@ -20,7 +20,7 @@ object NotificationIntentParser {
         val data = intent.data ?: return parseExtras(intent)
         if (data.scheme != "anisurge") return parseExtras(intent)
 
-        if (data.host == "mal" || data.host == "anilist") return null
+        if (data.host in setOf("mal", "anilist", "lunar", "tv-login")) return null
 
         val segments = data.pathSegments
         val animeId = when {
