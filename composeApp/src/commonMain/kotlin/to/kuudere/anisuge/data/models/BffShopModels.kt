@@ -9,6 +9,8 @@ data class BffShopItem(
     val name: String,
     val description: String = "",
     val priceCoins: Int,
+    val priceCoinsOriginal: Int? = null,
+    val premiumDiscountPercent: Int? = null,
     val assetUrl: String,
     val previewVideoUrl: String? = null,
     val owned: Boolean = false,

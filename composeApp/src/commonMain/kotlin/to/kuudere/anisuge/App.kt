@@ -571,6 +571,7 @@ fun App(
                             offlineTitle = offlineTitle,
                             resumeAtSeconds = resumeAtSeconds,
                             viewModel = watchVm,
+                            isPremiumUser = currentUserProfile?.isPremium == true,
                             onBack = {
                                 homeVm.refreshContinueWatching()
                                 navController.popBackStack()

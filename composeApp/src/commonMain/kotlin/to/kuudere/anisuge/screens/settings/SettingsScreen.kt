@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Star
@@ -117,7 +118,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -143,9 +143,7 @@ import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.platform.AppVersion
 import to.kuudere.anisuge.platform.AppBuildNumber
 import to.kuudere.anisuge.platform.PlatformName
-import to.kuudere.anisuge.platform.TvQrPairingAction
 import to.kuudere.anisuge.platform.isDesktopPlatform
-import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.ui.ConfirmDialog
 import to.kuudere.anisuge.i18n.AppStrings
 import to.kuudere.anisuge.i18n.AppLocale
@@ -167,6 +165,16 @@ private val TEXT = Color.White
 
 private const val ANISURGE_DISCORD_URL = "https://discord.gg/yR4T2dbeCx"
 private const val ANISURGE_TELEGRAM_URL = "https://t.me/anisurge"
+private val PREMIUM_BENEFITS = listOf(
+    "No chat cooldown",
+    "12-episode season downloads",
+    "Faster parallel downloads",
+    "Auto server fallback",
+    "300 Berries per purchase",
+    "Lifetime animated/MP4 PFP",
+    "Premium chat badge and gradient name",
+    "40% off shop items",
+)
 
 // ── Data ────────────────────────────────────────────────────────────────────────
 data class SettingsNavItem(
@@ -806,6 +814,18 @@ private fun MobileSettingsList(
         )
 
         Spacer(modifier = Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xFFFFD54F).copy(alpha = 0.07f))
+                .border(1.dp, Color(0xFFFFD54F).copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+                .padding(14.dp),
+        ) {
+            PremiumBenefitsList()
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Menu Items
         navItems.forEach { item ->
@@ -820,59 +840,6 @@ private fun MobileSettingsList(
                 useBeliIcon = item.useBeliIcon,
                 onClick = { onItemClick(item.tab) }
             )
-        }
-
-        if (!isAndroidTvPlatform) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(BG_CARD)
-                    .border(1.dp, BORDER, RoundedCornerShape(14.dp)),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .blur(18.dp),
-                ) {
-                    Text(
-                        "Connect to Android TV",
-                        color = TEXT,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        "Scan the QR shown on your TV to sign in there.",
-                        color = MUTED,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    TvQrPairingAction()
-                }
-                // Blocks all touches (blur alone does not); "Coming Soon" on top.
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(1f)
-                        .background(Color(0xFF0D0D0D).copy(alpha = 0.52f))
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() },
-                            onClick = {},
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "Coming Soon",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
         }
 
         // Logout
@@ -1032,6 +999,7 @@ private fun MobileSettingsDetail(
                     onRetry = { viewModel.refresh() },
                     onPickCustomPfp = pickPfp,
                     onEquipFrame = viewModel::equipShopFrame,
+                    onEditProfile = viewModel::openProfileAccount,
                     onBuyPremium = { viewModel.startPremiumCheckout(uriHandler::openUri) },
                 )
 
@@ -4106,7 +4074,7 @@ private fun PremiumProfileCard(
 ) {
     val user = uiState.userProfile ?: return
     val expiry = user.premiumExpiresAt?.substringBefore("T")?.takeIf { it.isNotBlank() }
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
@@ -4114,47 +4082,84 @@ private fun PremiumProfileCard(
             .border(1.dp, Color(0xFFFFD54F).copy(alpha = 0.22f), RoundedCornerShape(14.dp))
             .clickable(enabled = !uiState.isStartingPremiumCheckout) { onBuyPremium() }
             .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (uiState.isStartingPremiumCheckout) {
-            CircularProgressIndicator(
-                color = Color(0xFFFFD54F),
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp,
-            )
-        } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (uiState.isStartingPremiumCheckout) {
+                CircularProgressIndicator(
+                    color = Color(0xFFFFD54F),
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.WorkspacePremium,
+                    contentDescription = null,
+                    tint = Color(0xFFFFD54F),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    if (user.isPremium) "Premium active" else "Buy Premium",
+                    color = TEXT,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    when {
+                        user.isPremium && expiry != null -> "Expires $expiry"
+                        user.isPremium -> "Premium downloads, chat, shop, and profile perks enabled"
+                        else -> "Unlock downloads, chat perks, shop discount, and animated profile media"
+                    },
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+            }
             Icon(
-                imageVector = Icons.Default.WorkspacePremium,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
                 tint = Color(0xFFFFD54F),
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(20.dp),
             )
         }
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                if (user.isPremium) "Premium active" else "Buy Premium",
-                color = TEXT,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                when {
-                    user.isPremium && expiry != null -> "Expires $expiry"
-                    user.isPremium -> "Premium downloads and profile perks enabled"
-                    else -> "Unlock season downloads and faster HLS downloads"
-                },
-                color = MUTED,
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-            )
+        Spacer(Modifier.height(12.dp))
+        PremiumBenefitsList()
+    }
+}
+
+@Composable
+private fun PremiumBenefitsList() {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        PREMIUM_BENEFITS.chunked(2).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                row.forEach { benefit ->
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD54F),
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Text(
+                            benefit,
+                            color = TEXT.copy(alpha = 0.86f),
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp,
+                        )
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = Color(0xFFFFD54F),
-            modifier = Modifier.size(20.dp),
-        )
     }
 }
 
@@ -4213,7 +4218,7 @@ private fun ProfilePfpAndFramesSection(
                     ),
                 )
                 Text(
-                    "JPEG, PNG, GIF, WebP max 2.5 MB · Premium MP4 max 3 MB",
+                    "JPEG, PNG, GIF, WebP max 2.5 MB · Premium MP4 is cropped square and trimmed to 6s",
                     color = MUTED,
                     fontSize = 11.sp,
                 )
@@ -4834,6 +4839,7 @@ private fun MobileProfileContent(
     onRetry: () -> Unit = {},
     onPickCustomPfp: () -> Unit = {},
     onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit = {},
+    onEditProfile: () -> Unit = {},
     onBuyPremium: () -> Unit = {},
 ) {
     if (uiState.isOffline && uiState.userProfile == null) {
@@ -4896,6 +4902,17 @@ private fun MobileProfileContent(
                     isUploading = uiState.isUploadingPfp,
                     onClick = onPickCustomPfp,
                 )
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedButton(onClick = onEditProfile) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = TEXT,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Edit Profile", color = TEXT, fontWeight = FontWeight.SemiBold)
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

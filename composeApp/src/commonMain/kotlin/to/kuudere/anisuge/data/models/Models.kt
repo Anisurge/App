@@ -90,6 +90,8 @@ data class UserProfile(
     val isPremium: Boolean = false,
     val premiumPlan: String? = null,
     val premiumExpiresAt: String? = null,
+    val animatedPfpUnlocked: Boolean = false,
+    val mp4PfpUnlocked: Boolean = false,
     val chatProfilePrivate: Boolean = false,
 ) {
     val effectiveId: String? get() = id ?: userId

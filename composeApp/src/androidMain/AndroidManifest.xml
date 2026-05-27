@@ -122,6 +122,22 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="anisurge" />
             </intent-filter>
+            <!-- Public anime share links -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="www.anisurge.lol"
+                    android:pathPrefix="/anime"
+                />
+                <data
+                    android:scheme="https"
+                    android:host="anisurge.lol"
+                    android:pathPrefix="/anime"
+                />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

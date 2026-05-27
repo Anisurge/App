@@ -89,6 +89,7 @@ fun WatchScreen(
     offlineTitle: String? = null,
     resumeAtSeconds: Double? = null,
     viewModel: WatchViewModel,
+    isPremiumUser: Boolean = false,
     onBack: () -> Unit,
     onExit: () -> Unit = {}
 ) {
@@ -273,6 +274,7 @@ fun WatchScreen(
                                     uiState = uiState,
                                     viewModel = viewModel,
                                     modifier = Modifier.fillMaxSize(),
+                                    isPremiumUser = isPremiumUser,
                                     onFullscreenToggle = { viewModel.setFullscreen(!uiState.isFullscreen) },
                                     onBack = handleBack,
                                     onExit = onExit
@@ -1039,6 +1041,7 @@ fun WatchVideoPlayer(
     uiState: WatchUiState,
     viewModel: WatchViewModel,
     modifier: Modifier = Modifier,
+    isPremiumUser: Boolean = false,
     onFullscreenToggle: () -> Unit,
     onBack: () -> Unit,
     onExit: () -> Unit = {}
@@ -1281,6 +1284,10 @@ fun WatchVideoPlayer(
             LaunchedEffect(playerState.error) {
                 val error = playerState.error ?: return@LaunchedEffect
                 if (error.contains("trying another server", ignoreCase = true)) {
+                    if (!isPremiumUser) {
+                        playerState.error = "Stream failed to start — try another server in Settings"
+                        return@LaunchedEffect
+                    }
                     val resumeAt = playerState.position.takeIf { it >= 1.0 }
                         ?: uiState.savedWatchPosition
                     viewModel.tryNextServerAfterPlaybackFailure(resumeAt)

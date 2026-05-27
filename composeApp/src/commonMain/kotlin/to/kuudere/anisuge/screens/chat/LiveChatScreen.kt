@@ -461,13 +461,22 @@ private fun ChatMessageRow(
             modifier = Modifier.widthIn(max = 280.dp),
             horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
         ) {
-            ChatUsernameLabel(
-                message = message,
-                isMine = isMine,
-                modifier = profileClick,
-                fontSize = 11.sp,
-                fontWeight = if (isMine) FontWeight.Normal else FontWeight.SemiBold,
-            )
+            Row(
+                modifier = Modifier.widthIn(max = 240.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                ChatUsernameLabel(
+                    message = message,
+                    isMine = isMine,
+                    modifier = profileClick.weight(1f, fill = false),
+                    fontSize = 11.sp,
+                    fontWeight = if (isMine) FontWeight.Normal else FontWeight.SemiBold,
+                )
+                if (message.isPremium) {
+                    PremiumChatBadge()
+                }
+            }
             Spacer(Modifier.height(4.dp))
             Box(
                 Modifier
@@ -532,6 +541,21 @@ private fun ChatMessageRow(
             )
         }
     }
+}
+
+@Composable
+private fun PremiumChatBadge() {
+    Text(
+        text = "PRO",
+        color = Color(0xFFFFD54F),
+        fontSize = 9.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF2A2200))
+            .border(1.dp, Color(0xFFFFD54F).copy(alpha = 0.38f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 5.dp, vertical = 2.dp),
+    )
 }
 
 @Composable

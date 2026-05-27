@@ -172,6 +172,13 @@ fun AnimeInfoScreen(
             }
         } else if (state.details != null) {
             val anime = state.details!!
+            val shareAnime = {
+                to.kuudere.anisuge.platform.shareText(
+                    text = buildAnimeShareText(anime, animeId, preferRomajiAnimeTitles),
+                    title = anime.title.displayTitle(preferRomajiAnimeTitles),
+                )
+                Unit
+            }
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val isDesktop = maxWidth >= 1024.dp
                 if (isAndroidTvPlatform) {
@@ -194,6 +201,7 @@ fun AnimeInfoScreen(
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
                         onDownloadSeason = { episodes -> selectedBatchForDownload = episodes },
                         isPremiumUser = isPremiumUser,
+                        onShareAnime = shareAnime,
                         onDownloadsClick = onDownloadsClick,
                         onExit = onExit,
                         onBack = onBack
@@ -217,6 +225,7 @@ fun AnimeInfoScreen(
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
                         onDownloadSeason = { episodes -> selectedBatchForDownload = episodes },
                         isPremiumUser = isPremiumUser,
+                        onShareAnime = shareAnime,
                         onDownloadsClick = onDownloadsClick
                     )
                 }
@@ -227,6 +236,16 @@ fun AnimeInfoScreen(
 
 private fun stripHtmlTags(htmlContent: String): String {
     return htmlContent.replace(Regex("<.*?>"), "").replace("&quot;", "\"").replace("&amp;", "&").replace("&#039;", "'").replace("<br>", "\n").replace("<br/>", "\n")
+}
+
+private fun buildAnimeShareText(
+    anime: AnimeDetails,
+    routeAnimeId: String,
+    preferRomajiAnimeTitles: Boolean,
+): String {
+    val id = anime.animeId.ifBlank { routeAnimeId }
+    val title = anime.title.displayTitle(preferRomajiAnimeTitles).ifBlank { "this anime" }
+    return "$title\nWatch this on Anisurge:\nhttps://www.anisurge.lol/anime/$id"
 }
 
 @Composable
@@ -499,6 +518,7 @@ private fun MobileLayout(
     onDownloadEpisode: (to.kuudere.anisuge.data.models.EpisodeItem) -> Unit,
     onDownloadSeason: (List<to.kuudere.anisuge.data.models.EpisodeItem>) -> Unit,
     isPremiumUser: Boolean,
+    onShareAnime: () -> Unit,
     onDownloadsClick: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -553,7 +573,7 @@ private fun MobileLayout(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { /* Share */ }) {
+                        IconButton(onClick = onShareAnime) {
                             Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
                         }
                         IconButton(onClick = onDownloadsClick) {
@@ -792,6 +812,7 @@ private fun DesktopLayout(
     onDownloadEpisode: (to.kuudere.anisuge.data.models.EpisodeItem) -> Unit,
     onDownloadSeason: (List<to.kuudere.anisuge.data.models.EpisodeItem>) -> Unit,
     isPremiumUser: Boolean,
+    onShareAnime: () -> Unit,
     onDownloadsClick: () -> Unit,
     onExit: () -> Unit,
     onBack: () -> Unit,
@@ -1032,6 +1053,22 @@ private fun DesktopLayout(
                                 onDismiss = { showSheet = false }
                             )
                         }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF000000))
+                            .clickable(onClick = onShareAnime),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp),
+                        )
                     }
                 }
 

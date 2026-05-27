@@ -115,7 +115,7 @@ class BffMeService(
         val maxBytes = if (isVideo) PROFILE_VIDEO_MAX_BYTES else CHAT_IMAGE_MAX_BYTES
         if (pick.bytes.size > maxBytes) {
             val message = if (isVideo) {
-                "Video profile pictures must be less than 3 MB"
+                "Video profile pictures must be cropped square, 6 seconds or shorter, and less than 3 MB"
             } else {
                 "Image must be less than 2.5 MB"
             }

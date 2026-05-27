@@ -18,6 +18,24 @@ object NotificationIntentParser {
     fun parse(intent: Intent?): NotificationLaunch? {
         intent ?: return null
         val data = intent.data ?: return parseExtras(intent)
+        val webAnimeId = parseWebAnimeId(data)
+        if (webAnimeId != null) {
+            return NotificationLaunch(
+                id = System.nanoTime(),
+                type = "ANIME_INFO",
+                title = intent.getStringExtra("title") ?: "Anisurge",
+                body = intent.getStringExtra("body") ?: "",
+                animeId = webAnimeId,
+                episodeNumber = null,
+                actionUrl = intent.getStringExtra("actionUrl") ?: data.toString(),
+                actionLabel = intent.getStringExtra("actionLabel"),
+                mediaType = intent.getStringExtra("mediaType"),
+                mediaUrl = intent.getStringExtra("mediaUrl"),
+                imageUrl = intent.getStringExtra("imageUrl"),
+                referenceId = intent.getStringExtra("referenceId"),
+                campaign = intent.getStringExtra("campaign"),
+            )
+        }
         if (data.scheme != "anisurge") return parseExtras(intent)
 
         if (data.host in setOf("mal", "anilist", "lunar", "tv-login")) return null
@@ -74,6 +92,16 @@ object NotificationIntentParser {
             referenceId = intent.getStringExtra("referenceId"),
             campaign = intent.getStringExtra("campaign"),
         )
+    }
+
+    private fun parseWebAnimeId(data: android.net.Uri): String? {
+        val scheme = data.scheme?.lowercase()
+        if (scheme != "https") return null
+        val host = data.host?.lowercase() ?: return null
+        if (host != "www.anisurge.lol" && host != "anisurge.lol") return null
+        val segments = data.pathSegments
+        if (segments.size < 2 || segments[0] != "anime") return null
+        return segments[1].takeIf { it.isNotBlank() }
     }
 
     /** Accepts `12`, `ep-4`, etc. from FCM / notification extras. */

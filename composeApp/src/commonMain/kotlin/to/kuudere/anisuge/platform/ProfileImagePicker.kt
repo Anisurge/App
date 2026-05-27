@@ -6,16 +6,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import to.kuudere.anisuge.ui.ProfileImageCropSheet
+import to.kuudere.anisuge.ui.ProfileVideoCropSheet
 
-/** Pick a gallery image, crop to a square, or pass premium MP4 profile videos through. */
+/** Pick gallery media; images are manually cropped, MP4s are square-cropped and trimmed before upload. */
 @Composable
 fun rememberProfileImagePicker(
     onResult: (ChatImagePick?) -> Unit,
 ): () -> Unit {
     var pendingCrop by remember { mutableStateOf<ChatImagePick?>(null) }
+    var pendingVideo by remember { mutableStateOf<ChatImagePick?>(null) }
     val launchGallery = rememberChatImagePicker(allowVideo = true) { pick ->
         if (pick?.mimeType == "video/mp4") {
-            onResult(pick)
+            pendingVideo = pick
         } else {
             pendingCrop = pick
         }
@@ -29,6 +31,17 @@ fun rememberProfileImagePicker(
                 onResult(cropped)
             },
             onCancel = { pendingCrop = null },
+        )
+    }
+
+    pendingVideo?.let { source ->
+        ProfileVideoCropSheet(
+            sourcePick = source,
+            onConfirm = { processed ->
+                pendingVideo = null
+                onResult(processed)
+            },
+            onCancel = { pendingVideo = null },
         )
     }
 

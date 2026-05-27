@@ -55,6 +55,7 @@ data class DownloadTask(
     val streamUrl: String? = null,
     val preferBatchDub: Boolean = false,
     val useParallelSegments: Boolean = false,
+    val fallbackAttemptedServers: List<String> = emptyList(),
     @kotlinx.serialization.Transient internal var job: Job? = null
 )
 
@@ -350,6 +351,17 @@ object DownloadManager {
         updateTask(taskId) { it.copy(job = job) }
     }
 
+    private fun premiumDownloadFallbackServers(currentApiServer: String): List<String> {
+        val current = currentApiServer.lowercase()
+        val available = AppComponent.serverRepository.getAvailableServers()
+            .map { it.id.lowercase().removeSuffix("-dub") }
+            .filter { it.isNotBlank() && it != current }
+            .distinct()
+        val preferred = listOf("anitaku-1", "anitaku", "anikage")
+        return (preferred.filter { it in available } + available.filter { it !in preferred })
+            .distinct()
+    }
+
     private fun executeDownload(
         task: DownloadTask,
         anilistId: Int,
@@ -362,6 +374,7 @@ object DownloadManager {
     ) {
         val taskId = task.id
         val taskHeaders = task.headers
+        var resolvedServer = server
         val job = scope.launch {
             try {
                 val m3u8Url: String
@@ -440,6 +453,23 @@ object DownloadManager {
                         }
                     }
 
+                    if (streamInfo == null && task.useParallelSegments) {
+                        for (candidate in premiumDownloadFallbackServers(apiServer)) {
+                            val fallbackResponse = runCatching {
+                                infoService.getVideoStream(anilistId, task.episodeNumber, candidate)
+                            }.getOrNull()
+                            val fallbackData = if (useDub) fallbackResponse?.dub else fallbackResponse?.sub
+                            val fallbackInfo = fallbackData?.streams?.firstOrNull()
+                            if (fallbackInfo != null) {
+                                resolvedServer = candidate
+                                streamData = fallbackData
+                                streamInfo = fallbackInfo
+                                updateTask(taskId) { it.copy(status = "Switched to $candidate") }
+                                break
+                            }
+                        }
+                    }
+
                     if (streamInfo == null) {
                         abortDownload(taskId, "no stream")
                         return@launch
@@ -462,12 +492,19 @@ object DownloadManager {
                 updateTask(taskId) {
                     it.copy(
                         streamUrl = m3u8Url,
-                        serverId = server,
+                        serverId = resolvedServer,
                         anilistId = anilistId,
                         subLang = subLang,
                         audioLang = audioLang,
                         preferBatchDub = preferBatchDub,
                         headers = currentHeaders,
+                        fallbackAttemptedServers = if (resolvedServer.equals(server, ignoreCase = true)) {
+                            it.fallbackAttemptedServers
+                        } else {
+                            (it.fallbackAttemptedServers + server)
+                                .map { attempted -> attempted.lowercase().removeSuffix("-dub") }
+                                .distinct()
+                        },
                     )
                 }
 
@@ -1104,10 +1141,54 @@ object DownloadManager {
     /** Drop failed task from UI/storage and delete partial files so the next download starts clean. */
     private fun abortDownload(taskId: String, reason: String) {
         val task = tasks.value.find { it.id == taskId } ?: return
+        val nextServer = nextPremiumDownloadFallback(task)
+        if (nextServer != null && task.anilistId != null) {
+            scope.launch {
+                cleanupPartialDownloadFiles(task)
+                updateTask(taskId) {
+                    it.copy(
+                        status = "Retrying on $nextServer...",
+                        progress = 0f,
+                        downloadSpeed = "",
+                        eta = "",
+                        localPath = null,
+                        streamUrl = null,
+                        headers = null,
+                        serverId = nextServer,
+                        fallbackAttemptedServers =
+                            (it.fallbackAttemptedServers + listOfNotNull(task.serverId))
+                                .map { server -> server.lowercase().removeSuffix("-dub") }
+                                .distinct(),
+                    )
+                }
+                val retryTask = tasks.value.find { it.id == taskId } ?: return@launch
+                executeDownload(
+                    retryTask,
+                    task.anilistId,
+                    nextServer,
+                    task.subLang,
+                    task.audioLang,
+                    downloadFonts = true,
+                    preResolvedM3u8 = null,
+                    preferBatchDub = task.preferBatchDub,
+                )
+                println("[Download] premium fallback for $taskId: $reason -> $nextServer")
+            }
+            return
+        }
         scope.launch {
             removeFailedTaskSync(task)
             println("[Download] removed failed task $taskId: $reason")
         }
+    }
+
+    private fun nextPremiumDownloadFallback(task: DownloadTask): String? {
+        if (!task.useParallelSegments) return null
+        val current = task.serverId?.lowercase()?.removeSuffix("-dub") ?: return null
+        val tried = (task.fallbackAttemptedServers + current)
+            .map { it.lowercase().removeSuffix("-dub") }
+            .toSet()
+        return premiumDownloadFallbackServers(current).firstOrNull { it !in tried }
     }
 
     private suspend fun removeFailedTaskSync(task: DownloadTask) {

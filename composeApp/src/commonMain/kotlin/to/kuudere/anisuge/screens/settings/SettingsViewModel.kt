@@ -1695,8 +1695,12 @@ class SettingsViewModel(
     fun onCustomPfpPicked(pick: to.kuudere.anisuge.platform.ChatImagePick?) {
         if (pick == null) return
         val isVideo = pick.mimeType == "video/mp4"
-        if (isVideo && _uiState.value.userProfile?.isPremium != true) {
-            _uiState.update { it.copy(errorMessage = "MP4 profile pictures are a Premium option") }
+        val profile = _uiState.value.userProfile
+        val canUseVideoPfp = profile?.isPremium == true ||
+            profile?.mp4PfpUnlocked == true ||
+            profile?.animatedPfpUnlocked == true
+        if (isVideo && !canUseVideoPfp) {
+            _uiState.update { it.copy(errorMessage = "MP4 profile pictures unlock with Premium") }
             return
         }
         viewModelScope.launch {

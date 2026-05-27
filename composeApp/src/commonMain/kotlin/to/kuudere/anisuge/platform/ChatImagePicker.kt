@@ -31,3 +31,5 @@ expect fun rememberChatImagePicker(
     allowVideo: Boolean = false,
     onResult: (ChatImagePick?) -> Unit,
 ): () -> Unit
+
+expect suspend fun normalizeProfileVideoForUpload(pick: ChatImagePick): Result<ChatImagePick>

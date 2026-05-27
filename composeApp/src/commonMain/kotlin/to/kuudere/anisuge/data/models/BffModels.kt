@@ -74,6 +74,10 @@ fun BffPublicUser.toUserProfile(): UserProfile {
         ?: (profileExtra?.get("premiumPlan") as? JsonPrimitive)?.contentOrNull
     val resolvedPremiumExpiresAt = premiumExpiresAt
         ?: (profileExtra?.get("premiumExpiresAt") as? JsonPrimitive)?.contentOrNull
+    val animatedPfpUnlocked =
+        (profileExtra?.get("animatedPfpUnlocked") as? JsonPrimitive)?.booleanOrNull == true
+    val mp4PfpUnlocked =
+        (profileExtra?.get("mp4PfpUnlocked") as? JsonPrimitive)?.booleanOrNull == true
     val chatProfilePrivate =
         (profileExtra?.get("chatProfilePrivate") as? JsonPrimitive)?.booleanOrNull == true
     val resolvedAvatar = customPfpUrl?.takeIf { it.isNotBlank() } ?: avatarUrl
@@ -110,6 +114,8 @@ fun BffPublicUser.toUserProfile(): UserProfile {
         isPremium = isPremium,
         premiumPlan = resolvedPremiumPlan,
         premiumExpiresAt = resolvedPremiumExpiresAt,
+        animatedPfpUnlocked = animatedPfpUnlocked,
+        mp4PfpUnlocked = mp4PfpUnlocked,
         chatProfilePrivate = chatProfilePrivate,
     )
 }

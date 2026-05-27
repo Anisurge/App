@@ -9,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.io.path.createTempDirectory
+import ws.schild.jave.process.ffmpeg.DefaultFFMPEGLocator
 
 @Composable
 actual fun rememberChatImagePicker(
@@ -67,4 +69,77 @@ private fun readChatImageFile(file: File, allowVideo: Boolean): ChatImagePick? {
         file.name
     }
     return ChatImagePick(bytes, outMime, outName, bytes.size.toLong())
+}
+
+actual suspend fun normalizeProfileVideoForUpload(pick: ChatImagePick): Result<ChatImagePick> =
+    withContext(Dispatchers.IO) {
+        runCatching {
+            require(pick.mimeType == "video/mp4") { "Only MP4 videos are supported" }
+            val dir = createTempDirectory("anisurge-profile-video-").toFile()
+            val input = File(dir, "input.mp4")
+            val output = File(dir, "output.mp4")
+            input.writeBytes(pick.bytes)
+            try {
+                val ffmpeg = resolveFfmpegPath()
+                val ok = transcodeProfileVideo(ffmpeg, input, output, scale = 512, crf = 28) ||
+                    transcodeProfileVideo(ffmpeg, input, output, scale = 384, crf = 32)
+                if (!ok || !output.exists() || output.length() <= 0L) {
+                    throw IllegalStateException("Could not crop and trim MP4")
+                }
+                if (output.length() > PROFILE_VIDEO_MAX_BYTES) {
+                    throw IllegalStateException("Prepared MP4 is still over 3 MB")
+                }
+                val bytes = output.readBytes()
+                ChatImagePick(
+                    bytes = bytes,
+                    mimeType = "video/mp4",
+                    fileName = pick.fileName.substringBeforeLast('.').ifBlank { "profile" } + "-square.mp4",
+                    sizeBytes = bytes.size.toLong(),
+                )
+            } finally {
+                dir.deleteRecursively()
+            }
+        }
+    }
+
+private fun resolveFfmpegPath(): String =
+    runCatching { DefaultFFMPEGLocator().executablePath }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?: "ffmpeg"
+
+private fun transcodeProfileVideo(
+    ffmpeg: String,
+    input: File,
+    output: File,
+    scale: Int,
+    crf: Int,
+): Boolean {
+    if (output.exists()) output.delete()
+    val filter = "crop=min(iw\\,ih):min(iw\\,ih),scale=$scale:$scale,setsar=1"
+    val process = ProcessBuilder(
+        ffmpeg,
+        "-y",
+        "-i",
+        input.absolutePath,
+        "-t",
+        "6",
+        "-vf",
+        filter,
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        crf.toString(),
+        "-movflags",
+        "+faststart",
+        output.absolutePath,
+    )
+        .redirectErrorStream(true)
+        .start()
+    process.inputStream.bufferedReader().use { it.readText() }
+    val rc = process.waitFor()
+    return rc == 0 && output.exists() && output.length() in 1..PROFILE_VIDEO_MAX_BYTES
 }

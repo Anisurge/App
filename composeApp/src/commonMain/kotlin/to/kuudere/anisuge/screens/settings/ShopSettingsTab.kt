@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -247,6 +248,8 @@ private fun ShopItemCard(
     modifier: Modifier = Modifier,
 ) {
     val canAfford = balance >= item.priceCoins
+    val originalPrice = item.priceCoinsOriginal?.takeIf { it > item.priceCoins }
+    val discountPercent = item.premiumDiscountPercent?.takeIf { it > 0 }
 
     Column(
         modifier = modifier
@@ -303,6 +306,25 @@ private fun ShopItemCard(
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+            if (originalPrice != null) {
+                Text(
+                    " ${berryLabel(originalPrice)}",
+                    color = MUTED,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textDecoration = TextDecoration.LineThrough,
+                )
+            }
+        }
+        if (discountPercent != null) {
+            Text(
+                "$discountPercent% Premium discount",
+                color = Color(0xFFFFD54F),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 3.dp),
             )
         }
         Spacer(Modifier.height(8.dp))

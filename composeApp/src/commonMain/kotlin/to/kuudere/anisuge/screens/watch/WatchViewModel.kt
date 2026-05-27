@@ -743,12 +743,17 @@ class WatchViewModel(
         if (servers.isEmpty()) return
 
         val priority = serverRepository.getFallbackPriority().map { it.lowercase() }
-        val currentIndex = priority.indexOf(current)
-        val next = if (currentIndex >= 0) {
-            priority.drop(currentIndex + 1).firstOrNull { it in servers } ?: servers.first()
+        val premiumOrder = listOf("anitaku-1", "anitaku", "anikage")
+        val preferredNext = if (current in premiumOrder) {
+            premiumOrder
+                .drop(premiumOrder.indexOf(current) + 1)
+                .firstOrNull { it in servers }
         } else {
-            servers.first()
+            premiumOrder.firstOrNull { it in servers }
         }
+        val next = preferredNext
+            ?: priority.firstOrNull { it in servers }
+            ?: servers.first()
 
         lastAutoServerFallbackKey = fallbackKey
         println("[WatchVM] playback failed on $current, trying next server=$next")
