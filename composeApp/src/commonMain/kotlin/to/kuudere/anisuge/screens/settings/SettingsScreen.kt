@@ -275,7 +275,8 @@ fun SettingsScreen(
     onRefresh: () -> Unit = {},
     isLoggingOut: Boolean = false,
     initialTab: SettingsTab? = null,
-    onExit: () -> Unit = {}
+    onExit: () -> Unit = {},
+    onOpenHomeLayout: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val strings = LocalAppStrings.current
@@ -391,6 +392,7 @@ fun SettingsScreen(
                                 navItems = navItems,
                                 onLogout = onLogout,
                                 viewModel = viewModel,
+                                onOpenHomeLayout = onOpenHomeLayout,
                                 modifier = Modifier
                                     .then(
                                         if (isShopTab) {
@@ -437,6 +439,7 @@ fun SettingsScreen(
                             onBack = { viewModel.closeMobileSettingsDetail() },
                             onLogout = onLogout,
                             viewModel = viewModel,
+                            onOpenHomeLayout = onOpenHomeLayout,
                         )
 
                         MobileSettingsTarget.List -> MobileSettingsList(
@@ -913,7 +916,8 @@ private fun MobileSettingsDetail(
     uiState: SettingsUiState,
     onBack: () -> Unit,
     onLogout: () -> Unit,
-    viewModel: SettingsViewModel
+    viewModel: SettingsViewModel,
+    onOpenHomeLayout: () -> Unit,
 ) {
     val navItem = navItems.find { it.tab == tab }
     val uriHandler = LocalUriHandler.current
@@ -1010,6 +1014,7 @@ private fun MobileSettingsDetail(
                     onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
                     onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                     onThemeSelected = viewModel::setThemeId,
+                    onOpenHomeLayout = onOpenHomeLayout,
                 )
 
                 is SettingsTab.Sync -> SyncTab(
@@ -1096,6 +1101,7 @@ private fun SettingsContent(
     navItems: List<SettingsNavItem>,
     onLogout: () -> Unit,
     viewModel: SettingsViewModel,
+    onOpenHomeLayout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uriHandler = LocalUriHandler.current
@@ -1114,6 +1120,10 @@ private fun SettingsContent(
                 onCloseAccount = viewModel::closeProfileAccount,
                 onUsernameChange = viewModel::setUsernameDraft,
                 onSaveUsername = viewModel::saveUsername,
+                onCurrentPasswordChange = viewModel::setCurrentPassword,
+                onNewPasswordChange = viewModel::setNewPassword,
+                onConfirmPasswordChange = viewModel::setConfirmPassword,
+                onChangePassword = viewModel::changePassword,
                 onEquipFrame = viewModel::equipShopFrame,
             )
 
@@ -1154,6 +1164,7 @@ private fun SettingsContent(
                 onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
                 onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                 onThemeSelected = viewModel::setThemeId,
+                onOpenHomeLayout = onOpenHomeLayout,
             )
 
             is SettingsTab.Sync -> SyncTab(
@@ -1240,6 +1251,7 @@ private fun AppearanceTab(
     onPreferRomajiAnimeTitlesChange: (Boolean) -> Unit,
     onLegacyScheduleUiChange: (Boolean) -> Unit,
     onThemeSelected: (AppThemeId) -> Unit,
+    onOpenHomeLayout: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1297,6 +1309,12 @@ private fun AppearanceTab(
                     onCheckedChange = onExpandedHeroCarouselChange,
                     label = strings.expandedHeroCarousel
                 )
+                Button(
+                    onClick = onOpenHomeLayout,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))
+                ) {
+                    Text(strings.homeLayout)
+                }
                 SettingToggle(
                     checked = uiState.legacyScheduleUi,
                     onCheckedChange = onLegacyScheduleUiChange,
@@ -4053,6 +4071,10 @@ private fun ProfileAccountSection(
     onPickCustomPfp: () -> Unit,
     onUsernameChange: (String) -> Unit,
     onSaveUsername: () -> Unit,
+    onCurrentPasswordChange: (String) -> Unit,
+    onNewPasswordChange: (String) -> Unit,
+    onConfirmPasswordChange: (String) -> Unit,
+    onChangePassword: () -> Unit,
     onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit,
 ) {
     val user = uiState.userProfile ?: return
@@ -4130,7 +4152,89 @@ private fun ProfileAccountSection(
                 }
             }
         }
+
+        HorizontalDivider(thickness = 1.dp, color = BORDER)
+
+        ChangePasswordSection(
+            uiState = uiState,
+            onCurrentPasswordChange = onCurrentPasswordChange,
+            onNewPasswordChange = onNewPasswordChange,
+            onConfirmPasswordChange = onConfirmPasswordChange,
+            onChangePassword = onChangePassword,
+        )
     }
+}
+
+@Composable
+private fun ChangePasswordSection(
+    uiState: SettingsUiState,
+    onCurrentPasswordChange: (String) -> Unit,
+    onNewPasswordChange: (String) -> Unit,
+    onConfirmPasswordChange: (String) -> Unit,
+    onChangePassword: () -> Unit,
+) {
+    val canSubmit = uiState.currentPassword.isNotBlank() &&
+        uiState.newPassword.length >= 8 &&
+        uiState.confirmPassword.isNotBlank() &&
+        !uiState.isChangingPassword
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Change password", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        SettingsPasswordField(
+            value = uiState.currentPassword,
+            onValueChange = onCurrentPasswordChange,
+            placeholder = "Current password",
+        )
+        SettingsPasswordField(
+            value = uiState.newPassword,
+            onValueChange = onNewPasswordChange,
+            placeholder = "New password",
+        )
+        SettingsPasswordField(
+            value = uiState.confirmPassword,
+            onValueChange = onConfirmPasswordChange,
+            placeholder = "Retype new password",
+        )
+        Button(
+            onClick = onChangePassword,
+            enabled = canSubmit,
+            colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (uiState.isChangingPassword) {
+                CircularProgressIndicator(
+                    color = Color.Black,
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text("Update password", color = Color.Black)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsPasswordField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = { Text(placeholder, color = MUTED) },
+        visualTransformation = PasswordVisualTransformation(),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = TEXT,
+            unfocusedTextColor = TEXT,
+            focusedBorderColor = BORDER,
+            unfocusedBorderColor = BORDER,
+            cursorColor = Color.White,
+        ),
+    )
 }
 
 @Composable
@@ -4168,6 +4272,10 @@ private fun MobileProfileAccountDetail(
                     onPickCustomPfp = pickPfp,
                     onUsernameChange = viewModel::setUsernameDraft,
                     onSaveUsername = viewModel::saveUsername,
+                    onCurrentPasswordChange = viewModel::setCurrentPassword,
+                    onNewPasswordChange = viewModel::setNewPassword,
+                    onConfirmPasswordChange = viewModel::setConfirmPassword,
+                    onChangePassword = viewModel::changePassword,
                     onEquipFrame = viewModel::equipShopFrame,
                 )
             }
@@ -4186,6 +4294,10 @@ private fun ProfileTab(
     onCloseAccount: () -> Unit = {},
     onUsernameChange: (String) -> Unit = {},
     onSaveUsername: () -> Unit = {},
+    onCurrentPasswordChange: (String) -> Unit = {},
+    onNewPasswordChange: (String) -> Unit = {},
+    onConfirmPasswordChange: (String) -> Unit = {},
+    onChangePassword: () -> Unit = {},
     onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit = {},
 ) {
     val pickPfp = to.kuudere.anisuge.platform.rememberProfileImagePicker(onPickCustomPfp)
@@ -4246,6 +4358,10 @@ private fun ProfileTab(
                 onPickCustomPfp = pickPfp,
                 onUsernameChange = onUsernameChange,
                 onSaveUsername = onSaveUsername,
+                onCurrentPasswordChange = onCurrentPasswordChange,
+                onNewPasswordChange = onNewPasswordChange,
+                onConfirmPasswordChange = onConfirmPasswordChange,
+                onChangePassword = onChangePassword,
                 onEquipFrame = onEquipFrame,
             )
         } else {
@@ -4986,5 +5102,3 @@ private fun ServiceLogo(
         }
     }
 }
-
-

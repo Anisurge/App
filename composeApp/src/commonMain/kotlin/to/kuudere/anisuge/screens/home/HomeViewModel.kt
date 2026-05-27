@@ -7,15 +7,19 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
+import to.kuudere.anisuge.data.models.LayoutConfig
+import to.kuudere.anisuge.data.models.RowId
 import to.kuudere.anisuge.data.services.HomeService
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.models.UserProfile
 import to.kuudere.anisuge.data.services.AuthService
 import kotlinx.coroutines.flow.update
 import to.kuudere.anisuge.data.services.LibrarySyncService
+import to.kuudere.anisuge.data.services.SettingsStore
 import to.kuudere.anisuge.data.services.SessionStore
 import to.kuudere.anisuge.data.services.WatchlistService
 import to.kuudere.anisuge.utils.latestPerAnime
@@ -33,6 +37,7 @@ data class HomeUiState(
     val continueWatching: List<ContinueWatchingItem> = emptyList(),
     /** Full list screen source: every saved episode row from BFF. */
     val continueWatchingAll: List<ContinueWatchingItem> = emptyList(),
+    val layout: LayoutConfig = LayoutConfig.DEFAULT,
     val isUpdatingWatchlist: Boolean = false,
     val error: String? = null,
 )
@@ -43,6 +48,7 @@ class HomeViewModel(
     private val watchlistService: WatchlistService,
     private val sessionStore: SessionStore,
     private val librarySyncService: LibrarySyncService,
+    private val settingsStore: SettingsStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var homeDataJob: Job? = null
@@ -51,6 +57,15 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = _uiState
 
     init {
+        scope.launch {
+            settingsStore.homeLayoutFlow.collect { layout ->
+                _uiState.update { it.copy(layout = layout) }
+            }
+        }
+        scope.launch {
+            val firstLayout = settingsStore.homeLayoutFlow.first()
+            settingsStore.healHomeLayoutIfNeeded(firstLayout)
+        }
         scope.launch {
             authService.authState.collect { result ->
                 val userProfile = (result as? SessionCheckResult.Valid)?.user
@@ -66,6 +81,12 @@ class HomeViewModel(
         }
         refresh()
     }
+
+    fun visibleRowsForMobile(state: HomeUiState = _uiState.value): List<RowId> =
+        state.layout.rows.filter { it.visible }.map { it.id }
+
+    fun visibleRowsForTv(state: HomeUiState = _uiState.value): List<RowId> =
+        state.layout.rows.filter { it.visible && it.id in RowId.TV_SUPPORTED }.map { it.id }
 
     private fun itHasHomeContent(): Boolean {
         val state = _uiState.value

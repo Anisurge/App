@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.models.RowId
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.screens.home.HomeUiState
 import to.kuudere.anisuge.screens.home.HomeViewModel
@@ -311,51 +312,59 @@ private fun TvHomeTab(
             }
         }
 
-        if (state.continueWatching.isNotEmpty()) {
-            item {
-                Text("Continue Watching", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            }
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    items(state.continueWatching.size) { index ->
-                        val item = state.continueWatching[index]
-                        TvContinueWatchingCard(
-                            item = item,
-                            modifier = Modifier
-                                .then(
-                                    if (index == 0 && heroItem == null) {
-                                        Modifier
-                                            .focusRequester(contentFocus)
-                                            .focusProperties { left = railFocus }
-                                    } else {
-                                        Modifier
-                                    }
+        val visibleRows = state.layout.rows.filter { it.visible && it.id in RowId.TV_SUPPORTED }
+        var firstShelf = true
+        visibleRows.forEach { layoutRow ->
+            when (layoutRow.id) {
+                RowId.CONTINUE_WATCHING -> if (state.continueWatching.isNotEmpty()) {
+                    item {
+                        Text("Continue Watching", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                    }
+                    item {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                            items(state.continueWatching.size) { index ->
+                                val item = state.continueWatching[index]
+                                TvContinueWatchingCard(
+                                    item = item,
+                                    modifier = Modifier
+                                        .then(
+                                            if (index == 0 && heroItem == null && firstShelf) {
+                                                Modifier
+                                                    .focusRequester(contentFocus)
+                                                    .focusProperties { left = railFocus }
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
+                                        .focusProperties { left = railFocus },
+                                    onClick = {
+                                        onWatchClick(
+                                            item.animeId,
+                                            item.language ?: "sub",
+                                            item.displayEpisode,
+                                            item.server,
+                                            item.progress,
+                                        )
+                                    },
                                 )
-                                .focusProperties { left = railFocus },
-                            onClick = {
-                                onWatchClick(
-                                    item.animeId,
-                                    item.language ?: "sub",
-                                    item.displayEpisode,
-                                    item.server,
-                                    item.progress,
-                                )
-                            },
+                            }
+                        }
+                    }
+                    firstShelf = false
+                }
+                RowId.LATEST_EPISODES -> if (state.latestAired.isNotEmpty()) {
+                    item {
+                        TvAnimeShelf(
+                            title = "Latest",
+                            items = state.latestAired,
+                            focusRequester = if (heroItem == null && firstShelf) contentFocus else null,
+                            railFocus = railFocus,
+                            onAnimeClick = onAnimeClick,
                         )
                     }
+                    firstShelf = false
                 }
-            }
-        }
-
-        if (state.latestAired.isNotEmpty()) {
-            item {
-                TvAnimeShelf(
-                    title = "Latest",
-                    items = state.latestAired,
-                    focusRequester = if (heroItem == null && state.continueWatching.isEmpty()) contentFocus else null,
-                    railFocus = railFocus,
-                    onAnimeClick = onAnimeClick,
-                )
+                RowId.NEW_ON_APP, RowId.UPCOMING -> Unit
             }
         }
     }

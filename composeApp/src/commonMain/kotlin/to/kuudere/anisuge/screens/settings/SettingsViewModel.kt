@@ -22,6 +22,7 @@ import to.kuudere.anisuge.data.models.CommunityLeaderboardUser
 import to.kuudere.anisuge.data.models.CommunityPost
 import to.kuudere.anisuge.data.models.CommunityStatsResponse
 import to.kuudere.anisuge.data.models.DownloadStorageInfo
+import to.kuudere.anisuge.data.models.LayoutConfig
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.data.models.UserSettings
 import to.kuudere.anisuge.data.repository.ServerRepository
@@ -64,6 +65,7 @@ data class SettingsUiState(
 
     val currentPassword: String = "",
     val newPassword: String = "",
+    val confirmPassword: String = "",
     val isChangingPassword: Boolean = false,
 
     val storageInfo: StorageInfo? = null,
@@ -88,6 +90,8 @@ data class SettingsUiState(
     val preferRomajiAnimeTitles: Boolean = false,
     val themeId: AppThemeId = AppThemeId.Default,
     val legacyScheduleUi: Boolean = false,
+    val homeLayout: LayoutConfig = LayoutConfig.DEFAULT,
+    val layoutSaveError: String? = null,
 
     val notificationsEnabled: Boolean = true,
     val hasNotificationPrefsChanges: Boolean = false,
@@ -353,6 +357,11 @@ class SettingsViewModel(
                 _uiState.update { it.copy(legacyScheduleUi = v) }
             }
         }
+        viewModelScope.launch {
+            settingsStore.homeLayoutFlow.collect { layout ->
+                _uiState.update { it.copy(homeLayout = layout) }
+            }
+        }
 
         // Load tracking state
         loadTrackingState()
@@ -473,6 +482,31 @@ class SettingsViewModel(
 
     fun setLegacyScheduleUi(enabled: Boolean) {
         viewModelScope.launch { settingsStore.setLegacyScheduleUi(enabled) }
+    }
+
+    fun setHomeLayout(next: LayoutConfig) {
+        val normalized = next.sanitize().mergeWithDefaults()
+        _uiState.update { it.copy(homeLayout = normalized) }
+        viewModelScope.launch {
+            try {
+                settingsStore.setHomeLayout(normalized)
+                _uiState.update { it.copy(layoutSaveError = null) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(layoutSaveError = e.message ?: "save failed") }
+            }
+        }
+    }
+
+    fun resetHomeLayout() {
+        setHomeLayout(LayoutConfig.DEFAULT)
+    }
+
+    fun retrySaveHomeLayout() {
+        setHomeLayout(_uiState.value.homeLayout)
+    }
+
+    fun dismissLayoutSaveError() {
+        _uiState.update { it.copy(layoutSaveError = null) }
     }
 
     // Profile
@@ -1104,11 +1138,23 @@ class SettingsViewModel(
         _uiState.update { it.copy(newPassword = password) }
     }
 
+    fun setConfirmPassword(password: String) {
+        _uiState.update { it.copy(confirmPassword = password) }
+    }
+
     fun changePassword(onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val state = _uiState.value
+            if (state.currentPassword.isBlank()) {
+                _uiState.update { it.copy(errorMessage = "Enter your current password") }
+                return@launch
+            }
             if (state.newPassword.length < 8) {
                 _uiState.update { it.copy(errorMessage = "Password must be at least 8 characters") }
+                return@launch
+            }
+            if (state.newPassword != state.confirmPassword) {
+                _uiState.update { it.copy(errorMessage = "New passwords do not match") }
                 return@launch
             }
             _uiState.update { it.copy(isChangingPassword = true) }
@@ -1119,6 +1165,7 @@ class SettingsViewModel(
                         isChangingPassword = false,
                         currentPassword = "",
                         newPassword = "",
+                        confirmPassword = "",
                         successMessage = "Password changed successfully"
                     )
                 }

@@ -8,9 +8,13 @@ import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import to.kuudere.anisuge.AppComponent
+import kotlinx.serialization.json.Json
+import to.kuudere.anisuge.data.models.BffErrorResponse
 import to.kuudere.anisuge.data.models.CurrentUserResponse
 import to.kuudere.anisuge.data.models.NotificationCountResponse
 import to.kuudere.anisuge.data.models.NotificationsResponse
@@ -21,11 +25,14 @@ import to.kuudere.anisuge.data.models.ProfileUpdateResponse
 import to.kuudere.anisuge.data.models.UserSettings
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 
 class SettingsService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
+    private val json = Json { ignoreUnknownKeys = true }
+
     suspend fun getUserProfile(): CurrentUserResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
@@ -85,16 +92,24 @@ class SettingsService(
 
     suspend fun changePassword(currentPassword: String, newPassword: String): PasswordChangeResponse? {
         return try {
-            val stored = sessionStore.get() ?: return null
-            val response = httpClient.post("${AppComponent.BASE_URL}/user/password") {
-                header("Authorization", "Bearer ${stored.token}")
+            val stored = sessionStore.get()
+                ?: return PasswordChangeResponse(success = false, message = "Please sign in again")
+            val response = httpClient.post("${AnisurgeApi.v1Base}/me/password") {
+                applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
                 setBody(PasswordChangeRequest(currentPassword, newPassword))
             }
-            response.body<PasswordChangeResponse>()
+            if (response.status.isSuccess()) {
+                response.body<PasswordChangeResponse>()
+            } else {
+                val message = runCatching {
+                    json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+                }.getOrElse { "Failed to change password (${response.status.value})" }
+                PasswordChangeResponse(success = false, message = message)
+            }
         } catch (e: Exception) {
             println("[SettingsService] changePassword error: ${e.message}")
-            null
+            PasswordChangeResponse(success = false, message = e.message ?: "Failed to change password")
         }
     }
 

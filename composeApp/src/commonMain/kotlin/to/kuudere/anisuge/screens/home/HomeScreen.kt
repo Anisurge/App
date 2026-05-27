@@ -162,6 +162,7 @@ import kotlin.math.absoluteValue
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
+import to.kuudere.anisuge.data.models.RowId
 import to.kuudere.anisuge.utils.DownloadManager
 import to.kuudere.anisuge.utils.DownloadTask
 import to.kuudere.anisuge.utils.formatFloat
@@ -180,6 +181,7 @@ import to.kuudere.anisuge.screens.settings.SettingsScreen
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
 import to.kuudere.anisuge.ui.ConfirmDialog
 import to.kuudere.anisuge.i18n.LocalAppStrings
+import to.kuudere.anisuge.i18n.AppStrings
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.platform.isDesktopPlatform
@@ -214,6 +216,7 @@ fun HomeScreen(
     liveChatViewModel: LiveChatViewModel,
     onLiveChatClick: () -> Unit = {},
     onLiveChatSignIn: () -> Unit = {},
+    onOpenLayoutEditor: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
     onHomeBackActionChange: ((() -> Boolean)?) -> Unit = {},
@@ -363,6 +366,7 @@ fun HomeScreen(
                                         currentTab = AnisugTab.Search
                                     },
                                     onExit = onExit,
+                                    onOpenLayoutEditor = onOpenLayoutEditor,
                                     initialSettingsTab = initialSettingsTab
                                 )
                             }
@@ -425,6 +429,7 @@ fun HomeScreen(
                                     currentTab = AnisugTab.Search
                                 },
                                 onExit = onExit,
+                                onOpenLayoutEditor = onOpenLayoutEditor,
                                 initialSettingsTab = initialSettingsTab
                             )
                         }
@@ -522,6 +527,7 @@ private fun TabContent(
     onViewNewOnAppMore: () -> Unit,
     onSearchLatest: () -> Unit,
     onExit: () -> Unit,
+    onOpenLayoutEditor: () -> Unit,
     initialSettingsTab: SettingsTab?,
 ) {
     Box(Modifier.fillMaxSize()) {
@@ -579,6 +585,7 @@ private fun TabContent(
                                 onViewLatestEpisodesMore = onViewLatestEpisodesMore,
                                 onViewNewOnAppMore = onViewNewOnAppMore,
                                 onExit = onExit,
+                                onOpenLayoutEditor = onOpenLayoutEditor,
                                 onRemoveContinueItem = { homeViewModel.removeContinueItem(it) }
                             )
                         }
@@ -605,7 +612,8 @@ private fun TabContent(
                 onRefresh = { homeViewModel.refresh(force = true) },
                 isLoggingOut = homeState.isLoggingOut,
                 initialTab = initialSettingsTab,
-                onExit = onExit
+                onExit = onExit,
+                onOpenHomeLayout = onOpenLayoutEditor,
             )
         }
     }
@@ -624,9 +632,11 @@ private fun HomeContent(
     onViewLatestEpisodesMore: () -> Unit = {},
     onViewNewOnAppMore: () -> Unit = {},
     onExit: () -> Unit = {},
+    onOpenLayoutEditor: () -> Unit = {},
     onRemoveContinueItem: (ContinueWatchingItem) -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
+    val strings = LocalAppStrings.current
 
     val innerContent: @Composable () -> Unit = {
         Column(Modifier.fillMaxSize().verticalScroll(scrollState)) {
@@ -650,45 +660,42 @@ private fun HomeContent(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Continue Watching ──────────────────────────────────────────
-            if (state.continueWatching.isNotEmpty()) {
-                SectionHeader(title = "Continue Watching", onViewMore = onViewContinueWatchingMore)
-                ContinueWatchingRow(
-                    items = state.continueWatching,
-                    onWatchClick = onWatchClick,
-                    onRemove = onRemoveContinueItem,
-                )
-                Spacer(Modifier.height(24.dp))
-            }
-
-            // ── Latest Episodes (releases) ─────────────────────────────────
-            if (state.latestAired.isNotEmpty()) {
-                AnimeSection(
-                    title = "Latest Episodes",
-                    items = state.latestAired,
-                    onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                    onViewMoreClick = onViewLatestEpisodesMore,
-                )
-            }
-
-            // ── New Additions ────────────────────────────────────────────────
-            if (state.newOnSite.isNotEmpty()) {
-                AnimeSection(
-                    title = "New on App",
-                    items = state.newOnSite,
-                    onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                    onViewMoreClick = onViewNewOnAppMore,
-                )
-            }
-
-            // ── Upcoming ───────────────────────────────────────────────
-            if (state.upcoming.isNotEmpty()) {
-                AnimeSection(
-                    title = "Upcoming",
-                    items = state.upcoming,
-                    onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                    showViewMore = false,
-                )
+            val orderedRows = state.layout.rows.filter { it.visible }.map { it.id }
+            val nonEmptyRows = orderedRows.filter { state.hasDataForRow(it) }
+            if (orderedRows.isEmpty()) {
+                EmptyLayoutPlaceholder(onOpenEditor = onOpenLayoutEditor)
+            } else {
+                nonEmptyRows.forEach { rowId ->
+                    when (rowId) {
+                        RowId.CONTINUE_WATCHING -> {
+                            SectionHeader(title = strings.rowTitle(rowId), onViewMore = onViewContinueWatchingMore)
+                            ContinueWatchingRow(
+                                items = state.continueWatching,
+                                onWatchClick = onWatchClick,
+                                onRemove = onRemoveContinueItem,
+                            )
+                            Spacer(Modifier.height(24.dp))
+                        }
+                        RowId.LATEST_EPISODES -> AnimeSection(
+                            title = strings.rowTitle(rowId),
+                            items = state.latestAired,
+                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                            onViewMoreClick = onViewLatestEpisodesMore,
+                        )
+                        RowId.NEW_ON_APP -> AnimeSection(
+                            title = strings.rowTitle(rowId),
+                            items = state.newOnSite,
+                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                            onViewMoreClick = onViewNewOnAppMore,
+                        )
+                        RowId.UPCOMING -> AnimeSection(
+                            title = strings.rowTitle(rowId),
+                            items = state.upcoming,
+                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                            showViewMore = false,
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(if (isDesktopPlatform) 48.dp else 156.dp))
@@ -718,6 +725,35 @@ private fun HomeContent(
             ) {
                 innerContent()
             }
+        }
+    }
+}
+
+private fun HomeUiState.hasDataForRow(id: RowId): Boolean = when (id) {
+    RowId.CONTINUE_WATCHING -> continueWatching.isNotEmpty()
+    RowId.LATEST_EPISODES -> latestAired.isNotEmpty()
+    RowId.NEW_ON_APP -> newOnSite.isNotEmpty()
+    RowId.UPCOMING -> upcoming.isNotEmpty()
+}
+
+private fun AppStrings.rowTitle(id: RowId): String = when (id) {
+    RowId.CONTINUE_WATCHING -> continueWatchingTitle
+    RowId.LATEST_EPISODES -> latestEpisodesTitle
+    RowId.NEW_ON_APP -> newOnAppTitle
+    RowId.UPCOMING -> upcomingTitle
+} ?: id.storageId
+
+@Composable
+private fun EmptyLayoutPlaceholder(onOpenEditor: () -> Unit) {
+    val strings = LocalAppStrings.current
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text(strings.homeLayoutEmptyMessage, color = Color.White.copy(alpha = 0.72f), textAlign = TextAlign.Center)
+        Button(onClick = onOpenEditor, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))) {
+            Text(strings.openLayoutEditor)
         }
     }
 }

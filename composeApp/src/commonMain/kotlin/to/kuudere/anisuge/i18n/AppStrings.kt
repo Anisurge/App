@@ -209,6 +209,30 @@ data class AppStrings(
     val downloaded: String = "Downloaded",
     val retryDownload: String = "Retry Download",
     val keepDownloadingInBackground: String = "Keep Downloading in Background",
+    // ── Home layout customization (feature: home-layout-customization) ──
+    // Row titles are intentionally nullable: when a locale does not provide a
+    // translation, consumers (HomeContent headers, LayoutEditorScreen rows)
+    // fall back to the RowId.storageId literal (e.g. "continue_watching")
+    // per Requirement 10.6 / Property 15. English provides values; other
+    // locales currently leave these null so the literal storageId surfaces
+    // as the documented fallback until translators localize them.
+    val continueWatchingTitle: String? = null,
+    val latestEpisodesTitle: String? = null,
+    val newOnAppTitle: String? = null,
+    val upcomingTitle: String? = null,
+    // Layout editor copy. Non-nullable with English defaults — other locales
+    // inherit English via the standard AppStrings copy() convention.
+    val homeLayout: String = "Home Layout",
+    val homeLayoutResetConfirmTitle: String = "Reset Home layout?",
+    val homeLayoutResetConfirmMessage: String = "This restores the default row order and shows all rows.",
+    val homeLayoutSaveFailed: String = "Couldn't save layout",
+    val homeLayoutEmptyMessage: String = "All rows are hidden. Open the Layout Editor to choose what to show.",
+    val openLayoutEditor: String = "Open Layout Editor",
+    val visibleLabel: String = "Visible",
+    val hiddenLabel: String = "Hidden",
+    val shownLabel: String = "Shown",
+    val moveUp: String = "Move up",
+    val moveDown: String = "Move down",
 )
 
 private val englishStrings = AppStrings(
@@ -307,6 +331,10 @@ private val englishStrings = AppStrings(
     failedToLoadUserProfile = "Failed to load user profile",
     serverPrioritySaved = "Server priority saved",
     resetToDefaultPriority = "Reset to default priority",
+    continueWatchingTitle = "Continue Watching",
+    latestEpisodesTitle = "Latest Episodes",
+    newOnAppTitle = "New on App",
+    upcomingTitle = "Upcoming",
 )
 
 private val stringsByLocale = mapOf(

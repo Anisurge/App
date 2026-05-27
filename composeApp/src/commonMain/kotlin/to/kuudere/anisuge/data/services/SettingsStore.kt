@@ -4,13 +4,17 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import to.kuudere.anisuge.data.models.LayoutConfig
 import to.kuudere.anisuge.platform.randomInstallUuid
 
 class SettingsStore(private val dataStore: DataStore<Preferences>) {
@@ -38,6 +42,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val VIDEO_SCALE_MODE_KEY = stringPreferencesKey("video_scale_mode")
         val THEME_ID_KEY = stringPreferencesKey("theme_id")
         val LEGACY_SCHEDULE_UI_KEY = booleanPreferencesKey("legacy_schedule_ui")
+        val HOME_LAYOUT_KEY = stringPreferencesKey("home_layout_v1")
 
         // MAL tokens
         val MAL_ACCESS_TOKEN_KEY = stringPreferencesKey("mal_access_token")
@@ -81,6 +86,24 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     }
     val themeIdFlow: Flow<String> = dataStore.data.map { it[THEME_ID_KEY] ?: "default" }
     val legacyScheduleUiFlow: Flow<Boolean> = dataStore.data.map { it[LEGACY_SCHEDULE_UI_KEY] ?: false }
+    val homeLayoutFlow: Flow<LayoutConfig> = dataStore.data
+        .catch { e ->
+            println("[SettingsStore] Failed to read home layout: ${e.message}")
+            emit(emptyPreferences())
+        }
+        .map { preferences ->
+            val raw = preferences[HOME_LAYOUT_KEY]
+            if (raw.isNullOrBlank()) {
+                LayoutConfig.DEFAULT
+            } else {
+                when (val decoded = LayoutConfigCodec.decode(raw)) {
+                    is DecodeResult.Success -> decoded.config.sanitize().mergeWithDefaults()
+                    is DecodeResult.VersionTooNew -> LayoutConfig.DEFAULT
+                    is DecodeResult.Invalid -> LayoutConfig.DEFAULT
+                }
+            }
+        }
+        .distinctUntilChanged()
 
     val serverPriorityFlow: Flow<List<String>> = dataStore.data.map { preferences ->
         val jsonStr = preferences[SERVER_PRIORITY_KEY]
@@ -188,6 +211,26 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setLegacyScheduleUi(enabled: Boolean) {
         dataStore.edit { it[LEGACY_SCHEDULE_UI_KEY] = enabled }
+    }
+
+    suspend fun setHomeLayout(config: LayoutConfig) {
+        dataStore.edit { it[HOME_LAYOUT_KEY] = LayoutConfigCodec.encode(config) }
+    }
+
+    suspend fun healHomeLayoutIfNeeded(seen: LayoutConfig) {
+        val raw = dataStore.data.first()[HOME_LAYOUT_KEY] ?: return
+        when (val decoded = LayoutConfigCodec.decode(raw)) {
+            is DecodeResult.Invalid -> {
+                dataStore.edit { it[HOME_LAYOUT_KEY] = LayoutConfigCodec.encode(LayoutConfig.DEFAULT) }
+            }
+            is DecodeResult.Success -> {
+                val healed = decoded.config.sanitize().mergeWithDefaults()
+                if (healed != decoded.config || healed != seen) {
+                    dataStore.edit { it[HOME_LAYOUT_KEY] = LayoutConfigCodec.encode(healed) }
+                }
+            }
+            is DecodeResult.VersionTooNew -> Unit
+        }
     }
 
     suspend fun getOrCreateAnalyticsInstallId(): String {

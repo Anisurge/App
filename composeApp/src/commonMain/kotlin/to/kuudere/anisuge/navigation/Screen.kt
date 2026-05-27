@@ -57,6 +57,7 @@ sealed class Screen(val route: String) {
     }
 
     data object Settings : Screen("settings")
+    data object HomeLayout : Screen("settings/home-layout")
     data object Latest : Screen("latest")
     data object NewOnApp : Screen("new-on-app")
     data object ContinueWatching : Screen("continue-watching")

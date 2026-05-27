@@ -44,6 +44,7 @@ import to.kuudere.anisuge.screens.watchlist.WatchlistViewModel
 import to.kuudere.anisuge.screens.schedule.ScheduleViewModel
 import to.kuudere.anisuge.screens.settings.SettingsScreen
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
+import to.kuudere.anisuge.screens.settings.layout.LayoutEditorScreen
 import to.kuudere.anisuge.screens.latest.LatestEpisodesScreen
 import to.kuudere.anisuge.screens.latest.LatestViewModel
 import to.kuudere.anisuge.screens.newonapp.NewOnAppScreen
@@ -110,6 +111,7 @@ fun App(
                 AppComponent.watchlistService,
                 AppComponent.sessionStore,
                 AppComponent.librarySyncService,
+                AppComponent.settingsStore,
             )
         }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }
@@ -416,6 +418,7 @@ fun App(
                                 onViewContinueWatchingMore = { navController.navigate(Screen.ContinueWatching.route) },
                                 onViewLatestEpisodesMore = { navController.navigate(Screen.Latest.route) },
                                 onViewNewOnAppMore = { navController.navigate(Screen.NewOnApp.route) },
+                                onOpenLayoutEditor = { navController.navigate(Screen.HomeLayout.route) },
                                 liveChatViewModel = liveChatVm,
                                 onLiveChatClick = { navController.navigate(Screen.LiveChat.route) },
                                 onLiveChatSignIn = {
@@ -551,6 +554,13 @@ fun App(
                                 )
                             },
                             onBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable(Screen.HomeLayout.route) {
+                        LayoutEditorScreen(
+                            settingsViewModel = settingsVm,
+                            onBack = { navController.popBackStack() },
                         )
                     }
 
