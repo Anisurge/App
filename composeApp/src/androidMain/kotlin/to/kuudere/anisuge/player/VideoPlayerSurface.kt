@@ -213,6 +213,7 @@ actual fun VideoPlayerSurface(
         MPVLib.setOptionString("hls-bitrate", "max")          // Skip quality probing
         MPVLib.setOptionString("stream-buffer-size", "256k")  // HLS chunks are small
         MPVLib.setOptionString("prefetch-playlist", "yes")
+        MPVLib.setOptionString("ytdl", "no")
 
         // Fast-start: tell FFmpeg to stop over-analyzing the stream
         // Only apply to remote streams — demuxer-lavf-format is intentionally NOT set
@@ -408,6 +409,9 @@ actual fun VideoPlayerSurface(
                         } else if (state.isBuffering || isSeeking.value) {
                             // Slow HLS / server switch — mpv often ends the demuxer briefly while buffering.
                             println("[VideoPlayerSurface] END_FILE during buffer/seek ignored (pos=$pos dur=$dur)")
+                        } else if (dur <= 0.0 && pos <= 0.5) {
+                            state.error = "Stream failed to start — trying another server"
+                            println("[VideoPlayerSurface] END_FILE failed start before metadata (pos=$pos dur=$dur)")
                         } else if (dur >= 90.0 && pos < 8.0) {
                             state.error = "Stream failed to start — try another server in Settings"
                             println("[VideoPlayerSurface] END_FILE failed start (pos=$pos dur=$dur)")

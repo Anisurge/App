@@ -717,6 +717,38 @@ class WatchViewModel(
         }
     }
 
+    fun tryNextServerAfterPlaybackFailure(position: Double) {
+        val current = _uiState.value.currentServer.lowercase()
+        val failedBase = current.removeSuffix("-dub")
+        val servers = getAvailableServers()
+            .map { it.id.lowercase() }
+            .filter {
+                it.isNotBlank() &&
+                    it != current &&
+                    it != "offline" &&
+                    it.removeSuffix("-dub") != failedBase
+            }
+            .distinct()
+        if (servers.isEmpty()) return
+
+        val priority = serverRepository.getFallbackPriority().map { it.lowercase() }
+        val currentIndex = priority.indexOf(current)
+        val next = if (currentIndex >= 0) {
+            priority.drop(currentIndex + 1).firstOrNull { it in servers } ?: servers.first()
+        } else {
+            servers.first()
+        }
+
+        println("[WatchVM] playback failed on $current, trying next server=$next")
+        changeServerWithState(
+            newServer = next,
+            position = position,
+            targetAudioLang = _uiState.value.targetLang,
+            targetSubtitleLang = _uiState.value.targetSubtitleLang,
+            targetSubtitleLangCode = _uiState.value.targetSubtitleLangCode,
+        )
+    }
+
     /**
      * Get the list of available server IDs for UI display
      */

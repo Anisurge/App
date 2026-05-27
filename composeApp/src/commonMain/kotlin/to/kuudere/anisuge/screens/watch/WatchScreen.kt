@@ -46,6 +46,7 @@ import kotlinx.datetime.Clock
 import to.kuudere.anisuge.platform.DiscordPresenceActivity
 import to.kuudere.anisuge.platform.DiscordRichPresenceManager
 import to.kuudere.anisuge.platform.LockScreenOrientation
+import to.kuudere.anisuge.platform.isAndroidPlatform
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.platform.rememberPipManager
@@ -1277,6 +1278,15 @@ fun WatchVideoPlayer(
             LaunchedEffect(playerState.position) {
                 if (playerState.position > 15.0) playerState.error = null
             }
+            LaunchedEffect(playerState.error) {
+                val error = playerState.error ?: return@LaunchedEffect
+                if (error.contains("trying another server", ignoreCase = true)) {
+                    val resumeAt = playerState.position.takeIf { it >= 1.0 }
+                        ?: uiState.savedWatchPosition
+                    viewModel.tryNextServerAfterPlaybackFailure(resumeAt)
+                    playerState.error = null
+                }
+            }
 
             // Resume: [rememberVideoPlayerState] keys only on [playbackUrl], so [savedWatchPosition] can
             // arrive after the player is created (e.g. GET /watch returns after the stream is ready).
@@ -1379,7 +1389,11 @@ fun WatchVideoPlayer(
             }
 
             LaunchedEffect(uiState.availableSubtitles, uiState.currentSubtitleUrl, uiState.subtitlesDisabled) {
-                if (uiState.availableSubtitles.isNotEmpty() && !uiState.subtitlesDisabled) {
+                if (isAndroidPlatform) {
+                    // Android mpv can stall when several remote ASS tracks are added during startup.
+                    // The selected subtitle is still loaded by the single-subtitle effect below.
+                    playerState.allSubUrls = null
+                } else if (uiState.availableSubtitles.isNotEmpty() && !uiState.subtitlesDisabled) {
                     playerState.allSubUrls = uiState.availableSubtitles.mapNotNull { sub ->
                         sub.url?.let { url ->
                             Triple(
