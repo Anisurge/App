@@ -216,18 +216,21 @@ fun HomeScreen(
     liveChatViewModel: LiveChatViewModel,
     onLiveChatClick: () -> Unit = {},
     onLiveChatSignIn: () -> Unit = {},
+    onChatAction: (String) -> Unit = {},
     onOpenLayoutEditor: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
+    startSettingsTab: SettingsTab? = null,
     onHomeBackActionChange: ((() -> Boolean)?) -> Unit = {},
 ) {
     val strings = LocalAppStrings.current
     val homeState by homeViewModel.uiState.collectAsState()
     val settingsState by settingsViewModel.uiState.collectAsState()
-    var initialSettingsTab by remember { mutableStateOf<SettingsTab?>(null) }
+    var initialSettingsTab by remember(startSettingsTab) { mutableStateOf(startSettingsTab) }
     var currentTab by rememberSaveable(
         startOnDownloads,
         startTab,
+        startSettingsTab,
         stateSaver = Saver(
             save = { it.name },
             restore = { saved -> AnisugTab.entries.firstOrNull { it.name == saved } ?: AnisugTab.Home }
@@ -327,6 +330,7 @@ fun HomeScreen(
                                 viewModel = liveChatViewModel,
                                 onBack = { showDesktopLiveChat = false },
                                 onSignIn = onLiveChatSignIn,
+                                onAction = onChatAction,
                             )
                         } else {
                             AnimatedContent(

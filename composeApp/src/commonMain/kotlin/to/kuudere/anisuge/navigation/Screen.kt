@@ -6,17 +6,22 @@ import io.ktor.http.encodeURLParameter
 sealed class Screen(val route: String) {
     data object Splash : Screen("splash")
     data object Auth   : Screen("auth")
-    data class Home(val startTab: String? = null, val startOnDownloads: Boolean = false) : Screen(
+    data class Home(
+        val startTab: String? = null,
+        val startOnDownloads: Boolean = false,
+        val startSettingsTab: String? = null,
+    ) : Screen(
         buildString {
             append("home?")
             val params = mutableListOf<String>()
-            if (startTab != null) params.add("tab=$startTab")
+            if (startTab != null) params.add("tab=${startTab.encodeURLParameter()}")
             if (startOnDownloads) params.add("downloads=true")
+            if (startSettingsTab != null) params.add("settingsTab=${startSettingsTab.encodeURLParameter()}")
             append(params.joinToString("&"))
         }
     ) {
         companion object {
-            const val route = "home?downloads={downloads}&tab={tab}"
+            const val route = "home?downloads={downloads}&tab={tab}&settingsTab={settingsTab}"
         }
     }
     data object Search : Screen("search")

@@ -43,6 +43,7 @@ import to.kuudere.anisuge.screens.watch.WatchViewModel
 import to.kuudere.anisuge.screens.watchlist.WatchlistViewModel
 import to.kuudere.anisuge.screens.schedule.ScheduleViewModel
 import to.kuudere.anisuge.screens.settings.SettingsScreen
+import to.kuudere.anisuge.screens.settings.SettingsTab
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
 import to.kuudere.anisuge.screens.settings.layout.LayoutEditorScreen
 import to.kuudere.anisuge.screens.latest.LatestEpisodesScreen
@@ -82,6 +83,20 @@ private fun SavedState?.str(key: String): String? =
 
 private fun deepLinkLog(message: String) {
     println("[AnisurgeDeepLink] $message")
+}
+
+private fun settingsTabFromKey(key: String?): SettingsTab? = when (key?.lowercase()) {
+    "profile" -> SettingsTab.Profile
+    "preferences" -> SettingsTab.Preferences
+    "storage" -> SettingsTab.Storage
+    "appearance" -> SettingsTab.Appearance
+    "sync" -> SettingsTab.Sync
+    "connect" -> SettingsTab.Connect
+    "servers" -> SettingsTab.Servers
+    "notifications" -> SettingsTab.Notifications
+    "shop", "store" -> SettingsTab.Shop
+    "berries" -> SettingsTab.Berries
+    else -> null
 }
 
 @Composable
@@ -149,7 +164,7 @@ fun App(
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }
         val updateVm = remember { UpdateViewModel(AppComponent.updateService) }
         val liveChatVm = remember {
-            LiveChatViewModel(AppComponent.chatService, AppComponent.authService)
+            LiveChatViewModel(AppComponent.chatService, AppComponent.authService, AppComponent.searchService)
         }
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
@@ -174,6 +189,39 @@ fun App(
         val appStrings = appStringsFor(AppLocale.fromCode(appLocaleCode))
         val preferRomajiAnimeTitles by AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(initial = false)
         val uriHandler = LocalUriHandler.current
+        val handleChatAction: (String) -> Unit = { raw ->
+            val deeplink = raw.trim()
+            when {
+                deeplink.startsWith("anisurge://anime/", ignoreCase = true) -> {
+                    val animeId = deeplink.removePrefix("anisurge://anime/").substringBefore("/")
+                    if (animeId.isNotBlank()) {
+                        navController.navigate(Screen.Info(animeId).route) { launchSingleTop = true }
+                    }
+                }
+                deeplink.equals("anisurge://home", ignoreCase = true) -> {
+                    navController.navigate(Screen.Home().route) { launchSingleTop = true }
+                }
+                deeplink.equals("anisurge://search", ignoreCase = true) -> {
+                    navController.navigate(Screen.Home(startTab = "Search").route) { launchSingleTop = true }
+                }
+                deeplink.equals("anisurge://watchlist", ignoreCase = true) -> {
+                    navController.navigate(Screen.Home(startTab = "Bookmarks").route) { launchSingleTop = true }
+                }
+                deeplink.equals("anisurge://downloads", ignoreCase = true) -> {
+                    navController.navigate(Screen.Home(startTab = "Downloads").route) { launchSingleTop = true }
+                }
+                deeplink.equals("anisurge://chat", ignoreCase = true) -> {
+                    navController.navigate(Screen.LiveChat.route) { launchSingleTop = true }
+                }
+                deeplink.startsWith("anisurge://settings", ignoreCase = true) -> {
+                    val key = deeplink.removePrefix("anisurge://settings").trim('/').substringBefore("/")
+                    val tabKey = key.ifBlank { "profile" }
+                    navController.navigate(
+                        Screen.Home(startTab = "Settings", startSettingsTab = tabKey).route
+                    ) { launchSingleTop = true }
+                }
+            }
+        }
 
         var showExitConfirm by remember { mutableStateOf(false) }
         var homeBackAction by remember { mutableStateOf<(() -> Boolean)?>(null) }
@@ -352,11 +400,15 @@ fun App(
                             },
                             navArgument("tab") {
                                 type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null
+                            },
+                            navArgument("settingsTab") {
+                                type = androidx.navigation.NavType.StringType; nullable = true; defaultValue = null
                             }
                         )
                     ) { backStackEntry ->
                         val downloadsArg = backStackEntry.arguments.str("downloads") == "true"
                         val requestedTab = backStackEntry.arguments.str("tab")
+                        val requestedSettingsTab = settingsTabFromKey(backStackEntry.arguments.str("settingsTab"))
                         if (isAndroidTvPlatform) {
                             TvAppShell(
                                 homeViewModel = homeVm,
@@ -426,8 +478,10 @@ fun App(
                                         popUpTo(Screen.Home().route) { inclusive = false }
                                     }
                                 },
+                                onChatAction = handleChatAction,
                                 startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
                                 startTab = requestedTab,
+                                startSettingsTab = requestedSettingsTab,
                                 onHomeBackActionChange = { homeBackAction = it },
                             )
                         }
@@ -573,6 +627,7 @@ fun App(
                                     popUpTo(Screen.Home().route) { inclusive = false }
                                 }
                             },
+                            onAction = handleChatAction,
                         )
                     }
 

@@ -44,7 +44,7 @@ class VideoPlayerState(config: VideoPlayerConfig) {
     
     // New states for the revamped UI
     var isLocked        by mutableStateOf(false)
-    var isMuted         by mutableStateOf(false)
+    var isMuted         by mutableStateOf(config.muted)
     var aspectRatio     by mutableStateOf("Fit") // Fit, Stretch, Zoom, 16:9, 4:3
     
     // Availability for next/prev buttons (controlled by screen logic)

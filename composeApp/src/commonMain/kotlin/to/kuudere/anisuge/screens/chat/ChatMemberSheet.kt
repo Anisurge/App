@@ -46,7 +46,7 @@ fun ChatMemberSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ChatDecoratedAvatar(
-                avatarUrl = member.avatarUrl,
+                avatarUrl = member.effectiveAvatarUrl,
                 frameUrl = member.avatarFrameUrl,
                 outerFrameUrl = member.avatarOuterUrl,
                 userId = member.userId,
@@ -57,7 +57,7 @@ fun ChatMemberSheet(
             val labelMessage = ChatMessage(
                 userId = member.userId,
                 username = member.username,
-                avatarUrl = member.avatarUrl,
+                avatarUrl = member.effectiveAvatarUrl,
                 isPremium = member.isPremium,
                 nameStyle = member.nameStyle,
             )
@@ -68,6 +68,18 @@ fun ChatMemberSheet(
                 fontWeight = FontWeight.Bold,
             )
 
+            if (member.isBot) {
+                Text(
+                    text = "Anisurge AI Bot",
+                    color = Color(0xFFBF80FF),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .background(Color(0xFF241035), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+
             member.joinedAt?.let { joined ->
                 Text(
                     text = "Joined ${formatJoinDate(joined)}",
@@ -76,12 +88,14 @@ fun ChatMemberSheet(
                 )
             }
 
-            Text(
-                text = formatBerries(member.coins),
-                color = Color(0xFFFFB300),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            if (!member.isBot) {
+                Text(
+                    text = formatBerries(member.coins),
+                    color = Color(0xFFFFB300),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
 
             if (member.isPremium) {
                 Spacer(Modifier.height(4.dp))

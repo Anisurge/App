@@ -23,6 +23,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.data.models.BffErrorResponse
 import to.kuudere.anisuge.data.models.ChatLiveEvent
+import to.kuudere.anisuge.data.models.ChatMessageMetadata
 import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.data.models.ChatMessagesResponse
 import to.kuudere.anisuge.data.models.ChatPostMessageRequest
@@ -101,6 +102,7 @@ class ChatService(
     suspend fun postMessage(
         body: String,
         roomSlug: String = GLOBAL_ROOM_SLUG,
+        metadata: ChatMessageMetadata? = null,
     ): Result<ChatMessage> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
         val trimmed = body.trim()
@@ -111,7 +113,7 @@ class ChatService(
             val response = httpClient.post("${AnisurgeApi.v1Base}/chat/rooms/$roomSlug/messages") {
                 applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
-                setBody(ChatPostMessageRequest(trimmed))
+                setBody(ChatPostMessageRequest(trimmed, metadata))
             }
             if (response.status.isSuccess()) {
                 Result.success(response.body())

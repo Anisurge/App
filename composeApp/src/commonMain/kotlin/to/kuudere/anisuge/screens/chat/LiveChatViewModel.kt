@@ -10,11 +10,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.ChatLiveEvent
+import to.kuudere.anisuge.data.models.ChatAnimeCard
 import to.kuudere.anisuge.data.models.ChatMemberProfile
 import to.kuudere.anisuge.data.models.ChatMessage
+import to.kuudere.anisuge.data.models.ChatMessageMetadata
+import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.ChatService
+import to.kuudere.anisuge.data.services.SearchService
 import to.kuudere.anisuge.navigation.Screen
 import to.kuudere.anisuge.ui.ChatFramePrefetch
 
@@ -43,11 +47,17 @@ data class LiveChatUiState(
     val hasMoreOlder: Boolean = false,
     val isLoadingOlder: Boolean = false,
     val selectedMember: ChatMemberProfile? = null,
+    val animePickerOpen: Boolean = false,
+    val animePickerQuery: String = "",
+    val animePickerResults: List<AnimeItem> = emptyList(),
+    val animePickerLoading: Boolean = false,
+    val animePickerError: String? = null,
 )
 
 class LiveChatViewModel(
     private val chatService: ChatService,
     private val authService: AuthService,
+    private val searchService: SearchService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LiveChatUiState())
@@ -107,6 +117,7 @@ class LiveChatViewModel(
     private var wsJob: Job? = null
     private var loadOlderJob: Job? = null
     private var reconnectJob: Job? = null
+    private var animeSearchJob: Job? = null
     private var screenActive = false
     private var hasInitialized = false
 
@@ -234,49 +245,153 @@ class LiveChatViewModel(
     }
 
     fun onDraftChange(value: String) {
+        if (value.trim().equals("/anime", ignoreCase = true)) {
+            _uiState.update { it.copy(draft = "", error = null) }
+            openAnimePicker()
+            return
+        }
         _uiState.update { it.copy(draft = value.take(500), error = null) }
+    }
+
+    fun insertSurgeMention() {
+        val current = _uiState.value.draft
+        val lastAt = current.lastIndexOf('@')
+        val next = if (lastAt >= 0 && current.substring(lastAt).none { it.isWhitespace() }) {
+            current.substring(0, lastAt) + "@surge "
+        } else {
+            (current.trimEnd() + " @surge ").trimStart()
+        }
+        _uiState.update { it.copy(draft = next.take(500), error = null) }
     }
 
     fun sendMessage() {
         val text = _uiState.value.draft.trim()
         if (text.isEmpty() || _uiState.value.isSending) return
+        if (text.equals("/anime", ignoreCase = true) || text.startsWith("/anime ", ignoreCase = true)) {
+            val query = text.drop("/anime".length).trim()
+            _uiState.update { it.copy(draft = "") }
+            openAnimePicker(query)
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSending = true, error = null) }
-            val result = chatService.postMessage(text)
-            result.fold(
-                onSuccess = { message ->
-                    val snapshot = _uiState.value
-                    val enriched = enrichOwnMessage(
-                        message.copy(
-                            username = message.username.ifBlank {
-                                snapshot.currentUsername ?: message.username
-                            },
-                            avatarUrl = message.avatarUrl?.takeIf { it.isNotBlank() }
-                                ?: snapshot.currentUserAvatar,
-                        ),
-                        snapshot,
-                    )
-                    prefetchChatFrames(listOf(enriched))
-                    _uiState.update { state ->
-                        val merged = mergeMessages(state.messages, listOf(enriched))
-                        state.copy(
-                            draft = "",
-                            isSending = false,
-                            messages = merged,
-                            error = null,
-                        )
-                    }
-                },
-                onFailure = { e ->
-                    _uiState.update {
-                        it.copy(
-                            isSending = false,
-                            error = e.message ?: "Failed to send",
-                        )
-                    }
-                },
+            postChatMessage(text)
+        }
+    }
+
+    fun openAnimePicker(initialQuery: String = "") {
+        _uiState.update {
+            it.copy(
+                animePickerOpen = true,
+                animePickerQuery = initialQuery,
+                animePickerResults = emptyList(),
+                animePickerError = null,
             )
+        }
+        searchAnimeForPicker(initialQuery)
+    }
+
+    fun dismissAnimePicker() {
+        animeSearchJob?.cancel()
+        _uiState.update {
+            it.copy(
+                animePickerOpen = false,
+                animePickerLoading = false,
+                animePickerError = null,
+            )
+        }
+    }
+
+    fun onAnimePickerQueryChange(value: String) {
+        val query = value.take(80)
+        _uiState.update { it.copy(animePickerQuery = query, animePickerError = null) }
+        searchAnimeForPicker(query)
+    }
+
+    fun sendAnimeCard(anime: AnimeItem) {
+        val title = anime.displayTitle.ifBlank { anime.animeId }
+        val metadata = ChatMessageMetadata(
+            kind = "anime_card",
+            anime = ChatAnimeCard(
+                animeId = anime.animeId,
+                title = title,
+                description = anime.description,
+                imageUrl = anime.imageUrl,
+                format = anime.format.takeIf { it.isNotBlank() },
+                year = anime.seasonYear,
+                score = anime.score,
+                episodes = anime.epCount,
+            ),
+        )
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    animePickerOpen = false,
+                    animePickerLoading = false,
+                    isSending = true,
+                    error = null,
+                )
+            }
+            postChatMessage("Shared an anime: $title", metadata)
+        }
+    }
+
+    private suspend fun postChatMessage(
+        text: String,
+        metadata: ChatMessageMetadata? = null,
+    ) {
+        val result = chatService.postMessage(text, metadata = metadata)
+        result.fold(
+            onSuccess = { message ->
+                val snapshot = _uiState.value
+                val enriched = enrichOwnMessage(
+                    message.copy(
+                        username = message.username.ifBlank {
+                            snapshot.currentUsername ?: message.username
+                        },
+                        avatarUrl = message.avatarUrl?.takeIf { it.isNotBlank() }
+                            ?: snapshot.currentUserAvatar,
+                    ),
+                    snapshot,
+                )
+                prefetchChatFrames(listOf(enriched))
+                _uiState.update { state ->
+                    val merged = mergeMessages(state.messages, listOf(enriched))
+                    state.copy(
+                        draft = "",
+                        isSending = false,
+                        messages = merged,
+                        error = null,
+                    )
+                }
+            },
+            onFailure = { e ->
+                _uiState.update {
+                    it.copy(
+                        isSending = false,
+                        error = e.message ?: "Failed to send",
+                    )
+                }
+            },
+        )
+    }
+
+    private fun searchAnimeForPicker(query: String) {
+        animeSearchJob?.cancel()
+        animeSearchJob = viewModelScope.launch {
+            delay(if (query.isBlank()) 0 else 250)
+            _uiState.update { it.copy(animePickerLoading = true, animePickerError = null) }
+            val response = runCatching {
+                searchService.search(q = query.takeIf { it.isNotBlank() }, limit = 12)
+            }.getOrNull()
+            _uiState.update {
+                it.copy(
+                    animePickerLoading = false,
+                    animePickerResults = response?.results.orEmpty(),
+                    animePickerError = if (response == null) "Could not search anime" else null,
+                )
+            }
         }
     }
 
@@ -326,6 +441,7 @@ class LiveChatViewModel(
         reconnectJob?.cancel()
         wsJob?.cancel()
         loadOlderJob?.cancel()
+        animeSearchJob?.cancel()
         super.onCleared()
     }
 

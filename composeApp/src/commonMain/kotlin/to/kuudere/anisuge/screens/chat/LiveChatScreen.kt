@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,15 +28,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -52,14 +57,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import anisurge.composeapp.generated.resources.Res
 import anisurge.composeapp.generated.resources.chat_bg
 import org.jetbrains.compose.resources.painterResource
+import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.models.ChatAction
+import to.kuudere.anisuge.data.models.ChatAnimeCard
 import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.ui.ChatUsernameLabel
 import to.kuudere.anisuge.ui.ChatDecoratedAvatar
@@ -71,6 +84,7 @@ fun LiveChatScreen(
     viewModel: LiveChatViewModel,
     onBack: () -> Unit,
     onSignIn: () -> Unit,
+    onAction: (String) -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
@@ -138,6 +152,18 @@ fun LiveChatScreen(
         ChatMemberSheet(
             member = member,
             onDismiss = viewModel::dismissMemberProfile,
+        )
+    }
+
+    if (state.animePickerOpen) {
+        AnimePickerDialog(
+            query = state.animePickerQuery,
+            results = state.animePickerResults,
+            isLoading = state.animePickerLoading,
+            error = state.animePickerError,
+            onQueryChange = viewModel::onAnimePickerQueryChange,
+            onSelect = viewModel::sendAnimeCard,
+            onDismiss = viewModel::dismissAnimePicker,
         )
     }
 
@@ -301,6 +327,7 @@ fun LiveChatScreen(
                                     message = message,
                                     isMine = message.userId == state.currentUserId,
                                     onProfileClick = { viewModel.showMemberProfile(message) },
+                                    onActionClick = onAction,
                                 )
                             }
                         }
@@ -314,24 +341,30 @@ fun LiveChatScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OutlinedTextField(
-                            value = state.draft,
-                            onValueChange = viewModel::onDraftChange,
-                            modifier = Modifier.weight(1f),
-                            placeholder = {
-                                Text("Message…", color = Color.White.copy(alpha = 0.4f))
-                            },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                cursorColor = Color(0xFFE50914),
-                                focusedBorderColor = Color(0xFFE50914),
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
-                            ),
-                            shape = RoundedCornerShape(24.dp),
-                            maxLines = 4,
-                            enabled = !state.isSending,
-                        )
+                        Column(Modifier.weight(1f)) {
+                            if (shouldShowSurgeSuggestion(state.draft)) {
+                                SurgeMentionSuggestion(onClick = viewModel::insertSurgeMention)
+                                Spacer(Modifier.height(6.dp))
+                            }
+                            OutlinedTextField(
+                                value = state.draft,
+                                onValueChange = viewModel::onDraftChange,
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = {
+                                    Text("Message…", color = Color.White.copy(alpha = 0.4f))
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    cursorColor = Color(0xFFE50914),
+                                    focusedBorderColor = Color(0xFFE50914),
+                                    unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                                ),
+                                shape = RoundedCornerShape(24.dp),
+                                maxLines = 4,
+                                enabled = !state.isSending,
+                            )
+                        }
                         IconButton(
                             onClick = { viewModel.sendMessage() },
                             enabled = state.draft.isNotBlank() && !state.isSending,
@@ -387,6 +420,7 @@ private fun ChatMessageRow(
     message: ChatMessage,
     isMine: Boolean,
     onProfileClick: () -> Unit,
+    onActionClick: (String) -> Unit,
 ) {
     val bubbleColor = if (isMine) Color(0xFF8B1520) else Color(0xFF1E1E1E)
     val accent = chatAccentColor(message.userId, isMine)
@@ -403,7 +437,7 @@ private fun ChatMessageRow(
     ) {
         if (!isMine) {
             ChatDecoratedAvatar(
-                avatarUrl = message.avatarUrl,
+                avatarUrl = message.effectiveAvatarUrl,
                 frameUrl = message.avatarFrameUrl,
                 outerFrameUrl = message.avatarOuterUrl,
                 userId = message.userId,
@@ -450,19 +484,35 @@ private fun ChatMessageRow(
                     )
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                Text(
-                    message.body,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (message.body.isNotBlank()) {
+                        Text(
+                            markdownText(message.body),
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                        )
+                    }
+                    message.metadata.anime?.let { anime ->
+                        ChatAnimeCardView(
+                            anime = anime,
+                            onClick = { onActionClick("anisurge://anime/${anime.animeId}") },
+                        )
+                    }
+                    if (message.metadata.actions.isNotEmpty()) {
+                        ChatActionButtons(
+                            actions = message.metadata.actions,
+                            onActionClick = onActionClick,
+                        )
+                    }
+                }
             }
         }
 
         if (isMine) {
             Spacer(Modifier.size(8.dp))
             ChatDecoratedAvatar(
-                avatarUrl = message.avatarUrl,
+                avatarUrl = message.effectiveAvatarUrl,
                 frameUrl = message.avatarFrameUrl,
                 outerFrameUrl = message.avatarOuterUrl,
                 userId = message.userId,
@@ -472,4 +522,334 @@ private fun ChatMessageRow(
             )
         }
     }
+}
+
+@Composable
+private fun SurgeMentionSuggestion(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF241035))
+            .border(1.dp, Color(0xFFBF80FF).copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            "@surge",
+            color = Color(0xFFBF80FF),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            "Anisurge AI",
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 12.sp,
+        )
+    }
+}
+
+private fun shouldShowSurgeSuggestion(draft: String): Boolean {
+    val lastAt = draft.lastIndexOf('@')
+    if (lastAt < 0) return false
+    val token = draft.substring(lastAt)
+    if (token.any { it.isWhitespace() }) return false
+    return "@surge".startsWith(token.lowercase()) && token.lowercase() != "@surge"
+}
+
+@Composable
+private fun ChatActionButtons(
+    actions: List<ChatAction>,
+    onActionClick: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        actions.filter { it.label.isNotBlank() && it.deeplink.isNotBlank() }.forEach { action ->
+            OutlinedButton(
+                onClick = { onActionClick(action.deeplink) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(action.label, fontSize = 12.sp, maxLines = 1)
+            }
+        }
+    }
+}
+
+private fun markdownText(raw: String): AnnotatedString {
+    val normalized = raw
+        .replace("\r\n", "\n")
+        .lines()
+        .joinToString("\n") { line ->
+            val trimmed = line.trimStart()
+            when {
+                trimmed.startsWith("- ") -> "• ${trimmed.drop(2)}"
+                trimmed.startsWith("* ") -> "• ${trimmed.drop(2)}"
+                else -> line
+            }
+        }
+
+    return buildAnnotatedString {
+        appendMarkdownInline(normalized)
+    }
+}
+
+private fun AnnotatedString.Builder.appendMarkdownInline(text: String) {
+    var i = 0
+    while (i < text.length) {
+        when {
+            text.startsWith("**", i) -> {
+                val end = text.indexOf("**", startIndex = i + 2)
+                if (end > i + 2) {
+                    val start = length
+                    append(text.substring(i + 2, end))
+                    addStyle(SpanStyle(fontWeight = FontWeight.Bold), start, length)
+                    i = end + 2
+                } else {
+                    append(text[i])
+                    i++
+                }
+            }
+            text[i] == '`' -> {
+                val end = text.indexOf('`', startIndex = i + 1)
+                if (end > i + 1) {
+                    val start = length
+                    append(text.substring(i + 1, end))
+                    addStyle(SpanStyle(color = Color(0xFFFFD166)), start, length)
+                    i = end + 1
+                } else {
+                    append(text[i])
+                    i++
+                }
+            }
+            text[i] == '*' -> {
+                val end = text.indexOf('*', startIndex = i + 1)
+                if (end > i + 1 && (i + 1 >= text.length || text[i + 1] != '*')) {
+                    val start = length
+                    append(text.substring(i + 1, end))
+                    addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, length)
+                    i = end + 1
+                } else {
+                    append(text[i])
+                    i++
+                }
+            }
+            else -> {
+                append(text[i])
+                i++
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatAnimeCardView(
+    anime: ChatAnimeCard,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.35f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        AsyncImage(
+            model = anime.imageUrl,
+            contentDescription = anime.title,
+            modifier = Modifier
+                .width(58.dp)
+                .height(82.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color.White.copy(alpha = 0.08f)),
+            contentScale = ContentScale.Crop,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                anime.title.ifBlank { "Anime" },
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+            )
+            chatAnimeMetaLine(anime)?.let {
+                Text(
+                    it,
+                    color = Color.White.copy(alpha = 0.62f),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                )
+            }
+            val description = plainChatDescription(anime.description)
+            if (description.isNotBlank()) {
+                Text(
+                    description,
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 3,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnimePickerDialog(
+    query: String,
+    results: List<AnimeItem>,
+    isLoading: Boolean,
+    error: String?,
+    onQueryChange: (String) -> Unit,
+    onSelect: (AnimeItem) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF111111),
+        titleContentColor = Color.White,
+        textContentColor = Color.White,
+        title = { Text("Share anime") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search anime", color = Color.White.copy(alpha = 0.45f)) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color(0xFFE50914),
+                        focusedBorderColor = Color(0xFFE50914),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                    ),
+                )
+
+                if (error != null) {
+                    Text(error, color = Color(0xFFFF6B6B), fontSize = 12.sp)
+                }
+
+                Box(Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 390.dp)) {
+                    when {
+                        isLoading -> CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center),
+                            color = Color.White,
+                        )
+                        results.isEmpty() -> Text(
+                            "No results yet",
+                            color = Color.White.copy(alpha = 0.55f),
+                            fontSize = 13.sp,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                        else -> LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(results, key = { it.animeId }) { anime ->
+                                AnimePickerResultRow(
+                                    anime = anime,
+                                    onClick = { onSelect(anime) },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+    )
+}
+
+@Composable
+private fun AnimePickerResultRow(
+    anime: AnimeItem,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.06f))
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsyncImage(
+            model = anime.imageUrl,
+            contentDescription = anime.displayTitle,
+            modifier = Modifier
+                .width(48.dp)
+                .height(68.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color.White.copy(alpha = 0.08f)),
+            contentScale = ContentScale.Crop,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                anime.displayTitle.ifBlank { anime.animeId },
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+            )
+            val meta = listOfNotNull(
+                anime.format.takeIf { it.isNotBlank() },
+                anime.seasonYear?.toString(),
+                anime.epCount?.let { "$it eps" },
+            ).joinToString(" / ")
+            if (meta.isNotBlank()) {
+                Text(
+                    meta,
+                    color = Color.White.copy(alpha = 0.62f),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                )
+            }
+            val description = plainChatDescription(anime.description)
+            if (description.isNotBlank()) {
+                Text(
+                    description,
+                    color = Color.White.copy(alpha = 0.65f),
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 2,
+                )
+            }
+        }
+    }
+}
+
+private fun chatAnimeMetaLine(anime: ChatAnimeCard): String? {
+    val pieces = listOfNotNull(
+        anime.format?.takeIf { it.isNotBlank() },
+        anime.year?.toString(),
+        anime.episodes?.let { "$it eps" },
+        anime.score?.let { "$it%" },
+    )
+    return pieces.joinToString(" / ").takeIf { it.isNotBlank() }
+}
+
+private fun plainChatDescription(raw: String): String {
+    return raw
+        .replace(Regex("<[^>]+>"), "")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .trim()
+        .take(180)
 }
