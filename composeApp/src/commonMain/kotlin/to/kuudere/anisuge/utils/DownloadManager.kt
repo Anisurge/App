@@ -12,6 +12,9 @@ import io.ktor.http.isSuccess
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
@@ -24,6 +27,8 @@ import to.kuudere.anisuge.platform.KmpFileSystem
 import to.kuudere.anisuge.platform.isAndroidPlatform
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -49,7 +54,16 @@ data class DownloadTask(
     val audioLang: String? = null,
     val streamUrl: String? = null,
     val preferBatchDub: Boolean = false,
+    val useParallelSegments: Boolean = false,
     @kotlinx.serialization.Transient internal var job: Job? = null
+)
+
+data class BatchEpisodeDownload(
+    val animeId: String,
+    val anilistId: Int,
+    val episodeNumber: Int,
+    val title: String,
+    val coverImage: String?,
 )
 
 object DownloadManager {
@@ -61,6 +75,9 @@ object DownloadManager {
     private val persistenceFile = "${getCacheDirectory()}/tasks.json"
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
     private const val MP4_BUFFER_SIZE = 8 * 1024
+    private const val ANDROID_HLS_PARALLELISM = 4
+    private const val DESKTOP_HLS_PARALLELISM = 6
+    const val MAX_SEASON_BATCH_EPISODES = 12
 
     init {
         loadTasks()
@@ -145,6 +162,7 @@ object DownloadManager {
         headers: Map<String, String>? = null,
         m3u8Url: String? = null,
         preferBatchDub: Boolean = false,
+        useParallelSegments: Boolean = false,
     ) {
         val taskId = "${animeId}_$episodeNumber"
         val existing = tasks.value.find { it.id == taskId }
@@ -160,7 +178,7 @@ object DownloadManager {
                     removeFailedTaskSync(existing)
                     enqueueDownload(
                         taskId, animeId, anilistId, episodeNumber, title, coverImage,
-                        server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub,
+                        server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub, useParallelSegments,
                     )
                 }
                 return
@@ -168,8 +186,51 @@ object DownloadManager {
         }
         enqueueDownload(
             taskId, animeId, anilistId, episodeNumber, title, coverImage,
-            server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub,
+            server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub, useParallelSegments,
         )
+    }
+
+    fun startSeasonBatchDownload(
+        episodes: List<BatchEpisodeDownload>,
+        server: String,
+        subLang: String?,
+        audioLang: String?,
+        downloadFonts: Boolean,
+        headers: Map<String, String>? = null,
+        preferBatchDub: Boolean = false,
+    ) {
+        val batch = episodes
+            .distinctBy { "${it.animeId}_${it.episodeNumber}" }
+            .take(MAX_SEASON_BATCH_EPISODES)
+        if (batch.isEmpty()) return
+        scope.launch {
+            for (episode in batch) {
+                val taskId = "${episode.animeId}_${episode.episodeNumber}"
+                val existing = tasks.value.find { it.id == taskId }
+                if (existing != null && isDownloadFinished(existing.status)) continue
+                if (existing != null && !existing.status.startsWith("Failed") && !existing.isPaused) {
+                    waitForTaskToSettle(taskId)
+                    continue
+                }
+
+                startDownload(
+                    animeId = episode.animeId,
+                    anilistId = episode.anilistId,
+                    episodeNumber = episode.episodeNumber,
+                    title = episode.title,
+                    coverImage = episode.coverImage,
+                    server = server,
+                    subLang = subLang,
+                    audioLang = audioLang,
+                    downloadFonts = downloadFonts,
+                    headers = headers,
+                    m3u8Url = null,
+                    preferBatchDub = preferBatchDub,
+                    useParallelSegments = true,
+                )
+                waitForTaskToSettle(taskId)
+            }
+        }
     }
 
     private fun enqueueDownload(
@@ -186,6 +247,7 @@ object DownloadManager {
         headers: Map<String, String>?,
         m3u8Url: String?,
         preferBatchDub: Boolean,
+        useParallelSegments: Boolean,
     ) {
         val newTask = DownloadTask(
             id = taskId,
@@ -202,6 +264,7 @@ object DownloadManager {
             audioLang = audioLang,
             streamUrl = m3u8Url,
             preferBatchDub = preferBatchDub,
+            useParallelSegments = useParallelSegments,
         )
         tasks.update { it + newTask }
         saveTasks()
@@ -495,37 +558,34 @@ object DownloadManager {
 
                 // Download Video — skip concat when FFmpeg will demux HLS from URLs (encrypted, fMP4/Suzu, …)
                 if (!isEncrypted && !useHlsUrlRemux) {
-                    val videoSink = KmpFileSystem.sink(rawVideoPath).buffer()
-                    try {
-                    videoSegments.forEachIndexed { index, segmentUrl ->
-                        while (tasks.value.find { it.id == taskId }?.isPaused == true) {
-                            kotlinx.coroutines.delay(1000)
-                            lastMeasureTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-                        }
-
-                        val segmentBytes = fetchHlsSegmentBytes(segmentUrl, currentHeaders)
-                        videoSink.write(segmentBytes)
-                        totalBytesDownloaded += segmentBytes.size
-                        bytesSinceLastMeasure += segmentBytes.size
-                        
+                    downloadHlsSegmentsToFile(
+                        taskId = taskId,
+                        segments = videoSegments,
+                        headers = currentHeaders,
+                        outputPath = rawVideoPath,
+                        statusPrefix = "Downloading Video",
+                        progressOffset = 0,
+                        totalSegments = videoSegments.size + audioSegments.size,
+                        parallel = task.useParallelSegments,
+                    ) { index, bytes, speed ->
+                        totalBytesDownloaded += bytes
+                        bytesSinceLastMeasure += bytes
                         val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                         val diff = now - lastMeasureTime
                         if (diff >= 1000) {
-                            val speed = (bytesSinceLastMeasure.toDouble() / (diff / 1000.0))
-                            val progress = (index + 1).toFloat() / (videoSegments.size + audioSegments.size)
-                            val remainingBytes = (videoSegments.size + audioSegments.size - (index + 1)) * (totalBytesDownloaded.toDouble() / (index + 1))
-                            updateTask(taskId) { it.copy(
-                                status = "Downloading Video: ${(progress * 100).toInt()}%",
-                                progress = progress,
-                                downloadSpeed = formatSpeed(speed),
-                                eta = formatEta(if (speed > 0) (remainingBytes / speed).toInt() else 0)
-                            ) }
+                            val measuredSpeed = if (speed > 0.0) speed else bytesSinceLastMeasure.toDouble() / (diff / 1000.0)
+                            val completed = index + 1
+                            val remainingBytes = (videoSegments.size + audioSegments.size - completed) *
+                                (totalBytesDownloaded.toDouble() / completed.coerceAtLeast(1))
+                            updateTask(taskId) {
+                                it.copy(
+                                    downloadSpeed = formatSpeed(measuredSpeed),
+                                    eta = formatEta(if (measuredSpeed > 0) (remainingBytes / measuredSpeed).toInt() else 0),
+                                )
+                            }
                             lastMeasureTime = now
                             bytesSinceLastMeasure = 0
                         }
-                    }
-                    } finally {
-                        videoSink.close()
                     }
                 } else if (isEncrypted || useHlsUrlRemux) {
                     updateTask(taskId) { it.copy(status = "Downloading Stream (HLS)...", progress = 0.5f) }
@@ -533,24 +593,16 @@ object DownloadManager {
 
                 // Download Audio if separate (Skip if encrypted or URL remux — FFmpeg pulls alternate audio playlists)
                 if (audioSegments.isNotEmpty() && !isEncrypted && !useHlsUrlRemux) {
-                    val audioSink = KmpFileSystem.sink(rawAudioPath).buffer()
-                    try {
-                        audioSegments.forEachIndexed { index, segmentUrl ->
-                            while (tasks.value.find { it.id == taskId }?.isPaused == true) {
-                                kotlinx.coroutines.delay(1000)
-                            }
-                            val segmentBytes = fetchHlsSegmentBytes(segmentUrl, currentHeaders)
-                            audioSink.write(segmentBytes)
-                            
-                            val progress = (videoSegments.size + index + 1).toFloat() / (videoSegments.size + audioSegments.size)
-                            updateTask(taskId) { it.copy(
-                                status = "Downloading Audio: ${(progress * 100).toInt()}%",
-                                progress = progress
-                            ) }
-                        }
-                    } finally {
-                        audioSink.close()
-                    }
+                    downloadHlsSegmentsToFile(
+                        taskId = taskId,
+                        segments = audioSegments,
+                        headers = currentHeaders,
+                        outputPath = rawAudioPath,
+                        statusPrefix = "Downloading Audio",
+                        progressOffset = videoSegments.size,
+                        totalSegments = videoSegments.size + audioSegments.size,
+                        parallel = task.useParallelSegments,
+                    )
                 }
 
                 // 4. Muxing
@@ -793,6 +845,79 @@ object DownloadManager {
         return HlsPngTsStrip.stripSegmentPayloadIfNeeded(segmentUrl, raw)
     }
 
+    private suspend fun downloadHlsSegmentsToFile(
+        taskId: String,
+        segments: List<String>,
+        headers: Map<String, String>,
+        outputPath: String,
+        statusPrefix: String,
+        progressOffset: Int,
+        totalSegments: Int,
+        parallel: Boolean,
+        onSegmentWritten: (index: Int, bytes: Long, speed: Double) -> Unit = { _, _, _ -> },
+    ) {
+        if (segments.isEmpty()) return
+        val concurrency = if (!parallel) 1 else if (isAndroidPlatform) ANDROID_HLS_PARALLELISM else DESKTOP_HLS_PARALLELISM
+        val semaphore = Semaphore(concurrency)
+        val sink = KmpFileSystem.sink(outputPath).buffer()
+        var lastMeasureTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        var bytesSinceLastMeasure = 0L
+        try {
+            var index = 0
+            while (index < segments.size) {
+                while (tasks.value.find { it.id == taskId }?.isPaused == true) {
+                    kotlinx.coroutines.delay(1000)
+                    lastMeasureTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                    bytesSinceLastMeasure = 0
+                }
+
+                val window = segments.drop(index).take(concurrency)
+                val fetched = coroutineScope {
+                    window.mapIndexed { windowIndex, segmentUrl ->
+                        async {
+                            semaphore.withPermit {
+                                index + windowIndex to fetchHlsSegmentBytes(segmentUrl, headers)
+                            }
+                        }
+                    }.awaitAll()
+                }.sortedBy { it.first }
+
+                for ((segmentIndex, bytes) in fetched) {
+                    while (tasks.value.find { it.id == taskId }?.isPaused == true) {
+                        kotlinx.coroutines.delay(1000)
+                        lastMeasureTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                        bytesSinceLastMeasure = 0
+                    }
+                    sink.write(bytes)
+                    bytesSinceLastMeasure += bytes.size
+
+                    val completed = progressOffset + segmentIndex + 1
+                    val progress = completed.toFloat() / totalSegments.coerceAtLeast(1)
+                    val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                    val diff = now - lastMeasureTime
+                    val speed = if (diff >= 1000) {
+                        (bytesSinceLastMeasure.toDouble() / (diff / 1000.0)).also {
+                            lastMeasureTime = now
+                            bytesSinceLastMeasure = 0
+                        }
+                    } else {
+                        0.0
+                    }
+                    updateTask(taskId, persist = false) {
+                        it.copy(
+                            status = "$statusPrefix: ${(progress * 100).toInt()}%",
+                            progress = progress,
+                        )
+                    }
+                    onSegmentWritten(segmentIndex, bytes.size.toLong(), speed)
+                }
+                index += window.size
+            }
+        } finally {
+            sink.close()
+        }
+    }
+
     private fun parseSegments(playlistUrl: String, content: String): List<String> {
         val segments = mutableListOf<String>()
         content.lines().forEach { line ->
@@ -842,6 +967,14 @@ object DownloadManager {
         apiSubtitleTracks.forEach { (url, label) -> addFromUrl(url, label) }
         parseSubtitlePlaylistUrls(masterPlaylistUrl, masterPlaylist).forEach { (url, name) ->
             addFromUrl(url, name)
+        }
+    }
+
+    private suspend fun waitForTaskToSettle(taskId: String) {
+        while (true) {
+            val task = tasks.value.find { it.id == taskId }
+            if (task == null || isDownloadFinished(task.status) || task.isPaused) return
+            kotlinx.coroutines.delay(1000)
         }
     }
 

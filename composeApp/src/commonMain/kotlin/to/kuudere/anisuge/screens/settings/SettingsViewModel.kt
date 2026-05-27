@@ -190,6 +190,7 @@ data class SettingsUiState(
     val isDisconnectingReanime: Boolean = false,
     val isImportingReanime: Boolean = false,
     val isExportingReanime: Boolean = false,
+    val isStartingPremiumCheckout: Boolean = false,
 )
 
 sealed class SettingsTab {
@@ -421,6 +422,26 @@ class SettingsViewModel(
 
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, successMessage = null) }
+    }
+
+    fun startPremiumCheckout(openUrl: (String) -> Unit) {
+        if (_uiState.value.isStartingPremiumCheckout) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isStartingPremiumCheckout = true, errorMessage = null) }
+            bffMeService.createPremiumCheckoutSession().fold(
+                onSuccess = { session ->
+                    openUrl(session.checkoutUrl)
+                    delay(1200)
+                    loadUserProfile()
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(errorMessage = e.message ?: "Failed to start premium checkout")
+                    }
+                },
+            )
+            _uiState.update { it.copy(isStartingPremiumCheckout = false) }
+        }
     }
 
     fun setDeleteAnime(id: String?, title: String?) {

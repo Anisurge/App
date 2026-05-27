@@ -56,11 +56,13 @@ fun DownloadEpisodeDialog(
     coverImage: String?,
     infoService: InfoService,
     serverRepository: ServerRepository,
+    isSeasonBatch: Boolean = false,
+    batchEpisodeCount: Int = 1,
     onDismiss: () -> Unit,
     onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?, m3u8Url: String?, preferBatchDub: Boolean) -> Unit
 ) {
     val strings = LocalAppStrings.current
-    var selectedServer by remember { mutableStateOf("suzu") }
+    var selectedServer by remember { mutableStateOf(if (isSeasonBatch) "anitaku-1" else "suzu") }
     var selectedSubLang by remember { mutableStateOf<String?>("English") }
     /** HLS audio track code after playlist parse (e.g. jpn); unrelated to batch_scrape sub/dub. */
     var selectedAudioLang by remember { mutableStateOf<String?>("sub") }
@@ -138,7 +140,14 @@ fun DownloadEpisodeDialog(
     // Update selected server when repository loads
     LaunchedEffect(selectableServers) {
         if (selectableServers.none { it.id == selectedServer } && selectableServers.isNotEmpty()) {
-            selectedServer = selectableServers.first().id
+            selectedServer = if (isSeasonBatch) {
+                selectableServers.firstOrNull { it.id.equals("anitaku-1", ignoreCase = true) }?.id
+                    ?: selectableServers.firstOrNull { it.id.equals("anitaku", ignoreCase = true) }?.id
+                    ?: selectableServers.firstOrNull { it.id.equals("anikage", ignoreCase = true) }?.id
+                    ?: selectableServers.first().id
+            } else {
+                selectableServers.first().id
+            }
         }
     }
 
@@ -380,7 +389,7 @@ fun DownloadEpisodeDialog(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Text(
-                text = strings.downloadEpisode(episodeNumber),
+                text = if (isSeasonBatch) "Download ${batchEpisodeCount.coerceAtLeast(1)} episodes" else strings.downloadEpisode(episodeNumber),
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
@@ -426,7 +435,7 @@ fun DownloadEpisodeDialog(
             }
 
             // Quality — progressive MP4 (e.g. AllAnime) uses HEAD sizes + per-row download; HLS uses chips + main button
-            if (showDirectMp4Picker) {
+            if (showDirectMp4Picker && !isSeasonBatch) {
                 DirectMp4QualityPicker(
                     httpClient = to.kuudere.anisuge.AppComponent.httpClient,
                     options = mp4QualityOptions,
@@ -690,14 +699,22 @@ fun DownloadEpisodeDialog(
                     }
                 }
 
-                if (!showDirectMp4Picker) {
+                if (!showDirectMp4Picker || isSeasonBatch) {
                     Button(
                         onClick = {
                             if (currentTask == null) {
                                 if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
                                     shouldRequestNotificationPermission = true
                                 } else if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                                    onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
+                                    onStartDownload(
+                                        selectedServer,
+                                        selectedSubLang,
+                                        selectedAudioLang,
+                                        true,
+                                        currentHeaders,
+                                        if (isSeasonBatch) null else selectedM3u8,
+                                        preferBatchDub,
+                                    )
                                 } else {
                                     shouldRequestPermission = true
                                 }
@@ -737,7 +754,9 @@ fun DownloadEpisodeDialog(
                             val sizeText = if (estimatedSizeBytes > 0) " (~${formatFileSize(estimatedSizeBytes)})" else ""
                             Text(
                                 text = when {
-                                    currentTask == null -> if (isPathValid) strings.startDownload(sizeText) else strings.chooseValidFolder
+                                    currentTask == null -> if (isPathValid) {
+                                        if (isSeasonBatch) "Start Batch$sizeText" else strings.startDownload(sizeText)
+                                    } else strings.chooseValidFolder
                                     isFinished -> strings.downloaded
                                     else -> strings.keepDownloadingInBackground
                                 },

@@ -88,6 +88,8 @@ data class UserProfile(
     val reanimeConnected: Boolean = false,
     val reanimeUsername: String? = null,
     val isPremium: Boolean = false,
+    val premiumPlan: String? = null,
+    val premiumExpiresAt: String? = null,
     val chatProfilePrivate: Boolean = false,
 ) {
     val effectiveId: String? get() = id ?: userId

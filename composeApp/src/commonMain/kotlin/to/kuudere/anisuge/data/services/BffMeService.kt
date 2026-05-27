@@ -223,6 +223,25 @@ class BffMeService(
         }
     }
 
+    suspend fun createPremiumCheckoutSession(): Result<BffPremiumCheckoutSessionResponse> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/premium/checkout-session") {
+                applyAnisurgeAuth(stored)
+            }
+            if (response.status.isSuccess()) {
+                Result.success(response.body())
+            } else {
+                val message = runCatching {
+                    json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+                }.getOrElse { "Failed to start checkout (${response.status.value})" }
+                Result.failure(Exception(message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
 
     companion object {
         private const val CHAT_IMAGE_MAX_BYTES = (2.5 * 1024 * 1024).toLong()
@@ -304,4 +323,11 @@ private data class BffPatchEquippedRequest(
 @Serializable
 private data class BffPatchProfileExtraRequest(
     val profileExtra: JsonObject,
+)
+
+@Serializable
+data class BffPremiumCheckoutSessionResponse(
+    val id: String,
+    val checkoutUrl: String,
+    val expiresAt: String,
 )

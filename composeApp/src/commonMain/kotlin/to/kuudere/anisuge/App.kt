@@ -170,6 +170,7 @@ fun App(
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
         val updateState by updateVm.state.collectAsState()
         val authState by AppComponent.authService.authState.collectAsState()
+        val currentUserProfile = (authState as? SessionCheckResult.Valid)?.user
 
         LaunchedEffect(authState) {
             if (authState is SessionCheckResult.NoSession || authState is SessionCheckResult.Expired) {
@@ -514,6 +515,7 @@ fun App(
                             onDownloadsClick = {
                                 navController.navigate(Screen.Home(startOnDownloads = true).route)
                             },
+                            isPremiumUser = currentUserProfile?.isPremium == true,
                             onGenreClick = { genre ->
                                 searchVm.clearFilters()
                                 searchVm.onGenreToggle(genre)

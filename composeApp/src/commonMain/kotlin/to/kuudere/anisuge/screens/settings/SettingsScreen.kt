@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
@@ -281,6 +282,7 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val strings = LocalAppStrings.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val uriHandler = LocalUriHandler.current
     var selectedTab by remember { mutableStateOf<SettingsTab>(initialTab ?: SettingsTab.Preferences) }
 
     LaunchedEffect(initialTab) {
@@ -361,6 +363,7 @@ fun SettingsScreen(
                         uiState = uiState,
                         onLogout = onLogout,
                         isLoggingOut = isLoggingOut,
+                        onBuyPremium = { viewModel.startPremiumCheckout(uriHandler::openUri) },
                         modifier = Modifier.width(260.dp)
                     )
 
@@ -447,6 +450,7 @@ fun SettingsScreen(
                             uiState = uiState,
                             onLogout = onLogout,
                             isLoggingOut = isLoggingOut,
+                            onBuyPremium = { viewModel.startPremiumCheckout(uriHandler::openUri) },
                             onRetry = { viewModel.refresh() },
                             onProfileClick = { viewModel.openProfileAccount() },
                             onItemClick = {
@@ -525,6 +529,7 @@ private fun Sidebar(
     uiState: SettingsUiState,
     onLogout: () -> Unit,
     isLoggingOut: Boolean,
+    onBuyPremium: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
@@ -535,6 +540,13 @@ private fun Sidebar(
             .padding(horizontal = 16.dp, vertical = 24.dp)
     ) {
         // No overall header as per user request
+        Spacer(modifier = Modifier.height(8.dp))
+
+        PremiumSidebarRow(
+            uiState = uiState,
+            onBuyPremium = onBuyPremium,
+        )
+
         Spacer(modifier = Modifier.height(8.dp))
 
         // Nav Items
@@ -650,6 +662,41 @@ private fun Sidebar(
 }
 
 @Composable
+private fun PremiumSidebarRow(
+    uiState: SettingsUiState,
+    onBuyPremium: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFFFD54F).copy(alpha = 0.08f))
+            .clickable(enabled = !uiState.isStartingPremiumCheckout) { onBuyPremium() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (uiState.isStartingPremiumCheckout) {
+            CircularProgressIndicator(color = Color(0xFFFFD54F), modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(
+                imageVector = Icons.Default.WorkspacePremium,
+                contentDescription = null,
+                tint = Color(0xFFFFD54F),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            if (uiState.userProfile?.isPremium == true) "Extend Premium" else "Buy Premium",
+            color = Color(0xFFFFD54F),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
 private fun AppStatItem(label: String, value: String) {
     Row(modifier = Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = MUTED, fontSize = 12.sp)
@@ -689,8 +736,10 @@ private fun MobileSettingsList(
     onItemClick: (SettingsTab) -> Unit,
     onProfileClick: () -> Unit = {},
     isLoggingOut: Boolean = false,
+    onBuyPremium: () -> Unit,
     onRetry: () -> Unit = {},
 ) {
+    val uriHandler = LocalUriHandler.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -745,6 +794,16 @@ private fun MobileSettingsList(
         } else {
             Spacer(modifier = Modifier.height(16.dp))
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        MobileSettingsItem(
+            icon = Icons.Default.WorkspacePremium,
+            label = if (uiState.userProfile?.isPremium == true) "Extend Premium" else "Buy Premium",
+            tint = Color(0xFFFFD54F),
+            isLoading = uiState.isStartingPremiumCheckout,
+            onClick = onBuyPremium
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -824,8 +883,6 @@ private fun MobileSettingsList(
             onClick = onLogout,
             isLoading = isLoggingOut
         )
-
-        val uriHandler = LocalUriHandler.current
 
         MobileSettingsItem(
             icon = Icons.Default.Favorite,
@@ -975,6 +1032,7 @@ private fun MobileSettingsDetail(
                     onRetry = { viewModel.refresh() },
                     onPickCustomPfp = pickPfp,
                     onEquipFrame = viewModel::equipShopFrame,
+                    onBuyPremium = { viewModel.startPremiumCheckout(uriHandler::openUri) },
                 )
 
                 is SettingsTab.Shop -> ShopSettingsTab(
@@ -1133,6 +1191,7 @@ private fun SettingsContent(
                 onChangePassword = viewModel::changePassword,
                 onEquipFrame = viewModel::equipShopFrame,
                 onChatProfilePrivacyChange = viewModel::setChatProfilePrivate,
+                onBuyPremium = { viewModel.startPremiumCheckout(uriHandler::openUri) },
             )
 
             is SettingsTab.Shop -> ShopSettingsTab(
@@ -4041,6 +4100,65 @@ private fun ProfileSummaryCard(
 }
 
 @Composable
+private fun PremiumProfileCard(
+    uiState: SettingsUiState,
+    onBuyPremium: () -> Unit,
+) {
+    val user = uiState.userProfile ?: return
+    val expiry = user.premiumExpiresAt?.substringBefore("T")?.takeIf { it.isNotBlank() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFFFFD54F).copy(alpha = 0.08f))
+            .border(1.dp, Color(0xFFFFD54F).copy(alpha = 0.22f), RoundedCornerShape(14.dp))
+            .clickable(enabled = !uiState.isStartingPremiumCheckout) { onBuyPremium() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (uiState.isStartingPremiumCheckout) {
+            CircularProgressIndicator(
+                color = Color(0xFFFFD54F),
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Default.WorkspacePremium,
+                contentDescription = null,
+                tint = Color(0xFFFFD54F),
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                if (user.isPremium) "Premium active" else "Buy Premium",
+                color = TEXT,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                when {
+                    user.isPremium && expiry != null -> "Expires $expiry"
+                    user.isPremium -> "Premium downloads and profile perks enabled"
+                    else -> "Unlock season downloads and faster HLS downloads"
+                },
+                color = MUTED,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = Color(0xFFFFD54F),
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
 private fun ProfilePfpAndFramesSection(
     uiState: SettingsUiState,
     onPickCustomPfp: () -> Unit,
@@ -4446,6 +4564,7 @@ private fun ProfileTab(
     onChangePassword: () -> Unit = {},
     onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit = {},
     onChatProfilePrivacyChange: (Boolean) -> Unit = {},
+    onBuyPremium: () -> Unit = {},
 ) {
     val pickPfp = to.kuudere.anisuge.platform.rememberProfileImagePicker(onPickCustomPfp)
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -4521,6 +4640,12 @@ private fun ProfileTab(
                 user = user,
                 onClick = onOpenAccount,
                 showChevron = true,
+            )
+
+            Spacer(Modifier.height(12.dp))
+            PremiumProfileCard(
+                uiState = uiState,
+                onBuyPremium = onBuyPremium,
             )
 
             Spacer(Modifier.height(12.dp))
@@ -4709,6 +4834,7 @@ private fun MobileProfileContent(
     onRetry: () -> Unit = {},
     onPickCustomPfp: () -> Unit = {},
     onEquipFrame: (to.kuudere.anisuge.data.models.BffShopItem?) -> Unit = {},
+    onBuyPremium: () -> Unit = {},
 ) {
     if (uiState.isOffline && uiState.userProfile == null) {
         OfflineState(
@@ -4771,6 +4897,12 @@ private fun MobileProfileContent(
                     onClick = onPickCustomPfp,
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            PremiumProfileCard(
+                uiState = uiState,
+                onBuyPremium = onBuyPremium,
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 

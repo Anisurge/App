@@ -61,6 +61,8 @@ data class BffPublicUser(
     val karmaPoints: Int = 0,
     val equipped: JsonObject? = null,
     val profileExtra: JsonObject? = null,
+    val premiumPlan: String? = null,
+    val premiumExpiresAt: String? = null,
     val reanimeConnected: Boolean? = null,
     val reanimeUsername: String? = null,
 )
@@ -68,6 +70,10 @@ data class BffPublicUser(
 fun BffPublicUser.toUserProfile(): UserProfile {
     val ago = (profileExtra?.get("ago") as? JsonPrimitive)?.contentOrNull
     val isPremium = (profileExtra?.get("isPremium") as? JsonPrimitive)?.booleanOrNull == true
+    val resolvedPremiumPlan = premiumPlan
+        ?: (profileExtra?.get("premiumPlan") as? JsonPrimitive)?.contentOrNull
+    val resolvedPremiumExpiresAt = premiumExpiresAt
+        ?: (profileExtra?.get("premiumExpiresAt") as? JsonPrimitive)?.contentOrNull
     val chatProfilePrivate =
         (profileExtra?.get("chatProfilePrivate") as? JsonPrimitive)?.booleanOrNull == true
     val resolvedAvatar = customPfpUrl?.takeIf { it.isNotBlank() } ?: avatarUrl
@@ -102,6 +108,8 @@ fun BffPublicUser.toUserProfile(): UserProfile {
         reanimeConnected = reanimeConnected == true,
         reanimeUsername = reanimeUsername,
         isPremium = isPremium,
+        premiumPlan = resolvedPremiumPlan,
+        premiumExpiresAt = resolvedPremiumExpiresAt,
         chatProfilePrivate = chatProfilePrivate,
     )
 }
