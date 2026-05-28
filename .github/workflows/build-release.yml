@@ -155,6 +155,8 @@ jobs:
           name: android-apks
           path: dist/
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   build-linux:
     needs: resolve-version
@@ -206,6 +208,8 @@ jobs:
           name: linux-distributions
           path: dist/
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   build-windows:
     needs: resolve-version
@@ -303,6 +307,8 @@ jobs:
           name: windows-distributions
           path: dist/
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   build-macos:
     needs: resolve-version
@@ -355,6 +361,8 @@ jobs:
           name: macos-distributions
           path: dist/
           if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   # iOS is opt-in only. Tag pushes do NOT build iOS (composeApp ios* targets are commented out in build.gradle.kts).
   build-ios:
