@@ -1,69 +1,44 @@
-# Anisurge 0.10.46 — Build 41
+# Anisurge 0.11.0 — Build 42
 
-**Full Changelog**: [v0.10.1...v0.10.46](https://github.com/Anisurge/App/compare/v0.10.1...v0.10.46)
+**Full Changelog**: [v0.10.46...v0.11.0](https://github.com/Anisurge/App/compare/v0.10.46...v0.11.0)
 
-## 💎 Premium & Razorpay Integration
+## 🐛 Bug Fixes
 
-- **Razorpay payments** — purchase premium subscriptions directly in-app
-- **Premium badge** — active premium users see badge with expiration date on profile
-- **50-episode batch downloads** for premium users
-- Hide "extend premium" buttons for already-active subscribers
+### Settings no longer auto-revert
+- Fixed auto-skip intro/outro toggles reverting after being turned off
+- Fixed default language (sub/dub) preference reverting back automatically
+- Local settings are now the source of truth — server sync no longer overwrites your local choices during in-flight saves
 
-## 📺 Episode Watch Progress
+### Deep links no longer log you out
+- Fixed cold-start logout when opening a shared anime link (e.g. from a friend or notification)
+- Auth check now properly waits before redirecting to the login screen
+- Added `Checking` session state so the app doesn't assume you're logged out before verification completes
 
-- **Red progress indicator** on episode cards in Anime Info screen showing how much you've watched
-- Improved progress item matching for different ID formats across sources
+### Continue Watching ordering
+- Most recently watched show now correctly floats to the top of Continue Watching
+- Previously, if you watched ep 3 today but ep 8 had more progress from last week, the card sorted by ep 8's old timestamp
+- Now sorts by the most recent activity across ANY episode of that anime
 
 ## 💬 Chat Improvements
 
-- **Chat message grouping** — consecutive messages from the same user are visually grouped
-- **Chat cooldown timer** — rate limiting with visible countdown
-- **Bot support options** in chat member sheet
-- Chat member sheet opens fully expanded (no partial state) for better scrolling
-- Refined chat profile watchlist layout
-- Premium animated avatars in chat profiles
-- Silent karma tracking
+### Animated multi-color premium gradient
+- Premium usernames now flow through a vibrant 5-color rainbow gradient (coral, gold, green, blue, purple)
+- Animation is faster and continuous (1.2s loop) — no more static two-color gradient
+- All premium users get the gradient automatically (no server-side config needed)
 
-## 📥 Batch Downloads
+### Surge bot is now Pro
+- Surge bot displays the PRO badge in chat
+- Bot gets a special purple/cyan/pink/mint animated gradient on its name
 
-- **Batch download all episodes** — limit raised to 1000 episodes
-- **Search filter** in season batch picker dialog
-- **Select all / Clear all** options for quick batch selection
-
-## 🔗 LunarAnime & Connect
-
-- **LunarAnime OAuth** — connect your Lunar account from the new Connect settings tab
-- Brand logo images with fallback for ReAnime and LunarAnime in settings
-- Optimized ReAnime connection flow
-
-## 🖥️ Desktop Fixes
-
-- **Profile photo upload** — fixed CMYK and odd JPEG profile handling on desktop
-- **Offline playback on Windows** — fixed local file playback
-- Dropped AnimeTV submodule (unused)
-
-## 🛍️ Shop & Store
-
-- Fixed store page layout issues
-- Fixed Shop frames OOM crash on low-memory devices
-
-## 🔧 Dashboard & Admin
-
-- Rebuilt admin dashboard with improved layout
-- Backup sync fixes (cache, persisted, and API pointers)
+### Video PFPs load faster
+- Video profile pictures (like Surge bot's) now load and play almost instantly
+- Reduced startup buffer from ~2.5s to 200ms
+- Halved network timeouts for faster failure recovery
+- Doubled the video PFP cache (64MB → 128MB) — more videos stay cached
+- Video PFPs now actually display in chat messages (previously fell back to static icon)
 
 ## ⚙️ CI/CD
 
 - Fixed GitHub API rate limit in Windows MPV download (authenticated requests)
-- Disabled artifact re-compression for faster uploads (APK/DEB/MSI/DMG are pre-compressed)
+- Disabled artifact re-compression for faster uploads
 - 1-day artifact retention to reduce storage pressure
-
----
-
-| Quick Stats | |
-|-------------|---|
-| Commits | 40 |
-| Files changed | **103** |
-| Lines added | **13,667** |
-| Lines removed | **2,432** |
-| Build | 36 → **41** |
