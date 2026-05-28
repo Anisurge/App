@@ -55,7 +55,8 @@ class WatchlistViewModel : ViewModel() {
                         loadedToken = null
                         _uiState.update { WatchlistState() }
                     }
-                    SessionCheckResult.NetworkError -> Unit
+                    SessionCheckResult.NetworkError,
+                    SessionCheckResult.Checking -> Unit
                 }
             }
         }

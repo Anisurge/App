@@ -46,7 +46,7 @@ class AuthService(
     private val integrationsSyncService: IntegrationsSyncService,
     private val librarySyncService: LibrarySyncService,
 ) {
-    private val _authState = MutableStateFlow<SessionCheckResult>(SessionCheckResult.NoSession)
+    private val _authState = MutableStateFlow<SessionCheckResult>(SessionCheckResult.Checking)
     val authState: StateFlow<SessionCheckResult> = _authState.asStateFlow()
     private val bffErrorJson = Json { ignoreUnknownKeys = true }
     private val authScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

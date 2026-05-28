@@ -1123,9 +1123,25 @@ class SettingsViewModel(
     }
 
     private suspend fun applySettingsFromServer(loaded: UserSettings) {
-        originalSettings = loaded
-        _uiState.update { it.copy(settings = loaded, isLoading = false, hasSettingsChanges = false, isOffline = false) }
-        pushPlaybackPrefsToLocalStore(loaded)
+        // If a playback preference sync is in-flight, don't overwrite local playback values
+        // with potentially stale server data. Use local DataStore as source of truth for
+        // playback prefs and only take non-playback fields from server.
+        val effective = if (playbackSettingsSyncJob?.isActive == true) {
+            val local = readLocalPlaybackSettings()
+            loaded.copy(
+                autoPlay = local.autoPlay,
+                autoNext = local.autoNext,
+                skipIntro = local.skipIntro,
+                skipOutro = local.skipOutro,
+                defaultLang = local.defaultLang,
+                syncPercentage = local.syncPercentage,
+            )
+        } else {
+            loaded
+        }
+        originalSettings = effective
+        _uiState.update { it.copy(settings = effective, isLoading = false, hasSettingsChanges = false, isOffline = false) }
+        pushPlaybackPrefsToLocalStore(effective)
     }
 
     private suspend fun applyLocalPlaybackSettingsFallback(
@@ -1234,14 +1250,25 @@ class SettingsViewModel(
             val saved = settingsService.updateSettings(merged)
             if (generation != playbackSettingsSyncGeneration) return
             if (saved != null) {
-                originalSettings = saved
+                // Use the local playback prefs (source of truth) merged with any
+                // non-playback fields the server returned (showComments, publicWatchlist, etc.)
+                val authoritative = saved.copy(
+                    autoPlay = prefs.autoPlay,
+                    autoNext = prefs.autoNext,
+                    skipIntro = prefs.skipIntro,
+                    skipOutro = prefs.skipOutro,
+                    defaultLang = prefs.defaultLang,
+                    syncPercentage = prefs.syncPercentage,
+                )
+                originalSettings = authoritative
                 _uiState.update {
                     it.copy(
-                        settings = saved,
-                        hasSettingsChanges = it.settings != originalSettings,
+                        settings = authoritative,
+                        hasSettingsChanges = false,
                     )
                 }
-                pushPlaybackPrefsToLocalStore(saved)
+                // Do NOT pushPlaybackPrefsToLocalStore here — local store already
+                // has the correct values from persistPlaybackPreference.
             }
         } catch (e: Exception) {
             println("[SettingsViewModel] syncPlaybackSettings error: ${e.message}")

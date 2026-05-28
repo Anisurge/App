@@ -147,5 +147,7 @@ sealed interface SessionCheckResult {
     data object NoSession     : SessionCheckResult
     data object Expired       : SessionCheckResult
     data object NetworkError  : SessionCheckResult
+    /** Initial state before session check has completed — do NOT treat as logged-out. */
+    data object Checking      : SessionCheckResult
     data class Valid(val session: SessionInfo, val user: UserProfile? = null) : SessionCheckResult
 }
