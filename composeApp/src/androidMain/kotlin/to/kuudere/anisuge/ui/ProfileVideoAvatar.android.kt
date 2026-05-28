@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -16,6 +17,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -34,13 +36,25 @@ actual fun ProfileVideoAvatar(
         DefaultMediaSourceFactory(ProfileVideoCache.dataSourceFactory(context))
     }
     val player = remember(url) {
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs */ 1_000,
+                /* maxBufferMs */ 10_000,
+                /* bufferForPlaybackMs */ 200,
+                /* bufferForPlaybackAfterRebufferMs */ 500,
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
         ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
             .build()
             .apply {
                 repeatMode = Player.REPEAT_MODE_ONE
                 playWhenReady = true
                 volume = 0f
+                videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
                 setMediaItem(MediaItem.fromUri(url))
                 prepare()
             }
@@ -76,7 +90,7 @@ actual fun ProfileVideoAvatar(
 
 @OptIn(UnstableApi::class)
 private object ProfileVideoCache {
-    private const val MAX_BYTES = 64L * 1024L * 1024L
+    private const val MAX_BYTES = 128L * 1024L * 1024L
     @Volatile private var cache: SimpleCache? = null
 
     fun dataSourceFactory(context: android.content.Context): CacheDataSource.Factory {
@@ -90,8 +104,9 @@ private object ProfileVideoCache {
         }
         val upstream = DefaultHttpDataSource.Factory()
             .setUserAgent("AniSurge/ProfileVideo")
-            .setConnectTimeoutMs(8_000)
-            .setReadTimeoutMs(12_000)
+            .setConnectTimeoutMs(4_000)
+            .setReadTimeoutMs(6_000)
+            .setAllowCrossProtocolRedirects(true)
         return CacheDataSource.Factory()
             .setCache(resolvedCache)
             .setUpstreamDataSourceFactory(upstream)

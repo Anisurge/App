@@ -40,6 +40,9 @@ data class ChatMessage(
     val coins: Int = 0,
     val isBot: Boolean = userId == SURGE_BOT_USER_ID,
 ) {
+    /** Bots are always treated as premium for display purposes. */
+    val effectivePremium: Boolean get() = isPremium || isBot
+
     val effectiveAvatarUrl: String?
         get() = avatarUrl?.takeIf { it.isNotBlank() } ?: if (isBot) SURGE_BOT_AVATAR_URL else null
 
@@ -50,7 +53,7 @@ data class ChatMessage(
         avatarFrameUrl = avatarFrameUrl,
         avatarOuterUrl = avatarOuterUrl,
         joinedAt = joinedAt,
-        isPremium = isPremium,
+        isPremium = effectivePremium,
         nameStyle = nameStyle,
         coins = coins,
         isBot = isBot,

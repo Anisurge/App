@@ -481,7 +481,7 @@ private fun ChatMessageRow(
                         modifier = profileClick,
                         avatarSize = 36.dp,
                         contentDescription = message.username,
-                        playVideo = false,
+                        playVideo = true,
                     )
                 } else {
                     // Invisible spacer to keep bubble alignment consistent
@@ -507,7 +507,7 @@ private fun ChatMessageRow(
                             fontSize = 11.sp,
                             fontWeight = if (isMine) FontWeight.Normal else FontWeight.SemiBold,
                         )
-                        if (message.isPremium) {
+                        if (message.effectivePremium) {
                             PremiumChatBadge()
                         }
                     }
@@ -580,7 +580,7 @@ private fun ChatMessageRow(
                         modifier = profileClick,
                         avatarSize = 36.dp,
                         contentDescription = message.username,
-                        playVideo = false,
+                        playVideo = true,
                     )
                 } else {
                     // Invisible spacer to keep bubble alignment consistent
