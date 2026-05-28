@@ -1340,16 +1340,12 @@ private fun DesktopLayout(
 
                     } // Close inner Row
 
-                    val currentRangeEpisodes = state.episodes
-                        .filter { it.number >= currentPageStart && it.number < currentPageStart + episodesPerPage }
-                        .sortedBy { it.number }
-                        .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
                     Box(
                         Modifier
                             .clip(RoundedCornerShape(32.dp))
                             .background(if (isPremiumUser) Color.White else Color.White.copy(alpha = 0.1f))
-                            .clickable(enabled = isPremiumUser && currentRangeEpisodes.isNotEmpty()) {
-                                onDownloadSeason(currentRangeEpisodes)
+                            .clickable(enabled = isPremiumUser && state.episodes.isNotEmpty()) {
+                                onDownloadSeason(state.episodes)
                             }
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
@@ -1361,7 +1357,7 @@ private fun DesktopLayout(
                                 modifier = Modifier.size(17.dp),
                             )
                             Text(
-                                if (isPremiumUser) "Download Batch (${currentRangeEpisodes.size})" else "Premium Batch",
+                                if (isPremiumUser) "Download Batch (${state.episodes.size})" else "Premium Batch",
                                 color = if (isPremiumUser) Color.Black else Color.White.copy(alpha = 0.65f),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
@@ -1762,13 +1758,24 @@ private fun SeasonBatchPickerDialog(
         episodes
             .filter { it.number > 0 }
             .sortedBy { it.number }
-            .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
     }
     var selectedNumbers by remember(sortedEpisodes) {
         mutableStateOf(sortedEpisodes.take(12).map { it.number }.toSet())
     }
     var rangeStart by remember(sortedEpisodes) { mutableStateOf(sortedEpisodes.firstOrNull()?.number?.toString().orEmpty()) }
     var rangeEnd by remember(sortedEpisodes) { mutableStateOf(sortedEpisodes.getOrNull(11)?.number?.toString() ?: sortedEpisodes.lastOrNull()?.number?.toString().orEmpty()) }
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredEpisodes = remember(sortedEpisodes, searchQuery) {
+        if (searchQuery.isBlank()) {
+            sortedEpisodes
+        } else {
+            val query = searchQuery.trim().lowercase()
+            sortedEpisodes.filter {
+                it.number.toString().contains(query) ||
+                it.title?.lowercase()?.contains(query) == true
+            }
+        }
+    }
     val selectedEpisodes = remember(sortedEpisodes, selectedNumbers) {
         sortedEpisodes.filter { it.number in selectedNumbers }
     }
@@ -1792,11 +1799,13 @@ private fun SeasonBatchPickerDialog(
                     lineHeight = 18.sp,
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     val quickActions = listOf(
                         "12 eps" to 12,
                         "24 eps" to 24,
-                        "All" to to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES,
                     )
                     quickActions.forEach { (label, count) ->
                         AssistChip(
@@ -1805,6 +1814,20 @@ private fun SeasonBatchPickerDialog(
                             enabled = sortedEpisodes.isNotEmpty(),
                         )
                     }
+                    AssistChip(
+                        onClick = {
+                            selectedNumbers = sortedEpisodes.take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES).map { it.number }.toSet()
+                        },
+                        label = { Text("Select All") },
+                        enabled = sortedEpisodes.isNotEmpty(),
+                    )
+                    AssistChip(
+                        onClick = {
+                            selectedNumbers = emptySet()
+                        },
+                        label = { Text("Clear All") },
+                        enabled = selectedNumbers.isNotEmpty(),
+                    )
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1858,6 +1881,22 @@ private fun SeasonBatchPickerDialog(
                     }
                 }
 
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search episode number or title...", color = Color.White.copy(alpha = 0.4f), fontSize = 13.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color.White,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.24f),
+                        focusedLabelColor = Color.White,
+                        unfocusedLabelColor = Color.White.copy(alpha = 0.6f),
+                    ),
+                )
+
                 Text(
                     "Selected ${selectedEpisodes.size} episode${if (selectedEpisodes.size == 1) "" else "s"}",
                     color = Color.White,
@@ -1869,7 +1908,7 @@ private fun SeasonBatchPickerDialog(
                     modifier = Modifier.heightIn(max = 320.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    items(sortedEpisodes, key = { it.number }) { episode ->
+                    items(filteredEpisodes, key = { it.number }) { episode ->
                         val checked = episode.number in selectedNumbers
                         Row(
                             modifier = Modifier
@@ -2081,21 +2120,17 @@ private fun EpisodeListSection(
 
         Spacer(Modifier.height(12.dp))
 
-        val currentRangeEpisodes = state.episodes
-            .filter { it.number >= currentPageStart && it.number < currentPageStart + episodesPerPage }
-            .sortedBy { it.number }
-            .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
         ) {
             Button(
                 onClick = {
-                    if (isPremiumUser && currentRangeEpisodes.isNotEmpty()) {
-                        onDownloadSeason(currentRangeEpisodes)
+                    if (isPremiumUser && state.episodes.isNotEmpty()) {
+                        onDownloadSeason(state.episodes)
                     }
                 },
-                enabled = currentRangeEpisodes.isNotEmpty(),
+                enabled = state.episodes.isNotEmpty(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isPremiumUser) Color.White else Color.White.copy(alpha = 0.14f),
                     disabledContainerColor = Color.White.copy(alpha = 0.08f),
@@ -2111,7 +2146,7 @@ private fun EpisodeListSection(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = if (isPremiumUser) "Download Batch (${currentRangeEpisodes.size})" else "Premium Batch",
+                    text = if (isPremiumUser) "Download Batch (${state.episodes.size})" else "Premium Batch",
                     color = if (isPremiumUser) Color.Black else Color.White.copy(alpha = 0.72f),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,

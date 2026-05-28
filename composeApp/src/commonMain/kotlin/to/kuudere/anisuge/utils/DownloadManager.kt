@@ -78,7 +78,7 @@ object DownloadManager {
     private const val MP4_BUFFER_SIZE = 8 * 1024
     private const val ANDROID_HLS_PARALLELISM = 4
     private const val DESKTOP_HLS_PARALLELISM = 6
-    const val MAX_SEASON_BATCH_EPISODES = 50
+    const val MAX_SEASON_BATCH_EPISODES = 1000
 
     private fun downloadLog(taskId: String, message: String) {
         println("[Download][$taskId] $message")
