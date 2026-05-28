@@ -82,6 +82,9 @@ fun PlayerControls(
     isSyncingMAL: Boolean = false,
     isSyncingAniList: Boolean = false,
     pipManager: PipManager? = null,
+    showLibraryActions: Boolean = true,
+    showFullscreenButton: Boolean = to.kuudere.anisuge.platform.isDesktopPlatform,
+    compactControls: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val hideDelayMillis = 1500L
@@ -679,15 +682,17 @@ fun PlayerControls(
                             ) {
                                 // Left actions: Lock, Volume, Watchlist
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = {
-                                        playerState.isLocked = true; recordInteraction(forceShow = false)
-                                    }, modifier = Modifier.size(36.dp)) {
-                                        Icon(
-                                            Icons.Default.LockOpen,
-                                            null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                    if (!compactControls) {
+                                        IconButton(onClick = {
+                                            playerState.isLocked = true; recordInteraction(forceShow = false)
+                                        }, modifier = Modifier.size(36.dp)) {
+                                            Icon(
+                                                Icons.Default.LockOpen,
+                                                null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
                                     }
                                     IconButton(onClick = {
                                         playerState.isMuted = !playerState.isMuted; recordInteraction(forceShow = false)
@@ -699,17 +704,35 @@ fun PlayerControls(
                                             modifier = Modifier.size(24.dp)
                                         )
                                     }
-                                    IconButton(onClick = {
-                                        if (!isOffline) onWatchlistClick(); recordInteraction(
-                                        forceShow = false
-                                    )
-                                    }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
-                                        Icon(
-                                            if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                            null,
-                                            tint = if (isOffline) Color.Gray else Color.White,
-                                            modifier = Modifier.size(22.dp)
+                                    if (pipManager?.isAvailable == true && !pipManager.isActive) {
+                                        IconButton(
+                                            onClick = {
+                                                pipManager.requestPip(16, 9)
+                                                recordInteraction(forceShow = false)
+                                            },
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Icon(
+                                                getPictureInPictureIcon(),
+                                                contentDescription = "Picture in picture",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
+                                    if (!compactControls) {
+                                        IconButton(onClick = {
+                                            if (!isOffline) onWatchlistClick(); recordInteraction(
+                                            forceShow = false
                                         )
+                                        }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
+                                            Icon(
+                                                if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                                null,
+                                                tint = if (isOffline) Color.Gray else Color.White,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
                                     }
                                 }
 
@@ -730,17 +753,19 @@ fun PlayerControls(
                                             modifier = Modifier.size(24.dp)
                                         )
                                     }
-                                    IconButton(
-                                        onClick = { onPrevEpisode(); recordInteraction(forceShow = false) },
-                                        enabled = playerState.hasPrevEpisode,
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.SkipPrevious,
-                                            null,
-                                            tint = if (playerState.hasPrevEpisode) Color.White else Color.Gray,
-                                            modifier = Modifier.size(26.dp)
-                                        )
+                                    if (!compactControls) {
+                                        IconButton(
+                                            onClick = { onPrevEpisode(); recordInteraction(forceShow = false) },
+                                            enabled = playerState.hasPrevEpisode,
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.SkipPrevious,
+                                                null,
+                                                tint = if (playerState.hasPrevEpisode) Color.White else Color.Gray,
+                                                modifier = Modifier.size(26.dp)
+                                            )
+                                        }
                                     }
 
                                     // BIG PLAY BUTTON
@@ -760,17 +785,19 @@ fun PlayerControls(
                                         )
                                     }
 
-                                    IconButton(
-                                        onClick = { onNextEpisode(); recordInteraction(forceShow = false) },
-                                        enabled = playerState.hasNextEpisode,
-                                        modifier = Modifier.size(40.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.SkipNext,
-                                            null,
-                                            tint = if (playerState.hasNextEpisode) Color.White else Color.Gray,
-                                            modifier = Modifier.size(26.dp)
-                                        )
+                                    if (!compactControls) {
+                                        IconButton(
+                                            onClick = { onNextEpisode(); recordInteraction(forceShow = false) },
+                                            enabled = playerState.hasNextEpisode,
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.SkipNext,
+                                                null,
+                                                tint = if (playerState.hasNextEpisode) Color.White else Color.Gray,
+                                                modifier = Modifier.size(26.dp)
+                                            )
+                                        }
                                     }
                                     IconButton(onClick = {
                                         val nPos = (playerState.position + 10).coerceAtMost(duration)
@@ -789,43 +816,45 @@ fun PlayerControls(
 
                                 Spacer(Modifier.weight(1f))
 
-                                // Right actions: Info, Episodes, Comments, [Fullscreen on Desktop]
+                                // Right actions: Info, Episodes, Comments, Fullscreen/PiP.
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = { if (!isOffline) onInfoClick(); recordInteraction(forceShow = false) },
-                                        modifier = Modifier.size(38.dp),
-                                        enabled = !isOffline
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Info,
-                                            null,
-                                            tint = if (isOffline) Color.Gray else Color.White,
-                                            modifier = Modifier.size(22.dp)
+                                    if (showLibraryActions) {
+                                        IconButton(
+                                            onClick = { if (!isOffline) onInfoClick(); recordInteraction(forceShow = false) },
+                                            modifier = Modifier.size(38.dp),
+                                            enabled = !isOffline
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Info,
+                                                null,
+                                                tint = if (isOffline) Color.Gray else Color.White,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                        IconButton(onClick = {
+                                            if (!isOffline) onEpisodesClick(); recordInteraction(
+                                            forceShow = false
                                         )
-                                    }
-                                    IconButton(onClick = {
-                                        if (!isOffline) onEpisodesClick(); recordInteraction(
-                                        forceShow = false
-                                    )
-                                    }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.FormatListBulleted,
-                                            null,
-                                            tint = if (isOffline) Color.Gray else Color.White,
-                                            modifier = Modifier.size(22.dp)
+                                        }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.FormatListBulleted,
+                                                null,
+                                                tint = if (isOffline) Color.Gray else Color.White,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                        IconButton(onClick = {
+                                            if (!isOffline) onCommentsClick(); recordInteraction(
+                                            forceShow = false
                                         )
-                                    }
-                                    IconButton(onClick = {
-                                        if (!isOffline) onCommentsClick(); recordInteraction(
-                                        forceShow = false
-                                    )
-                                    }, modifier = Modifier.size(40.dp), enabled = !isOffline) {
-                                        Icon(
-                                            Icons.Default.ChatBubbleOutline,
-                                            null,
-                                            tint = if (isOffline) Color.Gray else Color.White,
-                                            modifier = Modifier.size(22.dp)
-                                        )
+                                        }, modifier = Modifier.size(40.dp), enabled = !isOffline) {
+                                            Icon(
+                                                Icons.Default.ChatBubbleOutline,
+                                                null,
+                                                tint = if (isOffline) Color.Gray else Color.White,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
                                     }
                                     // MAL Sync button
                                     if (onSyncMALClick != null) {
@@ -875,7 +904,7 @@ fun PlayerControls(
                                             }
                                         }
                                     }
-                                    if (to.kuudere.anisuge.platform.isDesktopPlatform) {
+                                    if (showFullscreenButton) {
                                         IconButton(
                                             onClick = { onFullscreenToggle(); recordInteraction(forceShow = false) },
                                             modifier = Modifier.size(40.dp)
@@ -888,23 +917,6 @@ fun PlayerControls(
                                             )
                                         }
                                     }
-                                    if (pipManager?.isAvailable == true && !pipManager.isActive) {
-                                        IconButton(
-                                            onClick = {
-                                                pipManager.requestPip(16, 9)
-                                                recordInteraction(forceShow = false)
-                                            },
-                                            modifier = Modifier.size(40.dp)
-                                        ) {
-                                            Icon(
-                                                getPictureInPictureIcon(),
-                                                contentDescription = "Picture in picture",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-                                    }
-
                                 }
                             }
                         }

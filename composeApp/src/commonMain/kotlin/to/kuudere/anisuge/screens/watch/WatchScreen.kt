@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,20 +95,6 @@ fun WatchScreen(
     onExit: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var isLandscape by remember { mutableStateOf(true) }
-
-    LockScreenOrientation(isLandscape)
-    to.kuudere.anisuge.platform.SyncFullscreen(uiState.isFullscreen)
-
-    val handleBack = {
-        viewModel.flushLatestWatchProgress()
-        isLandscape = false
-        onBack()
-    }
-
-    to.kuudere.anisuge.platform.PlatformBackHandler {
-        handleBack()
-    }
 
     LaunchedEffect(animeId, episodeNumber, offlinePath, server, lang, offlineTitle, resumeAtSeconds) {
         viewModel.initialize(
@@ -132,6 +119,23 @@ fun WatchScreen(
         if (offlinePath != null) "Loading offline video..." else "Fetching episode $episodeNumber..."
     } else {
         uiState.loadingMessage
+    }
+    val useAndroidWatchPage = isAndroidPlatform &&
+        !isAndroidTvPlatform &&
+        !uiState.isFullscreen &&
+        uiState.offlinePath == null &&
+        !isStateStale
+
+    LockScreenOrientation(!useAndroidWatchPage)
+    to.kuudere.anisuge.platform.SyncFullscreen(uiState.isFullscreen)
+
+    val handleBack = {
+        viewModel.flushLatestWatchProgress()
+        onBack()
+    }
+
+    to.kuudere.anisuge.platform.PlatformBackHandler {
+        handleBack()
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -163,7 +167,7 @@ fun WatchScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (isLoading) {
+            if (isLoading && !useAndroidWatchPage) {
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
@@ -259,6 +263,17 @@ fun WatchScreen(
                         modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
                     )
                 }
+            } else if (useAndroidWatchPage) {
+                AndroidWatchPageLayout(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    animeId = animeId,
+                    offlinePath = offlinePath,
+                    isPremiumUser = isPremiumUser,
+                    onFullscreenToggle = { viewModel.setFullscreen(!uiState.isFullscreen) },
+                    onBack = handleBack,
+                    onExit = onExit
+                )
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
                     val isPanelActive = uiState.activeSidePanel != null
@@ -1037,6 +1052,638 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
 }
 
 @Composable
+private fun AndroidWatchPageLayout(
+    uiState: WatchUiState,
+    viewModel: WatchViewModel,
+    animeId: String,
+    offlinePath: String?,
+    isPremiumUser: Boolean,
+    onFullscreenToggle: () -> Unit,
+    onBack: () -> Unit,
+    onExit: () -> Unit,
+) {
+    var selectedTab by remember { mutableStateOf(WatchPageTab.Episodes) }
+    val playerKey = "$animeId-${uiState.currentEpisodeNumber}-${offlinePath ?: "online"}"
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+    ) {
+        key(playerKey) {
+            WatchVideoPlayer(
+                uiState = uiState,
+                viewModel = viewModel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(Color.Black),
+                isPremiumUser = isPremiumUser,
+                onFullscreenToggle = onFullscreenToggle,
+                onBack = onBack,
+                onExit = onExit,
+                onInfoClick = {},
+                onEpisodesClick = { selectedTab = WatchPageTab.Episodes },
+                onCommentsClick = { selectedTab = WatchPageTab.Comments },
+                showPlayerLibraryActions = false,
+                showFullscreenButton = true,
+                compactControls = true,
+            )
+        }
+
+        WatchPageTabs(
+            selectedTab = selectedTab,
+            onSelectTab = { selectedTab = it },
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(Color.Black)
+        ) {
+            when (selectedTab) {
+                WatchPageTab.Episodes -> EpisodeListContent(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                WatchPageTab.Comments -> WatchCommentsContent(
+                    animeId = animeId,
+                    uiState = uiState,
+                    onClose = { selectedTab = WatchPageTab.Episodes },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchPageTabs(
+    selectedTab: WatchPageTab,
+    onSelectTab: (WatchPageTab) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.Black),
+    ) {
+        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+        TabRow(
+            selectedTabIndex = selectedTab.ordinal,
+            containerColor = Color.Black,
+            contentColor = Color.White,
+            indicator = { positions ->
+                TabRowDefaults.SecondaryIndicator(
+                    modifier = Modifier.tabIndicatorOffset(positions[selectedTab.ordinal]),
+                    color = Color.White,
+                )
+            },
+            divider = {
+                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+            },
+            modifier = Modifier.height(88.dp),
+        ) {
+            WatchPageTab.entries.forEach { tab ->
+                Tab(
+                    selected = selectedTab == tab,
+                    onClick = { onSelectTab(tab) },
+                    text = {
+                        Text(
+                            text = tab.label,
+                            fontSize = 14.sp,
+                            fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.SemiBold,
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.label,
+                            modifier = Modifier.size(21.dp),
+                        )
+                    },
+                    selectedContentColor = Color.White,
+                    unselectedContentColor = Color.White.copy(alpha = 0.55f),
+                )
+            }
+        }
+    }
+}
+
+private enum class WatchPageTab(
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    Episodes("Episodes", Icons.AutoMirrored.Filled.List),
+    Comments("Comments", Icons.AutoMirrored.Filled.Comment),
+}
+
+@Composable
+private fun WatchCommentsContent(
+    animeId: String,
+    uiState: WatchUiState,
+    onClose: () -> Unit,
+) {
+    var fastUserId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        fastUserId = AppComponent.sessionStore.get()?.let { "me" }
+    }
+
+    val userProfile by produceState<to.kuudere.anisuge.data.models.UserProfile?>(null) {
+        val result = AppComponent.authService.checkSession()
+        value = if (result is SessionCheckResult.Valid) result.user else null
+    }
+
+    CommentsSection(
+        animeId = animeId,
+        episodeNumber = uiState.currentEpisodeNumber,
+        userId = userProfile?.effectiveId ?: fastUserId,
+        username = userProfile?.username,
+        userPfp = userProfile?.avatar,
+        onClose = onClose,
+    )
+}
+
+@Composable
+private fun EpisodeListContent(
+    uiState: WatchUiState,
+    viewModel: WatchViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val episodes = uiState.episodeData?.episodes ?: emptyList()
+    val totalEpisodes = episodes.size
+    val watchedEpisode = uiState.episodeData?.progress?.episodeId
+        ?.let { Regex("\\d+").find(it)?.value?.toIntOrNull() }
+    val currentProgressSeconds = uiState.episodeData?.progress?.currentTime
+    val episodesPerPage = 100
+    val pageGroups = remember(totalEpisodes) {
+        if (totalEpisodes > 0) (1..totalEpisodes step episodesPerPage).toList() else listOf(1)
+    }
+    val currentEpisodePageStart = remember(totalEpisodes, uiState.currentEpisodeNumber) {
+        if (totalEpisodes > 0) (((uiState.currentEpisodeNumber - 1) / episodesPerPage) * episodesPerPage) + 1 else 1
+    }
+    var searchQuery by remember(episodes) { mutableStateOf("") }
+    var isAscending by remember(episodes) { mutableStateOf(true) }
+    var currentPageStart by remember(totalEpisodes, uiState.currentEpisodeNumber) {
+        mutableStateOf(currentEpisodePageStart)
+    }
+    var isPageDropdownExpanded by remember { mutableStateOf(false) }
+    var hasScrolled by remember { mutableStateOf(false) }
+    var pageDropdownAnchorSize by remember { mutableStateOf(IntSize.Zero) }
+    var pageDropdownAnchorOffset by remember { mutableStateOf(IntOffset.Zero) }
+    var outerBoxOffset by remember { mutableStateOf(IntOffset.Zero) }
+    val listState = rememberLazyListState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val headerItemCount = 1
+
+    val visibleEpisodes = remember(episodes, searchQuery, isAscending, currentPageStart) {
+        val baseEpisodes = if (searchQuery.isBlank()) {
+            episodes.filter { episode ->
+                episode.number in currentPageStart until (currentPageStart + episodesPerPage)
+            }
+        } else {
+            episodes.filter { episode ->
+                val episodeTitle = episode.titles?.firstOrNull().orEmpty()
+                episode.number.toString().contains(searchQuery) ||
+                    episodeTitle.contains(searchQuery, ignoreCase = true)
+            }
+        }
+        if (isAscending) baseEpisodes.sortedBy { it.number } else baseEpisodes.sortedByDescending { it.number }
+    }
+
+    LaunchedEffect(searchQuery, currentEpisodePageStart) {
+        if (searchQuery.isBlank() && currentPageStart != currentEpisodePageStart) {
+            currentPageStart = currentEpisodePageStart
+        }
+    }
+
+    LaunchedEffect(searchQuery, isAscending, currentPageStart) {
+        if (visibleEpisodes.isNotEmpty() || totalEpisodes > 0) {
+            listState.scrollToItem(0)
+        }
+    }
+
+    LaunchedEffect(visibleEpisodes, uiState.currentEpisodeNumber) {
+        if (!hasScrolled) {
+            val currentEpIndex = visibleEpisodes.indexOfFirst { it.number == uiState.currentEpisodeNumber }
+            if (currentEpIndex >= 0) {
+                listState.animateScrollToItem(currentEpIndex + headerItemCount)
+            }
+            hasScrolled = true
+        }
+    }
+
+    Box(modifier.fillMaxSize().onGloballyPositioned { coordinates ->
+        val pos = coordinates.positionInRoot()
+        outerBoxOffset = IntOffset(pos.x.toInt(), pos.y.toInt())
+    }) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (totalEpisodes == 0) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillParentMaxSize()
+                            .padding(top = 48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("No episodes found", color = Color.Gray)
+                    }
+                }
+            } else {
+                item {
+                    EpisodeListHeader(
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = {
+                            searchQuery = it
+                            if (it.isNotBlank()) isPageDropdownExpanded = false
+                        },
+                        isAscending = isAscending,
+                        onSortClick = { isAscending = !isAscending },
+                        pageGroups = pageGroups,
+                        currentPageStart = currentPageStart,
+                        episodesPerPage = episodesPerPage,
+                        totalEpisodes = totalEpisodes,
+                        visibleCount = visibleEpisodes.size,
+                        isPageDropdownExpanded = isPageDropdownExpanded,
+                        onPageDropdownClick = { isPageDropdownExpanded = !isPageDropdownExpanded },
+                        onAnchorPositioned = { size, offset ->
+                            pageDropdownAnchorSize = size
+                            pageDropdownAnchorOffset = IntOffset(
+                                (offset.x - outerBoxOffset.x).toInt(),
+                                (offset.y - outerBoxOffset.y).toInt(),
+                            )
+                        },
+                    )
+                }
+
+                if (visibleEpisodes.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillParentMaxWidth()
+                                .padding(top = 48.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("No matching episodes", color = Color.Gray)
+                        }
+                    }
+                } else {
+                    items(visibleEpisodes, key = { it.number }) { episode ->
+                        EpisodeListRow(
+                            episode = episode,
+                            isSelected = episode.number == uiState.currentEpisodeNumber,
+                            watchedEpisode = watchedEpisode,
+                            currentProgressSeconds = currentProgressSeconds,
+                            episodeProgress = uiState.episodeProgress[episode.number],
+                            onClick = { viewModel.onEpisodeSelected(episode.number) },
+                        )
+                    }
+                }
+            }
+        }
+
+        if (searchQuery.isBlank() && isPageDropdownExpanded && pageGroups.size > 1) {
+            val pageDropdownVisibleItems = 4
+            val pageDropdownItemHeight = 56.dp
+
+            LazyColumn(
+                modifier = Modifier
+                    .zIndex(10f)
+                    .offset {
+                        IntOffset(
+                            x = pageDropdownAnchorOffset.x,
+                            y = pageDropdownAnchorOffset.y + pageDropdownAnchorSize.height + with(density) { 4.dp.roundToPx() },
+                        )
+                    }
+                    .width(with(density) { pageDropdownAnchorSize.width.toDp() })
+                    .heightIn(max = pageDropdownItemHeight * pageDropdownVisibleItems)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF1D1D1D)),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                items(pageGroups, key = { it }) { start ->
+                    val end = (start + episodesPerPage - 1).coerceAtMost(totalEpisodes)
+                    val isSelected = start == currentPageStart
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = pageDropdownItemHeight)
+                            .clickable {
+                                currentPageStart = start
+                                isPageDropdownExpanded = false
+                            }
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "Episodes $start - $end",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                        if (isSelected) {
+                            Icon(
+                                Icons.Default.Check,
+                                null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpisodeListHeader(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    isAscending: Boolean,
+    onSortClick: () -> Unit,
+    pageGroups: List<Int>,
+    currentPageStart: Int,
+    episodesPerPage: Int,
+    totalEpisodes: Int,
+    visibleCount: Int,
+    isPageDropdownExpanded: Boolean,
+    onPageDropdownClick: () -> Unit,
+    onAnchorPositioned: (IntSize, androidx.compose.ui.geometry.Offset) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    onAnchorPositioned(coordinates.size, coordinates.positionInRoot())
+                }
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                .background(Color.Black)
+                .clickable(enabled = searchQuery.isBlank() && pageGroups.size > 1) {
+                    onPageDropdownClick()
+                }
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    val end = (currentPageStart + episodesPerPage - 1).coerceAtMost(totalEpisodes)
+                    Text(
+                        text = if (searchQuery.isBlank()) "Episodes $currentPageStart - $end" else "Search results",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = if (searchQuery.isBlank()) "$totalEpisodes total episodes" else "$visibleCount matching episodes",
+                        color = Color.Gray,
+                        fontSize = 12.sp,
+                    )
+                }
+
+                if (searchQuery.isBlank() && pageGroups.size > 1) {
+                    Icon(
+                        imageVector = if (isPageDropdownExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Select range",
+                        tint = Color.White,
+                    )
+                }
+            }
+        }
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.weight(1f).height(50.dp),
+                placeholder = {
+                    Text(
+                        "Search episode...",
+                        color = Color.White.copy(alpha = 0.4f),
+                        fontSize = 14.sp,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        null,
+                        tint = Color.White.copy(alpha = 0.4f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchQueryChange("") }) {
+                            Icon(
+                                Icons.Default.Clear,
+                                null,
+                                tint = Color.White.copy(alpha = 0.5f),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.White.copy(alpha = 0.2f),
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                    focusedContainerColor = Color.Black,
+                    unfocusedContainerColor = Color.Black,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    cursorColor = Color.White,
+                ),
+                shape = RoundedCornerShape(10.dp),
+                singleLine = true,
+            )
+
+            IconButton(
+                onClick = onSortClick,
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                    .background(Color.Black),
+            ) {
+                Icon(
+                    imageVector = if (isAscending) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isAscending) "Ascending" else "Descending",
+                    tint = Color.White,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpisodeListRow(
+    episode: to.kuudere.anisuge.data.models.EpisodeItem,
+    isSelected: Boolean,
+    watchedEpisode: Int?,
+    currentProgressSeconds: Double?,
+    episodeProgress: WatchEpisodeProgress?,
+    onClick: () -> Unit,
+) {
+    val progressFraction = if (episodeProgress != null && episodeProgress.duration > 0) {
+        (episodeProgress.currentTime / episodeProgress.duration).coerceIn(0.0, 1.0)
+    } else 0.0
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isSelected) Color(0xFF171717) else Color.White.copy(alpha = 0.05f))
+            .then(
+                if (isSelected) {
+                    Modifier.border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(12.dp))
+                } else {
+                    Modifier.border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                }
+            )
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(width = 64.dp, height = 48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = episode.number.toString(),
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                val title = episode.title ?: episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
+                Text(
+                    title,
+                    color = Color.White,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "EP ${episode.number}",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    when {
+                        episodeProgress != null && progressFraction >= 0.9 -> WatchProgressBadge("WATCHED")
+                        episodeProgress != null && progressFraction > 0.0 -> WatchProgressBadge("IN PROGRESS")
+                        watchedEpisode != null && episode.number < watchedEpisode -> WatchProgressBadge("WATCHED")
+                        watchedEpisode != null && episode.number == watchedEpisode -> {
+                            WatchProgressBadge(if ((currentProgressSeconds ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED")
+                        }
+                    }
+                }
+
+                val meta = buildList {
+                    if (episode.filler == true) add("FILLER")
+                    if (episode.recap == true) add("RECAP")
+                    episode.ago?.takeIf { it.isNotBlank() }?.let { add(it) }
+                }
+                if (meta.isNotEmpty()) {
+                    Text(
+                        text = meta.joinToString(" • "),
+                        color = Color.White.copy(alpha = 0.35f),
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            if (isSelected) {
+                Box(
+                    Modifier
+                        .size(30.dp)
+                        .background(Color.White.copy(alpha = 0.15f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        null,
+                        tint = Color.White,
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+            }
+        }
+
+        if (progressFraction > 0.0) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(Color.White.copy(alpha = 0.1f)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progressFraction.toFloat())
+                        .height(3.dp)
+                        .background(Color(0xFFE50914)),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchProgressBadge(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color.White.copy(alpha = 0.10f))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = text,
+            color = Color.White.copy(alpha = 0.78f),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
 fun WatchVideoPlayer(
     uiState: WatchUiState,
     viewModel: WatchViewModel,
@@ -1044,7 +1691,13 @@ fun WatchVideoPlayer(
     isPremiumUser: Boolean = false,
     onFullscreenToggle: () -> Unit,
     onBack: () -> Unit,
-    onExit: () -> Unit = {}
+    onExit: () -> Unit = {},
+    onInfoClick: (() -> Unit)? = null,
+    onEpisodesClick: (() -> Unit)? = null,
+    onCommentsClick: (() -> Unit)? = null,
+    showPlayerLibraryActions: Boolean = true,
+    showFullscreenButton: Boolean = isDesktopPlatform || isAndroidPlatform,
+    compactControls: Boolean = false,
 ) {
     var showWatchlistSheet by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -1839,9 +2492,9 @@ fun WatchVideoPlayer(
                     },
                     onCaptionsClick = { viewModel.toggleSettingsOverlay(SettingsMenuPage.SUBTITLES) },
                     onSettingsClick = { viewModel.toggleSettingsOverlay() },
-                    onInfoClick = { if (!isOffline) viewModel.toggleSidePanel("info") },
-                    onEpisodesClick = { if (!isOffline) viewModel.toggleSidePanel("episodes") },
-                    onCommentsClick = { if (!isOffline) viewModel.toggleSidePanel("comments") },
+                    onInfoClick = { if (!isOffline) (onInfoClick ?: { viewModel.toggleSidePanel("info") }).invoke() },
+                    onEpisodesClick = { if (!isOffline) (onEpisodesClick ?: { viewModel.toggleSidePanel("episodes") }).invoke() },
+                    onCommentsClick = { if (!isOffline) (onCommentsClick ?: { viewModel.toggleSidePanel("comments") }).invoke() },
                     onWatchlistClick = { if (!isOffline) viewModel.toggleSettingsOverlay(SettingsMenuPage.WATCHLIST) },
                     onBoostSpeedChange = { viewModel.setBoostSpeedActive(it) },
                     isInWatchlist = uiState.episodeData?.folder != null,
@@ -1857,6 +2510,9 @@ fun WatchVideoPlayer(
                     isSyncingMAL = uiState.isSyncingMal,
                     isSyncingAniList = uiState.isSyncingAnilist,
                     pipManager = pipManager,
+                    showLibraryActions = showPlayerLibraryActions,
+                    showFullscreenButton = showFullscreenButton,
+                    compactControls = compactControls,
                     modifier = Modifier.fillMaxSize()
                 )
 

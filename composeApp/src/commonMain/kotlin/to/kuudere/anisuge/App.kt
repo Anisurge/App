@@ -134,6 +134,7 @@ fun App(
         val watchVm = remember {
             WatchViewModel(
                 AppComponent.infoService,
+                AppComponent.homeService,
                 AppComponent.watchlistService,
                 AppComponent.settingsStore,
                 AppComponent.settingsService,

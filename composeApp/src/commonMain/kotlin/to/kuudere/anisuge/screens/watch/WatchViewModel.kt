@@ -17,6 +17,7 @@ import to.kuudere.anisuge.data.models.StreamingData
 import to.kuudere.anisuge.data.models.WatchInfoResponse
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
+import to.kuudere.anisuge.data.services.HomeService
 import to.kuudere.anisuge.data.services.SyncManager
 import to.kuudere.anisuge.data.services.TrackingService
 import to.kuudere.anisuge.data.services.WatchlistService
@@ -34,6 +35,7 @@ data class WatchUiState(
     val loadingMessage: String? = null,
     val episodeData: WatchInfoResponse? = null,
     val thumbnails: Map<String, String> = emptyMap(),
+    val episodeProgress: Map<Int, WatchEpisodeProgress> = emptyMap(),
     val currentEpisodeNumber: Int = 1,
     val currentServer: String = "",
     val streamingData: StreamingData? = null,
@@ -79,8 +81,14 @@ data class WatchUiState(
     val berriesToast: String? = null,
 )
 
+data class WatchEpisodeProgress(
+    val currentTime: Double,
+    val duration: Double,
+)
+
 class WatchViewModel(
     private val infoService: InfoService,
+    private val homeService: HomeService,
     private val watchlistService: WatchlistService,
     private val settingsStore: to.kuudere.anisuge.data.services.SettingsStore,
     private val settingsService: to.kuudere.anisuge.data.services.SettingsService,
@@ -280,6 +288,7 @@ class WatchViewModel(
                 }
             }
             val dataWithEpisodes = data.copy(episodes = mergedEpisodes.takeIf { it.isNotEmpty() })
+            val progressMap = fetchEpisodeProgress(currentAnimeId, dataWithEpisodes)
 
             _uiState.update { state ->
                 val mergedResume = mergeResumeHint(data.currentTime, state.savedWatchPosition)
@@ -287,6 +296,7 @@ class WatchViewModel(
                     isLoading = false,
                     loadingMessage = "Switching servers...",
                     episodeData = dataWithEpisodes,
+                    episodeProgress = progressMap,
                     savedWatchPosition = mergedResume,
                 )
             }
@@ -296,6 +306,37 @@ class WatchViewModel(
             }
         } else {
             _uiState.update { it.copy(isLoading = false, isLoadingVideo = false, loadingMessage = null) }
+        }
+    }
+
+    private suspend fun fetchEpisodeProgress(
+        requestedAnimeId: String,
+        data: WatchInfoResponse,
+    ): Map<Int, WatchEpisodeProgress> {
+        val detailsAnimeId = data.anime?.animeId
+        val detailsAnilistId = data.anime?.anilistId
+        val detailsMalId = data.anime?.malId
+        return runCatching {
+            homeService.fetchAllContinueWatching()
+                .filter { item ->
+                    val itemAnimeId = item.animeId
+                    val itemAnimeIdStr = item.effectiveAnimeId
+                    val matchId = itemAnimeId == requestedAnimeId || itemAnimeIdStr == requestedAnimeId
+                    val matchDetailsId = detailsAnimeId != null &&
+                        (itemAnimeId == detailsAnimeId || itemAnimeIdStr == detailsAnimeId)
+                    val matchAnilist = detailsAnilistId != null &&
+                        item.anime.anilistId != null &&
+                        detailsAnilistId == item.anime.anilistId
+                    val matchMal = detailsMalId != null &&
+                        item.anime.malId != null &&
+                        detailsMalId == item.anime.malId
+
+                    matchId || matchDetailsId || matchAnilist || matchMal
+                }
+                .associate { it.displayEpisode to WatchEpisodeProgress(it.progress, it.duration) }
+        }.getOrElse {
+            println("[WatchVM] fetchEpisodeProgress error: ${it.message}")
+            emptyMap()
         }
     }
 
@@ -846,7 +887,7 @@ class WatchViewModel(
                 didMarkWatched = false,
                 offlinePath = null,
                 isLoading = true,
-                isLoadingVideo = false,
+                isLoadingVideo = true,
                 loadingMessage = "Fetching episode $episodeNumber...",
                 streamingData = null,
                 introSkip = null,
