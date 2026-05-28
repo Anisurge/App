@@ -26,6 +26,7 @@ import kotlinx.serialization.json.put
 
 class TrackingService(
     private val httpClient: HttpClient,
+    private val sessionStore: SessionStore,
     private val settingsStore: SettingsStore,
     private val integrationsSyncService: IntegrationsSyncService,
 ) {
@@ -42,7 +43,12 @@ class TrackingService(
     /** Returns the login URL to open in CustomTabs. */
     suspend fun getMalLoginUrl(): String? {
         return try {
-            val response = httpClient.get("https://www.anisurge.lol/api/mal/login")
+            val session = sessionStore.get()
+            val response = httpClient.get("https://www.anisurge.lol/api/mal/login") {
+                session?.anisurgeToken?.takeIf { it.isNotBlank() }?.let {
+                    header("Authorization", "Bearer $it")
+                }
+            }
             val body: Map<String, String> = response.body()
             body["url"]
         } catch (e: Exception) {
@@ -53,7 +59,12 @@ class TrackingService(
     /** Returns the login URL to open in CustomTabs. */
     suspend fun getAnilistLoginUrl(): String? {
         return try {
-            val response = httpClient.get("https://www.anisurge.lol/api/anilist/login")
+            val session = sessionStore.get()
+            val response = httpClient.get("https://www.anisurge.lol/api/anilist/login") {
+                session?.anisurgeToken?.takeIf { it.isNotBlank() }?.let {
+                    header("Authorization", "Bearer $it")
+                }
+            }
             val body: Map<String, String> = response.body()
             body["url"]
         } catch (e: Exception) {
@@ -77,8 +88,12 @@ class TrackingService(
     suspend fun refreshMalToken(): Boolean {
         val refreshToken = settingsStore.getMalRefreshToken() ?: return false
         return try {
+            val session = sessionStore.get()
             val response = httpClient.post(MAL_REFRESH_ENDPOINT) {
                 contentType(ContentType.Application.Json)
+                session?.anisurgeToken?.takeIf { it.isNotBlank() }?.let {
+                    header("Authorization", "Bearer $it")
+                }
                 setBody(mapOf("refresh_token" to refreshToken))
             }
             if (!response.status.isSuccess()) {
@@ -91,7 +106,9 @@ class TrackingService(
                 refreshToken = body.refresh_token ?: refreshToken,
                 expiresAt = to.kuudere.anisuge.utils.currentTimeMillis() + (body.expires_in * 1000)
             )
-            integrationsSyncService.pushFromLocal()
+            if (!integrationsSyncService.restoreFromServer()) {
+                integrationsSyncService.pushFromLocal()
+            }
             true
         } catch (e: Exception) {
             false

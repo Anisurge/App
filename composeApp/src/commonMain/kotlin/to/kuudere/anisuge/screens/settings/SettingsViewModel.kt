@@ -1454,6 +1454,7 @@ class SettingsViewModel(
 
     fun refreshMalConnection() {
         viewModelScope.launch {
+            integrationsSyncService.restoreFromServer()
             val token = settingsStore.getMalAccessToken()
             if (token != null) {
                 val username = try {
@@ -1491,6 +1492,7 @@ class SettingsViewModel(
 
     fun refreshAnilistConnection() {
         viewModelScope.launch {
+            integrationsSyncService.restoreFromServer()
             val token = settingsStore.getAnilistAccessToken()
             if (token != null) {
                 val username = try {

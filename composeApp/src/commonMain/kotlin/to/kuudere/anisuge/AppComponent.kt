@@ -132,7 +132,7 @@ object AppComponent {
     }
 
     val trackingService: to.kuudere.anisuge.data.services.TrackingService by lazy {
-        to.kuudere.anisuge.data.services.TrackingService(httpClient, settingsStore, integrationsSyncService)
+        to.kuudere.anisuge.data.services.TrackingService(httpClient, sessionStore, settingsStore, integrationsSyncService)
     }
 
     val malAnilistIdCache: to.kuudere.anisuge.data.services.MalAnilistIdCache by lazy {

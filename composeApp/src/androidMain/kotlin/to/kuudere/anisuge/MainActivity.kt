@@ -98,6 +98,9 @@ class MainActivity : ComponentActivity() {
                     } catch (_: Exception) {}
                     AppComponent.integrationsSyncService.pushFromLocal()
                 }
+                "mal-linked" -> {
+                    AppComponent.integrationsSyncService.restoreFromServer()
+                }
                 "anilist" -> {
                     val accessToken = data.getQueryParameter("access_token") ?: return@launch
                     val expiresIn = data.getQueryParameter("expires_in")?.toLongOrNull() ?: 0L
@@ -107,6 +110,9 @@ class MainActivity : ComponentActivity() {
                         if (username != null) AppComponent.settingsStore.saveAnilistUsername(username)
                     } catch (_: Exception) {}
                     AppComponent.integrationsSyncService.pushFromLocal()
+                }
+                "anilist-linked" -> {
+                    AppComponent.integrationsSyncService.restoreFromServer()
                 }
                 "lunar" -> {
                     val accessToken = data.getQueryParameter("access_token") ?: return@launch

@@ -47,7 +47,7 @@ private fun readChatImageFile(file: File, allowVideo: Boolean): ChatImagePick? {
         "mp4" -> if (allowVideo) "video/mp4" else return null
         else -> return null
     }
-    val maxBytes = if (mime == "video/mp4") PROFILE_VIDEO_MAX_BYTES else CHAT_IMAGE_MAX_BYTES
+    val maxBytes = if (mime == "video/mp4") PROFILE_VIDEO_RAW_MAX_BYTES else CHAT_IMAGE_MAX_BYTES
     if (size <= 0 || size > maxBytes) return null
     if (mime == "video/mp4") {
         val bytes = file.readBytes()

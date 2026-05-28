@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +50,28 @@ fun ProfileVideoCropSheet(
     val scope = rememberCoroutineScope()
     var isProcessing by remember(sourcePick) { mutableStateOf(false) }
     var error by remember(sourcePick) { mutableStateOf<String?>(null) }
+
+    fun prepareVideo() {
+        if (isProcessing) return
+        isProcessing = true
+        error = null
+        scope.launch {
+            normalizeProfileVideoForUpload(sourcePick).fold(
+                onSuccess = {
+                    isProcessing = false
+                    onConfirm(it)
+                },
+                onFailure = {
+                    isProcessing = false
+                    error = it.message ?: "Could not prepare video"
+                },
+            )
+        }
+    }
+
+    LaunchedEffect(sourcePick) {
+        prepareVideo()
+    }
 
     Dialog(
         onDismissRequest = { if (!isProcessing) onCancel() },
@@ -124,21 +147,7 @@ fun ProfileVideoCropSheet(
                     }
                     Button(
                         onClick = {
-                            if (isProcessing) return@Button
-                            isProcessing = true
-                            error = null
-                            scope.launch {
-                                normalizeProfileVideoForUpload(sourcePick).fold(
-                                    onSuccess = {
-                                        isProcessing = false
-                                        onConfirm(it)
-                                    },
-                                    onFailure = {
-                                        isProcessing = false
-                                        error = it.message ?: "Could not prepare video"
-                                    },
-                                )
-                            }
+                            prepareVideo()
                         },
                         enabled = !isProcessing,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.White),

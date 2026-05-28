@@ -53,7 +53,7 @@ private fun readChatImage(uri: Uri, allowVideo: Boolean): ChatImagePick? {
     }
 
     val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-    val maxBytes = if (mime == "video/mp4") PROFILE_VIDEO_MAX_BYTES else CHAT_IMAGE_MAX_BYTES
+    val maxBytes = if (mime == "video/mp4") PROFILE_VIDEO_RAW_MAX_BYTES else CHAT_IMAGE_MAX_BYTES
     if (bytes.isEmpty() || bytes.size.toLong() > maxBytes) {
         return null
     }
