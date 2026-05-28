@@ -167,7 +167,7 @@ private const val ANISURGE_DISCORD_URL = "https://discord.gg/yR4T2dbeCx"
 private const val ANISURGE_TELEGRAM_URL = "https://t.me/anisurge"
 private val PREMIUM_BENEFITS = listOf(
     "No chat cooldown",
-    "12-episode season downloads",
+    "50-episode season downloads",
     "Faster parallel downloads",
     "Auto server fallback",
     "300 Berries per purchase",
@@ -4006,6 +4006,9 @@ private fun ProfileSummaryCard(
                         color = TEXT,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f, fill = false),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     if (user.isPremium) {
                         Spacer(modifier = Modifier.width(6.dp))

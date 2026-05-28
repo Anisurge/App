@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import to.kuudere.anisuge.data.models.ChatLiveEvent
 import to.kuudere.anisuge.data.models.ChatAnimeCard
 import to.kuudere.anisuge.data.models.ChatMemberProfile
@@ -52,6 +53,7 @@ data class LiveChatUiState(
     val animePickerResults: List<AnimeItem> = emptyList(),
     val animePickerLoading: Boolean = false,
     val animePickerError: String? = null,
+    val cooldownSecondsLeft: Int = 0,
 )
 
 class LiveChatViewModel(
@@ -74,6 +76,7 @@ class LiveChatViewModel(
     }
 
     private fun applyCurrentUserProfile(profile: to.kuudere.anisuge.data.models.UserProfile?) {
+        isCurrentUserPremium = profile?.isPremium == true
         prefetchChatFrameEntries(
             ChatFramePrefetch.entriesFromProfile(
                 frameUrl = profile?.equippedFrameUrl,
@@ -119,8 +122,15 @@ class LiveChatViewModel(
     private var reconnectJob: Job? = null
     private var animeSearchJob: Job? = null
     private var memberProfileJob: Job? = null
+    private var cooldownJob: Job? = null
     private var screenActive = false
     private var hasInitialized = false
+    private var lastSentAtMs: Long = 0L
+    private var isCurrentUserPremium: Boolean = false
+
+    companion object {
+        private const val COOLDOWN_MS = 5_000L
+    }
 
     /** Called when the chat screen enters composition (including return from back stack). */
     fun onScreenVisible() {
@@ -275,9 +285,25 @@ class LiveChatViewModel(
             return
         }
 
+        // Cooldown check for non-premium users (5 seconds between messages)
+        if (!isCurrentUserPremium) {
+            val now = Clock.System.now().toEpochMilliseconds()
+            val elapsed = now - lastSentAtMs
+            if (elapsed < COOLDOWN_MS) {
+                val remainingSec = ((COOLDOWN_MS - elapsed) / 1000).toInt() + 1
+                _uiState.update { it.copy(error = "Wait ${remainingSec}s before sending again", cooldownSecondsLeft = remainingSec) }
+                startCooldownTimer(COOLDOWN_MS - elapsed)
+                return
+            }
+        }
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isSending = true, error = null) }
+            _uiState.update { it.copy(isSending = true, error = null, cooldownSecondsLeft = 0) }
             postChatMessage(text)
+            lastSentAtMs = Clock.System.now().toEpochMilliseconds()
+            if (!isCurrentUserPremium) {
+                startCooldownTimer(COOLDOWN_MS)
+            }
         }
     }
 
@@ -325,6 +351,25 @@ class LiveChatViewModel(
                 episodes = anime.epCount,
             ),
         )
+
+        // Cooldown check for non-premium users
+        if (!isCurrentUserPremium) {
+            val now = Clock.System.now().toEpochMilliseconds()
+            val elapsed = now - lastSentAtMs
+            if (elapsed < COOLDOWN_MS) {
+                val remainingSec = ((COOLDOWN_MS - elapsed) / 1000).toInt() + 1
+                _uiState.update {
+                    it.copy(
+                        animePickerOpen = false,
+                        error = "Wait ${remainingSec}s before sending again",
+                        cooldownSecondsLeft = remainingSec,
+                    )
+                }
+                startCooldownTimer(COOLDOWN_MS - elapsed)
+                return
+            }
+        }
+
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
@@ -332,9 +377,27 @@ class LiveChatViewModel(
                     animePickerLoading = false,
                     isSending = true,
                     error = null,
+                    cooldownSecondsLeft = 0,
                 )
             }
             postChatMessage("Shared an anime: $title", metadata)
+            lastSentAtMs = Clock.System.now().toEpochMilliseconds()
+            if (!isCurrentUserPremium) {
+                startCooldownTimer(COOLDOWN_MS)
+            }
+        }
+    }
+
+    private fun startCooldownTimer(remainingMs: Long) {
+        cooldownJob?.cancel()
+        cooldownJob = viewModelScope.launch {
+            var left = remainingMs
+            while (left > 0) {
+                _uiState.update { it.copy(cooldownSecondsLeft = ((left + 999) / 1000).toInt()) }
+                delay(1000)
+                left -= 1000
+            }
+            _uiState.update { it.copy(cooldownSecondsLeft = 0, error = null) }
         }
     }
 
@@ -453,6 +516,19 @@ class LiveChatViewModel(
         _uiState.update { it.copy(selectedMember = null) }
     }
 
+    private fun startCooldownTimer(durationMs: Long) {
+        cooldownJob?.cancel()
+        cooldownJob = viewModelScope.launch {
+            var remaining = (durationMs / 1000.0).coerceAtLeast(1.0).toInt()
+            while (remaining > 0) {
+                _uiState.update { it.copy(cooldownSecondsLeft = remaining) }
+                delay(1000)
+                remaining--
+            }
+            _uiState.update { it.copy(cooldownSecondsLeft = 0) }
+        }
+    }
+
     fun refresh() {
         reconnectJob?.cancel()
         wsJob?.cancel()
@@ -468,6 +544,7 @@ class LiveChatViewModel(
         loadOlderJob?.cancel()
         animeSearchJob?.cancel()
         memberProfileJob?.cancel()
+        cooldownJob?.cancel()
         super.onCleared()
     }
 
