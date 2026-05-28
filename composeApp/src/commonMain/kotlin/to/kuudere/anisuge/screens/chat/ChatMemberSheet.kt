@@ -139,6 +139,10 @@ fun ChatMemberSheet(
                     EmptyProfileText("Watch activity hidden")
                 }
 
+                member.isBot -> item {
+                    BotSupportSection()
+                }
+
                 !member.isBot -> {
                     item {
                         ProfileStatsRow(member)
@@ -493,6 +497,96 @@ private fun ProfileWatchlistTile(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BotSupportSection() {
+    val uriHandler = LocalUriHandler.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.035f))
+            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(14.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text(
+            text = "Anisurge Support & Community",
+            color = Color.White,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+        )
+
+        Text(
+            text = "Need help, want to suggest features, or support the project? Use the official links below to get in touch with our community and developer team.",
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Donate button
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFE91E63))
+                    .clickable { runCatching { uriHandler.openUri("https://anisurge.lol/donate") } }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Donate", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // Premium button
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFFFD54F))
+                    .clickable { runCatching { uriHandler.openUri("https://anisurge.lol") } }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Get Premium", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Discord button
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF5865F2))
+                    .clickable { runCatching { uriHandler.openUri("https://discord.gg/yR4T2dbeCx") } }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Discord", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+
+            // Telegram button
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF24A1DE))
+                    .clickable { runCatching { uriHandler.openUri("https://t.me/anisurge") } }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Telegram", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
