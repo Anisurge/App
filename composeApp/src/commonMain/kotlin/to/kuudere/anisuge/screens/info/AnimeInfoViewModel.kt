@@ -12,6 +12,12 @@ import to.kuudere.anisuge.data.models.RecommendationItem
 import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.services.WatchlistService
+import to.kuudere.anisuge.data.services.HomeService
+
+data class EpisodeProgress(
+    val currentTime: Double,
+    val duration: Double
+)
 
 data class AnimeInfoUiState(
     val isLoading: Boolean = true,
@@ -28,11 +34,13 @@ data class AnimeInfoUiState(
     val isUpdatingWatchlist: Boolean = false,
     val inWatchlist: Boolean = false,
     val folder: String? = null,
+    val episodeProgress: Map<Int, EpisodeProgress> = emptyMap(),
 )
 
 class AnimeInfoViewModel(
     private val infoService: InfoService,
-    private val watchlistService: WatchlistService
+    private val watchlistService: WatchlistService,
+    private val homeService: HomeService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AnimeInfoUiState())
@@ -41,7 +49,10 @@ class AnimeInfoViewModel(
     private var currentAnimeId: String? = null
 
     fun loadAnimeInfo(id: String) {
-        if (currentAnimeId == id && !_uiState.value.isLoading) return
+        if (currentAnimeId == id && !_uiState.value.isLoading) {
+            refreshWatchProgress()
+            return
+        }
         currentAnimeId = id
         
         viewModelScope.launch {
@@ -55,24 +66,45 @@ class AnimeInfoViewModel(
             }
             try {
                 val details = infoService.getAnimeDetails(id)
+                val continueList = runCatching { homeService.fetchAllContinueWatching() }.getOrNull() ?: emptyList()
+                val progressMap = continueList
+                    .filter { it.animeId == id || it.effectiveAnimeId == id }
+                    .associate { it.displayEpisode to EpisodeProgress(it.progress, it.duration) }
+
                 if (details != null) {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
                             details = details,
                             inWatchlist = details.inWatchlist || details.watchlist != null,
-                        folder = details.folder ?: details.watchlist?.folder,
-                        episodes = details.episodes ?: emptyList(),
-                    )
+                            folder = details.folder ?: details.watchlist?.folder,
+                            episodes = details.episodes ?: emptyList(),
+                            episodeProgress = progressMap,
+                        )
+                    }
+                    loadRecommendations(id)
+                } else {
+                    _uiState.update { it.copy(isLoading = false, error = "Failed to load anime details.") }
                 }
-                loadRecommendations(id)
-            } else {
-                _uiState.update { it.copy(isLoading = false, error = "Failed to load anime details.") }
-            }
             } catch (e: Exception) {
                 println("[AnimeInfoVM] loadAnimeInfo error: ${(e::class.simpleName ?: "Exception")}: ${e.message}")
                 e.printStackTrace()
                 _uiState.update { it.copy(isLoading = false, error = "Error: ${(e::class.simpleName ?: "Exception")}: ${e.message}") }
+            }
+        }
+    }
+
+    fun refreshWatchProgress() {
+        val animeId = currentAnimeId ?: return
+        viewModelScope.launch {
+            try {
+                val continueList = homeService.fetchAllContinueWatching()
+                val progressMap = continueList
+                    .filter { it.animeId == animeId || it.effectiveAnimeId == animeId }
+                    .associate { it.displayEpisode to EpisodeProgress(it.progress, it.duration) }
+                _uiState.update { it.copy(episodeProgress = progressMap) }
+            } catch (e: Exception) {
+                println("[AnimeInfoVM] refreshWatchProgress error: ${e.message}")
             }
         }
     }

@@ -130,7 +130,7 @@ fun App(
             )
         }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }
-        val infoVm = remember { AnimeInfoViewModel(AppComponent.infoService, AppComponent.watchlistService) }
+        val infoVm = remember { AnimeInfoViewModel(AppComponent.infoService, AppComponent.watchlistService, AppComponent.homeService) }
         val watchVm = remember {
             WatchViewModel(
                 AppComponent.infoService,
@@ -574,6 +574,7 @@ fun App(
                             isPremiumUser = currentUserProfile?.isPremium == true,
                             onBack = {
                                 homeVm.refreshContinueWatching()
+                                infoVm.refreshWatchProgress()
                                 navController.popBackStack()
                             },
                             onExit = onAppExit

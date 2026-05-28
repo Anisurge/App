@@ -1506,6 +1506,7 @@ private fun DesktopLayout(
                                 thumbnail = anime.image ?: anime.poster ?: anime.cover,
                                 watchedEpisode = anime.watchProgress?.episode,
                                 currentProgressSeconds = anime.watchProgress?.currentTime,
+                                episodeProgress = state.episodeProgress[episode.number],
                                 modifier = Modifier.animateItem(),
                                 onClick = { onWatchEpisode(episode.number) },
                                 onDownloadClick = { onDownloadEpisode(episode) }
@@ -1552,6 +1553,7 @@ private fun DesktopEpisodeCard(
     thumbnail: String?,
     watchedEpisode: Int? = null,
     currentProgressSeconds: Double? = null,
+    episodeProgress: EpisodeProgress? = null,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onDownloadClick: () -> Unit = {},
@@ -1633,11 +1635,23 @@ private fun DesktopEpisodeCard(
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("EPISODE ${episode.number}", color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    
+                    val hasDetailedProgress = episodeProgress != null
+                    val progressPercent = if (hasDetailedProgress && episodeProgress!!.duration > 0) {
+                        (episodeProgress.currentTime / episodeProgress.duration).coerceIn(0.0, 1.0)
+                    } else 0.0
+
                     when {
-                        watchedEpisode != null && episode.number < watchedEpisode -> {
+                        hasDetailedProgress && progressPercent >= 0.9 -> {
                             Text("WATCHED", color = Color(0xFF66BB6A), fontSize = 8.sp, fontWeight = FontWeight.Bold)
                         }
-                        watchedEpisode != null && episode.number == watchedEpisode -> {
+                        hasDetailedProgress && progressPercent > 0.0 -> {
+                            Text("IN PROGRESS", color = Color(0xFFFFD54F), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        }
+                        !hasDetailedProgress && watchedEpisode != null && episode.number < watchedEpisode -> {
+                            Text("WATCHED", color = Color(0xFF66BB6A), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        }
+                        !hasDetailedProgress && watchedEpisode != null && episode.number == watchedEpisode -> {
                             Text(
                                 if ((currentProgressSeconds ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED",
                                 color = Color(0xFFFFD54F),
@@ -1646,6 +1660,7 @@ private fun DesktopEpisodeCard(
                             )
                         }
                     }
+
                     if (episode.filler == true) {
                         Text("FILLER", color = Color(0xFFFF9800), fontSize = 8.sp, fontWeight = FontWeight.Bold)
                     }
@@ -1685,6 +1700,20 @@ private fun DesktopEpisodeCard(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Text(episode.ago ?: "", color = Color.Gray, fontSize = 10.sp)
             }
+        }
+
+        // Red progress bar at the very bottom
+        if (episodeProgress != null && episodeProgress.duration > 0 && episodeProgress.currentTime > 0) {
+            val progressPercentValue = (episodeProgress.currentTime / episodeProgress.duration).toFloat().coerceIn(0f, 1f)
+            LinearProgressIndicator(
+                progress = { progressPercentValue },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(3.dp),
+                color = Color.Red,
+                trackColor = Color.Transparent
+            )
         }
     }
 }
