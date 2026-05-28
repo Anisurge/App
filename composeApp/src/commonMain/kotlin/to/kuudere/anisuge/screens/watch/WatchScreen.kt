@@ -1072,47 +1072,49 @@ private fun AndroidWatchPageLayout(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .then(
-                if (uiState.isFullscreen) {
-                    Modifier
-                } else {
-                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
-                }
-            )
     ) {
-        key(playerKey) {
-            WatchVideoPlayer(
-                uiState = uiState,
-                viewModel = viewModel,
-                modifier = if (uiState.isFullscreen) {
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black)
-                } else {
-                    Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .background(Color.Black)
-                },
-                isPremiumUser = isPremiumUser,
-                onFullscreenToggle = onFullscreenToggle,
-                onBack = onBack,
-                onExit = onExit,
-                onInfoClick = {},
-                onEpisodesClick = { selectedTab = WatchPageTab.Episodes },
-                onCommentsClick = { selectedTab = WatchPageTab.Comments },
-                showPlayerLibraryActions = false,
-                showFullscreenButton = true,
-                compactControls = true,
-            )
+        // Wrap the player call in a Box so the player surface and the SettingsOverlay sibling
+        // (both emitted by WatchVideoPlayer) share an overlay parent. Without this wrapper, the
+        // overlay competes with the player for vertical space inside the Column and stays
+        // invisible in fullscreen.
+        Box(
+            modifier = if (uiState.isFullscreen) {
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(Color.Black)
+            }
+        ) {
+            key(playerKey) {
+                WatchVideoPlayer(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize(),
+                    isPremiumUser = isPremiumUser,
+                    onFullscreenToggle = onFullscreenToggle,
+                    onBack = onBack,
+                    onExit = onExit,
+                    onInfoClick = {},
+                    onEpisodesClick = {
+                        selectedTab = WatchPageTab.Episodes
+                        if (uiState.isFullscreen) viewModel.setFullscreen(false)
+                    },
+                    onCommentsClick = {
+                        selectedTab = WatchPageTab.Comments
+                        if (uiState.isFullscreen) viewModel.setFullscreen(false)
+                    },
+                    showPlayerLibraryActions = uiState.isFullscreen,
+                    showFullscreenButton = true,
+                    compactControls = !uiState.isFullscreen,
+                )
+            }
         }
 
         if (!uiState.isFullscreen) {
-            WatchPageTabs(
-                selectedTab = selectedTab,
-                onSelectTab = { selectedTab = it },
-            )
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1133,6 +1135,11 @@ private fun AndroidWatchPageLayout(
                     )
                 }
             }
+
+            WatchPageTabs(
+                selectedTab = selectedTab,
+                onSelectTab = { selectedTab = it },
+            )
         }
     }
 }
@@ -2687,56 +2694,54 @@ fun WatchVideoPlayer(
             if (uiState.showSettingsOverlay) {
                 val isOffline = uiState.offlinePath != null
                 val servers = if (isOffline) emptyList() else viewModel.getAvailableServers()
-                SettingsOverlay(
-                    uiState = uiState,
-                    servers = servers,
-                    onDismiss = { viewModel.toggleSettingsOverlay() },
-                    onQualitySelected = { viewModel.setQuality(it) },
-                    onSubtitleSelected = { url ->
-                        val selectedSub = uiState.availableSubtitles.firstOrNull { it.url == url }
-                        val lang = selectedSub?.title ?: selectedSub?.resolvedLang
-                        viewModel.setSubtitle(url, lang)
-                    },
-                    onServerSelected = { serverLabel ->
-                        if (isOffline) return@SettingsOverlay
-                        val currentServer = uiState.currentServer.lowercase()
-                        val newServer = serverLabel.lowercase()
+                Box(Modifier.fillMaxSize().zIndex(50f)) {
+                    SettingsOverlay(
+                        uiState = uiState,
+                        servers = servers,
+                        onDismiss = { viewModel.toggleSettingsOverlay() },
+                        onQualitySelected = { viewModel.setQuality(it) },
+                        onSubtitleSelected = { url ->
+                            val selectedSub = uiState.availableSubtitles.firstOrNull { it.url == url }
+                            val lang = selectedSub?.title ?: selectedSub?.resolvedLang
+                            viewModel.setSubtitle(url, lang)
+                        },
+                        onServerSelected = { serverLabel ->
+                            if (isOffline) return@SettingsOverlay
+                            val currentAudioLabel =
+                                playerState.audioTracks.firstOrNull { it.first == playerState.selectedAudioTrack }?.second?.lowercase()
+                                    ?: ""
+                            val currentTrackLang = if (currentAudioLabel.contains("eng")) "dub" else "sub"
 
-                        val currentAudioLabel =
-                            playerState.audioTracks.firstOrNull { it.first == playerState.selectedAudioTrack }?.second?.lowercase()
-                                ?: ""
-                        val currentTrackLang = if (currentAudioLabel.contains("eng")) "dub" else "sub"
+                            val currentSubData =
+                                uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }
+                            val targetSubtitleLang = currentSubData?.title ?: currentSubData?.resolvedLang
+                            val targetSubtitleLangCode = currentSubData?.language ?: currentSubData?.lang
 
-                        var targetAudioLang: String? = currentTrackLang
-                        val currentSubData =
-                            uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }
-                        var targetSubtitleLang = currentSubData?.title ?: currentSubData?.resolvedLang
-                        var targetSubtitleLangCode = currentSubData?.language ?: currentSubData?.lang
-
-                        viewModel.changeServerWithState(
-                            newServer = serverLabel,
-                            position = playerState.position,
-                            targetAudioLang = targetAudioLang,
-                            targetSubtitleLang = targetSubtitleLang,
-                            targetSubtitleLangCode = targetSubtitleLangCode
-                        )
-                    },
-                    onSpeedSelected = { viewModel.setSpeed(it) },
-                    onCycleAudio = { playerState.cycleAudio = true },
-                    audioTracks = playerState.audioTracks,
-                    selectedAudioTrack = playerState.selectedAudioTrack,
-                    onAudioTrackSelected = { playerState.selectedAudioTrack = it },
-                    subtitleTracks = playerState.subtitleTracks,
-                    selectedSubtitleTrack = playerState.selectedSubtitleTrack,
-                    onSubtitleTrackSelected = { playerState.selectedSubtitleTrack = it },
-                    onSubtitleSizeSelected = { viewModel.setSubtitleSize(it) },
-                    onWatchlistStatusSelected = { folder -> viewModel.updateWatchlistStatus(folder) },
-                    onAutoPlayToggle = { viewModel.setAutoPlay(it) },
-                    onAutoNextToggle = { viewModel.setAutoNext(it) },
-                    onAutoSkipIntroToggle = { viewModel.setAutoSkipIntro(it) },
-                    onAutoSkipOutroToggle = { viewModel.setAutoSkipOutro(it) },
-                    onVideoScaleModeSelected = { viewModel.setVideoScaleMode(it) },
-                )
+                            viewModel.changeServerWithState(
+                                newServer = serverLabel,
+                                position = playerState.position,
+                                targetAudioLang = currentTrackLang,
+                                targetSubtitleLang = targetSubtitleLang,
+                                targetSubtitleLangCode = targetSubtitleLangCode
+                            )
+                        },
+                        onSpeedSelected = { viewModel.setSpeed(it) },
+                        onCycleAudio = { playerState.cycleAudio = true },
+                        audioTracks = playerState.audioTracks,
+                        selectedAudioTrack = playerState.selectedAudioTrack,
+                        onAudioTrackSelected = { playerState.selectedAudioTrack = it },
+                        subtitleTracks = playerState.subtitleTracks,
+                        selectedSubtitleTrack = playerState.selectedSubtitleTrack,
+                        onSubtitleTrackSelected = { playerState.selectedSubtitleTrack = it },
+                        onSubtitleSizeSelected = { viewModel.setSubtitleSize(it) },
+                        onWatchlistStatusSelected = { folder -> viewModel.updateWatchlistStatus(folder) },
+                        onAutoPlayToggle = { viewModel.setAutoPlay(it) },
+                        onAutoNextToggle = { viewModel.setAutoNext(it) },
+                        onAutoSkipIntroToggle = { viewModel.setAutoSkipIntro(it) },
+                        onAutoSkipOutroToggle = { viewModel.setAutoSkipOutro(it) },
+                        onVideoScaleModeSelected = { viewModel.setVideoScaleMode(it) },
+                    )
+                }
             }
         } else if (!uiState.isLoading && !uiState.isLoadingVideo) {
             Box(modifier = modifier.background(Color.Black)) {
