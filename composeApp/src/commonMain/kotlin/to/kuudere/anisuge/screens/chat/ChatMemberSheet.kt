@@ -56,7 +56,7 @@ fun ChatMemberSheet(
     onDismiss: () -> Unit,
     onAnimeClick: (String) -> Unit = {},
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var watchlistQuery by remember(member.userId) { mutableStateOf("") }
     val filteredWatchlist by remember(member.watchlist, watchlistQuery) {
         derivedStateOf {
@@ -77,7 +77,7 @@ fun ChatMemberSheet(
     }
 
     LaunchedEffect(member.userId) {
-        runCatching { sheetState.partialExpand() }
+        runCatching { sheetState.expand() }
     }
 
     ModalBottomSheet(

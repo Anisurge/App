@@ -516,19 +516,6 @@ class LiveChatViewModel(
         _uiState.update { it.copy(selectedMember = null) }
     }
 
-    private fun startCooldownTimer(durationMs: Long) {
-        cooldownJob?.cancel()
-        cooldownJob = viewModelScope.launch {
-            var remaining = (durationMs / 1000.0).coerceAtLeast(1.0).toInt()
-            while (remaining > 0) {
-                _uiState.update { it.copy(cooldownSecondsLeft = remaining) }
-                delay(1000)
-                remaining--
-            }
-            _uiState.update { it.copy(cooldownSecondsLeft = 0) }
-        }
-    }
-
     fun refresh() {
         reconnectJob?.cancel()
         wsJob?.cancel()
