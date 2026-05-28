@@ -110,7 +110,22 @@ actual fun VideoPlayerSurface(
 
                 override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
                     MPVLib.setPropertyString("android-surface-size", "${width}x${height}")
-                    MPVLib.command(arrayOf("video-redraw"))
+                    // While paused, mpv caches the last rendered frame at the previous surface
+                    // dimensions — a bare video-redraw shows it stretched/cropped after a size
+                    // change (e.g. fullscreen → inline). Force a fresh render by issuing a
+                    // no-op exact seek to the current position.
+                    coroutineScope.launch(Dispatchers.IO) {
+                        if (state.isPaused) {
+                            val pos = runCatching { MPVLib.getPropertyDouble("time-pos") }.getOrNull()
+                            if (pos != null && pos > 0.0) {
+                                MPVLib.command(arrayOf("seek", pos.toString(), "absolute+exact"))
+                            } else {
+                                MPVLib.command(arrayOf("video-redraw"))
+                            }
+                        } else {
+                            MPVLib.command(arrayOf("video-redraw"))
+                        }
+                    }
                 }
 
                 override fun surfaceDestroyed(holder: SurfaceHolder) {
