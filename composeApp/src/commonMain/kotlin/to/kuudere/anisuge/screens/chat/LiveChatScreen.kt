@@ -361,6 +361,14 @@ fun LiveChatScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Column(Modifier.weight(1f)) {
+                            if (state.cooldownSecondsLeft > 0) {
+                                Text(
+                                    "Wait ${state.cooldownSecondsLeft}s",
+                                    color = Color(0xFFFF6B6B).copy(alpha = 0.8f),
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
+                                )
+                            }
                             if (shouldShowSurgeSuggestion(state.draft)) {
                                 SurgeMentionSuggestion(onClick = viewModel::insertSurgeMention)
                                 Spacer(Modifier.height(6.dp))
@@ -386,13 +394,16 @@ fun LiveChatScreen(
                         }
                         IconButton(
                             onClick = { viewModel.sendMessage() },
-                            enabled = state.draft.isNotBlank() && !state.isSending,
+                            enabled = state.draft.isNotBlank() && !state.isSending && state.cooldownSecondsLeft == 0,
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (state.draft.isNotBlank()) Color(0xFFE50914)
-                                    else Color(0xFF333333),
+                                    when {
+                                        state.cooldownSecondsLeft > 0 -> Color(0xFF333333)
+                                        state.draft.isNotBlank() -> Color(0xFFE50914)
+                                        else -> Color(0xFF333333)
+                                    },
                                 ),
                         ) {
                             if (state.isSending) {
