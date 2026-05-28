@@ -674,6 +674,7 @@ private fun PremiumSidebarRow(
     uiState: SettingsUiState,
     onBuyPremium: () -> Unit,
 ) {
+    if (uiState.userProfile?.isPremium == true) return
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -805,15 +806,16 @@ private fun MobileSettingsList(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        MobileSettingsItem(
-            icon = Icons.Default.WorkspacePremium,
-            label = if (uiState.userProfile?.isPremium == true) "Extend Premium" else "Buy Premium",
-            tint = Color(0xFFFFD54F),
-            isLoading = uiState.isStartingPremiumCheckout,
-            onClick = onBuyPremium
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
+        if (uiState.userProfile?.isPremium != true) {
+            MobileSettingsItem(
+                icon = Icons.Default.WorkspacePremium,
+                label = "Buy Premium",
+                tint = Color(0xFFFFD54F),
+                isLoading = uiState.isStartingPremiumCheckout,
+                onClick = onBuyPremium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -4005,6 +4007,10 @@ private fun ProfileSummaryCard(
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                     )
+                    if (user.isPremium) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        ProBadge()
+                    }
                     if (user.isEmailVerified == true) {
                         Spacer(modifier = Modifier.width(6.dp))
                         VerifiedBadge(size = 13.dp)
@@ -4012,6 +4018,16 @@ private fun ProfileSummaryCard(
                 }
                 user.username?.let {
                     Text("@$it", color = MUTED, fontSize = 13.sp)
+                }
+                if (user.isPremium) {
+                    val expiry = user.premiumExpiresAt?.substringBefore("T")?.takeIf { it.isNotBlank() }
+                    Text(
+                        text = if (expiry != null) "Premium ends $expiry" else "Premium active",
+                        color = Color(0xFFFFD54F),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
                 if (!user.bio.isNullOrBlank()) {
                     Text(
@@ -4074,13 +4090,20 @@ private fun PremiumProfileCard(
 ) {
     val user = uiState.userProfile ?: return
     val expiry = user.premiumExpiresAt?.substringBefore("T")?.takeIf { it.isNotBlank() }
+    val isPremium = user.isPremium
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(Color(0xFFFFD54F).copy(alpha = 0.08f))
             .border(1.dp, Color(0xFFFFD54F).copy(alpha = 0.22f), RoundedCornerShape(14.dp))
-            .clickable(enabled = !uiState.isStartingPremiumCheckout) { onBuyPremium() }
+            .then(
+                if (!isPremium) {
+                    Modifier.clickable(enabled = !uiState.isStartingPremiumCheckout) { onBuyPremium() }
+                } else {
+                    Modifier
+                }
+            )
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -4101,15 +4124,15 @@ private fun PremiumProfileCard(
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    if (user.isPremium) "Premium active" else "Buy Premium",
+                    if (isPremium) "Premium active" else "Buy Premium",
                     color = TEXT,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     when {
-                        user.isPremium && expiry != null -> "Expires $expiry"
-                        user.isPremium -> "Premium downloads, chat, shop, and profile perks enabled"
+                        isPremium && expiry != null -> "Expires $expiry"
+                        isPremium -> "Premium downloads, chat, shop, and profile perks enabled"
                         else -> "Unlock downloads, chat perks, shop discount, and animated profile media"
                     },
                     color = MUTED,
@@ -4117,12 +4140,14 @@ private fun PremiumProfileCard(
                     lineHeight = 16.sp,
                 )
             }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = Color(0xFFFFD54F),
-                modifier = Modifier.size(20.dp),
-            )
+            if (!isPremium) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Color(0xFFFFD54F),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
         Spacer(Modifier.height(12.dp))
         PremiumBenefitsList()
@@ -5028,6 +5053,24 @@ private fun VerifiedBadge(size: Dp) {
             contentDescription = "Verified",
             tint = Color.Black,
             modifier = Modifier.size(size * 0.65f)
+        )
+    }
+}
+
+@Composable
+private fun ProBadge() {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0xFFFFD54F))
+            .padding(horizontal = 5.dp, vertical = 1.5.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "PRO",
+            color = Color.Black,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Black,
         )
     }
 }
