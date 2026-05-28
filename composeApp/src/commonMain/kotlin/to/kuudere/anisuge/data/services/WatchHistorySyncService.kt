@@ -1,10 +1,13 @@
 package to.kuudere.anisuge.data.services
 
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.prepareGet
+import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
@@ -28,8 +31,14 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.models.AnimeDetails
+import to.kuudere.anisuge.data.models.ContinueWatchingResponse
 import to.kuudere.anisuge.data.models.ReanimeExportItem
 import to.kuudere.anisuge.data.models.ReanimeExportLibrary
+import to.kuudere.anisuge.data.models.SessionInfo
+import to.kuudere.anisuge.data.models.WatchlistResponse
+import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 
 data class WatchHistorySyncProgress(
     val current: Int,
@@ -59,6 +68,7 @@ class WatchHistorySyncService(
         private const val EXPORT_URL = "https://reanime.to/api/user/export?format=json"
         private const val MAL_API_BASE = "https://api.myanimelist.net/v2"
         private const val ANILIST_GRAPHQL = "https://graphql.anilist.co"
+        private const val OFFLINE_PROJECT_R_TOKEN = "project_r_anisurge_offline"
         private const val MAL_DELAY_MS = 200L
         private const val ANILIST_DELAY_MS = 700L
     }
@@ -107,13 +117,12 @@ class WatchHistorySyncService(
             }
         }
 
-        val library = try {
-            fetchExportJson(session.token, onProgress)
+        val entries = try {
+            fetchSyncEntries(session, onProgress)
         } catch (e: Exception) {
             return Result.failure(e)
         }
 
-        val entries = flattenExport(library)
         if (entries.isEmpty()) {
             onProgress(
                 WatchHistorySyncProgress(
@@ -138,8 +147,9 @@ class WatchHistorySyncService(
         val cache = malAnilistIdCache.getAll().toMutableMap()
 
         val total = entries.size
-        entries.forEachIndexed { index, entry ->
+        entries.forEachIndexed { index, rawEntry ->
             val i = index + 1
+            val entry = rawEntry.withResolvedIds()
             onProgress(
                 WatchHistorySyncProgress(
                     current = i,
@@ -147,11 +157,12 @@ class WatchHistorySyncService(
                     malServiceDone = false,
                     anilistServiceDone = false,
                     detail = entry.title?.takeIf { it.isNotBlank() }
-                        ?: "MAL id ${entry.malId}",
+                        ?: entry.malId?.let { "MAL id $it" }
+                        ?: entry.anilistId?.let { "AniList id $it" },
                 )
             )
 
-            if (wantMal && malToken != null) {
+            if (wantMal && malToken != null && entry.malId != null) {
                 waitMal()
                 if (settingsStore.getMalIsExpired() && trackingService.refreshMalToken()) {
                     malToken = settingsStore.getMalAccessToken()
@@ -161,13 +172,17 @@ class WatchHistorySyncService(
             }
 
             if (wantAl && alToken != null) {
-                var anilistId = cache[entry.malId] ?: 0
-                if (anilistId <= 0) {
+                var anilistId = entry.anilistId ?: 0
+                val malId = entry.malId
+                if (anilistId <= 0 && malId != null) {
+                    anilistId = cache[malId] ?: 0
+                }
+                if (anilistId <= 0 && malId != null) {
                     waitAnilist()
-                    anilistId = resolveAnilistIdFromMal(entry.malId) ?: 0
+                    anilistId = resolveAnilistIdFromMal(malId) ?: 0
                     if (anilistId > 0) {
-                        cache[entry.malId] = anilistId
-                        malAnilistIdCache.put(entry.malId, anilistId)
+                        cache[malId] = anilistId
+                        malAnilistIdCache.put(malId, anilistId)
                     }
                 }
                 if (anilistId <= 0) {
@@ -263,6 +278,136 @@ class WatchHistorySyncService(
         return lastData ?: throw Exception("No export data in stream")
     }
 
+    private suspend fun fetchSyncEntries(
+        session: SessionInfo,
+        onExportProgress: (WatchHistorySyncProgress) -> Unit,
+    ): List<NormalizedWatchEntry> {
+        if (session.token == OFFLINE_PROJECT_R_TOKEN) {
+            return fetchBffLibraryEntries(session, onExportProgress)
+        }
+
+        return try {
+            flattenExport(fetchExportJson(session.token, onExportProgress))
+        } catch (e: Exception) {
+            if (e.message?.contains("HTTP 401") == true && !session.anisurgeToken.isNullOrBlank()) {
+                fetchBffLibraryEntries(session, onExportProgress)
+            } else {
+                throw e
+            }
+        }
+    }
+
+    private suspend fun fetchBffLibraryEntries(
+        session: SessionInfo,
+        onExportProgress: (WatchHistorySyncProgress) -> Unit,
+    ): List<NormalizedWatchEntry> {
+        onExportProgress(
+            WatchHistorySyncProgress(
+                current = 0,
+                total = 0,
+                malServiceDone = false,
+                anilistServiceDone = false,
+                detail = "Loading Anisurge library",
+            )
+        )
+
+        val out = linkedMapOf<String, NormalizedWatchEntry>()
+        var offset = 0
+        val pageSize = 100
+        while (true) {
+            val page: WatchlistResponse = httpClient.get("${AnisurgeApi.v1Base}/watchlist") {
+                applyAnisurgeAuth(session)
+                parameter("limit", pageSize)
+                if (offset > 0) parameter("offset", offset)
+            }.body()
+            page.results.forEach { item ->
+                val animeId = item.effectiveAnimeId.takeIf { it.isNotBlank() }
+                val malId = item.anime.malId?.takeIf { it > 0 }
+                val anilistId = item.anime.anilistId?.takeIf { it > 0 }
+                if (animeId == null && malId == null && anilistId == null) return@forEach
+                val status = folderToWatchListType(item.effectiveFolder)
+                val title = item.anime.displayTitle.takeIf { it.isNotBlank() }
+                out[entryKey(animeId, malId, anilistId)] = NormalizedWatchEntry(
+                    animeId = animeId,
+                    malId = malId,
+                    anilistId = anilistId,
+                    watchListType = status,
+                    startedAt = item.createdAt,
+                    completedAt = if (status == 5) item.lastUpdated else null,
+                    progress = null,
+                    title = title,
+                )
+            }
+            if (page.results.isEmpty() || offset + page.results.size >= page.total || page.results.size < pageSize) break
+            offset += page.results.size
+        }
+
+        offset = 0
+        while (true) {
+            val page: ContinueWatchingResponse = httpClient.get("${AnisurgeApi.v1Base}/watch/continue") {
+                applyAnisurgeAuth(session)
+                parameter("limit", pageSize)
+                if (offset > 0) parameter("offset", offset)
+            }.body()
+            page.data.forEach { item ->
+                val animeId = item.effectiveAnimeId.takeIf { it.isNotBlank() }
+                val malId = item.anime.malId?.takeIf { it > 0 }
+                val anilistId = item.anime.anilistId?.takeIf { it > 0 }
+                if (animeId == null && malId == null && anilistId == null) return@forEach
+                val title = item.displayTitle.takeIf { it.isNotBlank() }
+                val key = entryKey(animeId, malId, anilistId)
+                val existing = out[key]
+                val progress = item.displayEpisode.takeIf { it > 0 }
+                out[key] = existing?.copy(
+                    animeId = existing.animeId ?: animeId,
+                    malId = existing.malId ?: malId,
+                    anilistId = existing.anilistId ?: anilistId,
+                    progress = maxOf(existing.progress ?: 0, progress ?: 0).takeIf { it > 0 },
+                    title = existing.title ?: title,
+                ) ?: NormalizedWatchEntry(
+                    animeId = animeId,
+                    malId = malId,
+                    anilistId = anilistId,
+                    watchListType = 1,
+                    startedAt = null,
+                    completedAt = null,
+                    progress = progress,
+                    title = title,
+                )
+            }
+            if (page.data.isEmpty() || offset + page.data.size >= page.total || page.data.size < pageSize) break
+            offset += page.data.size
+        }
+
+        onExportProgress(
+            WatchHistorySyncProgress(
+                current = out.size,
+                total = out.size,
+                malServiceDone = false,
+                anilistServiceDone = false,
+                detail = "Loaded Anisurge library",
+            )
+        )
+        return out.values.toList()
+    }
+
+    private fun folderToWatchListType(folder: String?): Int {
+        return when (folder?.trim()?.uppercase()) {
+            "WATCHING", "CURRENT" -> 1
+            "PAUSED", "ON_HOLD", "ON-HOLD" -> 2
+            "PLANNING", "PLAN_TO_WATCH", "PLAN-TO-WATCH" -> 3
+            "DROPPED" -> 4
+            "COMPLETED" -> 5
+            else -> 1
+        }
+    }
+
+    private fun entryKey(animeId: String?, malId: Int?, anilistId: Int?): String {
+        return animeId?.let { "anime:$it" }
+            ?: malId?.let { "mal:$it" }
+            ?: "al:${anilistId ?: 0}"
+    }
+
     /** API may send ISO strings, epoch numbers, `null`, or `{ year, month, day }`. */
     private fun exportDateElementToYmdString(el: JsonElement?): String? {
         if (el == null) return null
@@ -301,10 +446,13 @@ class WatchHistorySyncService(
                 val prev = out[mal]
                 val title = item.name?.takeIf { it.isNotBlank() } ?: prev?.title
                 out[mal] = NormalizedWatchEntry(
+                    animeId = null,
                     malId = mal,
+                    anilistId = null,
                     watchListType = wlt,
                     startedAt = exportDateElementToYmdString(item.started_at),
                     completedAt = exportDateElementToYmdString(item.completed_at),
+                    progress = null,
                     title = title,
                 )
             }
@@ -318,10 +466,13 @@ class WatchHistorySyncService(
     }
 
     private data class NormalizedWatchEntry(
-        val malId: Int,
+        val animeId: String? = null,
+        val malId: Int?,
+        val anilistId: Int? = null,
         val watchListType: Int,
         val startedAt: String?,
         val completedAt: String?,
+        val progress: Int? = null,
         val title: String? = null,
     ) {
         val malStatus: String
@@ -350,6 +501,9 @@ class WatchHistorySyncService(
             val endYmd = toYmd(entry.completedAt)
             val body = buildString {
                 append("status=").append(entry.malStatus.encodeURLParameter())
+                entry.progress?.takeIf { it > 0 }?.let {
+                    append("&num_watched_episodes=").append(it.toString().encodeURLParameter())
+                }
                 if (startYmd != null) append("&my_start_date=").append(startYmd.encodeURLParameter())
                 if (endYmd != null) append("&my_finish_date=").append(endYmd.encodeURLParameter())
             }
@@ -361,6 +515,27 @@ class WatchHistorySyncService(
             response.status.isSuccess()
         } catch (_: Exception) {
             false
+        }
+    }
+
+    private suspend fun NormalizedWatchEntry.withResolvedIds(): NormalizedWatchEntry {
+        if (malId != null && anilistId != null) return this
+        val id = animeId?.takeIf { it.isNotBlank() } ?: return this
+        val details = resolveProjectRAnimeDetails(id) ?: return this
+        return copy(
+            malId = malId ?: details.malId?.takeIf { it > 0 },
+            anilistId = anilistId ?: details.anilistId?.takeIf { it > 0 },
+            title = title ?: details.title.displayTitle.takeIf { it.isNotBlank() },
+        )
+    }
+
+    private suspend fun resolveProjectRAnimeDetails(animeId: String): AnimeDetails? {
+        return try {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/anime/$animeId")
+            if (!response.status.isSuccess()) return null
+            response.body()
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -390,13 +565,14 @@ class WatchHistorySyncService(
 
     private suspend fun saveAnilist(token: String, mediaId: Int, entry: NormalizedWatchEntry): Boolean {
         val query = """
-            mutation (${'$'}mediaId: Int, ${'$'}status: MediaListStatus, ${'$'}startedAt: FuzzyDateInput, ${'$'}completedAt: FuzzyDateInput) {
-              SaveMediaListEntry(mediaId: ${'$'}mediaId, status: ${'$'}status, startedAt: ${'$'}startedAt, completedAt: ${'$'}completedAt) { id }
+            mutation (${'$'}mediaId: Int, ${'$'}status: MediaListStatus, ${'$'}progress: Int, ${'$'}startedAt: FuzzyDateInput, ${'$'}completedAt: FuzzyDateInput) {
+              SaveMediaListEntry(mediaId: ${'$'}mediaId, status: ${'$'}status, progress: ${'$'}progress, startedAt: ${'$'}startedAt, completedAt: ${'$'}completedAt) { id }
             }
         """.trimIndent()
         val vars = buildJsonObject {
             put("mediaId", mediaId)
             put("status", entry.anilistStatus)
+            entry.progress?.takeIf { it > 0 }?.let { put("progress", it) }
             fuzzyJson(entry.startedAt)?.let { put("startedAt", it) }
             fuzzyJson(entry.completedAt)?.let { put("completedAt", it) }
         }

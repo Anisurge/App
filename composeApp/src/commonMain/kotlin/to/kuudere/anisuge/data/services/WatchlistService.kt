@@ -57,15 +57,31 @@ class WatchlistService(
         val animeId: String,
         val folder: String,
         val notes: String? = null,
+        val anilistId: Int? = null,
+        val malId: Int? = null,
     )
 
-    suspend fun updateStatus(animeId: String, folder: String, notes: String? = null): WatchlistUpdateResponse? {
+    suspend fun updateStatus(
+        animeId: String,
+        folder: String,
+        notes: String? = null,
+        anilistId: Int? = null,
+        malId: Int? = null,
+    ): WatchlistUpdateResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
             val response = httpClient.post("${AnisurgeApi.v1Base}/watchlist") {
                 applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
-                setBody(UpdateWatchlistRequest(animeId, folder, notes))
+                setBody(
+                    UpdateWatchlistRequest(
+                        animeId = animeId,
+                        folder = folder,
+                        notes = notes,
+                        anilistId = anilistId?.takeIf { it > 0 },
+                        malId = malId?.takeIf { it > 0 },
+                    )
+                )
             }
             if (response.status.value in 200..299) {
                 response.body<WatchlistUpdateResponse>()

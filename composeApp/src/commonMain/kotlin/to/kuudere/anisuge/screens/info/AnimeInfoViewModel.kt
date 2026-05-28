@@ -186,7 +186,13 @@ class AnimeInfoViewModel(
                     _uiState.update { it.copy(isUpdatingWatchlist = false) }
                 }
             } else {
-                val response = watchlistService.updateStatus(animeId, folder)
+                val details = _uiState.value.details
+                val response = watchlistService.updateStatus(
+                    animeId = animeId,
+                    folder = folder,
+                    anilistId = details?.anilistId,
+                    malId = details?.malId,
+                )
                 if (response != null) {
                     _uiState.update {
                         it.copy(

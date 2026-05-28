@@ -244,11 +244,21 @@ class HomeViewModel(
         }
     }
 
-    fun updateWatchlist(animeId: String, folder: String) {
+    fun updateWatchlist(
+        animeId: String,
+        folder: String,
+        anilistId: Int? = null,
+        malId: Int? = null,
+    ) {
         scope.launch {
             _uiState.update { it.copy(isUpdatingWatchlist = true) }
             try {
-                watchlistService.updateStatus(animeId, folder)
+                watchlistService.updateStatus(
+                    animeId = animeId,
+                    folder = folder,
+                    anilistId = anilistId,
+                    malId = malId,
+                )
             } finally {
                 _uiState.update { it.copy(isUpdatingWatchlist = false) }
             }

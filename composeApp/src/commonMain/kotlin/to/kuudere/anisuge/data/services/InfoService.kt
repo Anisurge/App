@@ -130,6 +130,8 @@ class InfoService(
 
     suspend fun saveProgress(
         animeId: String,
+        anilistId: Int? = null,
+        malId: Int? = null,
         episodeId: String,
         currentTime: Double,
         duration: Double,
@@ -140,6 +142,8 @@ class InfoService(
             val stored = sessionStore.get() ?: return null
             val payload = buildJsonObject {
                 put("animeId", animeId)
+                anilistId?.takeIf { it > 0 }?.let { put("anilistId", it) }
+                malId?.takeIf { it > 0 }?.let { put("malId", it) }
                 put("episodeId", episodeId)
                 put("currentTime", currentTime)
                 put("duration", duration)

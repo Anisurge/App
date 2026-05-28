@@ -490,7 +490,13 @@ fun HomeScreen(
             WatchlistBottomSheet(
                 currentFolder = null, // We don't have this info here easily
                 onSelect = { folder ->
-                    homeViewModel.updateWatchlist(showWatchlistFor!!.id, folder)
+                    val anime = showWatchlistFor!!
+                    homeViewModel.updateWatchlist(
+                        animeId = anime.id,
+                        folder = folder,
+                        anilistId = anime.anilistId,
+                        malId = anime.malId,
+                    )
                     showWatchlistFor = null
                 },
                 onDismiss = { showWatchlistFor = null }

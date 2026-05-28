@@ -932,6 +932,8 @@ class WatchViewModel(
         viewModelScope.launch {
             val result = infoService.saveProgress(
                 animeId = animeId,
+                anilistId = currState.episodeData?.anime?.anilistId ?: currState.episodeData?.anilistId,
+                malId = currState.episodeData?.anime?.malId ?: currState.episodeData?.malId,
                 episodeId = episodeId,
                 currentTime = currentTime,
                 duration = effectiveDuration,
@@ -1039,7 +1041,13 @@ class WatchViewModel(
             _uiState.update { it.copy(isUpdatingWatchlist = true) }
             try {
                 if (currentAnimeId.isEmpty()) return@launch
-                val response = watchlistService.updateStatus(currentAnimeId, folder)
+                val anime = _uiState.value.episodeData?.anime
+                val response = watchlistService.updateStatus(
+                    animeId = currentAnimeId,
+                    folder = folder,
+                    anilistId = anime?.anilistId ?: _uiState.value.episodeData?.anilistId,
+                    malId = anime?.malId ?: _uiState.value.episodeData?.malId,
+                )
                 if (response != null) {
                     _uiState.update { state ->
                         state.copy(

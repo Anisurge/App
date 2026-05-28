@@ -177,7 +177,13 @@ class WatchlistViewModel : ViewModel() {
     fun updateAnimeStatus(animeId: String, newFolder: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdating = true) }
-            val response = watchlistService.updateStatus(animeId, newFolder)
+            val anime = _uiState.value.items.firstOrNull { it.activeId == animeId || it.id == animeId }
+            val response = watchlistService.updateStatus(
+                animeId = animeId,
+                folder = newFolder,
+                anilistId = anime?.anilistId,
+                malId = anime?.malId,
+            )
             if (response != null) {
                 val currentFolder = _uiState.value.selectedFolder
                 if (currentFolder != "All" && currentFolder != "All lists" && currentFolder != newFolder) {
