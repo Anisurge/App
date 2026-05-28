@@ -2169,6 +2169,7 @@ private fun EpisodeListSection(
                     thumbnail = state.details?.image ?: state.details?.poster ?: state.details?.cover,
                     watchedEpisode = watchedEpisode,
                     currentProgressSeconds = currentProgressSeconds,
+                    episodeProgress = state.episodeProgress[episode.number],
                     onClick = { onWatchEpisode(episode.number) },
                     onDownloadClick = { onDownloadEpisode(episode) }
                 )
@@ -2183,21 +2184,27 @@ private fun EpisodeItemRow(
     thumbnail: String?,
     watchedEpisode: Int? = null,
     currentProgressSeconds: Double? = null,
+    episodeProgress: EpisodeProgress? = null,
     onClick: () -> Unit,
     onDownloadClick: () -> Unit = {},
 ) {
+    val progressFraction = if (episodeProgress != null && episodeProgress.duration > 0) {
+        (episodeProgress.currentTime / episodeProgress.duration).coerceIn(0.0, 1.0)
+    } else 0.0
+
     // Modernized card style for episode item
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(Color.White.copy(alpha = 0.05f))
             .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
             .tvFocusableClick(shape = RoundedCornerShape(12.dp), onClick = onClick)
-            .padding(8.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -2274,6 +2281,12 @@ private fun EpisodeItemRow(
                             fontWeight = FontWeight.Medium
                         )
                         when {
+                            episodeProgress != null && progressFraction >= 0.9 -> {
+                                ProgressBadge("WATCHED")
+                            }
+                            episodeProgress != null && progressFraction > 0.0 -> {
+                                ProgressBadge("IN PROGRESS")
+                            }
                             watchedEpisode != null && episode.number < watchedEpisode -> {
                                 ProgressBadge("WATCHED")
                             }
@@ -2322,6 +2335,23 @@ private fun EpisodeItemRow(
                         modifier = Modifier.size(16.dp)
                     )
                 }
+            }
+        }
+
+        // Red progress bar at the bottom showing how much was watched
+        if (episodeProgress != null && progressFraction > 0.0) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(Color.White.copy(alpha = 0.1f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progressFraction.toFloat())
+                        .height(3.dp)
+                        .background(Color(0xFFE50914))
+                )
             }
         }
     }
