@@ -4291,7 +4291,7 @@ private fun ProfileAccountSection(
         SettingToggle(
             checked = user.chatProfilePrivate,
             onCheckedChange = onChatProfilePrivacyChange,
-            label = "Hide chat profile watch activity",
+            label = "Hide watchlist on chat profile",
             enabled = user.isPremium && !uiState.isSavingChatProfilePrivacy,
         )
         if (!user.isPremium) {

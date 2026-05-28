@@ -12,6 +12,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -67,7 +70,10 @@ fun AnimeInfoScreen(
     val preferRomajiAnimeTitles by to.kuudere.anisuge.AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(initial = false)
     var showEpisodes by remember { mutableStateOf(true) }
     var selectedEpisodeForDownload by remember { mutableStateOf<to.kuudere.anisuge.data.models.EpisodeItem?>(null) }
-    var selectedBatchForDownload by remember { mutableStateOf<List<to.kuudere.anisuge.data.models.EpisodeItem>>(emptyList()) }
+    var batchPickerEpisodes by remember { mutableStateOf<List<to.kuudere.anisuge.data.models.EpisodeItem>>(emptyList()) }
+    var batchPreflightMessage by remember { mutableStateOf<String?>(null) }
+    var batchPreflightError by remember { mutableStateOf<String?>(null) }
+    val batchScope = rememberCoroutineScope()
 
     // Auto-load episodes since it's the default tab
     LaunchedEffect(state.details) {
@@ -113,48 +119,101 @@ fun AnimeInfoScreen(
         )
     }
 
-    if (selectedBatchForDownload.isNotEmpty() && state.details != null) {
-        val batch = selectedBatchForDownload.take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
-        val firstEp = batch.first()
-        val anilistId = state.details!!.anilistId ?: 0
-        DownloadEpisodeDialog(
-            animeId = state.details!!.id,
-            episodeId = firstEp.id,
-            episodeNumber = firstEp.number,
-            anilistId = anilistId,
-            estimatedDurationSeconds = estimateDownloadDurationSeconds(firstEp, state.details!!.duration),
-            episodeDisplayTitle = state.details!!.title.displayTitle(preferRomajiAnimeTitles),
-            coverImage = state.details!!.image.takeIf { it.isNotBlank() }
-                ?: state.details!!.poster.takeIf { it.isNotBlank() }
-                ?: state.details!!.cover.takeIf { it.isNotBlank() },
-            infoService = to.kuudere.anisuge.AppComponent.infoService,
-            serverRepository = to.kuudere.anisuge.AppComponent.serverRepository,
-            isSeasonBatch = true,
-            batchEpisodeCount = batch.size,
-            onDismiss = { selectedBatchForDownload = emptyList() },
-            onStartDownload = { server, subLang, audioLang, downloadFonts, headers, _, preferBatchDub ->
-                val title = state.details!!.title.displayTitle(preferRomajiAnimeTitles)
-                val cover = state.details!!.image ?: state.details!!.poster ?: state.details!!.cover
-                to.kuudere.anisuge.utils.DownloadManager.startSeasonBatchDownload(
-                    episodes = batch.map { ep ->
-                        to.kuudere.anisuge.utils.BatchEpisodeDownload(
-                            animeId = state.details!!.id,
-                            anilistId = anilistId,
-                            episodeNumber = ep.number,
-                            title = title,
-                            coverImage = cover,
-                        )
-                    },
-                    server = server,
-                    subLang = subLang,
-                    audioLang = audioLang,
-                    downloadFonts = downloadFonts,
-                    headers = headers,
-                    preferBatchDub = preferBatchDub,
-                )
-                selectedBatchForDownload = emptyList()
-            }
+    if (batchPickerEpisodes.isNotEmpty()) {
+        SeasonBatchPickerDialog(
+            episodes = batchPickerEpisodes,
+            onDismiss = { batchPickerEpisodes = emptyList() },
+            onConfirm = { episodes ->
+                batchPickerEpisodes = emptyList()
+                val details = state.details ?: return@SeasonBatchPickerDialog
+                val anilistId = details.anilistId ?: 0
+                val title = details.title.displayTitle(preferRomajiAnimeTitles)
+                val cover = details.image ?: details.poster ?: details.cover
+                batchScope.launch {
+                    val batch = episodes
+                        .sortedBy { it.number }
+                        .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
+                    val server = preflightBatchDownloadServer(
+                        anilistId = anilistId,
+                        episodes = batch,
+                        onStatus = { batchPreflightMessage = it },
+                        onFailure = { failedServer, failedEpisodes ->
+                            batchPreflightMessage = "$failedServer failed for ${failedEpisodes.size} episode${if (failedEpisodes.size == 1) "" else "s"}: ${failedEpisodes.take(8).joinToString(", ") { "Ep ${it.number}" }}. Trying Anikage..."
+                        },
+                    )
+                    if (server == null) {
+                        batchPreflightError = "Batch check failed on Anitaku-1 and Anikage. Some selected episodes did not return a usable stream. Try fewer episodes or single download for the failing ones."
+                        batchPreflightMessage = null
+                        return@launch
+                    }
+                    to.kuudere.anisuge.utils.DownloadManager.startSeasonBatchDownload(
+                        episodes = batch.map { ep ->
+                            to.kuudere.anisuge.utils.BatchEpisodeDownload(
+                                animeId = details.id,
+                                anilistId = anilistId,
+                                episodeNumber = ep.number,
+                                title = title,
+                                coverImage = cover,
+                            )
+                        },
+                        server = server,
+                        subLang = "English",
+                        audioLang = "sub",
+                        downloadFonts = true,
+                        headers = null,
+                        preferBatchDub = false,
+                    )
+                    batchPreflightMessage = null
+                    onDownloadsClick()
+                }
+            },
         )
+    }
+
+    if (batchPreflightMessage != null || batchPreflightError != null) {
+        AlertDialog(
+            onDismissRequest = { if (batchPreflightError != null) batchPreflightError = null },
+            containerColor = Color(0xFF141414),
+            title = {
+                Text(
+                    if (batchPreflightError == null) "Checking episodes" else "Batch check failed",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (batchPreflightError == null) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    }
+                    Text(
+                        batchPreflightError ?: batchPreflightMessage.orEmpty(),
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    )
+                }
+            },
+            confirmButton = {
+                if (batchPreflightError != null) {
+                    Button(
+                        onClick = { batchPreflightError = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                    ) {
+                        Text("OK")
+                    }
+                }
+            },
+        )
+    }
+
+    fun openBatchPicker(episodes: List<to.kuudere.anisuge.data.models.EpisodeItem>) {
+        val sorted = episodes.sortedBy { it.number }
+        if (sorted.isEmpty()) return
+        batchPickerEpisodes = sorted
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
@@ -199,7 +258,7 @@ fun AnimeInfoScreen(
                         onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
                         onGenreClick = onGenreClick,
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
-                        onDownloadSeason = { episodes -> selectedBatchForDownload = episodes },
+                        onDownloadSeason = { episodes -> openBatchPicker(episodes) },
                         isPremiumUser = isPremiumUser,
                         onShareAnime = shareAnime,
                         onDownloadsClick = onDownloadsClick,
@@ -223,7 +282,7 @@ fun AnimeInfoScreen(
                         onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
                         onGenreClick = onGenreClick,
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
-                        onDownloadSeason = { episodes -> selectedBatchForDownload = episodes },
+                        onDownloadSeason = { episodes -> openBatchPicker(episodes) },
                         isPremiumUser = isPremiumUser,
                         onShareAnime = shareAnime,
                         onDownloadsClick = onDownloadsClick
@@ -246,6 +305,38 @@ private fun buildAnimeShareText(
     val id = anime.animeId.ifBlank { routeAnimeId }
     val title = anime.title.displayTitle(preferRomajiAnimeTitles).ifBlank { "this anime" }
     return "$title\nWatch this on Anisurge:\nhttps://www.anisurge.lol/anime/$id"
+}
+
+private suspend fun preflightBatchDownloadServer(
+    anilistId: Int,
+    episodes: List<to.kuudere.anisuge.data.models.EpisodeItem>,
+    onStatus: (String) -> Unit,
+    onFailure: (server: String, failedEpisodes: List<to.kuudere.anisuge.data.models.EpisodeItem>) -> Unit,
+): String? {
+    val candidates = listOf("anitaku-1", "anikage")
+    for (server in candidates) {
+        onStatus("Checking ${episodes.size} episode${if (episodes.size == 1) "" else "s"} on $server...")
+        val failed = coroutineScope {
+            episodes.map { episode ->
+                async {
+                    val usable = runCatching {
+                        val response = to.kuudere.anisuge.AppComponent.infoService
+                            .getVideoStream(anilistId, episode.number, server)
+                        val subOk = response?.sub?.streams?.any { !it.url.isNullOrBlank() } == true
+                        val dubOk = response?.dub?.streams?.any { !it.url.isNullOrBlank() } == true
+                        subOk || dubOk
+                    }.getOrDefault(false)
+                    if (usable) null else episode
+                }
+            }.awaitAll().filterNotNull()
+        }
+        if (failed.isEmpty()) {
+            onStatus("$server is ready. Queueing batch...")
+            return server
+        }
+        onFailure(server, failed)
+    }
+    return null
 }
 
 @Composable
@@ -1270,7 +1361,7 @@ private fun DesktopLayout(
                                 modifier = Modifier.size(17.dp),
                             )
                             Text(
-                                if (isPremiumUser) "Download Season (${currentRangeEpisodes.size})" else "Premium Batch",
+                                if (isPremiumUser) "Download Batch (${currentRangeEpisodes.size})" else "Premium Batch",
                                 color = if (isPremiumUser) Color.Black else Color.White.copy(alpha = 0.65f),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
@@ -1633,6 +1724,198 @@ private fun WatchlistDropdownIcon(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun SeasonBatchPickerDialog(
+    episodes: List<to.kuudere.anisuge.data.models.EpisodeItem>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<to.kuudere.anisuge.data.models.EpisodeItem>) -> Unit,
+) {
+    val sortedEpisodes = remember(episodes) {
+        episodes
+            .filter { it.number > 0 }
+            .sortedBy { it.number }
+            .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
+    }
+    var selectedNumbers by remember(sortedEpisodes) {
+        mutableStateOf(sortedEpisodes.take(12).map { it.number }.toSet())
+    }
+    var rangeStart by remember(sortedEpisodes) { mutableStateOf(sortedEpisodes.firstOrNull()?.number?.toString().orEmpty()) }
+    var rangeEnd by remember(sortedEpisodes) { mutableStateOf(sortedEpisodes.getOrNull(11)?.number?.toString() ?: sortedEpisodes.lastOrNull()?.number?.toString().orEmpty()) }
+    val selectedEpisodes = remember(sortedEpisodes, selectedNumbers) {
+        sortedEpisodes.filter { it.number in selectedNumbers }
+    }
+
+    fun selectFirst(count: Int) {
+        selectedNumbers = sortedEpisodes.take(count).map { it.number }.toSet()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF141414),
+        title = {
+            Text("Batch download", color = Color.White, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    "Choose up to ${to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES} episodes. You can use a quick range or pick episodes manually.",
+                    color = Color.White.copy(alpha = 0.68f),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val quickActions = listOf(
+                        "12 eps" to 12,
+                        "24 eps" to 24,
+                        "All" to to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES,
+                    )
+                    quickActions.forEach { (label, count) ->
+                        AssistChip(
+                            onClick = { selectFirst(count) },
+                            label = { Text(label) },
+                            enabled = sortedEpisodes.isNotEmpty(),
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = rangeStart,
+                        onValueChange = { rangeStart = it.filter(Char::isDigit).take(4) },
+                        label = { Text("From") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.24f),
+                            focusedLabelColor = Color.White,
+                            unfocusedLabelColor = Color.White.copy(alpha = 0.6f),
+                        ),
+                    )
+                    OutlinedTextField(
+                        value = rangeEnd,
+                        onValueChange = { rangeEnd = it.filter(Char::isDigit).take(4) },
+                        label = { Text("To") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.24f),
+                            focusedLabelColor = Color.White,
+                            unfocusedLabelColor = Color.White.copy(alpha = 0.6f),
+                        ),
+                    )
+                    Button(
+                        onClick = {
+                            val start = rangeStart.toIntOrNull()
+                            val end = rangeEnd.toIntOrNull()
+                            if (start != null && end != null) {
+                                val low = minOf(start, end)
+                                val high = maxOf(start, end)
+                                selectedNumbers = sortedEpisodes
+                                    .filter { it.number in low..high }
+                                    .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
+                                    .map { it.number }
+                                    .toSet()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                    ) {
+                        Text("Use")
+                    }
+                }
+
+                Text(
+                    "Selected ${selectedEpisodes.size} episode${if (selectedEpisodes.size == 1) "" else "s"}",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(sortedEpisodes, key = { it.number }) { episode ->
+                        val checked = episode.number in selectedNumbers
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (checked) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.035f))
+                                .clickable {
+                                    selectedNumbers = if (checked) {
+                                        selectedNumbers - episode.number
+                                    } else if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) {
+                                        selectedNumbers + episode.number
+                                    } else {
+                                        selectedNumbers
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { next ->
+                                    selectedNumbers = if (next) {
+                                        if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) selectedNumbers + episode.number else selectedNumbers
+                                    } else {
+                                        selectedNumbers - episode.number
+                                    }
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = Color.White,
+                                    uncheckedColor = Color.White.copy(alpha = 0.55f),
+                                    checkmarkColor = Color.Black,
+                                ),
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Episode ${episode.number}",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                episode.title?.takeIf { it.isNotBlank() }?.let {
+                                    Text(
+                                        it,
+                                        color = Color.White.copy(alpha = 0.50f),
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = selectedEpisodes.isNotEmpty(),
+                onClick = { onConfirm(selectedEpisodes) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+            ) {
+                Text("Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.White.copy(alpha = 0.72f))
+            }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun EpisodeListSection(
     state: AnimeInfoUiState,
     onWatchEpisode: (Int) -> Unit,
@@ -1799,7 +2082,7 @@ private fun EpisodeListSection(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = if (isPremiumUser) "Download Season (${currentRangeEpisodes.size})" else "Premium Batch",
+                    text = if (isPremiumUser) "Download Batch (${currentRangeEpisodes.size})" else "Premium Batch",
                     color = if (isPremiumUser) Color.Black else Color.White.copy(alpha = 0.72f),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,

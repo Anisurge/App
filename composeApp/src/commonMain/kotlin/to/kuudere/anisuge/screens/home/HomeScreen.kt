@@ -2474,19 +2474,46 @@ private fun formatDuration(seconds: Double): String {
 
 // ── Downloads Tab ─────────────────────────────────────────────────────────
 
+private data class DownloadAnimeGroup(
+    val animeId: String,
+    val title: String,
+    val coverImage: String?,
+    val tasks: List<DownloadTask>,
+    val priority: Int,
+    val latestIndex: Int,
+)
+
 @Composable
 fun DownloadsTab(
     onWatchOffline: (String, Int, String, String) -> Unit = { _, _, _, _ -> },
     onExit: () -> Unit = {}
 ) {
     val tasks by DownloadManager.tasks.collectAsState()
-    val sortedTasks = remember(tasks) {
-        tasks.sortedWith(
-            compareBy<DownloadTask> { downloadTaskPriority(it) }
-                .thenByDescending { if (isTaskFinishedStatus(it.status)) 1 else 0 }
-                .thenByDescending { it.progress }
-                .thenBy { it.title.lowercase() }
-        )
+    val groupedDownloads = remember(tasks) {
+        tasks.withIndex()
+            .groupBy { it.value.animeId }
+            .map { (animeId, indexedTasks) ->
+                val groupTasks = indexedTasks
+                    .map { it.value }
+                    .sortedWith(
+                        compareBy<DownloadTask> { downloadTaskPriority(it) }
+                            .thenBy { it.episodeNumber }
+                    )
+                val first = groupTasks.first()
+                DownloadAnimeGroup(
+                    animeId = animeId,
+                    title = first.title,
+                    coverImage = groupTasks.firstNotNullOfOrNull { it.coverImage },
+                    tasks = groupTasks,
+                    priority = groupTasks.minOf { downloadTaskPriority(it) },
+                    latestIndex = indexedTasks.maxOf { it.index },
+                )
+            }
+            .sortedWith(
+                compareBy<DownloadAnimeGroup> { it.priority }
+                    .thenByDescending { it.latestIndex }
+                    .thenBy { it.title.lowercase() }
+            )
     }
     val listState = rememberLazyListState()
 
@@ -2607,23 +2634,29 @@ fun DownloadsTab(
                     }
                 }
 
-                val rows = sortedTasks.chunked(cols)
-                itemsIndexed(rows, key = { rowIdx, _ -> "row-$rowIdx" }) { rowIdx, rowTasks ->
-                    DownloadsAnimatedEntry(delayMs = (rowIdx * 40).coerceAtMost(400)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            rowTasks.forEach { task ->
-                                DownloadTaskCard(
-                                    task = task,
-                                    onWatchOffline = onWatchOffline,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            // fill remaining columns with invisible spacers
-                            repeat(cols - rowTasks.size) {
-                                Spacer(Modifier.weight(1f))
+                groupedDownloads.forEachIndexed { groupIndex, group ->
+                    item(key = "anime-${group.animeId}") {
+                        DownloadsAnimatedEntry(delayMs = (groupIndex * 40).coerceAtMost(400)) {
+                            DownloadAnimeHeader(group)
+                        }
+                    }
+                    val rows = group.tasks.chunked(cols)
+                    itemsIndexed(rows, key = { rowIdx, _ -> "anime-${group.animeId}-row-$rowIdx" }) { rowIdx, rowTasks ->
+                        DownloadsAnimatedEntry(delayMs = ((groupIndex + rowIdx) * 40).coerceAtMost(400)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                rowTasks.forEach { task ->
+                                    DownloadTaskCard(
+                                        task = task,
+                                        onWatchOffline = onWatchOffline,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                repeat(cols - rowTasks.size) {
+                                    Spacer(Modifier.weight(1f))
+                                }
                             }
                         }
                     }
@@ -2633,6 +2666,52 @@ fun DownloadsTab(
                     Spacer(Modifier.height(72.dp))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DownloadAnimeHeader(group: DownloadAnimeGroup) {
+    val active = group.tasks.count { !isTaskFinishedStatus(it.status) && !it.status.startsWith("Failed") }
+    val finished = group.tasks.count { isTaskFinishedStatus(it.status) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Color.White.copy(alpha = 0.06f)),
+        ) {
+            group.coverImage?.let {
+                AsyncImage(
+                    model = it,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                group.title,
+                color = Color.White,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "${group.tasks.size} episode${if (group.tasks.size == 1) "" else "s"} queued • $active active • $finished ready",
+                color = Color.White.copy(alpha = 0.52f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

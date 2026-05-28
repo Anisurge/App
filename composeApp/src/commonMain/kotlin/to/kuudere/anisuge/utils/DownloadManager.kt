@@ -78,7 +78,11 @@ object DownloadManager {
     private const val MP4_BUFFER_SIZE = 8 * 1024
     private const val ANDROID_HLS_PARALLELISM = 4
     private const val DESKTOP_HLS_PARALLELISM = 6
-    const val MAX_SEASON_BATCH_EPISODES = 12
+    const val MAX_SEASON_BATCH_EPISODES = 50
+
+    private fun downloadLog(taskId: String, message: String) {
+        println("[Download][$taskId] $message")
+    }
 
     init {
         loadTasks()
@@ -205,29 +209,55 @@ object DownloadManager {
             .take(MAX_SEASON_BATCH_EPISODES)
         if (batch.isEmpty()) return
         scope.launch {
+            val queued = batch.mapNotNull { episode ->
+                val taskId = "${episode.animeId}_${episode.episodeNumber}"
+                val existing = tasks.value.find { it.id == taskId }
+                when {
+                    existing != null && isDownloadFinished(existing.status) -> null
+                    existing != null && !existing.status.startsWith("Failed") -> existing
+                    else -> DownloadTask(
+                        id = taskId,
+                        animeId = episode.animeId,
+                        title = episode.title,
+                        episodeNumber = episode.episodeNumber,
+                        coverImage = episode.coverImage,
+                        progress = 0f,
+                        status = "Queued",
+                        serverId = server,
+                        anilistId = episode.anilistId,
+                        subLang = subLang,
+                        audioLang = audioLang,
+                        headers = headers,
+                        preferBatchDub = preferBatchDub,
+                        useParallelSegments = true,
+                    )
+                }
+            }
+            val newQueued = queued.filter { queuedTask -> tasks.value.none { it.id == queuedTask.id } }
+            if (newQueued.isNotEmpty()) {
+                tasks.update { current -> current + newQueued }
+                saveTasks()
+            }
+
             for (episode in batch) {
                 val taskId = "${episode.animeId}_${episode.episodeNumber}"
                 val existing = tasks.value.find { it.id == taskId }
                 if (existing != null && isDownloadFinished(existing.status)) continue
-                if (existing != null && !existing.status.startsWith("Failed") && !existing.isPaused) {
+                if (existing != null && !existing.status.startsWith("Failed") && !existing.isPaused && existing.status != "Queued") {
                     waitForTaskToSettle(taskId)
                     continue
                 }
-
-                startDownload(
-                    animeId = episode.animeId,
-                    anilistId = episode.anilistId,
-                    episodeNumber = episode.episodeNumber,
-                    title = episode.title,
-                    coverImage = episode.coverImage,
-                    server = server,
-                    subLang = subLang,
-                    audioLang = audioLang,
-                    downloadFonts = downloadFonts,
-                    headers = headers,
-                    m3u8Url = null,
-                    preferBatchDub = preferBatchDub,
-                    useParallelSegments = true,
+                val task = tasks.value.find { it.id == taskId } ?: continue
+                updateTask(taskId) { it.copy(isPaused = false, status = "Fetching stream...", progress = 0f) }
+                executeDownload(
+                    task.copy(isPaused = false, status = "Fetching stream..."),
+                    episode.anilistId,
+                    task.serverId ?: server,
+                    task.subLang,
+                    task.audioLang,
+                    downloadFonts,
+                    preResolvedM3u8 = null,
+                    preferBatchDub = task.preferBatchDub,
                 )
                 waitForTaskToSettle(taskId)
             }
@@ -507,6 +537,10 @@ object DownloadManager {
                         },
                     )
                 }
+                downloadLog(
+                    taskId,
+                    "stream server=$resolvedServer urlHost=${urlHost(m3u8Url)} parallel=${task.useParallelSegments} headers=${currentHeaders.keys.joinToString(",")}",
+                )
 
                 // Create folder
                 val currentPath = AppComponent.settingsStore.downloadPathFlow.first()
@@ -584,6 +618,10 @@ object DownloadManager {
                     abortDownload(taskId, "no video segments")
                     return@launch
                 }
+                downloadLog(
+                    taskId,
+                    "playlist encrypted=$isEncrypted fmp4=$fmp4LikePlaylist urlRemux=$useHlsUrlRemux videoSegments=${videoSegments.size} audioSegments=${audioSegments.size}",
+                )
 
                 val rawVideoPath = "$epDir/video_raw.ts"
                 val rawAudioPath = "$epDir/audio_raw.ts"
@@ -662,6 +700,10 @@ object DownloadManager {
                     segmentUrls = videoSegments,
                     apiServer = apiServerForRemux,
                 )
+                downloadLog(
+                    taskId,
+                    "finalising android=$isAndroidPlatform apiServer=$apiServerForRemux preferLocalTsRemux=$preferLocalTsRemux videoSource=${if (muxVideoSource.startsWith("http")) "remote:${urlHost(muxVideoSource)}" else "local"} audio=${muxAudioSource != null} subtitles=${subsToDownload.size}",
+                )
 
                 val muxSuccess = muxToMkv(
                     videoPath = muxVideoSource,
@@ -676,6 +718,7 @@ object DownloadManager {
                 )
 
                 if (muxSuccess) {
+                    downloadLog(taskId, "finalising ok output=$finalOutputPath")
                     // Cleanup
                     try {
                         if (!isEncrypted && !useHlsUrlRemux) {
@@ -694,6 +737,7 @@ object DownloadManager {
                         )
                     }
                 } else {
+                    downloadLog(taskId, "finalising failed output=$finalOutputPath")
                     updateTask(taskId) {
                         it.copy(
                             status = "Finished (Mux Failed)",

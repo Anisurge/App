@@ -5,7 +5,7 @@
 /iosApp/build/
 /iosApp/iosApp.xcodeproj/
 /iosApp/*.xcworkspace/
-/Anisurge-V2-site/
+#/Anisurge-V2-site/
 # Kotlin / KMP
 .kotlin
 **/build/
@@ -16,7 +16,7 @@
 /bin/
 **/bin/
 .claude/
-api.md
+#api.md
 AniSurge/
 services/anisurge-api/
 # Signing & Secrets
