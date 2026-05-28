@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +68,9 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import anisurge.composeapp.generated.resources.Res
 import anisurge.composeapp.generated.resources.chat_bg
 import org.jetbrains.compose.resources.painterResource
@@ -326,14 +330,21 @@ fun LiveChatScreen(
                                 }
                             }
                         } else {
-                            items(
+                            itemsIndexed(
                                 state.messages,
-                                key = { it.id },
-                                contentType = { "chat-message" },
-                            ) { message ->
+                                key = { _, msg -> msg.id },
+                                contentType = { _, _ -> "chat-message" },
+                            ) { index, message ->
+                                val prevMessage = state.messages.getOrNull(index - 1)
+                                val nextMessage = state.messages.getOrNull(index + 1)
+                                val isFirstInGroup = prevMessage?.userId != message.userId
+                                val isLastInGroup = nextMessage?.userId != message.userId
+
                                 ChatMessageRow(
                                     message = message,
                                     isMine = message.userId == state.currentUserId,
+                                    showHeader = isFirstInGroup,
+                                    showAvatar = isLastInGroup,
                                     onProfileClick = { viewModel.showMemberProfile(message) },
                                     onActionClick = onAction,
                                 )
@@ -427,6 +438,8 @@ private fun LiveChatBackground() {
 private fun ChatMessageRow(
     message: ChatMessage,
     isMine: Boolean,
+    showHeader: Boolean,
+    showAvatar: Boolean,
     onProfileClick: () -> Unit,
     onActionClick: (String) -> Unit,
 ) {
@@ -438,107 +451,131 @@ private fun ChatMessageRow(
         onClick = onProfileClick,
     )
 
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        if (!isMine) {
-            ChatDecoratedAvatar(
-                avatarUrl = message.effectiveAvatarUrl,
-                frameUrl = message.avatarFrameUrl,
-                outerFrameUrl = message.avatarOuterUrl,
-                userId = message.userId,
-                modifier = profileClick,
-                avatarSize = 36.dp,
-                contentDescription = message.username,
-                playVideo = false,
-            )
-            Spacer(Modifier.size(8.dp))
-        }
+    // Extra top padding when this is the first message in a new group (visual separation)
+    val topPadding = if (showHeader) 8.dp else 0.dp
 
-        Column(
-            modifier = Modifier.widthIn(max = 280.dp),
-            horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
+    Column(modifier = Modifier.padding(top = topPadding)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.Bottom,
         ) {
-            Row(
-                modifier = Modifier.widthIn(max = 240.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                ChatUsernameLabel(
-                    message = message,
-                    isMine = isMine,
-                    modifier = profileClick.weight(1f, fill = false),
-                    fontSize = 11.sp,
-                    fontWeight = if (isMine) FontWeight.Normal else FontWeight.SemiBold,
-                )
-                if (message.isPremium) {
-                    PremiumChatBadge()
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            Box(
-                Modifier
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 12.dp,
-                            topEnd = 12.dp,
-                            bottomStart = if (isMine) 12.dp else 4.dp,
-                            bottomEnd = if (isMine) 4.dp else 12.dp,
-                        ),
+            if (!isMine) {
+                if (showAvatar) {
+                    ChatDecoratedAvatar(
+                        avatarUrl = message.effectiveAvatarUrl,
+                        frameUrl = message.avatarFrameUrl,
+                        outerFrameUrl = message.avatarOuterUrl,
+                        userId = message.userId,
+                        modifier = profileClick,
+                        avatarSize = 36.dp,
+                        contentDescription = message.username,
+                        playVideo = false,
                     )
-                    .background(bubbleColor)
-                    .then(
-                        if (!isMine) {
-                            Modifier.border(
-                                1.dp,
-                                accent.copy(alpha = 0.55f),
-                                RoundedCornerShape(12.dp),
-                            )
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (message.body.isNotBlank()) {
-                        Text(
-                            markdownText(message.body),
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                        )
-                    }
-                    message.metadata.anime?.let { anime ->
-                        ChatAnimeCardView(
-                            anime = anime,
-                            onClick = { onActionClick("anisurge://anime/${anime.animeId}") },
-                        )
-                    }
-                    if (message.metadata.actions.isNotEmpty()) {
-                        ChatActionButtons(
-                            actions = message.metadata.actions,
-                            onActionClick = onActionClick,
-                        )
-                    }
+                } else {
+                    // Invisible spacer to keep bubble alignment consistent
+                    Spacer(Modifier.size(36.dp))
                 }
+                Spacer(Modifier.size(8.dp))
             }
-        }
 
-        if (isMine) {
-            Spacer(Modifier.size(8.dp))
-            ChatDecoratedAvatar(
-                avatarUrl = message.effectiveAvatarUrl,
-                frameUrl = message.avatarFrameUrl,
-                outerFrameUrl = message.avatarOuterUrl,
-                userId = message.userId,
-                modifier = profileClick,
-                avatarSize = 36.dp,
-                contentDescription = message.username,
-                playVideo = false,
-            )
+            Column(
+                modifier = Modifier.widthIn(max = 280.dp),
+                horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
+            ) {
+                if (showHeader) {
+                    Row(
+                        modifier = Modifier.widthIn(max = 240.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        ChatUsernameLabel(
+                            message = message,
+                            isMine = isMine,
+                            modifier = profileClick.weight(1f, fill = false),
+                            fontSize = 11.sp,
+                            fontWeight = if (isMine) FontWeight.Normal else FontWeight.SemiBold,
+                        )
+                        if (message.isPremium) {
+                            PremiumChatBadge()
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                }
+                Box(
+                    Modifier
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 12.dp,
+                                topEnd = 12.dp,
+                                bottomStart = if (isMine) 12.dp else 4.dp,
+                                bottomEnd = if (isMine) 4.dp else 12.dp,
+                            ),
+                        )
+                        .background(bubbleColor)
+                        .then(
+                            if (!isMine) {
+                                Modifier.border(
+                                    1.dp,
+                                    accent.copy(alpha = 0.55f),
+                                    RoundedCornerShape(12.dp),
+                                )
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (message.body.isNotBlank()) {
+                            Text(
+                                markdownText(message.body),
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp,
+                            )
+                        }
+                        message.metadata.anime?.let { anime ->
+                            ChatAnimeCardView(
+                                anime = anime,
+                                onClick = { onActionClick("anisurge://anime/${anime.animeId}") },
+                            )
+                        }
+                        if (message.metadata.actions.isNotEmpty()) {
+                            ChatActionButtons(
+                                actions = message.metadata.actions,
+                                onActionClick = onActionClick,
+                            )
+                        }
+                        // Timestamp inside bubble (bottom-right)
+                        Text(
+                            text = formatChatTimestamp(message.createdAt),
+                            color = Color.White.copy(alpha = 0.4f),
+                            fontSize = 10.sp,
+                            modifier = Modifier.align(Alignment.End),
+                        )
+                    }
+                }
+            }
+
+            if (isMine) {
+                Spacer(Modifier.size(8.dp))
+                if (showAvatar) {
+                    ChatDecoratedAvatar(
+                        avatarUrl = message.effectiveAvatarUrl,
+                        frameUrl = message.avatarFrameUrl,
+                        outerFrameUrl = message.avatarOuterUrl,
+                        userId = message.userId,
+                        modifier = profileClick,
+                        avatarSize = 36.dp,
+                        contentDescription = message.username,
+                        playVideo = false,
+                    )
+                } else {
+                    // Invisible spacer to keep bubble alignment consistent
+                    Spacer(Modifier.size(36.dp))
+                }
+            }
         }
     }
 }
@@ -556,6 +593,35 @@ private fun PremiumChatBadge() {
             .border(1.dp, Color(0xFFFFD54F).copy(alpha = 0.38f), RoundedCornerShape(6.dp))
             .padding(horizontal = 5.dp, vertical = 2.dp),
     )
+}
+
+/**
+ * Formats a chat message timestamp (ISO-8601) into IST time + date.
+ * Shows "HH:mm" for today, "dd MMM, HH:mm" for older messages.
+ */
+private fun formatChatTimestamp(isoTimestamp: String): String {
+    if (isoTimestamp.isBlank()) return ""
+    return try {
+        val ist = TimeZone.of("Asia/Kolkata")
+        val instant = Instant.parse(isoTimestamp)
+        val localDt = instant.toLocalDateTime(ist)
+        val now = kotlinx.datetime.Clock.System.now().toLocalDateTime(ist)
+
+        val hour = localDt.hour.toString().padStart(2, '0')
+        val minute = localDt.minute.toString().padStart(2, '0')
+        val time = "$hour:$minute"
+
+        if (localDt.date == now.date) {
+            time
+        } else {
+            val day = localDt.dayOfMonth
+            val month = localDt.month.name.take(3).lowercase()
+                .replaceFirstChar { it.uppercase() }
+            "$day $month, $time"
+        }
+    } catch (_: Exception) {
+        ""
+    }
 }
 
 @Composable
