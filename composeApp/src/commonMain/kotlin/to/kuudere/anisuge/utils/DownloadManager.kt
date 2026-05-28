@@ -78,6 +78,7 @@ object DownloadManager {
     private const val MP4_BUFFER_SIZE = 8 * 1024
     private const val ANDROID_HLS_PARALLELISM = 4
     private const val DESKTOP_HLS_PARALLELISM = 6
+    private const val SEASON_BATCH_DOWNLOAD_CONCURRENCY = 3
     const val MAX_SEASON_BATCH_EPISODES = 1000
 
     private fun downloadLog(taskId: String, message: String) {
@@ -239,29 +240,47 @@ object DownloadManager {
                 saveTasks()
             }
 
-            for (episode in batch) {
-                val taskId = "${episode.animeId}_${episode.episodeNumber}"
-                val existing = tasks.value.find { it.id == taskId }
-                if (existing != null && isDownloadFinished(existing.status)) continue
-                if (existing != null && !existing.status.startsWith("Failed") && !existing.isPaused && existing.status != "Queued") {
-                    waitForTaskToSettle(taskId)
-                    continue
+            batch.chunked(SEASON_BATCH_DOWNLOAD_CONCURRENCY).forEach { window ->
+                coroutineScope {
+                    window.map { episode ->
+                        async {
+                            runSeasonBatchEpisode(
+                                episode = episode,
+                                server = server,
+                                downloadFonts = downloadFonts,
+                            )
+                        }
+                    }.awaitAll()
                 }
-                val task = tasks.value.find { it.id == taskId } ?: continue
-                updateTask(taskId) { it.copy(isPaused = false, status = "Fetching stream...", progress = 0f) }
-                executeDownload(
-                    task.copy(isPaused = false, status = "Fetching stream..."),
-                    episode.anilistId,
-                    task.serverId ?: server,
-                    task.subLang,
-                    task.audioLang,
-                    downloadFonts,
-                    preResolvedM3u8 = null,
-                    preferBatchDub = task.preferBatchDub,
-                )
-                waitForTaskToSettle(taskId)
             }
         }
+    }
+
+    private suspend fun runSeasonBatchEpisode(
+        episode: BatchEpisodeDownload,
+        server: String,
+        downloadFonts: Boolean,
+    ) {
+        val taskId = "${episode.animeId}_${episode.episodeNumber}"
+        val existing = tasks.value.find { it.id == taskId }
+        if (existing != null && isDownloadFinished(existing.status)) return
+        if (existing != null && !existing.status.startsWith("Failed") && !existing.isPaused && existing.status != "Queued") {
+            waitForTaskToSettle(taskId)
+            return
+        }
+        val task = tasks.value.find { it.id == taskId } ?: return
+        updateTask(taskId) { it.copy(isPaused = false, status = "Fetching stream...", progress = 0f) }
+        executeDownload(
+            task.copy(isPaused = false, status = "Fetching stream..."),
+            episode.anilistId,
+            task.serverId ?: server,
+            task.subLang,
+            task.audioLang,
+            downloadFonts,
+            preResolvedM3u8 = null,
+            preferBatchDub = task.preferBatchDub,
+        )
+        waitForTaskToSettle(taskId)
     }
 
     private fun enqueueDownload(

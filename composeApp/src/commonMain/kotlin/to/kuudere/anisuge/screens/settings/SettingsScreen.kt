@@ -1052,6 +1052,8 @@ private fun MobileSettingsDetail(
                     onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                     onDisconnectAnilist = viewModel::disconnectAnilist,
                     onWatchHistorySync = viewModel::startWatchHistorySync,
+                    onImportFromMAL = viewModel::importLibraryFromMal,
+                    onImportFromAniList = viewModel::importLibraryFromAniList,
                     onSyncToMAL = viewModel::syncAllToMAL,
                     onSyncToAniList = viewModel::syncAllToAniList,
                 )
@@ -1211,6 +1213,8 @@ private fun SettingsContent(
                 onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                 onDisconnectAnilist = viewModel::disconnectAnilist,
                 onWatchHistorySync = viewModel::startWatchHistorySync,
+                onImportFromMAL = viewModel::importLibraryFromMal,
+                onImportFromAniList = viewModel::importLibraryFromAniList,
                 onSyncToMAL = viewModel::syncAllToMAL,
                 onSyncToAniList = viewModel::syncAllToAniList,
             )
@@ -1456,6 +1460,8 @@ private fun SyncTab(
     onConnectAnilist: () -> Unit,
     onDisconnectAnilist: () -> Unit,
     onWatchHistorySync: () -> Unit,
+    onImportFromMAL: () -> Unit,
+    onImportFromAniList: () -> Unit,
     onSyncToMAL: () -> Unit,
     onSyncToAniList: () -> Unit,
 ) {
@@ -1608,7 +1614,114 @@ private fun SyncTab(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            val trackingBusy =
+                uiState.isWatchHistorySyncing ||
+                    uiState.isSyncingMal ||
+                    uiState.isSyncingAnilist ||
+                    uiState.isImportingMal ||
+                    uiState.isImportingAnilist ||
+                    uiState.isOffline
+            SettingCard(
+                title = "Tracker import",
+                description = "Bring MAL/AniList lists into Anisurge, or push Anisurge progress back out.",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TrackerSyncButton(
+                        label = "Import from MAL",
+                        loading = uiState.isImportingMal,
+                        enabled = uiState.malConnected && !trackingBusy,
+                        onClick = onImportFromMAL,
+                    )
+                    TrackerSyncButton(
+                        label = "Import from AniList",
+                        loading = uiState.isImportingAnilist,
+                        enabled = uiState.anilistConnected && !trackingBusy,
+                        onClick = onImportFromAniList,
+                    )
+                    HorizontalDivider(color = BORDER)
+                    TrackerSyncButton(
+                        label = "Sync to MAL",
+                        loading = uiState.isSyncingMal,
+                        enabled = uiState.malConnected && !trackingBusy,
+                        onClick = onSyncToMAL,
+                    )
+                    TrackerSyncButton(
+                        label = "Sync to AniList",
+                        loading = uiState.isSyncingAnilist,
+                        enabled = uiState.anilistConnected && !trackingBusy,
+                        onClick = onSyncToAniList,
+                    )
+
+                    if (uiState.isImportingMal || uiState.isImportingAnilist) {
+                        val total = uiState.trackingImportTotal
+                        val progress = if (total > 0) {
+                            (uiState.trackingImportCurrent.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                        } else {
+                            0f
+                        }
+                        LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color(0xFF6C4AB6),
+                            trackColor = Color.White.copy(alpha = 0.08f),
+                        )
+                        Text(
+                            text = if (total > 0) {
+                                "Importing ${uiState.trackingImportCurrent} / $total"
+                            } else {
+                                "Preparing import..."
+                            },
+                            color = MUTED,
+                            fontSize = 12.sp,
+                        )
+                        uiState.trackingImportDetail?.takeIf { it.isNotBlank() }?.let { detail ->
+                            Text(
+                                text = detail,
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 12.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun TrackerSyncButton(
+    label: String,
+    loading: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled && !loading,
+        modifier = Modifier.fillMaxWidth().height(44.dp),
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color(0xFF6C4AB6),
+            disabledContainerColor = Color.White.copy(alpha = 0.08f),
+            contentColor = Color.White,
+            disabledContentColor = MUTED,
+        ),
+    ) {
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = Color.White,
+                strokeWidth = 2.dp,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+        Text(label, fontWeight = FontWeight.SemiBold)
     }
 }
 

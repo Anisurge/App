@@ -163,23 +163,26 @@ class AuthService(
     }
 
     suspend fun forgotPassword(identifier: String): String {
-        val response = httpClient.post("${AppComponent.PROJECT_R_BASE_URL}/auth/forgot-password") {
+        val response = httpClient.post("${AnisurgeApi.v1Base}/auth/forgot-password") {
             contentType(ContentType.Application.Json)
             setBody(ForgotPasswordRequest(identifier))
         }
+        if (response.status != HttpStatusCode.OK) {
+            throw Exception(response.bffErrorMessage("Could not send reset code"))
+        }
         val body: BasicApiResponse = response.body()
-        return body.message ?: "Reset code sent successfully"
+        return body.message ?: "Reset code sent to your email"
     }
 
     suspend fun resetPassword(identifier: String, otp: String, newPassword: String): String {
-        val response = httpClient.post("${AppComponent.PROJECT_R_BASE_URL}/auth/reset-password") {
+        val response = httpClient.post("${AnisurgeApi.v1Base}/auth/reset-password") {
             contentType(ContentType.Application.Json)
             setBody(ResetPasswordRequest(identifier, otp, newPassword))
         }
-        val body: BasicApiResponse = response.body()
         if (response.status != HttpStatusCode.OK) {
-            throw Exception(body.message ?: "Failed to reset password")
+            throw Exception(response.bffErrorMessage("Failed to reset password"))
         }
+        val body: BasicApiResponse = response.body()
         return body.message ?: "Password reset successfully"
     }
 

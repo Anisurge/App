@@ -47,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -92,6 +93,7 @@ fun LiveChatScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    val isUserScrolling by remember { derivedStateOf { listState.isScrollInProgress } }
     var didInitialScroll by remember { mutableStateOf(false) }
     var messageCountBeforeOlder by remember { mutableIntStateOf(0) }
 
@@ -114,7 +116,7 @@ fun LiveChatScreen(
         val nearBottom = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
             ?.let { it >= lastIndex - 1 } ?: true
         if (nearBottom) {
-            listState.scrollToItem(lastIndex)
+            listState.animateScrollToItem(lastIndex)
         }
     }
 
@@ -345,6 +347,7 @@ fun LiveChatScreen(
                                     isMine = message.userId == state.currentUserId,
                                     showHeader = isFirstInGroup,
                                     showAvatar = isLastInGroup,
+                                    isScrolling = isUserScrolling,
                                     onProfileClick = { viewModel.showMemberProfile(message) },
                                     onActionClick = onAction,
                                 )
@@ -451,6 +454,7 @@ private fun ChatMessageRow(
     isMine: Boolean,
     showHeader: Boolean,
     showAvatar: Boolean,
+    isScrolling: Boolean,
     onProfileClick: () -> Unit,
     onActionClick: (String) -> Unit,
 ) {
@@ -481,7 +485,7 @@ private fun ChatMessageRow(
                         modifier = profileClick,
                         avatarSize = 36.dp,
                         contentDescription = message.username,
-                        playVideo = true,
+                        playVideo = !isScrolling,
                     )
                 } else {
                     // Invisible spacer to keep bubble alignment consistent
@@ -580,7 +584,7 @@ private fun ChatMessageRow(
                         modifier = profileClick,
                         avatarSize = 36.dp,
                         contentDescription = message.username,
-                        playVideo = true,
+                        playVideo = !isScrolling,
                     )
                 } else {
                     // Invisible spacer to keep bubble alignment consistent

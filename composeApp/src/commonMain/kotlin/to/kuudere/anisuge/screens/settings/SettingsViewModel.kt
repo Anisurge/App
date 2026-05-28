@@ -26,6 +26,7 @@ import to.kuudere.anisuge.data.models.DownloadStorageInfo
 import to.kuudere.anisuge.data.models.LayoutConfig
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.data.models.UserSettings
+import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.CommunityService
 import to.kuudere.anisuge.data.services.SettingsService
@@ -117,6 +118,11 @@ data class SettingsUiState(
     val isSavingChatProfilePrivacy: Boolean = false,
     val isSyncingMal: Boolean = false,
     val isSyncingAnilist: Boolean = false,
+    val isImportingMal: Boolean = false,
+    val isImportingAnilist: Boolean = false,
+    val trackingImportCurrent: Int = 0,
+    val trackingImportTotal: Int = 0,
+    val trackingImportDetail: String? = null,
     val lunarConnected: Boolean = false,
     val lunarUsername: String? = null,
     val isConnectingLunar: Boolean = false,
@@ -226,7 +232,14 @@ class SettingsViewModel(
     private companion object {
         const val SHOP_PAGE_SIZE = 15
         const val SHOP_PREFETCH_CONCURRENCY = 6
+        const val TRACKING_SYNC_CONCURRENCY = 3
+        const val TRACKING_IMPORT_CONCURRENCY = 3
     }
+
+    private data class TrackerImportResult(
+        val imported: Boolean,
+        val detail: String?,
+    )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -1510,6 +1523,198 @@ class SettingsViewModel(
         }
     }
 
+    fun importLibraryFromMal() {
+        importLibraryFromTracker(fromAnilist = false)
+    }
+
+    fun importLibraryFromAniList() {
+        importLibraryFromTracker(fromAnilist = true)
+    }
+
+    private fun importLibraryFromTracker(fromAnilist: Boolean) {
+        val snap = _uiState.value
+        if (snap.isImportingMal || snap.isImportingAnilist || snap.isWatchHistorySyncing) return
+        if (!snap.isSignedIn) {
+            _uiState.update { it.copy(errorMessage = "Sign in to import your tracker library.") }
+            return
+        }
+        val serviceName = if (fromAnilist) "AniList" else "MyAnimeList"
+        val connected = if (fromAnilist) snap.anilistConnected else snap.malConnected
+        if (!connected) {
+            _uiState.update { it.copy(errorMessage = "Connect $serviceName first.") }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.Default) {
+            _uiState.update {
+                if (fromAnilist) {
+                    it.copy(
+                        isImportingAnilist = true,
+                        errorMessage = null,
+                        successMessage = null,
+                        trackingImportCurrent = 0,
+                        trackingImportTotal = 0,
+                        trackingImportDetail = "Fetching AniList library...",
+                    )
+                } else {
+                    it.copy(
+                        isImportingMal = true,
+                        errorMessage = null,
+                        successMessage = null,
+                        trackingImportCurrent = 0,
+                        trackingImportTotal = 0,
+                        trackingImportDetail = "Fetching MyAnimeList library...",
+                    )
+                }
+            }
+            updateSyncProgressNotification(
+                title = "Importing from $serviceName",
+                statusText = "Fetching library...",
+                progressCurrent = 0,
+                progressMax = 1,
+            )
+
+            try {
+                val entries = (if (fromAnilist) {
+                    trackingService.fetchAnilistList()
+                } else {
+                    trackingService.fetchMalList()
+                }).getOrElse { throw it }
+                    .filter { it.externalId > 0 }
+                    .distinctBy { it.externalId }
+
+                if (entries.isEmpty()) {
+                    _uiState.update {
+                        if (fromAnilist) {
+                            it.copy(
+                                isImportingAnilist = false,
+                                trackingImportDetail = null,
+                                successMessage = "No AniList anime entries found.",
+                            )
+                        } else {
+                            it.copy(
+                                isImportingMal = false,
+                                trackingImportDetail = null,
+                                successMessage = "No MyAnimeList anime entries found.",
+                            )
+                        }
+                    }
+                    return@launch
+                }
+
+                _uiState.update {
+                    it.copy(
+                        trackingImportCurrent = 0,
+                        trackingImportTotal = entries.size,
+                        trackingImportDetail = "Matching ${entries.size} tracker entries...",
+                    )
+                }
+
+                var imported = 0
+                var completed = 0
+                entries.chunked(TRACKING_IMPORT_CONCURRENCY).forEach { chunk ->
+                    val results = chunk.map { entry ->
+                        async {
+                            val match = resolveImportedTrackerAnime(entry, fromAnilist)
+                                ?: return@async TrackerImportResult(
+                                    imported = false,
+                                    detail = entry.title?.let { "Skipped $it" } ?: "Skipped tracker id ${entry.externalId}",
+                                )
+                            val ok = watchlistService.updateStatus(
+                                animeId = match.animeId,
+                                folder = entry.toAnisurgeFolder(fromAnilist),
+                                anilistId = if (fromAnilist) entry.externalId else match.anilistId,
+                                malId = if (fromAnilist) match.malId else entry.externalId,
+                            ) != null
+                            TrackerImportResult(
+                                imported = ok,
+                                detail = entry.title ?: match.displayTitle,
+                            )
+                        }
+                    }.awaitAll()
+                    imported += results.count { it.imported }
+                    completed += chunk.size
+                    val detail = results.lastOrNull()?.detail
+                    _uiState.update {
+                        it.copy(
+                            trackingImportCurrent = completed,
+                            trackingImportTotal = entries.size,
+                            trackingImportDetail = detail,
+                        )
+                    }
+                    updateSyncProgressNotification(
+                        title = "Importing from $serviceName",
+                        statusText = "${detail ?: "Working"}\n$completed / ${entries.size}",
+                        progressCurrent = completed,
+                        progressMax = entries.size,
+                    )
+                }
+
+                val failed = entries.size - imported
+                _uiState.update {
+                    val base = it.copy(
+                        trackingImportCurrent = entries.size,
+                        trackingImportTotal = entries.size,
+                        trackingImportDetail = null,
+                        errorMessage = if (failed > 0) {
+                            "$serviceName import finished: $imported/${entries.size} imported."
+                        } else null,
+                        successMessage = if (failed == 0) {
+                            "$serviceName import complete: $imported/${entries.size} imported."
+                        } else null,
+                    )
+                    if (fromAnilist) base.copy(isImportingAnilist = false) else base.copy(isImportingMal = false)
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    val base = it.copy(
+                        trackingImportDetail = null,
+                        errorMessage = "$serviceName import failed: ${e.message ?: "Unknown error"}",
+                    )
+                    if (fromAnilist) base.copy(isImportingAnilist = false) else base.copy(isImportingMal = false)
+                }
+            } finally {
+                clearSyncProgressNotification()
+            }
+        }
+    }
+
+    private suspend fun resolveImportedTrackerAnime(
+        entry: TrackingService.ExternalListEntry,
+        fromAnilist: Boolean,
+    ): AnimeItem? {
+        val title = entry.title?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val results = runCatching {
+            AppComponent.searchService.search(q = title, limit = 10)?.results.orEmpty()
+        }.getOrDefault(emptyList())
+        if (results.isEmpty()) return null
+
+        val direct = if (fromAnilist) {
+            results.firstOrNull { it.anilistId == entry.externalId }
+        } else {
+            results.firstOrNull { it.malId == entry.externalId }
+        }
+        if (direct != null) return direct
+
+        if (!fromAnilist) {
+            val mappedAnilistId = runCatching { trackingService.lookupAnilistIdFromMal(entry.externalId) }.getOrNull()
+            if (mappedAnilistId != null) {
+                results.firstOrNull { it.anilistId == mappedAnilistId }?.let { return it }
+            }
+        }
+
+        val normalizedTitle = normalizeImportedTitle(title)
+        return results.firstOrNull { anime ->
+            normalizeImportedTitle(anime.displayTitle) == normalizedTitle ||
+                normalizeImportedTitle(anime.english) == normalizedTitle ||
+                normalizeImportedTitle(anime.romaji) == normalizedTitle
+        } ?: results.firstOrNull { it.canWatch && it.animeId.isNotBlank() }
+            ?: results.firstOrNull { it.animeId.isNotBlank() }
+    }
+
+    private fun normalizeImportedTitle(value: String): String =
+        value.lowercase().replace(Regex("[^a-z0-9]+"), "")
+
     fun connectLunar(onOpenUrl: (String) -> Unit) {
         viewModelScope.launch {
             _uiState.update { it.copy(isConnectingLunar = true) }
@@ -2200,23 +2405,26 @@ class SettingsViewModel(
                     progressMax = maxOf(1, eligible.size),
                 )
                 var success = 0
-                eligible.forEachIndexed { index, item ->
-                    val malId = item.anime.malId!!
-                    val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
-                    val totalEpisodes = item.anime.epCount
-                    val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
-                        ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
-                    val step = index + 1
+                var completed = 0
+                eligible.chunked(TRACKING_SYNC_CONCURRENCY).forEach { chunk ->
+                    val chunkResults = chunk.map { item ->
+                        async {
+                            val malId = item.anime.malId!!
+                            val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
+                            val totalEpisodes = item.anime.epCount
+                            val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
+                                ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
+                            trackingService.syncMalProgress(malId, progressEpisode, totalEpisodes)
+                        }
+                    }.awaitAll()
+                    success += chunkResults.count { it }
+                    completed += chunk.size
                     updateSyncProgressNotification(
                         title = "Syncing to MyAnimeList",
-                        statusText = "${item.anime.displayTitle}\n$step / ${eligible.size}",
-                        progressCurrent = step,
+                        statusText = "${chunk.lastOrNull()?.anime?.displayTitle ?: "Working"}\n$completed / ${eligible.size}",
+                        progressCurrent = completed,
                         progressMax = eligible.size,
                     )
-                    if (trackingService.syncMalProgress(malId, progressEpisode, totalEpisodes)) {
-                        success += 1
-                    }
-                    if (step % 10 == 0) delay(50L)
                 }
                 val attempted = eligible.size
                 val failed = attempted - success
@@ -2265,23 +2473,26 @@ class SettingsViewModel(
                     progressMax = maxOf(1, eligible.size),
                 )
                 var success = 0
-                eligible.forEachIndexed { index, item ->
-                    val anilistId = item.anime.anilistId!!
-                    val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
-                    val totalEpisodes = item.anime.epCount
-                    val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
-                        ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
-                    val step = index + 1
+                var completed = 0
+                eligible.chunked(TRACKING_SYNC_CONCURRENCY).forEach { chunk ->
+                    val chunkResults = chunk.map { item ->
+                        async {
+                            val anilistId = item.anime.anilistId!!
+                            val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
+                            val totalEpisodes = item.anime.epCount
+                            val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
+                                ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
+                            trackingService.syncAnilistProgress(anilistId, progressEpisode, totalEpisodes)
+                        }
+                    }.awaitAll()
+                    success += chunkResults.count { it }
+                    completed += chunk.size
                     updateSyncProgressNotification(
                         title = "Syncing to AniList",
-                        statusText = "${item.anime.displayTitle}\n$step / ${eligible.size}",
-                        progressCurrent = step,
+                        statusText = "${chunk.lastOrNull()?.anime?.displayTitle ?: "Working"}\n$completed / ${eligible.size}",
+                        progressCurrent = completed,
                         progressMax = eligible.size,
                     )
-                    if (trackingService.syncAnilistProgress(anilistId, progressEpisode, totalEpisodes)) {
-                        success += 1
-                    }
-                    delay(120L)
                 }
                 val attempted = eligible.size
                 val failed = attempted - success

@@ -2,6 +2,8 @@ package to.kuudere.anisuge.screens.watch
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -277,32 +279,51 @@ class WatchViewModel(
 
         if (data != null) {
             val slug = data.anime?.animeId?.takeIf { it.isNotBlank() } ?: currentAnimeId
-            val loadedEpisodes = reuseOrNullEpisodes(_uiState.value.episodeData, data, slug)
-                ?: fetchAllEpisodes(slug)
-            val mergedEpisodes = when {
-                loadedEpisodes.isNotEmpty() -> loadedEpisodes
-                data.episodes?.isNotEmpty() == true -> data.episodes
-                else -> {
-                    val total = data.anime?.epCount ?: data.anime?.episodes
-                    synthesizeEpisodesFromCount(total)
-                }
-            }
-            val dataWithEpisodes = data.copy(episodes = mergedEpisodes.takeIf { it.isNotEmpty() })
-            val progressMap = fetchEpisodeProgress(currentAnimeId, dataWithEpisodes)
-
+            val priorEpisodeData = _uiState.value.episodeData
             _uiState.update { state ->
                 val mergedResume = mergeResumeHint(data.currentTime, state.savedWatchPosition)
                 state.copy(
                     isLoading = false,
-                    loadingMessage = "Switching servers...",
-                    episodeData = dataWithEpisodes,
-                    episodeProgress = progressMap,
+                    loadingMessage = "Fetching streaming URL...",
+                    episodeData = data,
                     savedWatchPosition = mergedResume,
                 )
             }
 
-            if (_uiState.value.offlinePath == null && coroutineContext.isActive) {
-                loadVideoStream(streamServer, data.anilistId)
+            coroutineScope {
+                val streamJob = launch {
+                    if (_uiState.value.offlinePath == null && coroutineContext.isActive) {
+                        loadVideoStream(streamServer, data.anilistId)
+                    }
+                }
+                val loadedEpisodesDeferred = async {
+                    reuseOrNullEpisodes(priorEpisodeData, data, slug) ?: fetchAllEpisodes(slug)
+                }
+                val progressDeferred = async {
+                    fetchEpisodeProgress(currentAnimeId, data)
+                }
+
+                val loadedEpisodes = loadedEpisodesDeferred.await()
+                val mergedEpisodes = when {
+                    loadedEpisodes.isNotEmpty() -> loadedEpisodes
+                    data.episodes?.isNotEmpty() == true -> data.episodes
+                    else -> {
+                        val total = data.anime?.epCount ?: data.anime?.episodes
+                        synthesizeEpisodesFromCount(total)
+                    }
+                }
+                val dataWithEpisodes = data.copy(episodes = mergedEpisodes.takeIf { it.isNotEmpty() })
+                val progressMap = progressDeferred.await()
+
+                if (coroutineContext.isActive && _uiState.value.offlinePath == null) {
+                    _uiState.update { state ->
+                        state.copy(
+                            episodeData = dataWithEpisodes,
+                            episodeProgress = progressMap,
+                        )
+                    }
+                }
+                streamJob.join()
             }
         } else {
             _uiState.update { it.copy(isLoading = false, isLoadingVideo = false, loadingMessage = null) }

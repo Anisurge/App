@@ -116,14 +116,32 @@ fun SettingsOverlay(
                     SettingsMenuPage.MAIN -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             // Top Drag Handle indicator
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, end = 10.dp, top = 4.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
+                                Spacer(Modifier.size(32.dp))
                                 Box(
-                                    modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp))
-                                        .background(Color.DarkGray)
+                                    modifier = Modifier
+                                        .width(40.dp)
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(Color.DarkGray),
                                 )
+                                IconButton(
+                                    onClick = onDismiss,
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close settings",
+                                        tint = Color.White.copy(alpha = 0.86f),
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
                             }
 
                             Column(
@@ -297,7 +315,7 @@ fun SettingsOverlay(
 
                     SettingsMenuPage.SERVER -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Server") { currentPage = SettingsMenuPage.MAIN }
+                            SubMenuHeader("Server", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 items(servers) { server ->
                                     SubMenuItem(
@@ -312,7 +330,7 @@ fun SettingsOverlay(
 
                     SettingsMenuPage.QUALITY -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Quality") { currentPage = SettingsMenuPage.MAIN }
+                            SubMenuHeader("Quality", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 items(uiState.availableQualities) { (quality, _) ->
                                     SubMenuItem(
@@ -328,7 +346,7 @@ fun SettingsOverlay(
                     SettingsMenuPage.SPEED -> {
                         val speeds = listOf(0.5, 0.75, 1.0, 1.25, 1.5, 2.0)
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Playback speed") { currentPage = SettingsMenuPage.MAIN }
+                            SubMenuHeader("Playback speed", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 items(speeds) { speed ->
                                     val titleStr = if (speed == 1.0) "Normal" else "${speed}x"
@@ -345,7 +363,7 @@ fun SettingsOverlay(
                     SettingsMenuPage.SCALE -> {
                         val modes = listOf("Fit" to "Screen fit", "Zoom" to "Screen fill")
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Screen mode") { currentPage = SettingsMenuPage.MAIN }
+                            SubMenuHeader("Screen mode", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
                             LazyColumn(modifier = Modifier.heightIn(max = 220.dp).fillMaxWidth()) {
                                 items(modes) { (mode, label) ->
                                     SubMenuItem(
@@ -360,7 +378,7 @@ fun SettingsOverlay(
 
                     SettingsMenuPage.SUBTITLES -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Captions") { currentPage = SettingsMenuPage.MAIN }
+                            SubMenuHeader("Captions", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
                             LazyColumn(modifier = Modifier.heightIn(max = 340.dp).fillMaxWidth()) {
                                 item {
                                     Column(
@@ -440,7 +458,7 @@ fun SettingsOverlay(
                         val folders = listOf("Watching", "On Hold", "Plan To Watch", "Dropped", "Completed", "Remove")
                         val currentFolder = uiState.episodeData?.folder
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Watchlist") { currentPage = SettingsMenuPage.MAIN }
+                            SubMenuHeader("Watchlist", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 items(folders) { folder ->
                                     SubMenuItem(
@@ -455,7 +473,7 @@ fun SettingsOverlay(
 
                     SettingsMenuPage.AUTOPLAY -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Playback settings") { currentPage = SettingsMenuPage.MAIN }
+                            SubMenuHeader("Playback settings", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 item {
                                     ToggleMenuItem(
@@ -570,7 +588,7 @@ private fun SettingsMenuItem(
 }
 
 @Composable
-private fun SubMenuHeader(title: String, onBack: () -> Unit) {
+private fun SubMenuHeader(title: String, onBack: () -> Unit, onClose: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -593,8 +611,21 @@ private fun SubMenuHeader(title: String, onBack: () -> Unit) {
             color = Color.White,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 12.dp)
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .weight(1f)
         )
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Close settings",
+                tint = Color.White.copy(alpha = 0.86f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
 

@@ -82,7 +82,9 @@ actual suspend fun normalizeProfileVideoForUpload(pick: ChatImagePick): Result<C
             try {
                 val ffmpeg = resolveFfmpegPath()
                 val ok = transcodeProfileVideo(ffmpeg, input, output, scale = 512, crf = 28) ||
-                    transcodeProfileVideo(ffmpeg, input, output, scale = 384, crf = 32)
+                    transcodeProfileVideo(ffmpeg, input, output, scale = 384, crf = 32) ||
+                    transcodeProfileVideo(ffmpeg, input, output, scale = 320, crf = 34) ||
+                    transcodeProfileVideo(ffmpeg, input, output, scale = 256, crf = 36)
                 if (!ok || !output.exists() || output.length() <= 0L) {
                     throw IllegalStateException("Could not crop and trim MP4")
                 }
@@ -124,11 +126,17 @@ private fun transcodeProfileVideo(
         input.absolutePath,
         "-t",
         "6",
+        "-map",
+        "0:v:0",
         "-vf",
         filter,
         "-an",
+        "-r",
+        "30",
         "-c:v",
         "libx264",
+        "-pix_fmt",
+        "yuv420p",
         "-preset",
         "veryfast",
         "-crf",

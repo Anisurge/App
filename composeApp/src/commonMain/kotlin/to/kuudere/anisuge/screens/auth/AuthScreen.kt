@@ -373,37 +373,14 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                 text = when (mode) {
                     AuthMode.LOGIN -> "Sign in to continue watching"
                     AuthMode.REGISTER -> "Create your Anisurge account"
-                    AuthMode.FORGOT_PASSWORD -> "Enter your email or username to reset your password"
-                    AuthMode.RESET_PASSWORD -> "Enter your new password"
+                    AuthMode.FORGOT_PASSWORD -> "We'll email a secure reset code to your account"
+                    AuthMode.RESET_PASSWORD -> "Enter the code from your email and choose a new password"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF999999),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.W400,
             )
-        }
-        if (state.mode == AuthMode.LOGIN || state.mode == AuthMode.REGISTER) {
-            Spacer(Modifier.height(10.dp))
-            AnimatedContent(
-                targetState = state.mode,
-                transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
-                label = "auth_reanime_note",
-            ) { mode ->
-                Text(
-                    text = when (mode) {
-                        AuthMode.LOGIN ->
-                            "You can sign in with the same email or username and password you use on reanime.to."
-                        AuthMode.REGISTER ->
-                            "Already have a reanime.to account? Sign in with those details — no need to create a new one."
-                        else -> ""
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF6B6B6B),
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                    fontWeight = FontWeight.W400,
-                )
-            }
         }
     }
 
@@ -448,11 +425,37 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
 
     // RESET_PASSWORD mode — OTP field
     if (state.mode == AuthMode.RESET_PASSWORD) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.08f))
+                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                .padding(14.dp),
+        ) {
+            Column {
+                Text(
+                    "Code sent",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.W700,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Check ${state.identifier.ifBlank { "your email" }} for a 6-digit Anisurge reset code.",
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                )
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+
         AnisugTextField(
             value = state.otp,
             onValueChange = viewModel::onOtpChange,
-            label = "OTP Code",
-            placeholder = "Enter OTP code",
+            label = "Verification Code",
+            placeholder = "6-digit email code",
             keyboardType = KeyboardType.Number,
             imeAction = ImeAction.Next,
             onImeAction = { passwordFocus.requestFocus() },

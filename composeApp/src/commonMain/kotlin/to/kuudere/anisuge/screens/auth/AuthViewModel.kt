@@ -166,6 +166,8 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
                     AuthMode.RESET_PASSWORD -> {
                         if (state.otp.isBlank()) throw Exception("Please enter the OTP code")
                         if (state.password.isBlank()) throw Exception("Please enter a new password")
+                        if (state.password.length < 8) throw Exception("Password must be at least 8 characters")
+                        if (state.password != state.confirmPassword) throw Exception("Passwords do not match")
                         val msg = authService.resetPassword(state.identifier, state.otp, state.password)
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,

@@ -10,6 +10,8 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import to.kuudere.anisuge.AppComponent
@@ -21,11 +23,21 @@ import to.kuudere.anisuge.data.models.RecommendationsResponse
 import to.kuudere.anisuge.data.models.SuzuEmbedStream
 import to.kuudere.anisuge.data.models.BffWatchProgressResponse
 import to.kuudere.anisuge.data.models.WatchInfoResponse
+import to.kuudere.anisuge.utils.currentTimeMillis
 
 class InfoService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
+    private data class CachedVideoStream(
+        val storedAtMs: Long,
+        val response: BatchScrapeResponse,
+    )
+
+    private val videoStreamCache = mutableMapOf<String, CachedVideoStream>()
+    private val videoStreamCacheLock = Mutex()
+    private val videoStreamCacheTtlMs = 3 * 60 * 1000L
+
     suspend fun getAnimeDetails(slug: String): AnimeDetails? {
         return try {
             val stored = sessionStore.get()
@@ -98,6 +110,15 @@ class InfoService(
         episodeNumber: Int,
         server: String
     ): BatchScrapeResponse? {
+        val normalizedServer = server.lowercase()
+        val cacheKey = "$anilistId:$episodeNumber:$normalizedServer"
+        val now = currentTimeMillis()
+        videoStreamCacheLock.withLock {
+            videoStreamCache[cacheKey]
+                ?.takeIf { now - it.storedAtMs <= videoStreamCacheTtlMs }
+                ?.response
+        }?.let { return it }
+
         return try {
             val response = httpClient.get(AppComponent.STREAMING_URL) {
                 parameter("action", "batch_scrape")
@@ -105,7 +126,14 @@ class InfoService(
                 parameter("episode", episodeNumber)
                 parameter("source", server)
             }
-            response.body<BatchScrapeResponse>()
+            response.body<BatchScrapeResponse>().also { body ->
+                videoStreamCacheLock.withLock {
+                    videoStreamCache[cacheKey] = CachedVideoStream(currentTimeMillis(), body)
+                    if (videoStreamCache.size > 40) {
+                        videoStreamCache.minByOrNull { it.value.storedAtMs }?.key?.let(videoStreamCache::remove)
+                    }
+                }
+            }
         } catch (e: Exception) {
             println("[InfoService] getVideoStream error: ${e.message}")
             null
