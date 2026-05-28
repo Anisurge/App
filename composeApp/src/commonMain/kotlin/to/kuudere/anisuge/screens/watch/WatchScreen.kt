@@ -122,11 +122,14 @@ fun WatchScreen(
     }
     val useAndroidWatchPage = isAndroidPlatform &&
         !isAndroidTvPlatform &&
-        !uiState.isFullscreen &&
         uiState.offlinePath == null &&
         !isStateStale
 
-    LockScreenOrientation(!useAndroidWatchPage)
+    val shouldUseLandscape = when {
+        isAndroidPlatform && !isAndroidTvPlatform -> uiState.isFullscreen
+        else -> true
+    }
+    LockScreenOrientation(shouldUseLandscape)
     to.kuudere.anisuge.platform.SyncFullscreen(uiState.isFullscreen)
 
     val handleBack = {
@@ -1069,16 +1072,28 @@ private fun AndroidWatchPageLayout(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+            .then(
+                if (uiState.isFullscreen) {
+                    Modifier
+                } else {
+                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top))
+                }
+            )
     ) {
         key(playerKey) {
             WatchVideoPlayer(
                 uiState = uiState,
                 viewModel = viewModel,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .background(Color.Black),
+                modifier = if (uiState.isFullscreen) {
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .background(Color.Black)
+                },
                 isPremiumUser = isPremiumUser,
                 onFullscreenToggle = onFullscreenToggle,
                 onBack = onBack,
@@ -1092,29 +1107,31 @@ private fun AndroidWatchPageLayout(
             )
         }
 
-        WatchPageTabs(
-            selectedTab = selectedTab,
-            onSelectTab = { selectedTab = it },
-        )
+        if (!uiState.isFullscreen) {
+            WatchPageTabs(
+                selectedTab = selectedTab,
+                onSelectTab = { selectedTab = it },
+            )
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .background(Color.Black)
-        ) {
-            when (selectedTab) {
-                WatchPageTab.Episodes -> EpisodeListContent(
-                    uiState = uiState,
-                    viewModel = viewModel,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(Color.Black)
+            ) {
+                when (selectedTab) {
+                    WatchPageTab.Episodes -> EpisodeListContent(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        modifier = Modifier.fillMaxSize(),
+                    )
 
-                WatchPageTab.Comments -> WatchCommentsContent(
-                    animeId = animeId,
-                    uiState = uiState,
-                    onClose = { selectedTab = WatchPageTab.Episodes },
-                )
+                    WatchPageTab.Comments -> WatchCommentsContent(
+                        animeId = animeId,
+                        uiState = uiState,
+                        onClose = { selectedTab = WatchPageTab.Episodes },
+                    )
+                }
             }
         }
     }
