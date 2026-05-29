@@ -123,7 +123,7 @@ fun AnimeInfoScreen(
         SeasonBatchPickerDialog(
             episodes = batchPickerEpisodes,
             onDismiss = { batchPickerEpisodes = emptyList() },
-            onConfirm = { episodes ->
+            onConfirm = { episodes, chosenServer, preferDub ->
                 batchPickerEpisodes = emptyList()
                 val details = state.details ?: return@SeasonBatchPickerDialog
                 val anilistId = details.anilistId ?: 0
@@ -133,16 +133,19 @@ fun AnimeInfoScreen(
                     val batch = episodes
                         .sortedBy { it.number }
                         .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
+                    val audioLabel = if (preferDub) "Dub" else "Sub"
                     val server = preflightBatchDownloadServer(
                         anilistId = anilistId,
                         episodes = batch,
+                        preferredServer = chosenServer,
+                        preferDub = preferDub,
                         onStatus = { batchPreflightMessage = it },
                         onFailure = { failedServer, failedEpisodes ->
-                            batchPreflightMessage = "$failedServer failed for ${failedEpisodes.size} episode${if (failedEpisodes.size == 1) "" else "s"}: ${failedEpisodes.take(8).joinToString(", ") { "Ep ${it.number}" }}. Trying Anikage..."
+                            batchPreflightMessage = "$failedServer ($audioLabel) failed for ${failedEpisodes.size} episode${if (failedEpisodes.size == 1) "" else "s"}: ${failedEpisodes.take(8).joinToString(", ") { "Ep ${it.number}" }}. Trying a backup server..."
                         },
                     )
                     if (server == null) {
-                        batchPreflightError = "Batch check failed on Anitaku-1 and Anikage. Some selected episodes did not return a usable stream. Try fewer episodes or single download for the failing ones."
+                        batchPreflightError = "Batch check failed for $audioLabel on $chosenServer and backups. Some selected episodes did not return a usable stream. Try the other audio, fewer episodes, or single download for the failing ones."
                         batchPreflightMessage = null
                         return@launch
                     }
@@ -157,11 +160,11 @@ fun AnimeInfoScreen(
                             )
                         },
                         server = server,
-                        subLang = "English",
+                        subLang = if (preferDub) null else "English",
                         audioLang = "sub",
                         downloadFonts = true,
                         headers = null,
-                        preferBatchDub = false,
+                        preferBatchDub = preferDub,
                     )
                     batchPreflightMessage = null
                     onDownloadsClick()
@@ -307,15 +310,28 @@ private fun buildAnimeShareText(
     return "$title\nWatch this on Anisurge:\nhttps://www.anisurge.lol/anime/$id"
 }
 
+/**
+ * Recommended batch-download servers in priority order: Anikage, Anitaku, AniDB, Miruro.
+ * The user's pick is always tried first; these are the fallbacks if it fails.
+ */
+private val BATCH_RECOMMENDED_SERVERS = listOf("anikage", "anitaku-1", "anitaku", "anidb", "miruro")
+
 private suspend fun preflightBatchDownloadServer(
     anilistId: Int,
     episodes: List<to.kuudere.anisuge.data.models.EpisodeItem>,
+    preferredServer: String,
+    preferDub: Boolean,
     onStatus: (String) -> Unit,
     onFailure: (server: String, failedEpisodes: List<to.kuudere.anisuge.data.models.EpisodeItem>) -> Unit,
 ): String? {
-    val candidates = listOf("anitaku-1", "anikage")
+    // User's choice first, then the recommended fallbacks in order, de-duplicated.
+    val candidates = (listOf(preferredServer) + BATCH_RECOMMENDED_SERVERS)
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinctBy { it.lowercase() }
+    val audioLabel = if (preferDub) "Dub" else "Sub"
     for (server in candidates) {
-        onStatus("Checking ${episodes.size} episode${if (episodes.size == 1) "" else "s"} on $server...")
+        onStatus("Checking ${episodes.size} episode${if (episodes.size == 1) "" else "s"} ($audioLabel) on $server...")
         val failed = coroutineScope {
             episodes.map { episode ->
                 async {
@@ -324,14 +340,15 @@ private suspend fun preflightBatchDownloadServer(
                             .getVideoStream(anilistId, episode.number, server)
                         val subOk = response?.sub?.streams?.any { !it.url.isNullOrBlank() } == true
                         val dubOk = response?.dub?.streams?.any { !it.url.isNullOrBlank() } == true
-                        subOk || dubOk
+                        // Require the audio the user asked for; fall back to the other only if it's all we have.
+                        if (preferDub) dubOk else subOk || (!subOk && dubOk)
                     }.getOrDefault(false)
                     if (usable) null else episode
                 }
             }.awaitAll().filterNotNull()
         }
         if (failed.isEmpty()) {
-            onStatus("$server is ready. Queueing batch...")
+            onStatus("$server ($audioLabel) is ready. Queueing batch...")
             return server
         }
         onFailure(server, failed)
@@ -1752,8 +1769,43 @@ private fun WatchlistDropdownIcon(
 private fun SeasonBatchPickerDialog(
     episodes: List<to.kuudere.anisuge.data.models.EpisodeItem>,
     onDismiss: () -> Unit,
-    onConfirm: (List<to.kuudere.anisuge.data.models.EpisodeItem>) -> Unit,
+    onConfirm: (episodes: List<to.kuudere.anisuge.data.models.EpisodeItem>, server: String, preferDub: Boolean) -> Unit,
 ) {
+    val serverRepository = remember { to.kuudere.anisuge.AppComponent.serverRepository }
+    val catalogServers by serverRepository.servers.collectAsState()
+    // Recommended batch servers (Anikage, Anitaku, AniDB, Miruro) shown first, then the rest of the catalog.
+    val batchServers = remember(catalogServers) {
+        val available = catalogServers
+            .filterNot { it.id.equals("animepahe", ignoreCase = true) }
+        val byId = available.associateBy { it.id.lowercase() }
+        val recommended = BATCH_RECOMMENDED_SERVERS.mapNotNull { id ->
+            byId[id.lowercase()] ?: when (id.lowercase()) {
+                // Surface requested servers even if the live catalog hasn't loaded them yet.
+                "anidb" -> to.kuudere.anisuge.data.models.ServerInfo(id = "anidb", label = "AniDB", type = "sub_dub")
+                "miruro" -> to.kuudere.anisuge.data.models.ServerInfo(id = "miruro", label = "Miruro", type = "sub_dub")
+                "anikage" -> to.kuudere.anisuge.data.models.ServerInfo(id = "anikage", label = "Anikage", type = "sub")
+                "anitaku-1" -> to.kuudere.anisuge.data.models.ServerInfo(id = "anitaku-1", label = "Anitaku 1", type = "sub")
+                "anitaku" -> to.kuudere.anisuge.data.models.ServerInfo(id = "anitaku", label = "Anitaku", type = "sub")
+                else -> null
+            }
+        }
+        val recommendedIds = recommended.map { it.id.lowercase() }.toSet()
+        val rest = available.filterNot { it.id.lowercase() in recommendedIds }
+        (recommended + rest).distinctBy { it.id.lowercase() }
+    }
+
+    var selectedServer by remember(batchServers) {
+        mutableStateOf(batchServers.firstOrNull()?.id ?: "anikage")
+    }
+    val selectedServerInfo = remember(selectedServer, batchServers) {
+        batchServers.firstOrNull { it.id.equals(selectedServer, ignoreCase = true) }
+    }
+    var preferDub by remember { mutableStateOf(false) }
+    // Sub-only servers can't honour a Dub batch — reset to Sub when one is picked.
+    LaunchedEffect(selectedServerInfo) {
+        if (selectedServerInfo?.supportsDub == false) preferDub = false
+    }
+
     val sortedEpisodes = remember(episodes) {
         episodes
             .filter { it.number > 0 }
@@ -1904,6 +1956,78 @@ private fun SeasonBatchPickerDialog(
                     fontWeight = FontWeight.SemiBold,
                 )
 
+                // ── Audio (Sub / Dub) ─────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Audio", color = Color.Gray, fontSize = 13.sp)
+                    val dubSupported = selectedServerInfo?.supportsDub != false
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        listOf(false to "Sub", true to "Dub").forEach { (dub, label) ->
+                            val enabled = !dub || dubSupported
+                            val isSelected = preferDub == dub
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        when {
+                                            isSelected -> Color.White
+                                            else -> Color(0xFF000000)
+                                        }
+                                    )
+                                    .then(if (enabled) Modifier.clickable { preferDub = dub } else Modifier)
+                                    .alpha(if (enabled) 1f else 0.35f)
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (isSelected) Color.Black else Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                    }
+                    if (selectedServerInfo?.supportsDub == false) {
+                        Text(
+                            "${selectedServerInfo.displayName} is Sub-only.",
+                            color = Color.Gray.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                        )
+                    }
+                }
+
+                // ── Server (recommended first) ────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Server", color = Color.Gray, fontSize = 13.sp)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(batchServers, key = { it.id }) { server ->
+                            val isSelected = server.id.equals(selectedServer, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) Color.White else Color(0xFF000000))
+                                    .clickable { selectedServer = server.id }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = server.displayName,
+                                    color = if (isSelected) Color.Black else Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        "If the selected server fails, we try Anikage, Anitaku, AniDB, then Miruro automatically.",
+                        color = Color.Gray.copy(alpha = 0.85f),
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                    )
+                }
+
                 LazyColumn(
                     modifier = Modifier.heightIn(max = 320.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1968,7 +2092,7 @@ private fun SeasonBatchPickerDialog(
         confirmButton = {
             Button(
                 enabled = selectedEpisodes.isNotEmpty(),
-                onClick = { onConfirm(selectedEpisodes) },
+                onClick = { onConfirm(selectedEpisodes, selectedServer, preferDub) },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
             ) {
                 Text("Continue")
