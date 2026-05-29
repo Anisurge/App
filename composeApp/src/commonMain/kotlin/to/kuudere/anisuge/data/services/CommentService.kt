@@ -2,23 +2,30 @@ package to.kuudere.anisuge.data.services
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import to.kuudere.anisuge.AppComponent
+import io.ktor.http.isSuccess
+import to.kuudere.anisuge.data.models.CommentLikeRequest
 import to.kuudere.anisuge.data.models.CommentsResponse
+import to.kuudere.anisuge.data.models.CreateCommentRequest
 import to.kuudere.anisuge.data.models.PostCommentResponse
+import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 
+/**
+ * Anisurge-owned episode comments (BFF). Replaces the legacy ReAnime comment API so comments use
+ * our profiles, custom pfps, and equipped shop avatar frames. Requires the Anisurge JWT.
+ */
 class CommentService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
+    private val baseUrl = AnisurgeApi.v1Base
+
     suspend fun getComments(
         slug: String,
         episodeNumber: Int,
@@ -28,11 +35,11 @@ class CommentService(
     ): CommentsResponse? {
         return try {
             val stored = sessionStore.get()
-            val response = httpClient.get("${AppComponent.BASE_URL}/anime/comments/$slug/$episodeNumber") {
+            val response = httpClient.get("$baseUrl/comments/$slug/$episodeNumber") {
                 parameter("page", page)
                 parameter("sort", sort)
                 nid?.let { parameter("nid", it) }
-                if (stored != null) header("Authorization", "Bearer ${stored.token}")
+                if (stored?.anisurgeToken?.isNotBlank() == true) applyAnisurgeAuth(stored)
             }
             response.body()
         } catch (e: Exception) {
@@ -49,10 +56,10 @@ class CommentService(
     ): CommentsResponse? {
         return try {
             val stored = sessionStore.get()
-            val response = httpClient.get("${AppComponent.BASE_URL}/anime/comments/$slug/$episodeNumber") {
+            val response = httpClient.get("$baseUrl/comments/$slug/$episodeNumber") {
                 parameter("parent_id", parentId)
                 parameter("page", page)
-                if (stored != null) header("Authorization", "Bearer ${stored.token}")
+                if (stored?.anisurgeToken?.isNotBlank() == true) applyAnisurgeAuth(stored)
             }
             response.body()
         } catch (e: Exception) {
@@ -66,21 +73,27 @@ class CommentService(
         episodeNumber: Int,
         content: String,
         parentCommentId: String? = null,
+        spoiler: Boolean = false,
     ): PostCommentResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
-            val body = buildJsonObject {
-                put("anime", anime)
-                put("ep", episodeNumber)
-                put("content", content)
-                parentCommentId?.let { put("parentCommentId", it) }
+            if (stored.anisurgeToken.isNullOrBlank()) {
+                return PostCommentResponse(success = false, message = "Please log in to comment.")
             }
-            val response = httpClient.post("${AppComponent.BASE_URL}/anime/comment") {
-                header("Authorization", "Bearer ${stored.token}")
+            val response = httpClient.post("$baseUrl/comments") {
+                applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
-                setBody(body.toString())
+                setBody(
+                    CreateCommentRequest(
+                        anime = anime,
+                        ep = episodeNumber,
+                        content = content,
+                        parentCommentId = parentCommentId,
+                        spoiler = spoiler,
+                    ),
+                )
             }
-            if (response.status.value !in 200..299) {
+            if (!response.status.isSuccess()) {
                 return PostCommentResponse(success = false, message = "HTTP ${response.status.value}")
             }
             try {
@@ -97,18 +110,29 @@ class CommentService(
     suspend fun toggleLike(commentId: String, likeState: String): Boolean {
         return try {
             val stored = sessionStore.get() ?: return false
-            val body = buildJsonObject {
-                put("commentId", commentId)
-                put("likeState", likeState)
-            }
-            val response = httpClient.post("${AppComponent.BASE_URL}/anime/comment/like") {
-                header("Authorization", "Bearer ${stored.token}")
+            if (stored.anisurgeToken.isNullOrBlank()) return false
+            val response = httpClient.post("$baseUrl/comments/like") {
+                applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
-                setBody(body.toString())
+                setBody(CommentLikeRequest(commentId = commentId, likeState = likeState))
             }
-            response.status.value in 200..299
+            response.status.isSuccess()
         } catch (e: Exception) {
             println("[CommentService] toggleLike error: ${e.message}")
+            false
+        }
+    }
+
+    suspend fun deleteComment(commentId: String): Boolean {
+        return try {
+            val stored = sessionStore.get() ?: return false
+            if (stored.anisurgeToken.isNullOrBlank()) return false
+            val response = httpClient.delete("$baseUrl/comments/$commentId") {
+                applyAnisurgeAuth(stored)
+            }
+            response.status.isSuccess()
+        } catch (e: Exception) {
+            println("[CommentService] deleteComment error: ${e.message}")
             false
         }
     }

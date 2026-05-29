@@ -1042,6 +1042,8 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                             userId = userProfile?.effectiveId ?: fastUserId,
                             username = userProfile?.username,
                             userPfp = userProfile?.avatar,
+                            userFrameUrl = userProfile?.equippedFrameUrl,
+                            userOuterFrameUrl = userProfile?.equippedOuterFrameUrl,
                             onClose = { viewModel.toggleSidePanel(null) }
                         )
                     }
@@ -1229,6 +1231,8 @@ private fun WatchCommentsContent(
         userId = userProfile?.effectiveId ?: fastUserId,
         username = userProfile?.username,
         userPfp = userProfile?.avatar,
+        userFrameUrl = userProfile?.equippedFrameUrl,
+        userOuterFrameUrl = userProfile?.equippedOuterFrameUrl,
         onClose = onClose,
     )
 }

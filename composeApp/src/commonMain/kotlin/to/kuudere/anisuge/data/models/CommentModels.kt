@@ -10,8 +10,13 @@ data class Comment(
     @SerialName("author_display_name") val authorDisplayName: String? = null,
     val authorId: String? = null,
     val authorPfp: String? = null,
+    /** Equipped inner ring (APNG/GIF) from the author's shop frame. */
+    val authorFrameUrl: String? = null,
+    /** Equipped outer decoration (APNG/GIF) from the author's shop frame. */
+    val authorOuterUrl: String? = null,
     val authorVerified: Boolean = false,
     val authorLabels: List<String> = emptyList(),
+    val isPremium: Boolean = false,
     val content: String,
     val isSpoiller: Boolean = false,
     val created_at: String? = null,
@@ -59,6 +64,15 @@ data class PostCommentData(
 data class CommentLikeRequest(
     val commentId: String,
     val likeState: String,
+)
+
+@Serializable
+data class CreateCommentRequest(
+    val anime: String,
+    val ep: Int,
+    val content: String,
+    val parentCommentId: String? = null,
+    val spoiler: Boolean = false,
 )
 
 @Serializable

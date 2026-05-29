@@ -48,6 +48,8 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.ui.ProfileAvatar
+import to.kuudere.anisuge.ui.resolveProfileMediaUrl
+import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 import to.kuudere.anisuge.data.models.Comment
 
 // ── Colour palette — mirrors Kuudere's zinc/black dark theme ─────────────────
@@ -104,6 +106,8 @@ fun CommentsSection(
     userId: String?,
     username: String?,
     userPfp: String?,
+    userFrameUrl: String? = null,
+    userOuterFrameUrl: String? = null,
     onClose: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -129,6 +133,29 @@ fun CommentsSection(
 
     fun sortParam() = when (sortBy) { "oldest" -> "oldest"; "best" -> "best"; else -> "new" }
 
+    fun prefetchCommentFrames(items: List<Comment>) {
+        val entries = LinkedHashMap<String, Pair<String, String?>>()
+        fun collect(list: List<Comment>) {
+            for (c in list) {
+                val uid = c.authorId?.takeIf { it.isNotBlank() }
+                resolveProfileMediaUrl(c.authorFrameUrl)?.let { url ->
+                    entries.getOrPut(url) { url to uid?.let { "${it}-ring" } }
+                }
+                resolveProfileMediaUrl(c.authorOuterUrl)?.let { url ->
+                    entries.getOrPut(url) { url to uid?.let { "${it}-outer" } }
+                }
+                if (c.replies.isNotEmpty()) collect(c.replies)
+            }
+        }
+        collect(items)
+        if (entries.isEmpty()) return
+        scope.launch {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                AnimatedFrameBytesCache.prefetchEntries(entries.values.toList(), concurrency = 12)
+            }
+        }
+    }
+
     fun loadComments(page: Int = 1) {
         scope.launch {
             isLoading = true
@@ -142,6 +169,7 @@ fun CommentsSection(
                 totalComments = res.total_comments
                 currentPage = page
                 hasMore = res.has_more
+                prefetchCommentFrames(res.comments)
             }
             isLoading = false
         }
@@ -190,7 +218,7 @@ fun CommentsSection(
         if (!isAuthenticated || rootText.isBlank()) return
         scope.launch {
             isPostingRoot = true
-            val res = commentService.postComment(animeId, episodeNumber, rootText)
+            val res = commentService.postComment(animeId, episodeNumber, rootText, spoiler = rootIsSpoiler)
             println("[CommentsSection] postRoot response: $res")
             if (res?.success == true) {
                 val id = res.data?.commentId ?: res.data?.id ?: to.kuudere.anisuge.utils.currentTimeMillis().toString()
@@ -198,6 +226,7 @@ fun CommentsSection(
                 comments = listOf(CommentUiModel(
                     data = Comment(
                         id = id, author = username, authorId = userId, authorPfp = userPfp,
+                        authorFrameUrl = userFrameUrl, authorOuterUrl = userOuterFrameUrl,
                         content = rootText, isSpoiller = rootIsSpoiler, likes = 0, dislikes = 0
                     )
                 )) + comments
@@ -224,6 +253,7 @@ fun CommentsSection(
                         showReplies = true, isLoadingReplies = false
                     )
                 }
+                prefetchCommentFrames(res.comments)
             } else {
                 updateComment(model.data.id) { it.copy(isLoadingReplies = false) }
             }
@@ -234,7 +264,7 @@ fun CommentsSection(
         if (!isAuthenticated || parent.replyText.isBlank()) return
         updateComment(parent.data.id) { it.copy(isSubmitting = true) }
         scope.launch {
-            val res = commentService.postComment(animeId, episodeNumber, parent.replyText, parent.data.id)
+            val res = commentService.postComment(animeId, episodeNumber, parent.replyText, parent.data.id, spoiler = parent.replyIsSpoiler)
             if (res?.success == true) {
                 val id = res.data?.commentId ?: res.data?.id ?: to.kuudere.anisuge.utils.currentTimeMillis().toString()
                 updateComment(parent.data.id) { c ->
@@ -242,7 +272,8 @@ fun CommentsSection(
                         replies = c.replies + CommentUiModel(
                             data = Comment(
                                 id = id, author = username, authorId = userId, authorPfp = userPfp,
-                                content = parent.replyText, likes = 0, dislikes = 0
+                                authorFrameUrl = userFrameUrl, authorOuterUrl = userOuterFrameUrl,
+                                content = parent.replyText, isSpoiller = parent.replyIsSpoiler, likes = 0, dislikes = 0
                             )
                         ),
                         replyText = "", replyIsSpoiler = false, isReplying = false, showReplies = true, isSubmitting = false
@@ -255,8 +286,7 @@ fun CommentsSection(
     }
 
     fun deleteComment(id: String) {
-        // Delete comment endpoint not available in new API
-        // Remove locally only
+        // Optimistically remove locally, then delete on the BFF (Anisurge-owned comments).
         fun filterRecursive(nodes: List<CommentUiModel>): List<CommentUiModel> {
             return nodes.filter { it.data.id != id }.map {
                 val newReps = filterRecursive(it.replies)
@@ -266,6 +296,7 @@ fun CommentsSection(
         val oldSize = comments.size
         comments = filterRecursive(comments)
         if (comments.size < oldSize) totalComments = maxOf(0, totalComments - 1)
+        scope.launch { commentService.deleteComment(id) }
     }
 
     // ── UI ───────────────────────────────────────────────────────────────────
@@ -733,7 +764,14 @@ private fun CommentItem(
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(avatarSize)) {
                 ProfileAvatar(
                     url = c.authorPfp,
+                    frameUrl = resolveProfileMediaUrl(c.authorFrameUrl),
+                    outerFrameUrl = resolveProfileMediaUrl(c.authorOuterUrl),
+                    frameCacheKey = c.authorId?.takeIf { it.isNotBlank() }?.let { "${it}-ring" },
+                    outerFrameCacheKey = c.authorId?.takeIf { it.isNotBlank() }?.let { "${it}-outer" },
+                    avatarSize = avatarSize,
                     modifier = Modifier.size(avatarSize),
+                    showBundledTestFrame = false,
+                    playVideo = false,
                 )
             }
 
