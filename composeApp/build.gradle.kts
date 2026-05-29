@@ -167,8 +167,11 @@ kotlin {
             implementation(libs.apng.core)
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
-            // CIO engine for desktop HTTP
-            implementation(libs.ktor.client.cio)
+            // OkHttp engine for desktop HTTP — CIO's pure-Kotlin TLS stack fails
+            // handshakes against Cloudflare-fronted hosts (e.g. the Anisurge BFF),
+            // which surfaced as "Something went wrong" on signup/login. OkHttp uses
+            // the JDK TLS stack and matches the Android engine that already works.
+            implementation(libs.ktor.client.okhttp)
             // JNA for getting AWT canvas WID for MPV playback
             implementation(libs.jna)
             
