@@ -126,7 +126,10 @@ fun WatchScreen(
         !isStateStale
 
     val shouldUseLandscape = when {
-        isAndroidPlatform && !isAndroidTvPlatform -> uiState.isFullscreen
+        // Offline (downloaded) playback uses the full-bleed player with no episode list below it,
+        // so it should be landscape like online fullscreen — otherwise a 16:9 video is locked in
+        // portrait and renders tiny.
+        isAndroidPlatform && !isAndroidTvPlatform -> uiState.isFullscreen || uiState.offlinePath != null
         else -> true
     }
     LockScreenOrientation(shouldUseLandscape)
