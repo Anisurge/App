@@ -226,6 +226,16 @@ fun HomeScreen(
     val strings = LocalAppStrings.current
     val homeState by homeViewModel.uiState.collectAsState()
     val settingsState by settingsViewModel.uiState.collectAsState()
+    val liveChatState by liveChatViewModel.uiState.collectAsState()
+    val chatUnreadCount = liveChatState.unreadCount
+
+    // Keep a background chat connection alive (when signed in) so the unread badge counts new
+    // messages even while the chat screen is closed.
+    LaunchedEffect(homeState.userProfile?.effectiveId) {
+        if (homeState.userProfile != null) {
+            liveChatViewModel.ensureBackgroundConnection()
+        }
+    }
     var initialSettingsTab by remember(startSettingsTab) { mutableStateOf(startSettingsTab) }
     var currentTab by rememberSaveable(
         startOnDownloads,
@@ -315,6 +325,7 @@ fun HomeScreen(
                         switchTab(tab, nested)
                     },
                     onLiveChatClick = { showDesktopLiveChat = true },
+                    chatUnreadCount = chatUnreadCount,
                     onLogout = {
                         showLogoutConfirm = true
                     },
@@ -454,6 +465,7 @@ fun HomeScreen(
                             switchTab(AnisugTab.Settings, SettingsTab.Profile)
                         },
                         onLiveChatClick = onLiveChatClick,
+                        chatUnreadCount = chatUnreadCount,
                         hazeState = hazeState,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
@@ -1865,6 +1877,7 @@ private fun AnisugSidebar(
     isLoggingOut: Boolean,
     onTabSelect: (AnisugTab, SettingsTab?) -> Unit,
     onLiveChatClick: () -> Unit,
+    chatUnreadCount: Int = 0,
     onLogout: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -1929,6 +1942,8 @@ private fun AnisugSidebar(
                 SidebarIcon(
                     Icons.Default.ChatBubbleOutline,
                     isSelected = false,
+                    badgeCount = chatUnreadCount,
+                    badgeColor = Color(0xFFE50914),
                     onClick = onLiveChatClick,
                 )
                 SidebarIcon(
@@ -1955,6 +1970,7 @@ private fun SidebarIcon(
     selectedTint: Color = Color.White,
     defaultTint: Color = Color.Gray.copy(alpha = 0.4f),
     badgeCount: Int = 0,
+    badgeColor: Color = Color(0xFFBF80FF),
     onClick: () -> Unit = {},
 ) {
     val animatedTint by animateColorAsState(
@@ -1979,6 +1995,7 @@ private fun SidebarIcon(
             Icon(icon, contentDescription = null, tint = animatedTint, modifier = Modifier.size(22.dp))
             DownloadCountBadge(
                 count = badgeCount,
+                badgeColor = badgeColor,
                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = 2.dp)
             )
         }
@@ -2074,6 +2091,7 @@ private fun DonateButton(onClick: () -> Unit) {
 private fun DownloadCountBadge(
     count: Int,
     modifier: Modifier = Modifier,
+    badgeColor: Color = Color(0xFFBF80FF),
 ) {
     if (count <= 0) return
     val label = if (count > 9) "9+" else count.toString()
@@ -2083,7 +2101,7 @@ private fun DownloadCountBadge(
             .height(12.dp)
             .defaultMinSize(minWidth = if (wide) 14.dp else 12.dp)
             .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFFBF80FF))
+            .background(badgeColor)
             .padding(horizontal = if (wide) 2.dp else 0.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -2106,6 +2124,7 @@ private fun MobileTopBar(
     onDownloadClick: () -> Unit,
     onProfileClick: () -> Unit,
     onLiveChatClick: () -> Unit,
+    chatUnreadCount: Int = 0,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
@@ -2143,15 +2162,22 @@ private fun MobileTopBar(
             )
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                IconButton(
-                    onClick = onLiveChatClick,
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ChatBubbleOutline,
-                        contentDescription = "Community chat",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp),
+                Box(modifier = Modifier.size(36.dp)) {
+                    IconButton(
+                        onClick = onLiveChatClick,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ChatBubbleOutline,
+                            contentDescription = "Community chat",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    DownloadCountBadge(
+                        count = chatUnreadCount,
+                        badgeColor = Color(0xFFE50914),
+                        modifier = Modifier.align(Alignment.TopEnd).offset(x = (-1).dp, y = (-1).dp),
                     )
                 }
                 Box(modifier = Modifier.size(36.dp)) {

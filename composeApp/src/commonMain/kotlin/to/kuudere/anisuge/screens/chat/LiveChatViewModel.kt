@@ -54,6 +54,8 @@ data class LiveChatUiState(
     val animePickerLoading: Boolean = false,
     val animePickerError: String? = null,
     val cooldownSecondsLeft: Int = 0,
+    /** Messages from other users received while the chat screen was not open. */
+    val unreadCount: Int = 0,
 )
 
 class LiveChatViewModel(
@@ -123,6 +125,7 @@ class LiveChatViewModel(
     private var animeSearchJob: Job? = null
     private var memberProfileJob: Job? = null
     private var cooldownJob: Job? = null
+    private var backgroundJob: Job? = null
     private var screenActive = false
     private var hasInitialized = false
     private var lastSentAtMs: Long = 0L
@@ -135,6 +138,12 @@ class LiveChatViewModel(
     /** Called when the chat screen enters composition (including return from back stack). */
     fun onScreenVisible() {
         screenActive = true
+        // Opening chat clears the unread badge.
+        if (_uiState.value.unreadCount != 0) {
+            _uiState.update { it.copy(unreadCount = 0) }
+        }
+        backgroundJob?.cancel()
+        backgroundJob = null
         if (!hasInitialized || _uiState.value.needsAuth) {
             start()
         } else {
@@ -142,13 +151,69 @@ class LiveChatViewModel(
         }
     }
 
-    /** Called when leaving the chat screen — tear down WS so we can reconnect cleanly on return. */
+    /**
+     * Called when leaving the chat screen. We keep a lightweight background WebSocket alive so the
+     * unread badge keeps counting messages from others; the foreground WS is torn down so the chat
+     * screen reconnects cleanly on return.
+     */
     fun onScreenHidden() {
         screenActive = false
         reconnectJob?.cancel()
         reconnectJob = null
         wsJob?.cancel()
         wsJob = null
+        if (hasInitialized && !_uiState.value.needsAuth) {
+            startBackgroundUnreadWatch()
+        }
+    }
+
+    /**
+     * Keep counting unread messages while the chat screen is closed. Safe to call when signed in;
+     * no-op if a background watch is already running, the screen is active, or auth is missing.
+     */
+    fun startBackgroundUnreadWatch() {
+        if (screenActive) return
+        if (_uiState.value.needsAuth || _uiState.value.currentUserId == null) return
+        if (backgroundJob?.isActive == true) return
+        backgroundJob = viewModelScope.launch {
+            chatService.connectLive().collect { event ->
+                if (event is ChatLiveEvent.Message) {
+                    val msg = event.message
+                    val selfId = _uiState.value.currentUserId
+                    // Don't count our own echoed messages.
+                    if (selfId != null && msg.userId == selfId) return@collect
+                    if (!screenActive) {
+                        _uiState.update { it.copy(unreadCount = (it.unreadCount + 1).coerceAtMost(99)) }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Bootstraps a background chat connection so the unread badge works even before the chat screen
+     * is ever opened. Call when the user is signed in (e.g. from the home screen). No-op when the
+     * chat screen is already active or a background watch is running.
+     *
+     * Note: this intentionally does NOT set [hasInitialized] — that flag controls whether the
+     * foreground screen does a full [start] (with history + isLoading handling) vs a lighter
+     * [resumeSession]. Marking it here would leave the chat screen stuck on its loading spinner.
+     */
+    fun ensureBackgroundConnection() {
+        if (screenActive) return
+        if (backgroundJob?.isActive == true) return
+        viewModelScope.launch {
+            when (val auth = authService.checkSession()) {
+                is SessionCheckResult.Valid -> {
+                    applyCurrentUserProfile(auth.user)
+                    _uiState.update { it.copy(needsAuth = false) }
+                    startBackgroundUnreadWatch()
+                }
+                else -> {
+                    _uiState.update { it.copy(needsAuth = true) }
+                }
+            }
+        }
     }
 
     fun start() {
@@ -532,6 +597,7 @@ class LiveChatViewModel(
         animeSearchJob?.cancel()
         memberProfileJob?.cancel()
         cooldownJob?.cancel()
+        backgroundJob?.cancel()
         super.onCleared()
     }
 
