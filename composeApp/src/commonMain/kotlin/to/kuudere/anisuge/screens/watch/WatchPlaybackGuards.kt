@@ -33,6 +33,9 @@ internal fun clampSkipToDuration(skip: SkipData?, durationSec: Double): SkipData
     val end = skip.end ?: return null
     if (end <= start) return null
     val clampedStart = start.coerceIn(0.0, durationSec)
+    // Start sits at/after the end (bad aniskip data) — no valid skip range, so coerceIn below
+    // would get min > max and throw. Drop it.
+    if (clampedStart + 0.5 >= durationSec) return null
     val clampedEnd = end.coerceIn(clampedStart + 0.5, durationSec)
     if (clampedEnd <= clampedStart) return null
     return SkipData(start = clampedStart, end = clampedEnd)
