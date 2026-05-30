@@ -13,7 +13,7 @@ class LatestService(
 ) {
     suspend fun getLatestAired(
         lang: String? = null,
-        limit: Int = 12,
+        limit: Int = 100,
         cursor: String? = null,
     ): LatestAiredResponse? {
         return try {

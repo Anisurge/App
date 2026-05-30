@@ -220,6 +220,10 @@ data class AppStrings(
     val latestEpisodesTitle: String? = null,
     val newOnAppTitle: String? = null,
     val upcomingTitle: String? = null,
+    val trendingWeekTitle: String? = null,
+    val newSeasonsTitle: String? = null,
+    val recommendedTitle: String? = null,
+    val hiddenGemsTitle: String? = null,
     // Layout editor copy. Non-nullable with English defaults — other locales
     // inherit English via the standard AppStrings copy() convention.
     val homeLayout: String = "Home Layout",
@@ -335,6 +339,10 @@ private val englishStrings = AppStrings(
     latestEpisodesTitle = "Latest Episodes",
     newOnAppTitle = "New on App",
     upcomingTitle = "Upcoming",
+    trendingWeekTitle = "Trending This Week",
+    newSeasonsTitle = "New Seasons",
+    recommendedTitle = "Recommended For You",
+    hiddenGemsTitle = "Hidden Gems",
 )
 
 private val stringsByLocale = mapOf(

@@ -9,11 +9,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.datetime.toLocalDateTime
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.data.models.LayoutConfig
 import to.kuudere.anisuge.data.models.RowId
+import to.kuudere.anisuge.data.models.toAnimeItem
 import to.kuudere.anisuge.data.services.HomeService
+import to.kuudere.anisuge.data.services.SearchService
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.data.models.UserProfile
 import to.kuudere.anisuge.data.services.AuthService
@@ -33,6 +36,10 @@ data class HomeUiState(
     val latestAired: List<AnimeItem> = emptyList(),
     val newOnSite: List<AnimeItem> = emptyList(),
     val upcoming: List<AnimeItem> = emptyList(),
+    val trendingWeek: List<AnimeItem> = emptyList(),
+    val newSeasons: List<AnimeItem> = emptyList(),
+    val recommended: List<AnimeItem> = emptyList(),
+    val hiddenGems: List<AnimeItem> = emptyList(),
     /** Home row: one entry per anime (latest episode). */
     val continueWatching: List<ContinueWatchingItem> = emptyList(),
     /** Full list screen source: every saved episode row from BFF. */
@@ -49,6 +56,7 @@ class HomeViewModel(
     private val sessionStore: SessionStore,
     private val librarySyncService: LibrarySyncService,
     private val settingsStore: SettingsStore,
+    private val searchService: SearchService,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var homeDataJob: Job? = null
@@ -118,6 +126,69 @@ class HomeViewModel(
                 handleHomeLoadError(e)
             }
         }
+        loadDiscoveryRows()
+    }
+
+    /**
+     * Loads the non-personalized discovery rows (Trending This Week, New Seasons,
+     * Hidden Gems) independently of the main /home payload so a slow/failed row
+     * never blocks the rest of the page. Each failure leaves its row empty, which
+     * [HomeUiState.hasDataForRow] then hides.
+     */
+    private fun loadDiscoveryRows() {
+        scope.launch {
+            val top = async { homeService.fetchTopAnime(period = "week", limit = 20) }
+            val (season, year) = currentSeasonAndYear()
+            val seasons = async {
+                searchService.search(
+                    season = season,
+                    year = year,
+                    sort = "popularity_desc",
+                    limit = 24,
+                )
+            }
+            val gems = async {
+                searchService.search(
+                    sort = "score_desc",
+                    status = "Finished",
+                    limit = 40,
+                )
+            }
+
+            val topItems = runCatching { top.await()?.data }.getOrNull().orEmpty()
+            val seasonItems = runCatching { seasons.await()?.results }.getOrNull().orEmpty()
+            // Hidden gems = highly rated but under a popularity threshold (underrated).
+            val gemItems = runCatching { gems.await()?.results }.getOrNull().orEmpty()
+                .filter { (it.popularity ?: Int.MAX_VALUE) < HIDDEN_GEM_MAX_POPULARITY }
+                .take(20)
+
+            _uiState.update {
+                it.copy(
+                    trendingWeek = if (topItems.isNotEmpty()) topItems else it.trendingWeek,
+                    newSeasons = if (seasonItems.isNotEmpty()) seasonItems else it.newSeasons,
+                    hiddenGems = if (gemItems.isNotEmpty()) gemItems else it.hiddenGems,
+                )
+            }
+        }
+    }
+
+    /** Recommendations seeded from the user's most recently watched anime. */
+    private suspend fun loadRecommendations() {
+        val seedSlug = _uiState.value.continueWatching.firstOrNull()
+            ?.let { it.effectiveAnimeId.ifBlank { it.animeId } }
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+        try {
+            val recs = homeService.fetchRecommendations(seedSlug)
+                ?.recommendations
+                .orEmpty()
+                .map { it.toAnimeItem() }
+            if (recs.isNotEmpty()) {
+                _uiState.update { it.copy(recommended = recs) }
+            }
+        } catch (e: Exception) {
+            println("[HomeVM] Failed to fetch recommendations: ${e.message}")
+        }
     }
 
     private fun fetchPersonalizedData() {
@@ -164,6 +235,7 @@ class HomeViewModel(
                 continueWatching = all.latestPerAnime(),
             )
         }
+        scope.launch { loadRecommendations() }
     }
 
     fun removeContinueItem(item: ContinueWatchingItem) {
@@ -191,7 +263,7 @@ class HomeViewModel(
             try {
                 val authCheck = async { authService.checkSession() }
                 val homeData = async { homeService.fetchHomeData(forceRefresh = force) }
-
+                loadDiscoveryRows()
                 homeData.await()?.let { data ->
                     _uiState.update {
                         it.copy(
@@ -275,5 +347,25 @@ class HomeViewModel(
                 onComplete()
             }
         }
+    }
+
+    /** Current anime season (`WINTER|SPRING|SUMMER|FALL`) and year in UTC. */
+    private fun currentSeasonAndYear(): Pair<String, Int> {
+        val now = kotlinx.datetime.Clock.System.now()
+            .toLocalDateTime(kotlinx.datetime.TimeZone.UTC)
+        val season = when (now.monthNumber) {
+            12, 1, 2 -> "WINTER"
+            3, 4, 5 -> "SPRING"
+            6, 7, 8 -> "SUMMER"
+            else -> "FALL"
+        }
+        // December belongs to next year's Winter season.
+        val year = if (now.monthNumber == 12) now.year + 1 else now.year
+        return season to year
+    }
+
+    companion object {
+        /** Below this AniList popularity a highly-scored show counts as a "hidden gem". */
+        private const val HIDDEN_GEM_MAX_POPULARITY = 50_000
     }
 }

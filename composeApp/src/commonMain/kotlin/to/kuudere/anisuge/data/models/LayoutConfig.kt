@@ -20,13 +20,17 @@ data class LayoutConfig(val rows: List<LayoutRow>) {
         /** Persistence schema version for the current build. (Req 11.2) */
         const val SCHEMA_VERSION: Int = 1
 
-        /** Default_Layout: all four rows visible, in canonical order. (Req 2.1, 2.2) */
+        /** Default_Layout: all rows visible, in canonical order. (Req 2.1, 2.2) */
         val DEFAULT: LayoutConfig = LayoutConfig(
             rows = listOf(
                 LayoutRow(RowId.CONTINUE_WATCHING, visible = true),
                 LayoutRow(RowId.LATEST_EPISODES, visible = true),
+                LayoutRow(RowId.TRENDING_WEEK, visible = true),
+                LayoutRow(RowId.NEW_SEASONS, visible = true),
                 LayoutRow(RowId.NEW_ON_APP, visible = true),
+                LayoutRow(RowId.RECOMMENDED, visible = true),
                 LayoutRow(RowId.UPCOMING, visible = true),
+                LayoutRow(RowId.HIDDEN_GEMS, visible = true),
             )
         )
     }

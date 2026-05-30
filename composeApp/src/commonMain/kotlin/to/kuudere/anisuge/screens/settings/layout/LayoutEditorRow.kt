@@ -106,6 +106,10 @@ fun LayoutEditorRow(
 fun AppStrings.layoutRowTitle(id: RowId): String = when (id) {
     RowId.CONTINUE_WATCHING -> continueWatchingTitle
     RowId.LATEST_EPISODES -> latestEpisodesTitle
+    RowId.TRENDING_WEEK -> trendingWeekTitle
+    RowId.NEW_SEASONS -> newSeasonsTitle
     RowId.NEW_ON_APP -> newOnAppTitle
+    RowId.RECOMMENDED -> recommendedTitle
     RowId.UPCOMING -> upcomingTitle
+    RowId.HIDDEN_GEMS -> hiddenGemsTitle
 } ?: id.storageId

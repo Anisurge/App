@@ -127,6 +127,7 @@ fun App(
                 AppComponent.sessionStore,
                 AppComponent.librarySyncService,
                 AppComponent.settingsStore,
+                AppComponent.searchService,
             )
         }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }

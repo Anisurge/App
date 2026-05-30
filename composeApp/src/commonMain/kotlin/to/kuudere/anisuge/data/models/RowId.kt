@@ -12,8 +12,12 @@ import kotlinx.serialization.Serializable
 enum class RowId(val storageId: String) {
     CONTINUE_WATCHING("continue_watching"),
     LATEST_EPISODES("latest_episodes"),
+    TRENDING_WEEK("trending_week"),
+    NEW_SEASONS("new_seasons"),
     NEW_ON_APP("new_on_app"),
-    UPCOMING("upcoming");
+    RECOMMENDED("recommended"),
+    UPCOMING("upcoming"),
+    HIDDEN_GEMS("hidden_gems");
 
     companion object {
         /** Case-sensitive lookup. Returns null for unknown ids. (Req 1.1, 1.3) */

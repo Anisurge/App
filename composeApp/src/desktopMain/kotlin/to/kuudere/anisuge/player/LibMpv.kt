@@ -97,11 +97,34 @@ internal interface LibMpv : Library {
                 CLib.INSTANCE?.setlocale(CLib.LC_NUMERIC, "C")
             } catch (_: Exception) {}
 
-            // 1. Try system library
+            // 1. Try system library (uses JNA's default search path)
             tryLoad("mpv")?.let { return it }
 
-            // 2. Try extracting bundled binary from resources
             val osName  = System.getProperty("os.name").lowercase()
+
+            // 1b. macOS: JNA's default search path does NOT include Homebrew's
+            // /opt/homebrew/lib (Apple Silicon) or /usr/local/lib (Intel), so a
+            // `brew install mpv` is invisible to Native.load("mpv"). Try the known
+            // install locations explicitly by absolute path. libmpv ships as
+            // libmpv.2.dylib (versioned) with an unversioned libmpv.dylib symlink.
+            if ("mac" in osName) {
+                val macCandidates = listOf(
+                    "/opt/homebrew/lib/libmpv.dylib",
+                    "/opt/homebrew/lib/libmpv.2.dylib",
+                    "/usr/local/lib/libmpv.dylib",
+                    "/usr/local/lib/libmpv.2.dylib",
+                )
+                for (path in macCandidates) {
+                    if (java.io.File(path).exists()) {
+                        tryLoad(path)?.let {
+                            println("[LibMpv] loaded macOS system libmpv from $path")
+                            return it
+                        }
+                    }
+                }
+            }
+
+            // 2. Try extracting bundled binary from resources
             val libName = when {
                 "linux"  in osName -> "libmpv.so.2"
                 "win"    in osName -> "mpv-2.dll"

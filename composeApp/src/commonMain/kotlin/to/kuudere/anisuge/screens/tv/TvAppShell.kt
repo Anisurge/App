@@ -364,7 +364,9 @@ private fun TvHomeTab(
                     }
                     firstShelf = false
                 }
-                RowId.NEW_ON_APP, RowId.UPCOMING -> Unit
+                RowId.NEW_ON_APP, RowId.UPCOMING,
+                RowId.TRENDING_WEEK, RowId.NEW_SEASONS,
+                RowId.RECOMMENDED, RowId.HIDDEN_GEMS -> Unit
             }
         }
     }

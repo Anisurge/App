@@ -704,15 +704,39 @@ private fun HomeContent(
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             onViewMoreClick = onViewLatestEpisodesMore,
                         )
+                        RowId.TRENDING_WEEK -> AnimeSection(
+                            title = strings.rowTitle(rowId),
+                            items = state.trendingWeek,
+                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                            showViewMore = false,
+                        )
+                        RowId.NEW_SEASONS -> AnimeSection(
+                            title = strings.rowTitle(rowId),
+                            items = state.newSeasons,
+                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                            showViewMore = false,
+                        )
                         RowId.NEW_ON_APP -> AnimeSection(
                             title = strings.rowTitle(rowId),
                             items = state.newOnSite,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             onViewMoreClick = onViewNewOnAppMore,
                         )
+                        RowId.RECOMMENDED -> AnimeSection(
+                            title = strings.rowTitle(rowId),
+                            items = state.recommended,
+                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                            showViewMore = false,
+                        )
                         RowId.UPCOMING -> AnimeSection(
                             title = strings.rowTitle(rowId),
                             items = state.upcoming,
+                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                            showViewMore = false,
+                        )
+                        RowId.HIDDEN_GEMS -> AnimeSection(
+                            title = strings.rowTitle(rowId),
+                            items = state.hiddenGems,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
                         )
@@ -754,15 +778,23 @@ private fun HomeContent(
 private fun HomeUiState.hasDataForRow(id: RowId): Boolean = when (id) {
     RowId.CONTINUE_WATCHING -> continueWatching.isNotEmpty()
     RowId.LATEST_EPISODES -> latestAired.isNotEmpty()
+    RowId.TRENDING_WEEK -> trendingWeek.isNotEmpty()
+    RowId.NEW_SEASONS -> newSeasons.isNotEmpty()
     RowId.NEW_ON_APP -> newOnSite.isNotEmpty()
+    RowId.RECOMMENDED -> recommended.isNotEmpty()
     RowId.UPCOMING -> upcoming.isNotEmpty()
+    RowId.HIDDEN_GEMS -> hiddenGems.isNotEmpty()
 }
 
 private fun AppStrings.rowTitle(id: RowId): String = when (id) {
     RowId.CONTINUE_WATCHING -> continueWatchingTitle
     RowId.LATEST_EPISODES -> latestEpisodesTitle
+    RowId.TRENDING_WEEK -> trendingWeekTitle
+    RowId.NEW_SEASONS -> newSeasonsTitle
     RowId.NEW_ON_APP -> newOnAppTitle
+    RowId.RECOMMENDED -> recommendedTitle
     RowId.UPCOMING -> upcomingTitle
+    RowId.HIDDEN_GEMS -> hiddenGemsTitle
 } ?: id.storageId
 
 @Composable

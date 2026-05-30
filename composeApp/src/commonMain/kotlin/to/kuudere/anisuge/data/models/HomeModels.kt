@@ -114,6 +114,9 @@ data class HomeData(
 
 @Serializable
 data class LatestAiredResponse(
-    val episodes: List<AnimeItem> = emptyList(),
+    // Project-R returns the rows under "data"; keep the Kotlin property name
+    // "episodes" for existing call sites.
+    @SerialName("data") val episodes: List<AnimeItem> = emptyList(),
+    @SerialName("has_more") val hasMore: Boolean = false,
     @SerialName("next_cursor") val nextCursor: String? = null,
 )

@@ -12,6 +12,8 @@ import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.data.models.ContinueWatchingResponse
 import to.kuudere.anisuge.data.models.HomeData
 import to.kuudere.anisuge.data.models.LatestAiredResponse
+import to.kuudere.anisuge.data.models.RecommendationsResponse
+import to.kuudere.anisuge.data.models.TopAnimeResponse
 
 class HomeService(
     private val sessionStore: SessionStore,
@@ -99,6 +101,31 @@ class HomeService(
             response.body()
         } catch (e: Exception) {
             println("[HomeService] fetchLatestAired error: ${e.message}")
+            null
+        }
+    }
+
+    /** Trending/top anime for a period: `this hour`, `today`, `week`, `month`. */
+    suspend fun fetchTopAnime(period: String = "week", limit: Int = 20): TopAnimeResponse? {
+        return try {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/top/anime") {
+                parameter("period", period)
+                parameter("limit", limit)
+            }
+            response.body<TopAnimeResponse>()
+        } catch (e: Exception) {
+            println("[HomeService] fetchTopAnime error: ${e.message}")
+            null
+        }
+    }
+
+    /** Content-based recommendations for a given anime slug/id. */
+    suspend fun fetchRecommendations(slug: String): RecommendationsResponse? {
+        return try {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/anime/$slug/recommendations")
+            response.body<RecommendationsResponse>()
+        } catch (e: Exception) {
+            println("[HomeService] fetchRecommendations error: ${e.message}")
             null
         }
     }
