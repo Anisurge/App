@@ -359,6 +359,7 @@ private fun TvHomeTab(
                             items = state.latestAired,
                             focusRequester = if (heroItem == null && firstShelf) contentFocus else null,
                             railFocus = railFocus,
+                            showLatestLangBadge = true,
                             onAnimeClick = onAnimeClick,
                         )
                     }
@@ -537,6 +538,7 @@ private fun TvAnimeShelf(
     items: List<AnimeItem>,
     railFocus: FocusRequester,
     focusRequester: FocusRequester? = null,
+    showLatestLangBadge: Boolean = false,
     onAnimeClick: (String) -> Unit,
 ) {
     if (items.isEmpty()) return
@@ -559,6 +561,7 @@ private fun TvAnimeShelf(
                                 Modifier
                             }
                         ),
+                    showLatestLangBadge = showLatestLangBadge,
                     onClick = { onAnimeClick(anime.activeSlug) },
                 )
             }

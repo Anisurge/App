@@ -146,6 +146,7 @@ fun LatestEpisodesScreen(
                             AnimeCard(
                                 item = anime,
                                 modifier = Modifier.fillMaxWidth(),
+                                showLatestLangBadge = true,
                                 onClick = { onAnimeClick(anime.activeSlug) }
                             )
                         }

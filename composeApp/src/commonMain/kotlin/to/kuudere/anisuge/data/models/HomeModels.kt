@@ -96,6 +96,31 @@ data class EpisodeBrief(
     val title: String = "",
 )
 
+/** Language availability of the most recently aired episode for a latest-aired card. */
+enum class LatestEpisodeLang { SUB, DUB, SUB_DUB }
+
+/**
+ * Derives whether the most recently aired episode ([AnimeItem.episode]) is available
+ * in sub, dub, or both. Episodes release sequentially, so for the latest episode
+ * number N: a sub exists when `subbed >= N` and a dub exists when `dubbed >= N`.
+ *
+ * Returns null when there is no episode info (non latest-aired rows) or neither
+ * language covers the latest episode — callers then render no badge.
+ */
+val AnimeItem.latestEpisodeLang: LatestEpisodeLang?
+    get() {
+        val epNum = episode?.episodeNumber ?: return null
+        if (epNum <= 0) return null
+        val hasSub = subbed >= epNum
+        val hasDub = dubbed >= epNum
+        return when {
+            hasSub && hasDub -> LatestEpisodeLang.SUB_DUB
+            hasDub -> LatestEpisodeLang.DUB
+            hasSub -> LatestEpisodeLang.SUB
+            else -> null
+        }
+    }
+
 @Serializable
 data class NextAiringEpisode(
     @SerialName("airing_at") val airingAt: String = "",

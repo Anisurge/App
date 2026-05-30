@@ -702,6 +702,7 @@ private fun HomeContent(
                             title = strings.rowTitle(rowId),
                             items = state.latestAired,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                            showLatestLangBadge = true,
                             onViewMoreClick = onViewLatestEpisodesMore,
                         )
                         RowId.TRENDING_WEEK -> AnimeSection(
@@ -1734,6 +1735,7 @@ private fun AnimeSection(
     items: List<AnimeItem>,
     onItemClick: (AnimeItem) -> Unit,
     showViewMore: Boolean = true,
+    showLatestLangBadge: Boolean = false,
     onViewMoreClick: () -> Unit = {},
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -1759,6 +1761,7 @@ private fun AnimeSection(
                     to.kuudere.anisuge.ui.AnimeCard(
                         item = item,
                         modifier = Modifier.width(if (isXlScreen) 200.dp else 155.dp),
+                        showLatestLangBadge = showLatestLangBadge,
                         onClick = { onItemClick(item) }
                     )
                 }

@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.models.LatestEpisodeLang
+import to.kuudere.anisuge.data.models.latestEpisodeLang
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 
 /**
@@ -54,6 +56,8 @@ fun AnimeCard(
     item: AnimeItem,
     modifier: Modifier = Modifier,
     badgeText: String? = null,
+    /** When true, shows a SUB / DUB / SUB·DUB badge for the latest aired episode (top-right). */
+    showLatestLangBadge: Boolean = false,
     onClick: () -> Unit,
 ) {
     val inter   = remember { MutableInteractionSource() }
@@ -138,6 +142,16 @@ fun AnimeCard(
                         color = Color.White,
                         fontSize = 10.sp,                // font-size: 10px
                         fontWeight = FontWeight.SemiBold  // font-weight: 600
+                    )
+                }
+            }
+
+            // ── Latest-episode language badge (top-right, opt-in) ────────────
+            if (showLatestLangBadge) {
+                item.latestEpisodeLang?.let { lang ->
+                    LatestLangBadge(
+                        lang = lang,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
                     )
                 }
             }
@@ -303,6 +317,35 @@ private fun EpisodeBadge(
             color = Color.White,
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+// ── Latest-episode language badge ─────────────────────────────────────────────
+// Top-right pill showing whether the just-aired episode is SUB, DUB, or both.
+@Composable
+private fun LatestLangBadge(
+    lang: LatestEpisodeLang,
+    modifier: Modifier = Modifier,
+) {
+    val (label, bg) = when (lang) {
+        LatestEpisodeLang.SUB -> "SUB" to Color(0xFF2563EB)        // blue
+        LatestEpisodeLang.DUB -> "DUB" to Color(0xFF9333EA)        // purple
+        LatestEpisodeLang.SUB_DUB -> "SUB·DUB" to Color(0xFF059669) // green
+    }
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(3.dp))
+            .background(bg.copy(alpha = 0.92f))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(3.dp))
+            .padding(horizontal = 5.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
