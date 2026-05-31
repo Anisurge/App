@@ -2136,6 +2136,88 @@ private fun SeasonBatchPickerDialog(
                     )
                 }
 
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = {
+                        Text(
+                            "Search episode number or title...",
+                            color = AppColors.textMuted,
+                            fontSize = 13.sp
+                        )
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = AppColors.text,
+                        unfocusedTextColor = AppColors.text,
+                        focusedBorderColor = AppColors.border,
+                        unfocusedBorderColor = AppColors.border,
+                        focusedLabelColor = AppColors.text,
+                        unfocusedLabelColor = AppColors.textMuted,
+                    ),
+                )
+
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(filteredEpisodes, key = { it.number }) { episode ->
+                        val checked = episode.number in selectedNumbers
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (checked) AppColors.surfaceVariant else AppColors.surface)
+                                .clickable {
+                                    selectedNumbers = if (checked) {
+                                        selectedNumbers - episode.number
+                                    } else if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) {
+                                        selectedNumbers + episode.number
+                                    } else {
+                                        selectedNumbers
+                                    }
+                                }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { next ->
+                                    selectedNumbers = if (next) {
+                                        if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) selectedNumbers + episode.number else selectedNumbers
+                                    } else {
+                                        selectedNumbers - episode.number
+                                    }
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = AppColors.accent,
+                                    uncheckedColor = AppColors.textMuted,
+                                    checkmarkColor = AppColors.onAccent,
+                                ),
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Episode ${episode.number}",
+                                    color = AppColors.text,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                episode.title?.takeIf { it.isNotBlank() }?.let {
+                                    Text(
+                                        it,
+                                        color = AppColors.textMuted,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -2192,28 +2274,6 @@ private fun SeasonBatchPickerDialog(
                         Text("Use")
                     }
                 }
-
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = {
-                        Text(
-                            "Search episode number or title...",
-                            color = AppColors.textMuted,
-                            fontSize = 13.sp
-                        )
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = AppColors.text,
-                        unfocusedTextColor = AppColors.text,
-                        focusedBorderColor = AppColors.border,
-                        unfocusedBorderColor = AppColors.border,
-                        focusedLabelColor = AppColors.text,
-                        unfocusedLabelColor = AppColors.textMuted,
-                    ),
-                )
 
                 Text(
                     "Selected ${selectedEpisodes.size} episode${if (selectedEpisodes.size == 1) "" else "s"}",
@@ -2294,65 +2354,6 @@ private fun SeasonBatchPickerDialog(
                     )
                 }
 
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 320.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(filteredEpisodes, key = { it.number }) { episode ->
-                        val checked = episode.number in selectedNumbers
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (checked) AppColors.surfaceVariant else AppColors.surface)
-                                .clickable {
-                                    selectedNumbers = if (checked) {
-                                        selectedNumbers - episode.number
-                                    } else if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) {
-                                        selectedNumbers + episode.number
-                                    } else {
-                                        selectedNumbers
-                                    }
-                                }
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Checkbox(
-                                checked = checked,
-                                onCheckedChange = { next ->
-                                    selectedNumbers = if (next) {
-                                        if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) selectedNumbers + episode.number else selectedNumbers
-                                    } else {
-                                        selectedNumbers - episode.number
-                                    }
-                                },
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = AppColors.accent,
-                                    uncheckedColor = AppColors.textMuted,
-                                    checkmarkColor = AppColors.onAccent,
-                                ),
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    "Episode ${episode.number}",
-                                    color = AppColors.text,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                episode.title?.takeIf { it.isNotBlank() }?.let {
-                                    Text(
-                                        it,
-                                        color = AppColors.textMuted,
-                                        fontSize = 11.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
             }
         },
         confirmButton = {
