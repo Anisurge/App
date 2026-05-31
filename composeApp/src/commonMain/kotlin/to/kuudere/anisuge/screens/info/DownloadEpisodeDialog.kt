@@ -63,21 +63,27 @@ fun DownloadEpisodeDialog(
     onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?, m3u8Url: String?, preferBatchDub: Boolean) -> Unit
 ) {
     val strings = LocalAppStrings.current
-    var selectedServer by remember { mutableStateOf(if (isSeasonBatch) "anitaku-1" else "suzu") }
-    var selectedSubLang by remember { mutableStateOf<String?>("English") }
+
+    // ---- Step 0: Sub or Dub ----
+    var selectedSubDub by remember { mutableStateOf<String?>(null) } // null = not chosen yet, "sub" or "dub"
+
+    // ---- Step 1: Server ----
+    var selectedServer by remember { mutableStateOf("") }
+
+    // ---- Step 2: Quality ----
+    var selectedQualityIndex by remember { mutableIntStateOf(0) }
+
+    // ---- Step 3: Subtitle language ----
+    var selectedSubLang by remember { mutableStateOf<String?>(null) }
 
     /** HLS audio track code after playlist parse (e.g. jpn); unrelated to batch_scrape sub/dub. */
-    var selectedAudioLang by remember { mutableStateOf<String?>("sub") }
-
-    /** For providers with one `source` id and both `sub` / `dub` in batch_scrape JSON (api.md). */
-    var preferBatchDub by remember { mutableStateOf(false) }
-    var selectedQualityIndex by remember { mutableIntStateOf(0) }
+    var selectedAudioLang by remember { mutableStateOf<String?>(null) }
 
     val serverListState = rememberLazyListState()
     val subListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    var availableSubtitles by remember { mutableStateOf<List<String>>(listOf("All", "English")) }
+    var availableSubtitles by remember { mutableStateOf<List<String>>(emptyList()) }
     var batchStreamSection by remember {
         mutableStateOf<to.kuudere.anisuge.data.models.BatchScrapeStreamData?>(null)
     }
@@ -134,16 +140,27 @@ fun DownloadEpisodeDialog(
     }
 
     val catalogServers = serverRepository.servers.collectAsState()
-    val selectableServers = remember(catalogServers.value) {
-        // Keep AnimePahe available for streaming; hide it only in the download dialog.
+    val allSelectableServers = remember(catalogServers.value) {
         catalogServers.value
             .expandForSelection()
             .filterNot { it.id.equals("animepahe", ignoreCase = true) }
     }
 
-    // Update selected server when repository loads
-    LaunchedEffect(selectableServers) {
-        if (selectableServers.none { it.id == selectedServer } && selectableServers.isNotEmpty()) {
+    // Filter servers by the chosen sub/dub type
+    val selectableServers = remember(allSelectableServers, selectedSubDub) {
+        val choice = selectedSubDub ?: return@remember allSelectableServers
+        allSelectableServers.filter { server ->
+            when (choice) {
+                "sub" -> server.type == "sub" || server.type == "sub_dub"
+                "dub" -> server.type == "dub" || server.type == "sub_dub"
+                else -> true
+            }
+        }
+    }
+
+    // When sub/dub is first chosen, auto-pick first matching server
+    LaunchedEffect(selectedSubDub, selectableServers) {
+        if (selectedSubDub != null && selectableServers.isNotEmpty() && selectedServer.isBlank()) {
             selectedServer = if (isSeasonBatch) {
                 selectableServers.firstOrNull { it.id.equals("anitaku-1", ignoreCase = true) }?.id
                     ?: selectableServers.firstOrNull { it.id.equals("anitaku", ignoreCase = true) }?.id
@@ -155,25 +172,43 @@ fun DownloadEpisodeDialog(
         }
     }
 
-    LaunchedEffect(selectedServer) {
-        preferBatchDub = false
+    // Reset API data when sub/dub changes
+    LaunchedEffect(selectedSubDub) {
+        if (selectedSubDub != null) {
+            selectedServer = ""
+            availableQualities = emptyList()
+            availableSubtitles = emptyList()
+            availableAudioTracks = emptyList()
+            estimatedSizeBytes = 0L
+            selectedQualityIndex = 0
+            selectedSubLang = null
+            selectedAudioLang = null
+        }
     }
 
-    LaunchedEffect(selectedServer, preferBatchDub) {
+    // Fetch stream data when both sub/dub AND server are selected
+    LaunchedEffect(selectedServer, selectedSubDub) {
+        val server = selectedServer
+        val choice = selectedSubDub
+        if (server.isBlank() || choice == null) return@LaunchedEffect
+
         isLoadingSubs = true
         estimatedSizeBytes = 0L
         availableQualities = emptyList()
         selectedQualityIndex = 0
         try {
-            val legacyDub = selectedServer.endsWith("-dub", ignoreCase = true)
-            val apiSource = if (legacyDub) selectedServer.dropLast(4) else selectedServer
-            val meta = serverRepository.getServerById(selectedServer)
+            val legacyDub = server.endsWith("-dub", ignoreCase = true)
+            val apiSource = if (legacyDub) server.dropLast(4) else server
+            val meta = serverRepository.getServerById(server)
                 ?: serverRepository.getServerById(apiSource)
+            // Determine dub section usage from the sub/dub choice AND server metadata
             val useDubSection = when {
+                choice == "dub" -> true
+                choice == "sub" -> false
                 legacyDub -> true
                 meta?.type == "dub" -> true
                 meta?.type == "sub" -> false
-                else -> preferBatchDub
+                else -> false
             }
             val response = infoService.getVideoStream(anilistId, episodeNumber, apiSource)
             var streamSection = if (useDubSection) response?.dub else response?.sub
@@ -228,17 +263,17 @@ fun DownloadEpisodeDialog(
             val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStreamSection(streamSection)
                 .mapNotNull { it.title ?: it.resolvedLang }
                 .distinct()
-            availableSubtitles = if (subLabels.isEmpty()) listOf("All") else listOf("All") + subLabels
-            if (selectedSubLang !in availableSubtitles) {
+            availableSubtitles = subLabels
+            if (selectedSubLang == null || selectedSubLang !in availableSubtitles) {
                 selectedSubLang = when {
                     "English" in availableSubtitles -> "English"
                     subLabels.isNotEmpty() -> subLabels.first()
                     else -> "All"
                 }
             }
-            println("[DownloadDialog] server=$selectedServer qualities=${qualities.size} streams=${streams.size} subs=${subLabels.size}")
+            println("[DownloadDialog] subDub=$choice server=$server qualities=${qualities.size} streams=${streams.size} subs=${subLabels.size}")
         } catch (e: Exception) {
-            println("[DownloadDialog] Failed to fetch for $selectedServer: ${e.message}")
+            println("[DownloadDialog] Failed to fetch for $server: ${e.message}")
             e.printStackTrace()
         } finally {
             isLoadingSubs = false
@@ -250,8 +285,8 @@ fun DownloadEpisodeDialog(
         val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStreamSection(section)
             .mapNotNull { it.title ?: it.resolvedLang }
             .distinct()
-        availableSubtitles = if (subLabels.isEmpty()) listOf("All") else listOf("All") + subLabels
-        if (selectedSubLang !in availableSubtitles) {
+        availableSubtitles = subLabels
+        if (selectedSubLang == null || selectedSubLang !in availableSubtitles) {
             selectedSubLang = when {
                 "English" in availableSubtitles -> "English"
                 subLabels.isNotEmpty() -> subLabels.first()
@@ -350,7 +385,7 @@ fun DownloadEpisodeDialog(
                         true,
                         currentHeaders,
                         selectedM3u8,
-                        preferBatchDub
+                        selectedSubDub == "dub"
                     )
                 }
             } else pendingMp4AfterStorageGrant = null
@@ -369,8 +404,6 @@ fun DownloadEpisodeDialog(
     if (shouldRequestNotificationPermission) {
         to.kuudere.anisuge.utils.RequestNotificationPermission { granted ->
             shouldRequestNotificationPermission = false
-            // We don't block download for now because it might still work in foreground,
-            // but user won't see notification. We just try to get it.
             if (to.kuudere.anisuge.utils.hasStoragePermission()) {
                 onStartDownload(
                     selectedServer,
@@ -379,7 +412,7 @@ fun DownloadEpisodeDialog(
                     true,
                     currentHeaders,
                     selectedM3u8,
-                    preferBatchDub
+                    selectedSubDub == "dub"
                 )
             } else {
                 shouldRequestPermission = true
@@ -388,6 +421,12 @@ fun DownloadEpisodeDialog(
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val canDownload = selectedSubDub != null &&
+            selectedServer.isNotBlank() &&
+            !isLoadingSubs &&
+            isPathValid &&
+            !selectedQualityIsDash
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -401,7 +440,7 @@ fun DownloadEpisodeDialog(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
                 text = if (isSeasonBatch) "Download ${batchEpisodeCount.coerceAtLeast(1)} episodes" else strings.downloadEpisode(
@@ -412,72 +451,59 @@ fun DownloadEpisodeDialog(
                 fontWeight = FontWeight.Bold
             )
 
-            // Server Selection
+            // ==========================================
+            // Step 0: Sub or Dub
+            // ==========================================
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(strings.selectServer, color = Color.Gray, fontSize = 14.sp)
-                androidx.compose.foundation.lazy.LazyRow(
-                    state = serverListState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .draggable(
-                            orientation = Orientation.Horizontal,
-                            state = rememberDraggableState { delta ->
-                                scope.launch { serverListState.scrollBy(-delta) }
-                            }
-                        ),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Text("Sub or Dub?", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(selectableServers.size) { index ->
-                        val server = selectableServers[index]
-                        val isSelected = server.id == selectedServer
+                    listOf("sub" to "Sub", "dub" to "Dub").forEach { (key, label) ->
+                        val isSelected = selectedSubDub == key
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(if (isSelected) AppColors.accent else AppColors.surface)
+                                .border(
+                                    1.dp,
+                                    if (isSelected) AppColors.accent else AppColors.border,
+                                    RoundedCornerShape(10.dp)
+                                )
                                 .clickable {
-                                    selectedServer = server.id
+                                    selectedSubDub = if (isSelected) null else key
                                 }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                                .padding(vertical = 14.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = server.displayName,
+                                text = label,
                                 color = if (isSelected) AppColors.onAccent else AppColors.text,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
             }
 
-            // Quality — progressive MP4 (e.g. AllAnime) uses HEAD sizes + per-row download; HLS uses chips + main button
-            if (showDirectMp4Picker && !isSeasonBatch) {
-                DirectMp4QualityPicker(
-                    httpClient = to.kuudere.anisuge.AppComponent.httpClient,
-                    options = mp4QualityOptions,
-                    onDownloadRequested = { url, hdrs, qual ->
-                        if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                            to.kuudere.anisuge.utils.DownloadManager.startMp4Download(
-                                animeId = animeId,
-                                episodeNumber = episodeNumber,
-                                title = episodeDisplayTitle,
-                                coverImage = coverImage,
-                                mp4Url = url,
-                                headers = hdrs,
-                                qualityLabel = qual,
-                            )
-                        } else {
-                            pendingMp4AfterStorageGrant = Triple(url, hdrs, qual)
-                            shouldRequestPermission = true
-                        }
-                    },
-                )
-            } else if (availableQualities.isNotEmpty()) {
+            // ==========================================
+            // Step 1: Server Selection (only after sub/dub chosen)
+            // ==========================================
+            AnimatedVisibility(visible = selectedSubDub != null) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (availableQualities.size > 1) {
-                        Text("Quality", color = Color.Gray, fontSize = 14.sp)
+                    Text(strings.selectServer, color = Color.Gray, fontSize = 14.sp)
+                    if (selectableServers.isEmpty()) {
+                        Text(
+                            "No servers available for ${selectedSubDub?.uppercase()}",
+                            color = Color.Gray,
+                            fontSize = 13.sp
+                        )
+                    } else {
                         androidx.compose.foundation.lazy.LazyRow(
+                            state = serverListState,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .draggable(
@@ -488,22 +514,21 @@ fun DownloadEpisodeDialog(
                                 ),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(availableQualities.size) { index ->
-                                val (label, _, _) = availableQualities[index]
-                                val isSelected = index == selectedQualityIndex
+                            items(selectableServers.size) { index ->
+                                val server = selectableServers[index]
+                                val isSelected = server.id == selectedServer
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(if (isSelected) AppColors.accent else AppColors.surface)
                                         .clickable {
-                                            selectedQualityIndex = index
-                                            currentHeaders = availableQualities[index].third
+                                            selectedServer = server.id
                                         }
                                         .padding(horizontal = 16.dp, vertical = 10.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = label,
+                                        text = server.displayName,
                                         color = if (isSelected) AppColors.onAccent else AppColors.text,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold
@@ -512,27 +537,124 @@ fun DownloadEpisodeDialog(
                             }
                         }
                     }
-                    if (selectedServer.startsWith("suzu", ignoreCase = true)) {
-                        Text(
-                            text = "Suzu quality names come from the provider (not our file-size scan). The download button shows an estimate from playlist bitrate and episode length.",
-                            color = Color.Gray.copy(alpha = 0.88f),
-                            fontSize = 11.sp,
-                            lineHeight = 14.sp
+                }
+            }
+
+            // Loading indicator for API call
+            AnimatedVisibility(visible = selectedSubDub != null && selectedServer.isNotBlank() && isLoadingSubs) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("Fetching streams...", color = Color.Gray, fontSize = 13.sp)
+                }
+            }
+
+            val hasStreamData =
+                selectedSubDub != null && selectedServer.isNotBlank() && !isLoadingSubs && availableQualities.isNotEmpty()
+
+            // ==========================================
+            // Step 2: Quality (only after API loaded)
+            // ==========================================
+            AnimatedVisibility(visible = hasStreamData) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Quality — progressive MP4 (e.g. AllAnime) uses HEAD sizes + per-row download; HLS uses chips + main button
+                    if (showDirectMp4Picker && !isSeasonBatch) {
+                        DirectMp4QualityPicker(
+                            httpClient = to.kuudere.anisuge.AppComponent.httpClient,
+                            options = mp4QualityOptions,
+                            onDownloadRequested = { url, hdrs, qual ->
+                                if (to.kuudere.anisuge.utils.hasStoragePermission()) {
+                                    to.kuudere.anisuge.utils.DownloadManager.startMp4Download(
+                                        animeId = animeId,
+                                        episodeNumber = episodeNumber,
+                                        title = episodeDisplayTitle,
+                                        coverImage = coverImage,
+                                        mp4Url = url,
+                                        headers = hdrs,
+                                        qualityLabel = qual,
+                                    )
+                                } else {
+                                    pendingMp4AfterStorageGrant = Triple(url, hdrs, qual)
+                                    shouldRequestPermission = true
+                                }
+                            },
                         )
-                    }
-                    if (selectedQualityIsDash) {
-                        Text(
-                            text = "DASH (.mpd) streams are for playback only — pick an HLS or MP4 quality to download.",
-                            color = Color(0xFFFFB74D),
-                            fontSize = 11.sp,
-                            lineHeight = 14.sp
-                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (availableQualities.size > 1) {
+                                Text("Quality", color = Color.Gray, fontSize = 14.sp)
+                                androidx.compose.foundation.lazy.LazyRow(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .draggable(
+                                            orientation = Orientation.Horizontal,
+                                            state = rememberDraggableState { delta ->
+                                                scope.launch { serverListState.scrollBy(-delta) }
+                                            }
+                                        ),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(availableQualities.size) { index ->
+                                        val (label, _, _) = availableQualities[index]
+                                        val isSelected = index == selectedQualityIndex
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (isSelected) AppColors.accent else AppColors.surface)
+                                                .clickable {
+                                                    selectedQualityIndex = index
+                                                    currentHeaders = availableQualities[index].third
+                                                }
+                                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                color = if (isSelected) AppColors.onAccent else AppColors.text,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+                            } else if (availableQualities.size == 1) {
+                                Text(
+                                    "Quality: ${availableQualities.first().first}",
+                                    color = AppColors.text,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            if (selectedServer.startsWith("suzu", ignoreCase = true)) {
+                                Text(
+                                    text = "Suzu quality names come from the provider (not our file-size scan). The download button shows an estimate from playlist bitrate and episode length.",
+                                    color = Color.Gray.copy(alpha = 0.88f),
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp
+                                )
+                            }
+                            if (selectedQualityIsDash) {
+                                Text(
+                                    text = "DASH (.mpd) streams are for playback only — pick an HLS or MP4 quality to download.",
+                                    color = Color(0xFFFFB74D),
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
 
             // Audio Selection (Only relevant for Zen servers which embed multiple tracks)
-            if (availableAudioTracks.isNotEmpty()) {
+            AnimatedVisibility(visible = hasStreamData && availableAudioTracks.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(strings.audioTrack, color = Color.Gray, fontSize = 14.sp)
                     Row(
@@ -562,49 +684,52 @@ fun DownloadEpisodeDialog(
                 }
             }
 
-            // Subtitle Selection
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(strings.subtitleLanguage, color = Color.Gray, fontSize = 14.sp)
-                if (isLoadingSubs) {
-                    Box(modifier = Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
+            // ==========================================
+            // Step 3: Subtitle Selection (only after API loaded)
+            // ==========================================
+            AnimatedVisibility(visible = hasStreamData) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(strings.subtitleLanguage, color = Color.Gray, fontSize = 14.sp)
+                    if (availableSubtitles.isEmpty()) {
+                        Text(strings.noSubtitlesAvailable, color = Color.Gray, fontSize = 13.sp)
+                    } else if (availableSubtitles.size == 1) {
+                        Text(
+                            availableSubtitles.first(),
+                            color = AppColors.text,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
                         )
-                    }
-                } else if (availableSubtitles.size <= 1) {
-                    Text(strings.noSubtitlesAvailable, color = Color.Gray, fontSize = 13.sp)
-                } else {
-                    androidx.compose.foundation.lazy.LazyRow(
-                        state = subListState,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .draggable(
-                                orientation = Orientation.Horizontal,
-                                state = rememberDraggableState { delta ->
-                                    scope.launch { subListState.scrollBy(-delta) }
+                    } else {
+                        androidx.compose.foundation.lazy.LazyRow(
+                            state = subListState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .draggable(
+                                    orientation = Orientation.Horizontal,
+                                    state = rememberDraggableState { delta ->
+                                        scope.launch { subListState.scrollBy(-delta) }
+                                    }
+                                ),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(availableSubtitles.size) { index ->
+                                val sub = availableSubtitles[index]
+                                val isSelected = selectedSubLang == sub
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) AppColors.accent else AppColors.surface)
+                                        .clickable { selectedSubLang = sub }
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = sub,
+                                        color = if (isSelected) AppColors.onAccent else AppColors.text,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 }
-                            ),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(availableSubtitles.size) { index ->
-                            val sub = availableSubtitles[index]
-                            val isSelected = selectedSubLang == sub
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) AppColors.accent else AppColors.surface)
-                                    .clickable { selectedSubLang = sub }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = sub,
-                                    color = if (isSelected) AppColors.onAccent else AppColors.text,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
                             }
                         }
                     }
@@ -661,7 +786,6 @@ fun DownloadEpisodeDialog(
                 }
             }
 
-            // Options
             /* Removed Download Fonts Switch as it is now strictly automatic in DownloadManager */
 
             if (currentTask != null && currentTask.status != "Finished") {
@@ -740,7 +864,7 @@ fun DownloadEpisodeDialog(
                                         true,
                                         currentHeaders,
                                         if (isSeasonBatch) null else selectedM3u8,
-                                        preferBatchDub,
+                                        selectedSubDub == "dub",
                                     )
                                 } else {
                                     shouldRequestPermission = true
@@ -753,7 +877,7 @@ fun DownloadEpisodeDialog(
                                 }
                             }
                         },
-                        enabled = !isFinished && isPathValid && !isLoadingSubs && !selectedQualityIsDash,
+                        enabled = !isFinished && canDownload,
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp),
@@ -804,62 +928,44 @@ fun DownloadEpisodeDialog(
     }
 }
 
-internal fun isDashManifestUrl(url: String): Boolean {
-    val path = url.lowercase().substringBefore("#").substringBefore("?")
-    return path.endsWith(".mpd") || ".mpd/" in path
+fun isDashManifestUrl(url: String): Boolean {
+    val path = url.substringAfter('?', "").lowercase()
+    return path.endsWith(".mpd")
 }
 
-/** Prefer HLS with Referer (Anikage proxy / Vibeplayer) over DASH or tokenized MP4. */
-internal fun preferredDownloadQualityIndex(
-    qualities: List<Triple<String, String, Map<String, String>>>,
-): Int {
-    if (qualities.isEmpty()) return 0
-    val downloadable = qualities.withIndex().filter { (_, triple) ->
-        !isDashManifestUrl(triple.second) && !isDirectProgressiveMp4Url(triple.second)
+fun preferredDownloadQualityIndex(qualities: List<Triple<String, String, Map<String, String>>>): Int {
+    val downloadable = qualities.map { it.first.lowercase() }
+    return listOf("8k", "4k", "2160p", "1440p", "1080p", "720p", "480p").firstNotNullOfOrNull { pref ->
+        downloadable.indexOfFirst { it.contains(pref) }.takeIf { it >= 0 }
+    } ?: run {
+        val withReferer = qualities.indexOfFirst { (_, _, headers) ->
+            headers["Referer"]?.isNotBlank() == true
+        }.takeIf { it >= 0 }
+        withReferer ?: run {
+            val pool = qualities.indexOfFirst { (_, url) -> !isDirectProgressiveMp4Url(url) }
+            if (pool >= 0 && pool < qualities.size - 1) pool else 0
+        }
     }
-    if (downloadable.isEmpty()) return 0
-    val withReferer = downloadable.filter { (_, triple) ->
-        triple.third["Referer"]?.isNotBlank() == true
-    }
-    val pool = if (withReferer.isNotEmpty()) withReferer else downloadable
-    pool.firstOrNull { (_, triple) ->
-        triple.first.contains("1080", ignoreCase = true) &&
-                (triple.second.contains("anikage", ignoreCase = true) ||
-                        triple.second.contains("vibeplayer", ignoreCase = true))
-    }?.index?.let { return it }
-    pool.firstOrNull { (_, triple) ->
-        triple.second.contains("vibeplayer", ignoreCase = true)
-    }?.index?.let { return it }
-    pool.firstOrNull { (_, triple) ->
-        triple.second.contains("anikage", ignoreCase = true)
-    }?.index?.let { return it }
-    return pool.first().index
 }
 
-internal fun isDirectProgressiveMp4Url(url: String): Boolean {
-    val lower = url.lowercase().substringBefore("#")
-    val path = lower.substringBefore("?")
-    if (path.endsWith(".mp4") || ".mp4?" in lower || "/mp4/" in lower) return true
-    val host = try {
-        urlHost(url)?.lowercase()
-    } catch (_: Exception) {
-        null
-    } ?: return false
-    // All anime (`allmanga`) serves progressive MP4 from Wix video CDN paths that may omit a `.mp4` suffix.
-    if (host == "video.wixstatic.com" || (host.length >= 8 && host.substring(host.length - 8) == ".wixmp.com")) return true
-    // All anime can also serve direct video blobs from fast4speed without an explicit `.mp4` extension.
-    if (host == "tools.fast4speed.rsvp" || (host.length >= 16 && host.substring(host.length - 16) == ".fast4speed.rsvp")) {
-        if ("/videos/" in path && (path.length < 5 || path.substring(path.length - 5)
-                .lowercase() != ".m3u8")
-        ) return true
-    }
-    return false
+fun isDirectProgressiveMp4Url(url: String): Boolean {
+    val lower = url.lowercase()
+    if (lower.contains(".m3u8") || lower.contains(".mpd")) return false
+    val path = url.substringAfter('?', "")
+    if (path.contains(".m3u8") || path.contains(".mpd")) return false
+    val host = urlHost(url)
+    if (lower.endsWith(".mp4") || host.endsWith("ibyteimg.com") || host.endsWith("byteimg.com")) return false
+    return true
 }
 
-private fun formatFileSize(bytes: Long): String {
-    return when {
-        bytes >= 1024 * 1024 * 1024 -> "${formatFloat(bytes.toDouble() / (1024 * 1024 * 1024), 1)} GB"
-        bytes >= 1024 * 1024 -> "${formatFloat(bytes.toDouble() / (1024 * 1024), 0)} MB"
-        else -> "${formatFloat(bytes.toDouble() / 1024, 0)} KB"
+fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0) return ""
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    var size = bytes.toDouble()
+    var unitIndex = 0
+    while (size >= 1024 && unitIndex < units.lastIndex) {
+        size /= 1024
+        unitIndex++
     }
+    return "${formatFloat(size.toFloat(), 1)} ${units[unitIndex]}"
 }

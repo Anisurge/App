@@ -159,8 +159,8 @@ actual suspend fun muxToMkv(
         }
 
         val skipRemoteHlsExport = preferLocalTsRemux ||
-            HlsPngTsStrip.isDisguisedTsCdnHost(videoPath) ||
-            masterPlaylistUrl?.let { HlsPngTsStrip.isVibeplayerHlsHost(it) } == true
+                HlsPngTsStrip.isDisguisedTsCdnHost(videoPath) ||
+                masterPlaylistUrl?.let { HlsPngTsStrip.isVibeplayerHlsHost(it) } == true
 
         val masterUrl = masterPlaylistUrl?.takeIf { it.startsWith("http") }
         if (masterUrl != null && !skipRemoteHlsExport) {
@@ -189,19 +189,34 @@ actual suspend fun muxToMkv(
         }
 
         if (!videoPath.startsWith("http")) {
-            if (remuxToMkvWithRxFfmpeg(videoPath, audioPath, subtitles, outputPath)) {
-                return@withContext true
-            }
+            // Resolve content:// SAF URIs to real filesystem paths so native tools
+            // (RxFFmpeg) and Media3 Transformer can read/write the files directly.
+            val realVideo = resolveContentUriToFilePath(videoPath)
+            val realOutput = resolveContentUriToFilePath(outputPath)
+            val realAudio = audioPath?.let { resolveContentUriToFilePath(it) }
+            val realSubs = subtitles.map { (p, l) -> resolveContentUriToFilePath(p) to l }
+
+            // Try Media3 Transformer first (more stable than RxFFmpeg on some devices).
+            // RxFFmpeg native code can SIGSEGV on certain phones; Media3 uses the platform's
+            // software codecs which are better tested.
             val exported = exportLocalMediaToFile(
                 context = androidAppContext,
-                inputPath = videoPath,
-                outputPath = outputPath,
+                inputPath = realVideo,
+                outputPath = realOutput,
             )
             if (exported) return@withContext true
-            return@withContext finalizeLocalDownload(videoPath, audioPath, outputPath)
+
+            // Media3 failed — skip RxFFmpeg (can SIGSEGV natively) and fall back to
+            // a plain file copy. The output will be a raw TS stream with a .mkv extension;
+            // most video players detect the container from content, not extension.
+            return@withContext finalizeLocalDownload(realVideo, realAudio, realOutput)
         }
 
-        println("[Download] mux/export failed for remote HLS (host=${masterPlaylistUrl?.substringAfter("://")?.substringBefore('/')})")
+        println(
+            "[Download] mux/export failed for remote HLS (host=${
+                masterPlaylistUrl?.substringAfter("://")?.substringBefore('/')
+            })"
+        )
         false
     } catch (e: Exception) {
         e.printStackTrace()
