@@ -46,8 +46,9 @@ object BatchSubtitleExtract {
         section: BatchScrapeStreamData?,
         quality: String?,
     ): List<SubtitleData> {
-        val stream = findStream(section, quality = quality, m3u8Url = null)
-        return fromStream(stream).ifEmpty { fromStreamSection(section) }
+        // Always return ALL subtitles from the section, merged across all streams,
+        // so the user sees every available subtitle option regardless of selected quality.
+        return fromStreamSection(section)
     }
 
     fun defaultUrl(subtitles: List<SubtitleData>): String? =
@@ -63,8 +64,8 @@ object BatchSubtitleExtract {
         quality: String? = null,
         m3u8Url: String? = null,
     ): List<Pair<String, String>> {
-        val stream = findStream(section, quality, m3u8Url)
-        val subs = fromStream(stream).ifEmpty { fromStreamSection(section) }
+        // Always return ALL subtitles from the section, merged across all streams.
+        val subs = fromStreamSection(section)
         return subs.mapNotNull { sub ->
             sub.url?.let { url -> url to (sub.title ?: sub.resolvedLang ?: "Default") }
         }
@@ -80,7 +81,7 @@ object BatchSubtitleExtract {
         val embedOnly = streams.filter { stream ->
             val q = stream.url.substringAfter('?', "")
             q.contains("caption_", ignoreCase = true) ||
-                stream.quality.orEmpty().contains("embed", ignoreCase = true)
+                    stream.quality.orEmpty().contains("embed", ignoreCase = true)
         }
         return fromStreams(embedOnly, legacySubtitlesUrl = null)
     }

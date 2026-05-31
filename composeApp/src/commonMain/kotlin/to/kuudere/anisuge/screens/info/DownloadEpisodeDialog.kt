@@ -65,12 +65,14 @@ fun DownloadEpisodeDialog(
     val strings = LocalAppStrings.current
     var selectedServer by remember { mutableStateOf(if (isSeasonBatch) "anitaku-1" else "suzu") }
     var selectedSubLang by remember { mutableStateOf<String?>("English") }
+
     /** HLS audio track code after playlist parse (e.g. jpn); unrelated to batch_scrape sub/dub. */
     var selectedAudioLang by remember { mutableStateOf<String?>("sub") }
+
     /** For providers with one `source` id and both `sub` / `dub` in batch_scrape JSON (api.md). */
     var preferBatchDub by remember { mutableStateOf(false) }
     var selectedQualityIndex by remember { mutableIntStateOf(0) }
-    
+
     val serverListState = rememberLazyListState()
     val subListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -94,7 +96,7 @@ fun DownloadEpisodeDialog(
     }
 
     val settingsStore = to.kuudere.anisuge.AppComponent.settingsStore
-    
+
     val directoryPickerLauncher = rememberDirectoryPickerLauncher { dir ->
         dir?.let {
             val path = it.absolutePath()
@@ -104,10 +106,10 @@ fun DownloadEpisodeDialog(
             }
         }
     }
-    
+
     val downloadPath by settingsStore.downloadPathFlow.collectAsState("")
-    val isPathValid = remember(downloadPath) { 
-        if (downloadPath.isBlank()) true 
+    val isPathValid = remember(downloadPath) {
+        if (downloadPath.isBlank()) true
         else to.kuudere.anisuge.platform.isFolderWritable(downloadPath)
     }
 
@@ -121,10 +123,11 @@ fun DownloadEpisodeDialog(
                 Regex("(\\d{3,4})").find(label)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
             }
     }
+
     /** AllAnime-style catalogs are MP4-only; mixed providers (e.g. Anikage) keep the HLS quality row. */
     val showDirectMp4Picker = remember(availableQualities, mp4QualityOptions) {
         mp4QualityOptions.isNotEmpty() &&
-            availableQualities.all { isDirectProgressiveMp4Url(it.second) }
+                availableQualities.all { isDirectProgressiveMp4Url(it.second) }
     }
     val selectedQualityIsDash = remember(availableQualities, selectedQualityIndex) {
         availableQualities.getOrNull(selectedQualityIndex)?.second?.let { isDashManifestUrl(it) } == true
@@ -222,12 +225,7 @@ fun DownloadEpisodeDialog(
             }
             availableQualities = qualities
             selectedQualityIndex = preferredDownloadQualityIndex(qualities)
-            val m3u8 = qualities.getOrNull(selectedQualityIndex)?.second
-            val stream = to.kuudere.anisuge.utils.BatchSubtitleExtract.findStream(
-                streamSection,
-                m3u8Url = m3u8,
-            )
-            val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStream(stream)
+            val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStreamSection(streamSection)
                 .mapNotNull { it.title ?: it.resolvedLang }
                 .distinct()
             availableSubtitles = if (subLabels.isEmpty()) listOf("All") else listOf("All") + subLabels
@@ -249,9 +247,7 @@ fun DownloadEpisodeDialog(
 
     LaunchedEffect(batchStreamSection, availableQualities, selectedQualityIndex) {
         val section = batchStreamSection ?: return@LaunchedEffect
-        val m3u8 = availableQualities.getOrNull(selectedQualityIndex.coerceAtLeast(0))?.second
-        val stream = to.kuudere.anisuge.utils.BatchSubtitleExtract.findStream(section, m3u8Url = m3u8)
-        val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStream(stream)
+        val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStreamSection(section)
             .mapNotNull { it.title ?: it.resolvedLang }
             .distinct()
         availableSubtitles = if (subLabels.isEmpty()) listOf("All") else listOf("All") + subLabels
@@ -262,6 +258,7 @@ fun DownloadEpisodeDialog(
                 else -> "All"
             }
         }
+        println("[DownloadDialog] server=$selectedServer subs=${subLabels.size}")
     }
 
     LaunchedEffect(availableQualities, selectedQualityIndex, estimatedDurationSeconds, showDirectMp4Picker) {
@@ -346,16 +343,25 @@ fun DownloadEpisodeDialog(
                         qualityLabel = q,
                     )
                 } else {
-                    onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
+                    onStartDownload(
+                        selectedServer,
+                        selectedSubLang,
+                        selectedAudioLang,
+                        true,
+                        currentHeaders,
+                        selectedM3u8,
+                        preferBatchDub
+                    )
                 }
             } else pendingMp4AfterStorageGrant = null
         }
     }
 
     LaunchedEffect(currentTask) {
-        if (currentTask != null && !currentTask.isPaused && 
+        if (currentTask != null && !currentTask.isPaused &&
             currentTask.status != "Finished" && !currentTask.status.startsWith("Failed") &&
-            !to.kuudere.anisuge.utils.hasNotificationPermission()) {
+            !to.kuudere.anisuge.utils.hasNotificationPermission()
+        ) {
             shouldRequestNotificationPermission = true
         }
     }
@@ -363,10 +369,18 @@ fun DownloadEpisodeDialog(
     if (shouldRequestNotificationPermission) {
         to.kuudere.anisuge.utils.RequestNotificationPermission { granted ->
             shouldRequestNotificationPermission = false
-            // We don't block download for now because it might still work in foreground, 
+            // We don't block download for now because it might still work in foreground,
             // but user won't see notification. We just try to get it.
             if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                onStartDownload(selectedServer, selectedSubLang, selectedAudioLang, true, currentHeaders, selectedM3u8, preferBatchDub)
+                onStartDownload(
+                    selectedServer,
+                    selectedSubLang,
+                    selectedAudioLang,
+                    true,
+                    currentHeaders,
+                    selectedM3u8,
+                    preferBatchDub
+                )
             } else {
                 shouldRequestPermission = true
             }
@@ -390,7 +404,9 @@ fun DownloadEpisodeDialog(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Text(
-                text = if (isSeasonBatch) "Download ${batchEpisodeCount.coerceAtLeast(1)} episodes" else strings.downloadEpisode(episodeNumber),
+                text = if (isSeasonBatch) "Download ${batchEpisodeCount.coerceAtLeast(1)} episodes" else strings.downloadEpisode(
+                    episodeNumber
+                ),
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
@@ -551,7 +567,11 @@ fun DownloadEpisodeDialog(
                 Text(strings.subtitleLanguage, color = Color.Gray, fontSize = 14.sp)
                 if (isLoadingSubs) {
                     Box(modifier = Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
                     }
                 } else if (availableSubtitles.size <= 1) {
                     Text(strings.noSubtitlesAvailable, color = Color.Gray, fontSize = 13.sp)
@@ -594,7 +614,7 @@ fun DownloadEpisodeDialog(
             // Download Path Selection
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(text = strings.downloadLocation, color = Color.Gray, fontSize = 14.sp)
-                
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -622,9 +642,9 @@ fun DownloadEpisodeDialog(
                             )
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.width(12.dp))
-                    
+
                     Text(
                         text = strings.change,
                         color = Color.Black,
@@ -633,7 +653,7 @@ fun DownloadEpisodeDialog(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.White)
-                            .clickable { 
+                            .clickable {
                                 directoryPickerLauncher.launch()
                             }
                             .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -695,7 +715,13 @@ fun DownloadEpisodeDialog(
                             colors = ButtonDefaults.buttonColors(containerColor = AppColors.surface),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text(strings.delete, color = AppColors.accent, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                            Text(
+                                strings.delete,
+                                color = AppColors.accent,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                maxLines = 1
+                            )
                         }
                     }
                 }
@@ -752,12 +778,14 @@ fun DownloadEpisodeDialog(
                                 maxLines = 1
                             )
                         } else {
-                            val sizeText = if (estimatedSizeBytes > 0) " (~${formatFileSize(estimatedSizeBytes)})" else ""
+                            val sizeText =
+                                if (estimatedSizeBytes > 0) " (~${formatFileSize(estimatedSizeBytes)})" else ""
                             Text(
                                 text = when {
                                     currentTask == null -> if (isPathValid) {
                                         if (isSeasonBatch) "Start Batch$sizeText" else strings.startDownload(sizeText)
                                     } else strings.chooseValidFolder
+
                                     isFinished -> strings.downloaded
                                     else -> strings.keepDownloadingInBackground
                                 },
@@ -796,8 +824,8 @@ internal fun preferredDownloadQualityIndex(
     val pool = if (withReferer.isNotEmpty()) withReferer else downloadable
     pool.firstOrNull { (_, triple) ->
         triple.first.contains("1080", ignoreCase = true) &&
-            (triple.second.contains("anikage", ignoreCase = true) ||
-                triple.second.contains("vibeplayer", ignoreCase = true))
+                (triple.second.contains("anikage", ignoreCase = true) ||
+                        triple.second.contains("vibeplayer", ignoreCase = true))
     }?.index?.let { return it }
     pool.firstOrNull { (_, triple) ->
         triple.second.contains("vibeplayer", ignoreCase = true)
@@ -821,7 +849,9 @@ internal fun isDirectProgressiveMp4Url(url: String): Boolean {
     if (host == "video.wixstatic.com" || (host.length >= 8 && host.substring(host.length - 8) == ".wixmp.com")) return true
     // All anime can also serve direct video blobs from fast4speed without an explicit `.mp4` extension.
     if (host == "tools.fast4speed.rsvp" || (host.length >= 16 && host.substring(host.length - 16) == ".fast4speed.rsvp")) {
-        if ("/videos/" in path && (path.length < 5 || path.substring(path.length - 5).lowercase() != ".m3u8")) return true
+        if ("/videos/" in path && (path.length < 5 || path.substring(path.length - 5)
+                .lowercase() != ".m3u8")
+        ) return true
     }
     return false
 }

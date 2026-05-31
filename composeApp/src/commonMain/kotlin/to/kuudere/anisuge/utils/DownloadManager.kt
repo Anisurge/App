@@ -72,7 +72,7 @@ object DownloadManager {
     private val scope = CoroutineScope(Dispatchers.Default)
     private val httpClient = AppComponent.httpClient
     private val infoService = AppComponent.infoService
-    
+
     private val persistenceFile = "${getCacheDirectory()}/tasks.json"
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
     private const val MP4_BUFFER_SIZE = 8 * 1024
@@ -87,15 +87,15 @@ object DownloadManager {
 
     init {
         loadTasks()
-        
+
         // Update system notification when tasks change
         scope.launch {
             tasks.collect { list ->
-                val active = list.filter { 
+                val active = list.filter {
                     (it.status.contains("Downloading") || it.status.contains("...") || it.status.contains("task")) &&
-                    !it.isPaused
+                            !it.isPaused
                 }
-                
+
                 if (active.isEmpty()) {
                     to.kuudere.anisuge.platform.clearDownloadNotification()
                 } else {
@@ -126,8 +126,8 @@ object DownloadManager {
                         }
                         if (normalizedStatus != "Finished") {
                             val almostDone = task.progress >= 0.92f ||
-                                normalizedStatus.contains("Finaliz", ignoreCase = true) ||
-                                normalizedStatus.contains("Mux", ignoreCase = true)
+                                    normalizedStatus.contains("Finaliz", ignoreCase = true) ||
+                                    normalizedStatus.contains("Mux", ignoreCase = true)
                             task.copy(
                                 status = if (almostDone) "Almost done — tap Resume" else "Paused",
                                 isPaused = true,
@@ -177,14 +177,27 @@ object DownloadManager {
                 resumeDownload(taskId)
                 return
             }
+
             existing != null && isDownloadFinished(existing.status) -> return
             existing != null && !existing.status.startsWith("Failed") -> return
             existing != null && existing.status.startsWith("Failed") -> {
                 scope.launch {
                     removeFailedTaskSync(existing)
                     enqueueDownload(
-                        taskId, animeId, anilistId, episodeNumber, title, coverImage,
-                        server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub, useParallelSegments,
+                        taskId,
+                        animeId,
+                        anilistId,
+                        episodeNumber,
+                        title,
+                        coverImage,
+                        server,
+                        subLang,
+                        audioLang,
+                        downloadFonts,
+                        headers,
+                        m3u8Url,
+                        preferBatchDub,
+                        useParallelSegments,
                     )
                 }
                 return
@@ -337,6 +350,7 @@ object DownloadManager {
                 resumeDownload(taskId)
                 return
             }
+
             existing != null && isDownloadFinished(existing.status) -> return
             existing != null && !existing.status.startsWith("Failed") -> return
             existing != null && existing.status.startsWith("Failed") -> {
@@ -451,7 +465,8 @@ object DownloadManager {
                             streamData,
                             m3u8Url = preResolvedM3u8,
                         )
-                    } catch (_: Exception) { }
+                    } catch (_: Exception) {
+                    }
                 } else {
                     val legacyDub = server.endsWith("-dub", ignoreCase = true)
                     val apiServer = if (legacyDub) server.dropLast(4) else server
@@ -476,7 +491,9 @@ object DownloadManager {
                             val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
                             if (embedStreams != null && embedStreams.isNotEmpty()) {
                                 val referer = try {
-                                    val schemeHost = embedUrl.substringBefore("://", "") + "://" + embedUrl.substringAfter("://").substringBefore("/")
+                                    val schemeHost =
+                                        embedUrl.substringBefore("://", "") + "://" + embedUrl.substringAfter("://")
+                                            .substringBefore("/")
                                     if (schemeHost.contains("://")) schemeHost else "https://senshi.live"
                                 } catch (_: Exception) {
                                     "https://senshi.live"
@@ -534,8 +551,7 @@ object DownloadManager {
                     streamInfo.headers?.Referer?.let { currentHeaders["Referer"] = it }
                     streamInfo.headers?.userAgent?.let { currentHeaders["User-Agent"] = it }
                     streamInfo.headers?.Origin?.let { currentHeaders["Origin"] = it }
-                    apiSubtitleTracks = BatchSubtitleExtract.trackUrls(streamInfo)
-                        .ifEmpty { BatchSubtitleExtract.trackUrls(streamData, m3u8Url = m3u8Url) }
+                    apiSubtitleTracks = BatchSubtitleExtract.trackUrls(streamData, m3u8Url = m3u8Url)
                 }
 
                 updateTask(taskId) {
@@ -558,7 +574,11 @@ object DownloadManager {
                 }
                 downloadLog(
                     taskId,
-                    "stream server=$resolvedServer urlHost=${urlHost(m3u8Url)} parallel=${task.useParallelSegments} headers=${currentHeaders.keys.joinToString(",")}",
+                    "stream server=$resolvedServer urlHost=${urlHost(m3u8Url)} parallel=${task.useParallelSegments} headers=${
+                        currentHeaders.keys.joinToString(
+                            ","
+                        )
+                    }",
                 )
 
                 // Create folder
@@ -603,26 +623,27 @@ object DownloadManager {
                 )
 
                 // 3. Download Video & Audio
-                
+
                 val audioPlaylistUrl = parseAudioPlaylistUrl(m3u8Url, masterPlaylist, audioLang ?: "jpn")
                 val videoPlaylistUrl = getFinalPlaylistUrl(m3u8Url, masterPlaylist)
-                
+
                 val videoPlaylistText = httpClient.get(videoPlaylistUrl) {
                     currentHeaders.forEach { (k, v) -> header(k, v) }
                 }.bodyAsText()
 
                 val isEncrypted = videoPlaylistText.contains("#EXT-X-KEY") || masterPlaylist.contains("#EXT-X-KEY")
                 val fmp4LikePlaylist = videoPlaylistText.contains("#EXT-X-MAP", ignoreCase = true) ||
-                    videoPlaylistText.lines().any { line ->
-                        val l = line.trim()
-                        l.isNotEmpty() && !l.startsWith("#") &&
-                            (l.endsWith(".m4s", ignoreCase = true) ||
-                                l.endsWith(".mp4", ignoreCase = true))
-                    }
+                        videoPlaylistText.lines().any { line ->
+                            val l = line.trim()
+                            l.isNotEmpty() && !l.startsWith("#") &&
+                                    (l.endsWith(".m4s", ignoreCase = true) ||
+                                            l.endsWith(".mp4", ignoreCase = true))
+                        }
+
                 /** fMP4/Suzu HLS: desktop muxes from playlist URLs; Android always segments + Media3 export (no native FFmpeg). */
                 val useHlsUrlRemux = !isAndroidPlatform && !isEncrypted && (
-                    fmp4LikePlaylist || apiServerForRemux.equals("suzu", ignoreCase = true)
-                )
+                        fmp4LikePlaylist || apiServerForRemux.equals("suzu", ignoreCase = true)
+                        )
 
                 val videoSegments = if (isEncrypted || useHlsUrlRemux) emptyList<String>()
                 else parseSegments(videoPlaylistUrl, videoPlaylistText)
@@ -645,7 +666,7 @@ object DownloadManager {
                 val rawVideoPath = "$epDir/video_raw.ts"
                 val rawAudioPath = "$epDir/audio_raw.ts"
                 val finalOutputPath = buildDownloadOutputPath(epDir, task.title, task.episodeNumber)
-                
+
                 var totalBytesDownloaded = 0L
                 var lastMeasureTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                 var bytesSinceLastMeasure = 0L
@@ -667,10 +688,11 @@ object DownloadManager {
                         val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
                         val diff = now - lastMeasureTime
                         if (diff >= 1000) {
-                            val measuredSpeed = if (speed > 0.0) speed else bytesSinceLastMeasure.toDouble() / (diff / 1000.0)
+                            val measuredSpeed =
+                                if (speed > 0.0) speed else bytesSinceLastMeasure.toDouble() / (diff / 1000.0)
                             val completed = index + 1
                             val remainingBytes = (videoSegments.size + audioSegments.size - completed) *
-                                (totalBytesDownloaded.toDouble() / completed.coerceAtLeast(1))
+                                    (totalBytesDownloaded.toDouble() / completed.coerceAtLeast(1))
                             updateTask(taskId) {
                                 it.copy(
                                     downloadSpeed = formatSpeed(measuredSpeed),
@@ -702,7 +724,7 @@ object DownloadManager {
                 // 4. Muxing
                 val muxStatus = if (isAndroidPlatform) "Finalizing download..." else "Muxing into MKV..."
                 updateTask(taskId) { it.copy(status = muxStatus, progress = 0.99f, downloadSpeed = "", eta = "") }
-                
+
                 val muxVideoSource = when {
                     isEncrypted || useHlsUrlRemux -> videoPlaylistUrl
                     else -> rawVideoPath
@@ -721,7 +743,12 @@ object DownloadManager {
                 )
                 downloadLog(
                     taskId,
-                    "finalising android=$isAndroidPlatform apiServer=$apiServerForRemux preferLocalTsRemux=$preferLocalTsRemux videoSource=${if (muxVideoSource.startsWith("http")) "remote:${urlHost(muxVideoSource)}" else "local"} audio=${muxAudioSource != null} subtitles=${subsToDownload.size}",
+                    "finalising android=$isAndroidPlatform apiServer=$apiServerForRemux preferLocalTsRemux=$preferLocalTsRemux videoSource=${
+                        if (muxVideoSource.startsWith(
+                                "http"
+                            )
+                        ) "remote:${urlHost(muxVideoSource)}" else "local"
+                    } audio=${muxAudioSource != null} subtitles=${subsToDownload.size}",
                 )
 
                 val muxSuccess = muxToMkv(
@@ -745,8 +772,9 @@ object DownloadManager {
                             if (audioSegments.isNotEmpty()) KmpFileSystem.delete(rawAudioPath)
                         }
                         subsToDownload.forEach { (path, _) -> KmpFileSystem.delete(path) }
-                    } catch (e: Exception) { }
-                    
+                    } catch (e: Exception) {
+                    }
+
                     updateTask(taskId) {
                         it.copy(
                             status = "Finished",
@@ -907,9 +935,14 @@ object DownloadManager {
 
     private fun parseAudioPlaylistUrl(baseUrl: String, content: String, targetLang: String): String? {
         val lines = content.lines()
-        val mediaLine = lines.find { it.startsWith("#EXT-X-MEDIA:TYPE=AUDIO") && (it.contains("LANGUAGE=\"$targetLang\"") || it.contains("LANGUAGE=\"$targetLang-", true)) }
+        val mediaLine = lines.find {
+            it.startsWith("#EXT-X-MEDIA:TYPE=AUDIO") && (it.contains("LANGUAGE=\"$targetLang\"") || it.contains(
+                "LANGUAGE=\"$targetLang-",
+                true
+            ))
+        }
             ?: lines.find { it.startsWith("#EXT-X-MEDIA:TYPE=AUDIO") && it.contains("DEFAULT=YES") }
-        
+
         if (mediaLine != null) {
             val uriMatch = Regex("URI=\"([^\"]+)\"").find(mediaLine)
             val uri = uriMatch?.groupValues?.get(1)
@@ -957,7 +990,8 @@ object DownloadManager {
         onSegmentWritten: (index: Int, bytes: Long, speed: Double) -> Unit = { _, _, _ -> },
     ) {
         if (segments.isEmpty()) return
-        val concurrency = if (!parallel) 1 else if (isAndroidPlatform) ANDROID_HLS_PARALLELISM else DESKTOP_HLS_PARALLELISM
+        val concurrency =
+            if (!parallel) 1 else if (isAndroidPlatform) ANDROID_HLS_PARALLELISM else DESKTOP_HLS_PARALLELISM
         val semaphore = Semaphore(concurrency)
         val sink = KmpFileSystem.sink(outputPath).buffer()
         var lastMeasureTime = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
@@ -1164,8 +1198,12 @@ object DownloadManager {
         updateTask(id) { it.copy(isPaused = false, status = "Resuming...") }
         val resumed = task.copy(isPaused = false, status = "Resuming...")
         val mp4Only = streamUrl.contains(".mp4", ignoreCase = true) ||
-            streamUrl.contains("fast4speed", ignoreCase = true)
-        if (mp4Only && !streamUrl.contains(".m3u8", ignoreCase = true) && !streamUrl.contains(".mpd", ignoreCase = true)) {
+                streamUrl.contains("fast4speed", ignoreCase = true)
+        if (mp4Only && !streamUrl.contains(".m3u8", ignoreCase = true) && !streamUrl.contains(
+                ".mpd",
+                ignoreCase = true
+            )
+        ) {
             executeMp4Download(resumed, streamUrl, "")
         } else {
             val server = task.serverId ?: return
@@ -1293,14 +1331,16 @@ object DownloadManager {
                 } catch (_: Exception) {
                     try {
                         KmpFileSystem.delete(child)
-                    } catch (_: Exception) { }
+                    } catch (_: Exception) {
+                    }
                 }
             }
             KmpFileSystem.delete(dir)
         } catch (_: Exception) {
             try {
                 KmpFileSystem.delete(dir)
-            } catch (_: Exception) { }
+            } catch (_: Exception) {
+            }
         }
     }
 
