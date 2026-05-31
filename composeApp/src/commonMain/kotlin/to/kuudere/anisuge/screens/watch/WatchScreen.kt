@@ -122,9 +122,9 @@ fun WatchScreen(
         uiState.loadingMessage
     }
     val useAndroidWatchPage = isAndroidPlatform &&
-        !isAndroidTvPlatform &&
-        uiState.offlinePath == null &&
-        !isStateStale
+            !isAndroidTvPlatform &&
+            uiState.offlinePath == null &&
+            !isStateStale
 
     val shouldUseLandscape = when {
         // Offline (downloaded) playback uses the full-bleed player with no episode list below it,
@@ -950,7 +950,10 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                     Box(
                                                         Modifier
                                                             .size(28.dp)
-                                                            .background(AppColors.accent.copy(alpha = 0.15f), CircleShape),
+                                                            .background(
+                                                                AppColors.accent.copy(alpha = 0.15f),
+                                                                CircleShape
+                                                            ),
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         Icon(
@@ -1279,7 +1282,7 @@ private fun EpisodeListContent(
             episodes.filter { episode ->
                 val episodeTitle = episode.titles?.firstOrNull().orEmpty()
                 episode.number.toString().contains(searchQuery) ||
-                    episodeTitle.contains(searchQuery, ignoreCase = true)
+                        episodeTitle.contains(searchQuery, ignoreCase = true)
             }
         }
         if (isAscending) baseEpisodes.sortedBy { it.number } else baseEpisodes.sortedByDescending { it.number }
@@ -1617,7 +1620,8 @@ private fun EpisodeListRow(
                 Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                val title = episode.title ?: episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
+                val title =
+                    episode.title ?: episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
                 Text(
                     title,
                     color = Color.White,
@@ -1641,7 +1645,9 @@ private fun EpisodeListRow(
                         episodeProgress != null && progressFraction > 0.0 -> WatchProgressBadge("IN PROGRESS")
                         watchedEpisode != null && episode.number < watchedEpisode -> WatchProgressBadge("WATCHED")
                         watchedEpisode != null && episode.number == watchedEpisode -> {
-                            WatchProgressBadge(if ((currentProgressSeconds ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED")
+                            WatchProgressBadge(
+                                if ((currentProgressSeconds ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED"
+                            )
                         }
                     }
                 }
@@ -2081,11 +2087,7 @@ fun WatchVideoPlayer(
             }
 
             LaunchedEffect(uiState.availableSubtitles, uiState.currentSubtitleUrl, uiState.subtitlesDisabled) {
-                if (isAndroidPlatform) {
-                    // Android mpv can stall when several remote ASS tracks are added during startup.
-                    // The selected subtitle is still loaded by the single-subtitle effect below.
-                    playerState.allSubUrls = null
-                } else if (uiState.availableSubtitles.isNotEmpty() && !uiState.subtitlesDisabled) {
+                if (uiState.availableSubtitles.isNotEmpty() && !uiState.subtitlesDisabled) {
                     playerState.allSubUrls = uiState.availableSubtitles.mapNotNull { sub ->
                         sub.url?.let { url ->
                             Triple(
@@ -2525,8 +2527,12 @@ fun WatchVideoPlayer(
                     onCaptionsClick = { viewModel.toggleSettingsOverlay(SettingsMenuPage.SUBTITLES) },
                     onSettingsClick = { viewModel.toggleSettingsOverlay() },
                     onInfoClick = { if (!isOffline) (onInfoClick ?: { viewModel.toggleSidePanel("info") }).invoke() },
-                    onEpisodesClick = { if (!isOffline) (onEpisodesClick ?: { viewModel.toggleSidePanel("episodes") }).invoke() },
-                    onCommentsClick = { if (!isOffline) (onCommentsClick ?: { viewModel.toggleSidePanel("comments") }).invoke() },
+                    onEpisodesClick = {
+                        if (!isOffline) (onEpisodesClick ?: { viewModel.toggleSidePanel("episodes") }).invoke()
+                    },
+                    onCommentsClick = {
+                        if (!isOffline) (onCommentsClick ?: { viewModel.toggleSidePanel("comments") }).invoke()
+                    },
                     onWatchlistClick = { if (!isOffline) viewModel.toggleSettingsOverlay(SettingsMenuPage.WATCHLIST) },
                     onBoostSpeedChange = { viewModel.setBoostSpeedActive(it) },
                     isInWatchlist = uiState.episodeData?.folder != null,
