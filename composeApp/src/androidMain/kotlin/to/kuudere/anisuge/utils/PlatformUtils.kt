@@ -35,7 +35,12 @@ actual fun getCacheDirectory(): String {
 }
 
 actual fun hasStoragePermission(): Boolean {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return true
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        return ContextCompat.checkSelfPermission(
+            androidAppContext,
+            Manifest.permission.MANAGE_EXTERNAL_STORAGE
+        ) == PackageManager.PERMISSION_GRANTED
+    }
 
     return ContextCompat.checkSelfPermission(
         androidAppContext,
@@ -57,7 +62,12 @@ actual fun RequestStoragePermission(onResult: (Boolean) -> Unit) {
     }
 
     SideEffect {
-        launcher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Manifest.permission.MANAGE_EXTERNAL_STORAGE
+        } else {
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        }
+        launcher.launch(permission)
     }
 }
 
