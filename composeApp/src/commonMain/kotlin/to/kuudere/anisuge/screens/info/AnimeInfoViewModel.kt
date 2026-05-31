@@ -66,23 +66,7 @@ class AnimeInfoViewModel(
             }
             try {
                 val details = infoService.getAnimeDetails(id)
-                val continueList = runCatching { homeService.fetchAllContinueWatching() }.getOrNull() ?: emptyList()
-                val progressMap = continueList
-                    .filter { item ->
-                        val itemAnimeId = item.animeId
-                        val itemAnimeIdStr = item.effectiveAnimeId
-                        val itemAnilistId = item.anime.anilistId
-                        val itemMalId = item.anime.malId
-
-                        val matchId = itemAnimeId == id || itemAnimeIdStr == id
-                        val matchDetailsId = details != null && (itemAnimeId == details.animeId || itemAnimeIdStr == details.animeId)
-                        val matchAnilist = details?.anilistId != null && itemAnilistId != null && details.anilistId == itemAnilistId
-                        val matchMal = details?.malId != null && itemMalId != null && details.malId == itemMalId
-
-                        matchId || matchDetailsId || matchAnilist || matchMal
-                    }
-                    .associate { it.displayEpisode to EpisodeProgress(it.progress, it.duration) }
-
+                
                 if (details != null) {
                     _uiState.update {
                         it.copy(
@@ -91,8 +75,12 @@ class AnimeInfoViewModel(
                             inWatchlist = details.inWatchlist || details.watchlist != null,
                             folder = details.folder ?: details.watchlist?.folder,
                             episodes = details.episodes ?: emptyList(),
-                            episodeProgress = progressMap,
+                            episodeProgress = emptyMap(),
                         )
+                    }
+                    // Fetch progress asynchronously in the background to avoid blocking the UI
+                    viewModelScope.launch {
+                        refreshWatchProgress()
                     }
                     loadRecommendations(id)
                 } else {

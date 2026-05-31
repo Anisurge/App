@@ -170,6 +170,7 @@ object DownloadManager {
         preferBatchDub: Boolean = false,
         useParallelSegments: Boolean = false,
     ) {
+        println("[DownloadManager] startDownload called: server=$server subLang=$subLang preferBatchDub=$preferBatchDub")
         val taskId = "${animeId}_$episodeNumber"
         val existing = tasks.value.find { it.id == taskId }
         when {
@@ -178,9 +179,13 @@ object DownloadManager {
                 return
             }
 
-            existing != null && isDownloadFinished(existing.status) -> return
-            existing != null && !existing.status.startsWith("Failed") -> return
-            existing != null && existing.status.startsWith("Failed") -> {
+            existing != null && !existing.status.startsWith("Failed") && !isDownloadFinished(existing.status) -> {
+                // Download is in progress, don't restart
+                return
+            }
+
+            existing != null && (existing.status.startsWith("Failed") || isDownloadFinished(existing.status)) -> {
+                // Allow retrying failed or finished downloads
                 scope.launch {
                     removeFailedTaskSync(existing)
                     enqueueDownload(
@@ -351,9 +356,13 @@ object DownloadManager {
                 return
             }
 
-            existing != null && isDownloadFinished(existing.status) -> return
-            existing != null && !existing.status.startsWith("Failed") -> return
-            existing != null && existing.status.startsWith("Failed") -> {
+            existing != null && !existing.status.startsWith("Failed") && !isDownloadFinished(existing.status) -> {
+                // Download is in progress, don't restart
+                return
+            }
+
+            existing != null && (existing.status.startsWith("Failed") || isDownloadFinished(existing.status)) -> {
+                // Allow retrying failed or finished downloads
                 scope.launch {
                     removeFailedTaskSync(existing)
                     enqueueMp4Download(taskId, animeId, episodeNumber, title, coverImage, mp4Url, headers)

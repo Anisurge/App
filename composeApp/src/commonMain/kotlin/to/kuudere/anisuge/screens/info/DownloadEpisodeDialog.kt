@@ -98,10 +98,6 @@ fun DownloadEpisodeDialog(
     var estimatedSizeBytes by remember { mutableStateOf(0L) }
     var currentHeaders by remember { mutableStateOf<Map<String, String>?>(null) }
     var shouldRequestNotificationPermission by remember { mutableStateOf(false) }
-    var shouldRequestPermission by remember { mutableStateOf(false) }
-    var pendingMp4AfterStorageGrant by remember {
-        mutableStateOf<Triple<String, Map<String, String>, String>?>(null)
-    }
 
     val settingsStore = to.kuudere.anisuge.AppComponent.settingsStore
 
@@ -182,6 +178,21 @@ fun DownloadEpisodeDialog(
             } else {
                 ""
             }
+        }
+    }
+
+    // Fallback: if servers loaded late (after sub/dub was picked), auto-pick first server
+    LaunchedEffect(selectableServers, selectedSubDub) {
+        if (selectedSubDub != null && selectedServer.isBlank() && selectableServers.isNotEmpty()) {
+            selectedServer = if (isSeasonBatch) {
+                selectableServers.firstOrNull { it.id.equals("anitaku-1", ignoreCase = true) }?.id
+                    ?: selectableServers.firstOrNull { it.id.equals("anitaku", ignoreCase = true) }?.id
+                    ?: selectableServers.firstOrNull { it.id.equals("anikage", ignoreCase = true) }?.id
+                    ?: selectableServers.first().id
+            } else {
+                selectableServers.first().id
+            }
+            println("[DownloadDialog] fallback: picked server=$selectedServer after servers loaded")
         }
     }
 
@@ -361,38 +372,6 @@ fun DownloadEpisodeDialog(
         }
     }
 
-    if (shouldRequestPermission) {
-        to.kuudere.anisuge.utils.RequestStoragePermission { granted ->
-            shouldRequestPermission = false
-            if (granted) {
-                val mp4Pending = pendingMp4AfterStorageGrant
-                pendingMp4AfterStorageGrant = null
-                if (mp4Pending != null) {
-                    val (u, h, q) = mp4Pending
-                    to.kuudere.anisuge.utils.DownloadManager.startMp4Download(
-                        animeId = animeId,
-                        episodeNumber = episodeNumber,
-                        title = episodeDisplayTitle,
-                        coverImage = coverImage,
-                        mp4Url = u,
-                        headers = h,
-                        qualityLabel = q,
-                    )
-                } else {
-                    onStartDownload(
-                        selectedServer,
-                        selectedSubLang,
-                        selectedAudioLang,
-                        true,
-                        currentHeaders,
-                        selectedM3u8,
-                        selectedSubDub == "dub"
-                    )
-                }
-            } else pendingMp4AfterStorageGrant = null
-        }
-    }
-
     LaunchedEffect(currentTask) {
         if (currentTask != null && !currentTask.isPaused &&
             currentTask.status != "Finished" && !currentTask.status.startsWith("Failed") &&
@@ -405,19 +384,16 @@ fun DownloadEpisodeDialog(
     if (shouldRequestNotificationPermission) {
         to.kuudere.anisuge.utils.RequestNotificationPermission { granted ->
             shouldRequestNotificationPermission = false
-            if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                onStartDownload(
-                    selectedServer,
-                    selectedSubLang,
-                    selectedAudioLang,
-                    true,
-                    currentHeaders,
-                    selectedM3u8,
-                    selectedSubDub == "dub"
-                )
-            } else {
-                shouldRequestPermission = true
-            }
+            println("[DownloadDialog] notification permission result: granted=$granted")
+            onStartDownload(
+                selectedServer,
+                selectedSubLang,
+                selectedAudioLang,
+                true,
+                currentHeaders,
+                selectedM3u8,
+                selectedSubDub == "dub"
+            )
         }
     }
 
@@ -573,20 +549,15 @@ fun DownloadEpisodeDialog(
                             httpClient = to.kuudere.anisuge.AppComponent.httpClient,
                             options = mp4QualityOptions,
                             onDownloadRequested = { url, hdrs, qual ->
-                                if (to.kuudere.anisuge.utils.hasStoragePermission()) {
-                                    to.kuudere.anisuge.utils.DownloadManager.startMp4Download(
-                                        animeId = animeId,
-                                        episodeNumber = episodeNumber,
-                                        title = episodeDisplayTitle,
-                                        coverImage = coverImage,
-                                        mp4Url = url,
-                                        headers = hdrs,
-                                        qualityLabel = qual,
-                                    )
-                                } else {
-                                    pendingMp4AfterStorageGrant = Triple(url, hdrs, qual)
-                                    shouldRequestPermission = true
-                                }
+                                to.kuudere.anisuge.utils.DownloadManager.startMp4Download(
+                                    animeId = animeId,
+                                    episodeNumber = episodeNumber,
+                                    title = episodeDisplayTitle,
+                                    coverImage = coverImage,
+                                    mp4Url = url,
+                                    headers = hdrs,
+                                    qualityLabel = qual,
+                                )
                             },
                         )
                     } else {
@@ -856,10 +827,15 @@ fun DownloadEpisodeDialog(
                 if (!showDirectMp4Picker || isSeasonBatch) {
                     Button(
                         onClick = {
+                            println("[DownloadDialog] button clicked! subDub=$selectedSubDub server=$selectedServer canDownload=$canDownload")
                             if (currentTask == null) {
-                                if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
+                                val notifOk = to.kuudere.anisuge.utils.hasNotificationPermission()
+                                println("[DownloadDialog] notifOk=$notifOk")
+                                if (!notifOk) {
+                                    println("[DownloadDialog] → requesting notification permission")
                                     shouldRequestNotificationPermission = true
-                                } else if (to.kuudere.anisuge.utils.hasStoragePermission()) {
+                                } else {
+                                    println("[DownloadDialog] → calling onStartDownload(server=$selectedServer)")
                                     onStartDownload(
                                         selectedServer,
                                         selectedSubLang,
@@ -869,8 +845,6 @@ fun DownloadEpisodeDialog(
                                         if (isSeasonBatch) null else selectedM3u8,
                                         selectedSubDub == "dub",
                                     )
-                                } else {
-                                    shouldRequestPermission = true
                                 }
                             } else {
                                 if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
