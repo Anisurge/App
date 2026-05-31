@@ -50,7 +50,7 @@ data class DownloadTask(
     /** Persisted so Resume can restart the coroutine after pause or process death. */
     val serverId: String? = null,
     val anilistId: Int? = null,
-    val subLang: String? = null,
+    val selectedSubtitleLabels: List<String> = emptyList(),
     val audioLang: String? = null,
     val streamUrl: String? = null,
     val preferBatchDub: Boolean = false,
@@ -162,7 +162,7 @@ object DownloadManager {
         title: String,
         coverImage: String?,
         server: String,
-        subLang: String?,
+        subtitleLabels: List<String>,
         audioLang: String?,
         downloadFonts: Boolean,
         headers: Map<String, String>? = null,
@@ -170,7 +170,7 @@ object DownloadManager {
         preferBatchDub: Boolean = false,
         useParallelSegments: Boolean = false,
     ) {
-        println("[DownloadManager] startDownload called: server=$server subLang=$subLang preferBatchDub=$preferBatchDub")
+        println("[DownloadManager] startDownload called: server=$server subtitleLabels=$subtitleLabels preferBatchDub=$preferBatchDub")
         val taskId = "${animeId}_$episodeNumber"
         val existing = tasks.value.find { it.id == taskId }
         when {
@@ -196,7 +196,7 @@ object DownloadManager {
                         title,
                         coverImage,
                         server,
-                        subLang,
+                        subtitleLabels,
                         audioLang,
                         downloadFonts,
                         headers,
@@ -210,14 +210,14 @@ object DownloadManager {
         }
         enqueueDownload(
             taskId, animeId, anilistId, episodeNumber, title, coverImage,
-            server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub, useParallelSegments,
+            server, subtitleLabels, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub, useParallelSegments,
         )
     }
 
     fun startSeasonBatchDownload(
         episodes: List<BatchEpisodeDownload>,
         server: String,
-        subLang: String?,
+        subtitleLabels: List<String>,
         audioLang: String?,
         downloadFonts: Boolean,
         headers: Map<String, String>? = null,
@@ -244,7 +244,7 @@ object DownloadManager {
                         status = "Queued",
                         serverId = server,
                         anilistId = episode.anilistId,
-                        subLang = subLang,
+                        selectedSubtitleLabels = subtitleLabels,
                         audioLang = audioLang,
                         headers = headers,
                         preferBatchDub = preferBatchDub,
@@ -292,7 +292,7 @@ object DownloadManager {
             task.copy(isPaused = false, status = "Fetching stream..."),
             episode.anilistId,
             task.serverId ?: server,
-            task.subLang,
+            task.selectedSubtitleLabels,
             task.audioLang,
             downloadFonts,
             preResolvedM3u8 = null,
@@ -309,7 +309,7 @@ object DownloadManager {
         title: String,
         coverImage: String?,
         server: String,
-        subLang: String?,
+        subtitleLabels: List<String>,
         audioLang: String?,
         downloadFonts: Boolean,
         headers: Map<String, String>?,
@@ -328,7 +328,7 @@ object DownloadManager {
             headers = headers,
             serverId = server,
             anilistId = anilistId,
-            subLang = subLang,
+            selectedSubtitleLabels = subtitleLabels,
             audioLang = audioLang,
             streamUrl = m3u8Url,
             preferBatchDub = preferBatchDub,
@@ -336,7 +336,7 @@ object DownloadManager {
         )
         tasks.update { it + newTask }
         saveTasks()
-        executeDownload(newTask, anilistId, server, subLang, audioLang, downloadFonts, m3u8Url, preferBatchDub)
+        executeDownload(newTask, anilistId, server, subtitleLabels, audioLang, downloadFonts, m3u8Url, preferBatchDub)
     }
 
     fun startMp4Download(
@@ -438,7 +438,7 @@ object DownloadManager {
         task: DownloadTask,
         anilistId: Int,
         server: String,
-        subLang: String?,
+        subtitleLabels: List<String>,
         audioLang: String?,
         downloadFonts: Boolean,
         preResolvedM3u8: String? = null,
@@ -568,7 +568,7 @@ object DownloadManager {
                         streamUrl = m3u8Url,
                         serverId = resolvedServer,
                         anilistId = anilistId,
-                        subLang = subLang,
+                        selectedSubtitleLabels = subtitleLabels,
                         audioLang = audioLang,
                         preferBatchDub = preferBatchDub,
                         headers = currentHeaders,
@@ -622,9 +622,12 @@ object DownloadManager {
 
                 val subsToDownload = mutableListOf<Pair<String, String>>()
                 updateTask(taskId) { it.copy(status = "Downloading subtitles...") }
+                val filteredSubtitleTracks = if (subtitleLabels.isNotEmpty()) {
+                    apiSubtitleTracks.filter { (_, label) -> label in subtitleLabels }
+                } else apiSubtitleTracks
                 collectDownloadedSubtitles(
                     epDir = epDir,
-                    apiSubtitleTracks = apiSubtitleTracks,
+                    apiSubtitleTracks = filteredSubtitleTracks,
                     masterPlaylistUrl = m3u8Url,
                     masterPlaylist = masterPlaylist,
                     headers = currentHeaders,
@@ -774,13 +777,12 @@ object DownloadManager {
 
                 if (muxSuccess) {
                     downloadLog(taskId, "finalising ok output=$finalOutputPath")
-                    // Cleanup
+                    // Cleanup — keep subtitle files alongside the MKV for offline playback
                     try {
                         if (!isEncrypted && !useHlsUrlRemux) {
                             KmpFileSystem.delete(rawVideoPath)
                             if (audioSegments.isNotEmpty()) KmpFileSystem.delete(rawAudioPath)
                         }
-                        subsToDownload.forEach { (path, _) -> KmpFileSystem.delete(path) }
                     } catch (e: Exception) {
                     }
 
@@ -1221,7 +1223,7 @@ object DownloadManager {
                 resumed,
                 anilist,
                 server,
-                task.subLang,
+                task.selectedSubtitleLabels,
                 task.audioLang,
                 downloadFonts = true,
                 preResolvedM3u8 = streamUrl,
@@ -1276,7 +1278,7 @@ object DownloadManager {
                     retryTask,
                     task.anilistId,
                     nextServer,
-                    task.subLang,
+                    task.selectedSubtitleLabels,
                     task.audioLang,
                     downloadFonts = true,
                     preResolvedM3u8 = null,

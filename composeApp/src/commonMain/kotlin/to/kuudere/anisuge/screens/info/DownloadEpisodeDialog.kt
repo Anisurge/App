@@ -62,7 +62,7 @@ fun DownloadEpisodeDialog(
     isSeasonBatch: Boolean = false,
     batchEpisodeCount: Int = 1,
     onDismiss: () -> Unit,
-    onStartDownload: (server: String, subLang: String?, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?, m3u8Url: String?, preferBatchDub: Boolean) -> Unit
+    onStartDownload: (server: String, subtitleLabels: List<String>, audioLang: String?, downloadFonts: Boolean, headers: Map<String, String>?, m3u8Url: String?, preferBatchDub: Boolean) -> Unit
 ) {
     val strings = LocalAppStrings.current
 
@@ -75,8 +75,8 @@ fun DownloadEpisodeDialog(
     // ---- Step 2: Quality ----
     var selectedQualityIndex by remember { mutableIntStateOf(0) }
 
-    // ---- Step 3: Subtitle language ----
-    var selectedSubLang by remember { mutableStateOf<String?>(null) }
+    // ---- Step 3: Subtitle languages (multi-select) ----
+    var selectedSubtitleLabels by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     /** HLS audio track code after playlist parse (e.g. jpn); unrelated to batch_scrape sub/dub. */
     var selectedAudioLang by remember { mutableStateOf<String?>(null) }
@@ -118,18 +118,18 @@ fun DownloadEpisodeDialog(
                 shouldRequestStoragePermission = true
             } else if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
                 shouldRequestNotificationPermission = true
-            } else {
-                onStartDownload(
-                    selectedServer,
-                    selectedSubLang,
-                    selectedAudioLang,
-                    true,
-                    currentHeaders,
-                    if (isSeasonBatch) null else selectedM3u8,
-                    selectedSubDub == "dub",
-                )
-                pendingDownloadParams = null
-            }
+                } else {
+                    onStartDownload(
+                        selectedServer,
+                        selectedSubtitleLabels.toList(),
+                        selectedAudioLang,
+                        true,
+                        currentHeaders,
+                        if (isSeasonBatch) null else selectedM3u8,
+                        selectedSubDub == "dub",
+                    )
+                    pendingDownloadParams = null
+                }
         }
     }
 
@@ -186,7 +186,7 @@ fun DownloadEpisodeDialog(
             availableAudioTracks = emptyList()
             estimatedSizeBytes = 0L
             selectedQualityIndex = 0
-            selectedSubLang = null
+            selectedSubtitleLabels = emptySet()
             selectedAudioLang = null
             selectedServer = if (selectableServers.isNotEmpty()) {
                 if (isSeasonBatch) {
@@ -297,11 +297,11 @@ fun DownloadEpisodeDialog(
                 .filter { isLikelyLanguageLabel(it) }
                 .distinct()
             availableSubtitles = subLabels
-            if (selectedSubLang == null || selectedSubLang !in availableSubtitles) {
-                selectedSubLang = when {
-                    "English" in availableSubtitles -> "English"
-                    subLabels.isNotEmpty() -> subLabels.first()
-                    else -> "All"
+            if (selectedSubtitleLabels.isEmpty() || selectedSubtitleLabels.none { it in availableSubtitles }) {
+                selectedSubtitleLabels = when {
+                    "English" in availableSubtitles -> setOf("English")
+                    subLabels.isNotEmpty() -> setOf(subLabels.first())
+                    else -> emptySet()
                 }
             }
             println("[DownloadDialog] subDub=$choice server=$server qualities=${qualities.size} streams=${streams.size} subs=${subLabels.size}")
@@ -320,11 +320,11 @@ fun DownloadEpisodeDialog(
             .filter { isLikelyLanguageLabel(it) }
             .distinct()
         availableSubtitles = subLabels
-        if (selectedSubLang == null || selectedSubLang !in availableSubtitles) {
-            selectedSubLang = when {
-                "English" in availableSubtitles -> "English"
-                subLabels.isNotEmpty() -> subLabels.first()
-                else -> "All"
+        if (selectedSubtitleLabels.isEmpty() || selectedSubtitleLabels.none { it in availableSubtitles }) {
+            selectedSubtitleLabels = when {
+                "English" in availableSubtitles -> setOf("English")
+                subLabels.isNotEmpty() -> setOf(subLabels.first())
+                else -> emptySet()
             }
         }
         println("[DownloadDialog] server=$selectedServer subs=${subLabels.size}")
@@ -425,7 +425,7 @@ fun DownloadEpisodeDialog(
             pendingDownloadParams?.let { (server, headers) ->
                 onStartDownload(
                     server,
-                    selectedSubLang,
+                    selectedSubtitleLabels.toList(),
                     selectedAudioLang,
                     true,
                     headers,
@@ -707,43 +707,72 @@ fun DownloadEpisodeDialog(
                     if (availableSubtitles.isEmpty()) {
                         Text(strings.noSubtitlesAvailable, color = Color.Gray, fontSize = 13.sp)
                     } else if (availableSubtitles.size == 1) {
-                        Text(
-                            availableSubtitles.first(),
-                            color = AppColors.text,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    } else {
-                        androidx.compose.foundation.lazy.LazyRow(
-                            state = subListState,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .draggable(
-                                    orientation = Orientation.Horizontal,
-                                    state = rememberDraggableState { delta ->
-                                        scope.launch { subListState.scrollBy(-delta) }
-                                    }
-                                ),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        val only = availableSubtitles.first()
+                        val checked = only in selectedSubtitleLabels
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable {
+                                selectedSubtitleLabels = if (checked) emptySet() else setOf(only)
+                            }
                         ) {
-                            items(availableSubtitles.size) { index ->
-                                val sub = availableSubtitles[index]
-                                val isSelected = selectedSubLang == sub
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isSelected) AppColors.accent else AppColors.surface)
-                                        .clickable { selectedSubLang = sub }
-                                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = sub,
-                                        color = if (isSelected) AppColors.onAccent else AppColors.text,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { selected ->
+                                    selectedSubtitleLabels = if (selected) setOf(only) else emptySet()
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = AppColors.accent,
+                                    uncheckedColor = AppColors.border,
+                                    checkmarkColor = AppColors.onAccent,
+                                )
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                only,
+                                color = AppColors.text,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    } else {
+                        availableSubtitles.forEach { sub ->
+                            val checked = sub in selectedSubtitleLabels
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        selectedSubtitleLabels = if (checked) {
+                                            selectedSubtitleLabels - sub
+                                        } else {
+                                            selectedSubtitleLabels + sub
+                                        }
+                                    }
+                                    .padding(vertical = 4.dp, horizontal = 4.dp)
+                            ) {
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { selected ->
+                                        selectedSubtitleLabels = if (selected) {
+                                            selectedSubtitleLabels + sub
+                                        } else {
+                                            selectedSubtitleLabels - sub
+                                        }
+                                    },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = AppColors.accent,
+                                        uncheckedColor = AppColors.border,
+                                        checkmarkColor = AppColors.onAccent,
                                     )
-                                }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    sub,
+                                    color = AppColors.text,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }
@@ -892,7 +921,7 @@ fun DownloadEpisodeDialog(
                                             println("[DownloadDialog] → calling onStartDownload(server=$selectedServer)")
                                             onStartDownload(
                                                 selectedServer,
-                                                selectedSubLang,
+                                                selectedSubtitleLabels.toList(),
                                                 selectedAudioLang,
                                                 true,
                                                 currentHeaders,

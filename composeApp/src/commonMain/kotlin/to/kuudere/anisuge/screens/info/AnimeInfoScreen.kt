@@ -101,7 +101,7 @@ fun AnimeInfoScreen(
             infoService = to.kuudere.anisuge.AppComponent.infoService,
             serverRepository = to.kuudere.anisuge.AppComponent.serverRepository,
             onDismiss = { selectedEpisodeForDownload = null },
-            onStartDownload = { server, subLang, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub ->
+            onStartDownload = { server, subtitleLabels, audioLang, downloadFonts, headers, m3u8Url, preferBatchDub ->
                 val title = state.details!!.title.displayTitle(preferRomajiAnimeTitles)
                 to.kuudere.anisuge.utils.DownloadManager.startDownload(
                     animeId = state.details!!.id,
@@ -110,7 +110,7 @@ fun AnimeInfoScreen(
                     title = title,
                     coverImage = state.details!!.image ?: state.details!!.poster ?: state.details!!.cover,
                     server = server,
-                    subLang = subLang,
+                    subtitleLabels = subtitleLabels,
                     audioLang = audioLang,
                     downloadFonts = downloadFonts,
                     headers = headers,
@@ -167,7 +167,7 @@ fun AnimeInfoScreen(
                             )
                         },
                         server = server,
-                        subLang = if (preferDub) null else "English",
+                        subtitleLabels = if (preferDub) emptyList() else listOf("English"),
                         audioLang = "sub",
                         downloadFonts = true,
                         headers = null,
