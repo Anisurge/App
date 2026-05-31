@@ -953,7 +953,7 @@ fun isDirectProgressiveMp4Url(url: String): Boolean {
     if (lower.contains(".m3u8") || lower.contains(".mpd")) return false
     val path = url.substringAfter('?', "")
     if (path.contains(".m3u8") || path.contains(".mpd")) return false
-    val host = urlHost(url)
+    val host = urlHost(url).orEmpty()
     if (lower.endsWith(".mp4") || host.endsWith("ibyteimg.com") || host.endsWith("byteimg.com")) return false
     return true
 }
@@ -967,5 +967,5 @@ fun formatFileSize(bytes: Long): String {
         size /= 1024
         unitIndex++
     }
-    return "${formatFloat(size.toFloat(), 1)} ${units[unitIndex]}"
+    return "${formatFloat(size, 1)} ${units[unitIndex]}"
 }

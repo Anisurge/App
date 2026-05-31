@@ -7,21 +7,14 @@ import com.sun.jna.Pointer
 /**
  * JNA binding to libc's setlocale — required by libmpv.
  * mpv_create() returns null if LC_NUMERIC is not "C".
+ * Loaded dynamically in forceLocaleC() rather than as a static instance,
+ * so we can target the same C runtime that the loaded mpv dylib uses.
  */
 private interface CLib : Library {
     fun setlocale(category: Int, locale: String?): String?
     companion object {
         const val LC_NUMERIC = 1
         const val LC_ALL     = 6
-        val INSTANCE: CLib? = try {
-            val libName = when {
-                System.getProperty("os.name").lowercase().contains("win") -> "msvcrt"
-                else -> "c"
-            }
-            Native.load(libName, CLib::class.java) as CLib
-        } catch (e: Exception) {
-            null
-        }
     }
 }
 
@@ -92,10 +85,10 @@ internal interface LibMpv : Library {
          * then tries system lib, then bundled fallback.
          */
         fun load(): LibMpv? {
-            // mpv REQUIRES LC_NUMERIC=C or mpv_create() returns null
-            try {
-                CLib.INSTANCE?.setlocale(CLib.LC_NUMERIC, "C")
-            } catch (_: Exception) {}
+            // mpv REQUIRES LC_NUMERIC=C. Set it via every available mechanism so
+            // it takes effect regardless of which dylib/so is loaded and which C
+            // runtime instance it uses.
+            forceLocaleC()
 
             // 1. Try system library (uses JNA's default search path)
             tryLoad("mpv")?.let { return it }
@@ -118,6 +111,9 @@ internal interface LibMpv : Library {
                     if (java.io.File(path).exists()) {
                         tryLoad(path)?.let {
                             println("[LibMpv] loaded macOS system libmpv from $path")
+                            // Re-apply locale through the same dylib's C runtime
+                            // so mpv_create() sees LC_NUMERIC=C in its own libc.
+                            forceLocaleC(path)
                             return it
                         }
                     }
@@ -175,6 +171,43 @@ internal interface LibMpv : Library {
             Native.load(name, LibMpv::class.java) as LibMpv
         } catch (e: UnsatisfiedLinkError) {
             null
+        }
+
+        /**
+         * Set LC_NUMERIC=C through every available mechanism so mpv_create()
+         * doesn't fail with "Non-C locale detected":
+         *
+         * 1. JVM system property (affects Java's own locale formatting).
+         * 2. JNA call to the *same* native library that mpv will use — on macOS
+         *    each dylib can have its own C runtime locale state, so calling
+         *    setlocale through our generic libc "c" binding may not affect the
+         *    locale seen by libmpv.dylib. Loading the target lib as a CLib and
+         *    calling setlocale through it ensures mpv's own C runtime is set.
+         * 3. Fallback to the generic libc binding (Linux / Windows).
+         *
+         * [libPath] is the absolute path to the mpv dylib/so just loaded, or
+         * null to use the generic system libc.
+         */
+        private fun forceLocaleC(libPath: String? = null) {
+            // JVM-level
+            try { System.setProperty("user.language", "en") } catch (_: Exception) {}
+            try { System.setProperty("user.country", "US") } catch (_: Exception) {}
+
+            // Native setlocale — try through the specific lib first, then generic libc
+            val libsToTry = buildList {
+                if (libPath != null) add(libPath)
+                val os = System.getProperty("os.name").lowercase()
+                add(if ("win" in os) "msvcrt" else "c")
+            }
+            for (lib in libsToTry) {
+                try {
+                    val clib = Native.load(lib, CLib::class.java) as CLib
+                    clib.setlocale(CLib.LC_ALL, "C")
+                    clib.setlocale(CLib.LC_NUMERIC, "C")
+                    println("[LibMpv] setlocale(LC_NUMERIC, C) via $lib")
+                    break
+                } catch (_: Exception) {}
+            }
         }
     }
 }
