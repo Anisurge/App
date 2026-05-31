@@ -15,11 +15,17 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
 
 actual fun getDownloadsDirectory(): String {
@@ -57,23 +63,43 @@ actual fun RequestStoragePermission(onResult: (Boolean) -> Unit) {
     }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        // MANAGE_EXTERNAL_STORAGE requires navigating to app settings.
-        // We'll open settings and check the permission after a delay to detect user return.
-        
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val latestOnResult by rememberUpdatedState(onResult)
+
         LaunchedEffect(Unit) {
             try {
-                val intent = Intent(
-                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:${androidAppContext.packageName}")
-                )
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                if (intent.resolveActivity(androidAppContext.packageManager) == null) {
+                    intent.action = android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
+                    intent.data = Uri.parse("package:${androidAppContext.packageName}")
+                }
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 androidAppContext.startActivity(intent)
-                
-                // Check permission after user might return from settings
-                kotlinx.coroutines.delay(2000)
-                onResult(hasStoragePermission())
             } catch (e: Exception) {
-                e.printStackTrace()
-                onResult(false)
+                try {
+                    val fallbackIntent = Intent(
+                        android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:${androidAppContext.packageName}")
+                    ).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    androidAppContext.startActivity(fallbackIntent)
+                } catch (fallbackError: Exception) {
+                    fallbackError.printStackTrace()
+                    latestOnResult(false)
+                }
+            }
+        }
+
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    latestOnResult(hasStoragePermission())
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
             }
         }
     } else {
