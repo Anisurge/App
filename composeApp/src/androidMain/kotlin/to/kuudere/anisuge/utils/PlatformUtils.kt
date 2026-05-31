@@ -16,6 +16,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.content.ContextCompat
 
 actual fun getDownloadsDirectory(): String {
@@ -53,15 +57,20 @@ actual fun RequestStoragePermission(onResult: (Boolean) -> Unit) {
     }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        // MANAGE_EXTERNAL_STORAGE is a special permission that requires navigating
-        // to app settings, not a runtime permission that can be requested via dialog
-        SideEffect {
+        // MANAGE_EXTERNAL_STORAGE requires navigating to app settings.
+        // We'll open settings and check the permission after a delay to detect user return.
+        
+        LaunchedEffect(Unit) {
             try {
                 val intent = Intent(
                     android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                     Uri.parse("package:${androidAppContext.packageName}")
                 )
                 androidAppContext.startActivity(intent)
+                
+                // Check permission after user might return from settings
+                kotlinx.coroutines.delay(2000)
+                onResult(hasStoragePermission())
             } catch (e: Exception) {
                 e.printStackTrace()
                 onResult(false)

@@ -98,6 +98,9 @@ fun DownloadEpisodeDialog(
     var estimatedSizeBytes by remember { mutableStateOf(0L) }
     var currentHeaders by remember { mutableStateOf<Map<String, String>?>(null) }
     var shouldRequestNotificationPermission by remember { mutableStateOf(false) }
+    var shouldRequestStoragePermission by remember { mutableStateOf(false) }
+    var pendingDownloadParams by remember { mutableStateOf<Pair<String, Map<String, String>?>?>(null) }
+
 
     val settingsStore = to.kuudere.anisuge.AppComponent.settingsStore
 
@@ -381,19 +384,37 @@ fun DownloadEpisodeDialog(
         }
     }
 
+    if (shouldRequestStoragePermission) {
+        to.kuudere.anisuge.utils.RequestStoragePermission { storageGranted ->
+            shouldRequestStoragePermission = false
+            println("[DownloadDialog] storage permission result: granted=$storageGranted")
+            if (storageGranted) {
+                // Storage granted, now request notification permission
+                shouldRequestNotificationPermission = true
+            } else {
+                // Storage not granted, can't download
+                println("[DownloadDialog] storage permission denied")
+            }
+        }
+    }
+
     if (shouldRequestNotificationPermission) {
         to.kuudere.anisuge.utils.RequestNotificationPermission { granted ->
             shouldRequestNotificationPermission = false
             println("[DownloadDialog] notification permission result: granted=$granted")
-            onStartDownload(
-                selectedServer,
-                selectedSubLang,
-                selectedAudioLang,
-                true,
-                currentHeaders,
-                selectedM3u8,
-                selectedSubDub == "dub"
-            )
+            // Proceed with download regardless of notification permission
+            pendingDownloadParams?.let { (server, headers) ->
+                onStartDownload(
+                    server,
+                    selectedSubLang,
+                    selectedAudioLang,
+                    true,
+                    headers,
+                    selectedM3u8,
+                    selectedSubDub == "dub"
+                )
+                pendingDownloadParams = null
+            }
         }
     }
 
@@ -829,22 +850,30 @@ fun DownloadEpisodeDialog(
                         onClick = {
                             println("[DownloadDialog] button clicked! subDub=$selectedSubDub server=$selectedServer canDownload=$canDownload")
                             if (currentTask == null) {
-                                val notifOk = to.kuudere.anisuge.utils.hasNotificationPermission()
-                                println("[DownloadDialog] notifOk=$notifOk")
-                                if (!notifOk) {
-                                    println("[DownloadDialog] → requesting notification permission")
-                                    shouldRequestNotificationPermission = true
+                                val storageOk = to.kuudere.anisuge.utils.hasStoragePermission()
+                                println("[DownloadDialog] storageOk=$storageOk")
+                                if (!storageOk) {
+                                    println("[DownloadDialog] → requesting storage permission")
+                                    pendingDownloadParams = selectedServer to currentHeaders
+                                    shouldRequestStoragePermission = true
                                 } else {
-                                    println("[DownloadDialog] → calling onStartDownload(server=$selectedServer)")
-                                    onStartDownload(
-                                        selectedServer,
-                                        selectedSubLang,
-                                        selectedAudioLang,
-                                        true,
-                                        currentHeaders,
-                                        if (isSeasonBatch) null else selectedM3u8,
-                                        selectedSubDub == "dub",
-                                    )
+                                    val notifOk = to.kuudere.anisuge.utils.hasNotificationPermission()
+                                    println("[DownloadDialog] notifOk=$notifOk")
+                                    if (!notifOk) {
+                                        println("[DownloadDialog] → requesting notification permission")
+                                        shouldRequestNotificationPermission = true
+                                    } else {
+                                        println("[DownloadDialog] → calling onStartDownload(server=$selectedServer)")
+                                        onStartDownload(
+                                            selectedServer,
+                                            selectedSubLang,
+                                            selectedAudioLang,
+                                            true,
+                                            currentHeaders,
+                                            if (isSeasonBatch) null else selectedM3u8,
+                                            selectedSubDub == "dub",
+                                        )
+                                    }
                                 }
                             } else {
                                 if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
