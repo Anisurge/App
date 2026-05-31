@@ -7,6 +7,12 @@ expect fun openDirectory(path: String)
 
 expect fun hasStoragePermission(): Boolean
 
+expect fun isSharedExternalStoragePath(path: String): Boolean
+
+expect fun downloadPathRequiresSafPicker(path: String): Boolean
+
+expect fun publishTempDownloadOutput(tempPath: String, outputPath: String): Boolean
+
 @androidx.compose.runtime.Composable
 expect fun RequestStoragePermission(onResult: (Boolean) -> Unit)
 

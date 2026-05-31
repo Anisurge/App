@@ -112,6 +112,25 @@ fun DownloadEpisodeDialog(
                 settingsStore.setDownloadPath(path)
             }
         }
+        // After picker, continue with any pending download
+        pendingDownloadParams?.let { _ ->
+            if (!to.kuudere.anisuge.utils.hasStoragePermission()) {
+                shouldRequestStoragePermission = true
+            } else if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
+                shouldRequestNotificationPermission = true
+            } else {
+                onStartDownload(
+                    selectedServer,
+                    selectedSubLang,
+                    selectedAudioLang,
+                    true,
+                    currentHeaders,
+                    if (isSeasonBatch) null else selectedM3u8,
+                    selectedSubDub == "dub",
+                )
+                pendingDownloadParams = null
+            }
+        }
     }
 
     val downloadPath by settingsStore.downloadPathFlow.collectAsState("")
@@ -850,29 +869,37 @@ fun DownloadEpisodeDialog(
                         onClick = {
                             println("[DownloadDialog] button clicked! subDub=$selectedSubDub server=$selectedServer canDownload=$canDownload")
                             if (currentTask == null) {
-                                val storageOk = to.kuudere.anisuge.utils.hasStoragePermission()
-                                println("[DownloadDialog] storageOk=$storageOk")
-                                if (!storageOk) {
-                                    println("[DownloadDialog] → requesting storage permission")
+                                val needsSaf = to.kuudere.anisuge.utils.downloadPathRequiresSafPicker(downloadPath)
+                                println("[DownloadDialog] needsSaf=$needsSaf downloadPath=$downloadPath")
+                                if (needsSaf) {
+                                    println("[DownloadDialog] → launching SAF folder picker")
                                     pendingDownloadParams = selectedServer to currentHeaders
-                                    shouldRequestStoragePermission = true
+                                    directoryPickerLauncher.launch()
                                 } else {
-                                    val notifOk = to.kuudere.anisuge.utils.hasNotificationPermission()
-                                    println("[DownloadDialog] notifOk=$notifOk")
-                                    if (!notifOk) {
-                                        println("[DownloadDialog] → requesting notification permission")
-                                        shouldRequestNotificationPermission = true
+                                    val storageOk = to.kuudere.anisuge.utils.hasStoragePermission()
+                                    println("[DownloadDialog] storageOk=$storageOk")
+                                    if (!storageOk) {
+                                        println("[DownloadDialog] → requesting storage permission")
+                                        pendingDownloadParams = selectedServer to currentHeaders
+                                        shouldRequestStoragePermission = true
                                     } else {
-                                        println("[DownloadDialog] → calling onStartDownload(server=$selectedServer)")
-                                        onStartDownload(
-                                            selectedServer,
-                                            selectedSubLang,
-                                            selectedAudioLang,
-                                            true,
-                                            currentHeaders,
-                                            if (isSeasonBatch) null else selectedM3u8,
-                                            selectedSubDub == "dub",
-                                        )
+                                        val notifOk = to.kuudere.anisuge.utils.hasNotificationPermission()
+                                        println("[DownloadDialog] notifOk=$notifOk")
+                                        if (!notifOk) {
+                                            println("[DownloadDialog] → requesting notification permission")
+                                            shouldRequestNotificationPermission = true
+                                        } else {
+                                            println("[DownloadDialog] → calling onStartDownload(server=$selectedServer)")
+                                            onStartDownload(
+                                                selectedServer,
+                                                selectedSubLang,
+                                                selectedAudioLang,
+                                                true,
+                                                currentHeaders,
+                                                if (isSeasonBatch) null else selectedM3u8,
+                                                selectedSubDub == "dub",
+                                            )
+                                        }
                                     }
                                 }
                             } else {

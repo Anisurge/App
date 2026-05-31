@@ -20,6 +20,20 @@ actual fun getCacheDirectory(): String {
 
 actual fun hasStoragePermission(): Boolean = true
 
+actual fun isSharedExternalStoragePath(path: String): Boolean = false
+
+actual fun downloadPathRequiresSafPicker(path: String): Boolean = false
+
+actual fun publishTempDownloadOutput(tempPath: String, outputPath: String): Boolean {
+    return try {
+        File(tempPath).copyTo(File(outputPath), overwrite = true)
+        true
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
+}
+
 @androidx.compose.runtime.Composable
 actual fun RequestStoragePermission(onResult: (Boolean) -> Unit) {
     onResult(true)

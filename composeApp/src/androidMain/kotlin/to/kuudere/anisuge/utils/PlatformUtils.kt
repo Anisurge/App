@@ -1,5 +1,6 @@
 package to.kuudere.anisuge.utils
 
+import android.content.ContentValues
 import android.os.Environment
 import android.content.Intent
 import android.net.Uri
@@ -15,18 +16,13 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
+import okio.buffer
+import okio.source
+import to.kuudere.anisuge.platform.KmpFileSystem
+import android.os.storage.StorageManager
+import android.provider.MediaStore
 
 actual fun getDownloadsDirectory(): String {
     val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Anisug")
@@ -45,14 +41,90 @@ actual fun getCacheDirectory(): String {
 }
 
 actual fun hasStoragePermission(): Boolean {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        return Environment.isExternalStorageManager()
-    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return true
 
-    return ContextCompat.checkSelfPermission(
+    val hasRead = ContextCompat.checkSelfPermission(
+        androidAppContext,
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    ) == PackageManager.PERMISSION_GRANTED
+
+    val hasWrite = ContextCompat.checkSelfPermission(
         androidAppContext,
         Manifest.permission.WRITE_EXTERNAL_STORAGE
     ) == PackageManager.PERMISSION_GRANTED
+
+    return hasRead && hasWrite
+}
+
+actual fun downloadPathRequiresSafPicker(path: String): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+    if (path.isBlank()) return true
+    if (path.startsWith("content://")) return false
+    return isSharedExternalStoragePath(path)
+}
+
+actual fun isSharedExternalStoragePath(path: String): Boolean {
+    if (path.isBlank() || path.startsWith("content://")) return false
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+
+    val extRoot = Environment.getExternalStorageDirectory().absolutePath
+    val appExternal = androidAppContext.getExternalFilesDir(null)?.absolutePath
+    return path.startsWith(extRoot) && (appExternal == null || !path.startsWith(appExternal))
+}
+
+actual fun publishTempDownloadOutput(tempPath: String, outputPath: String): Boolean {
+    val tempFile = File(tempPath)
+    if (!tempFile.exists() || tempFile.length() == 0L) return false
+
+    return try {
+        when {
+            outputPath.startsWith("content://") -> {
+                KmpFileSystem.sink(outputPath).buffer().use { sink ->
+                    tempFile.inputStream().source().use { source ->
+                        sink.writeAll(source)
+                    }
+                }
+                true
+            }
+
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isSharedExternalStoragePath(outputPath) -> {
+                val mimeType = when {
+                    outputPath.endsWith(".mkv", ignoreCase = true) -> "video/x-matroska"
+                    outputPath.endsWith(".mp4", ignoreCase = true) -> "video/mp4"
+                    else -> "application/octet-stream"
+                }
+                val displayName = outputPath.substringAfterLast('/').substringAfterLast('\\')
+                val relativePath = deriveRelativePath(outputPath)
+                val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+
+                val uri = androidAppContext.contentResolver.insert(collection, values) ?: return false
+                androidAppContext.contentResolver.openOutputStream(uri)?.use { out ->
+                    tempFile.inputStream().use { input -> input.copyTo(out) }
+                } ?: return false
+
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                androidAppContext.contentResolver.update(uri, values, null, null)
+                true
+            }
+
+            else -> {
+                val destFile = File(outputPath)
+                destFile.parentFile?.mkdirs()
+                tempFile.copyTo(destFile, overwrite = true)
+                destFile.exists() && destFile.length() > 0L
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        false
+    }
 }
 
 @Composable
@@ -62,56 +134,25 @@ actual fun RequestStoragePermission(onResult: (Boolean) -> Unit) {
         return
     }
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        val lifecycleOwner = LocalLifecycleOwner.current
-        val latestOnResult by rememberUpdatedState(onResult)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        onResult(true)
+        return
+    }
 
-        LaunchedEffect(Unit) {
-            try {
-                val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                if (intent.resolveActivity(androidAppContext.packageManager) == null) {
-                    intent.action = android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
-                    intent.data = Uri.parse("package:${androidAppContext.packageName}")
-                }
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                androidAppContext.startActivity(intent)
-            } catch (e: Exception) {
-                try {
-                    val fallbackIntent = Intent(
-                        android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                        Uri.parse("package:${androidAppContext.packageName}")
-                    ).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    androidAppContext.startActivity(fallbackIntent)
-                } catch (fallbackError: Exception) {
-                    fallbackError.printStackTrace()
-                    latestOnResult(false)
-                }
-            }
-        }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val allGranted = results.entries.all { it.value }
+        onResult(allGranted)
+    }
 
-        DisposableEffect(lifecycleOwner) {
-            val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) {
-                    latestOnResult(hasStoragePermission())
-                }
-            }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            onDispose {
-                lifecycleOwner.lifecycle.removeObserver(observer)
-            }
-        }
-    } else {
-        val launcher = rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { isGranted ->
-            onResult(isGranted)
-        }
-
-        SideEffect {
-            launcher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        }
+    SideEffect {
+        launcher.launch(
+            arrayOf(
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            )
+        )
     }
 }
 
@@ -180,6 +221,13 @@ actual fun buildDownloadOutputPath(epDir: String, title: String, episodeNumber: 
     return "$epDir/${safeTitle}_Ep_$episodeNumber.mkv"
 }
 
+private fun deriveRelativePath(outputPath: String): String {
+    val extStorage = Environment.getExternalStorageDirectory().absolutePath
+    val relative = outputPath.removePrefix(extStorage).trimStart('/')
+    val dir = relative.substringBeforeLast('/', "Download/Anisug")
+    return if (dir.isBlank()) "Download/Anisug" else dir
+}
+
 actual suspend fun muxToMkv(
     videoPath: String,
     audioPath: String?,
@@ -192,8 +240,15 @@ actual suspend fun muxToMkv(
     preferLocalTsRemux: Boolean,
 ): Boolean = withContext(Dispatchers.IO) {
     val proxiedUrls = mutableListOf<Pair<String, String>>() // proxied -> original (for release)
+    val context = androidAppContext
     try {
-        File(outputPath).parentFile?.mkdirs()
+        // Use a temp file in cache dir for ALL export operations, then copy to final
+        // destination via MediaStore. This avoids native-permission issues with RxFFmpeg
+        // and eliminates the need for MANAGE_EXTERNAL_STORAGE on API 30+.
+        val tempExt = if (outputPath.endsWith(".mkv", ignoreCase = true)) "mkv" else "mp4"
+        val tempFile = File(context.cacheDir, "mux_temp_${System.currentTimeMillis()}.$tempExt")
+        tempFile.parentFile?.mkdirs()
+        val tempOutputPath = tempFile.absolutePath
 
         fun urlForHlsExport(original: String): String {
             if (!original.startsWith("http") || inputHeaders.isNullOrEmpty()) return original
@@ -206,62 +261,56 @@ actual suspend fun muxToMkv(
                 HlsPngTsStrip.isDisguisedTsCdnHost(videoPath) ||
                 masterPlaylistUrl?.let { HlsPngTsStrip.isVibeplayerHlsHost(it) } == true
 
+        var exportOk = false
         val masterUrl = masterPlaylistUrl?.takeIf { it.startsWith("http") }
         if (masterUrl != null && !skipRemoteHlsExport) {
-            val exported = exportHlsPlaylistToFile(
-                context = androidAppContext,
+            exportOk = exportHlsPlaylistToFile(
+                context = context,
                 playlistUrl = urlForHlsExport(masterUrl),
-                outputPath = outputPath,
+                outputPath = tempOutputPath,
                 headers = inputHeaders,
             )
-            if (exported) return@withContext true
         }
 
-        if (videoPath.startsWith("http") && !skipRemoteHlsExport) {
+        if (!exportOk && videoPath.startsWith("http") && !skipRemoteHlsExport) {
             val exportPlaylist = if (videoPath == masterUrl && proxiedUrls.isNotEmpty()) {
                 proxiedUrls.last().first
             } else {
                 urlForHlsExport(videoPath)
             }
-            val exported = exportHlsPlaylistToFile(
-                context = androidAppContext,
+            exportOk = exportHlsPlaylistToFile(
+                context = context,
                 playlistUrl = exportPlaylist,
-                outputPath = outputPath,
+                outputPath = tempOutputPath,
                 headers = inputHeaders,
             )
-            if (exported) return@withContext true
         }
 
-        if (!videoPath.startsWith("http")) {
-            // Resolve content:// SAF URIs to real filesystem paths so native tools
-            // (RxFFmpeg) and Media3 Transformer can read/write the files directly.
+        if (!exportOk && !videoPath.startsWith("http")) {
             val realVideo = resolveContentUriToFilePath(videoPath)
-            val realOutput = resolveContentUriToFilePath(outputPath)
             val realAudio = audioPath?.let { resolveContentUriToFilePath(it) }
             val realSubs = subtitles.map { (p, l) -> resolveContentUriToFilePath(p) to l }
 
-            // Try Media3 Transformer first (more stable than RxFFmpeg on some devices).
-            // RxFFmpeg native code can SIGSEGV on certain phones; Media3 uses the platform's
-            // software codecs which are better tested.
-            val exported = exportLocalMediaToFile(
-                context = androidAppContext,
-                inputPath = realVideo,
-                outputPath = realOutput,
-            )
-            if (exported) return@withContext true
-
-            // Media3 failed — skip RxFFmpeg (can SIGSEGV natively) and fall back to
-            // a plain file copy. The output will be a raw TS stream with a .mkv extension;
-            // most video players detect the container from content, not extension.
-            return@withContext finalizeLocalDownload(realVideo, realAudio, realOutput)
+            // Local file: just copy directly. Media3 Transformer re-demuxes via
+            // MediaCodec which is very slow for already-downloaded TS segments.
+            // The raw TS plays fine in any video player.
+            exportOk = finalizeLocalDownload(realVideo, realAudio, tempOutputPath)
         }
 
-        println(
-            "[Download] mux/export failed for remote HLS (host=${
+        if (!exportOk) {
+            println("[Download] mux/export failed for host=${
                 masterPlaylistUrl?.substringAfter("://")?.substringBefore('/')
-            })"
-        )
-        false
+            }")
+            tempFile.delete()
+            return@withContext false
+        }
+
+        val copyOk = publishTempDownloadOutput(tempFile.absolutePath, outputPath)
+        tempFile.delete()
+        if (!copyOk) {
+            println("[Download] failed to copy temp result to final path: $outputPath")
+        }
+        copyOk
     } catch (e: Exception) {
         e.printStackTrace()
         false

@@ -26,6 +26,21 @@ actual fun getCacheDirectory(): String {
 
 actual fun hasStoragePermission(): Boolean = true
 
+actual fun isSharedExternalStoragePath(path: String): Boolean = false
+
+actual fun downloadPathRequiresSafPicker(path: String): Boolean = false
+
+actual fun publishTempDownloadOutput(tempPath: String, outputPath: String): Boolean = try {
+    NSFileManager.defaultManager.createFileAtPath(
+        path = outputPath,
+        contents = NSFileManager.defaultManager.contentsAtPath(tempPath),
+        attributes = null,
+    )
+    true
+} catch (_: Exception) {
+    false
+}
+
 @Composable
 actual fun RequestStoragePermission(onResult: (Boolean) -> Unit) {
     onResult(true)

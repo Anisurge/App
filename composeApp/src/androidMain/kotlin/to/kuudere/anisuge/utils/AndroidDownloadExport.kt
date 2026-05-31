@@ -33,8 +33,9 @@ internal suspend fun exportHlsPlaylistToFile(
     headers: Map<String, String>?,
 ): Boolean = withContext(Dispatchers.Main.immediate) {
     suspendCancellableCoroutine { continuation ->
-        val outputFile = File(outputPath)
-        outputFile.parentFile?.mkdirs()
+        val tempFile = File(context.cacheDir, "hls_export_${System.currentTimeMillis()}.mp4")
+        tempFile.parentFile?.mkdirs()
+        if (tempFile.exists()) tempFile.delete()
 
         val requestHeaders = (headers ?: emptyMap()).toMutableMap()
         val userAgent = requestHeaders.remove("User-Agent")
@@ -61,7 +62,9 @@ internal suspend fun exportHlsPlaylistToFile(
 
         val listener = object : Transformer.Listener {
             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
-                val ok = outputFile.exists() && outputFile.length() > 0L
+                val ok = tempFile.exists() && tempFile.length() > 0L &&
+                    publishTempDownloadOutput(tempFile.absolutePath, outputPath)
+                tempFile.delete()
                 if (continuation.isActive) continuation.resume(ok)
             }
 
@@ -86,9 +89,10 @@ internal suspend fun exportHlsPlaylistToFile(
         }
 
         try {
-            transformer.start(mediaItem, outputFile.absolutePath)
+            transformer.start(mediaItem, tempFile.absolutePath)
         } catch (e: Exception) {
             e.printStackTrace()
+            tempFile.delete()
             if (continuation.isActive) continuation.resume(false)
         }
     }
@@ -106,8 +110,9 @@ internal suspend fun exportLocalMediaToFile(
             return@suspendCancellableCoroutine
         }
 
-        val outputFile = File(outputPath)
-        outputFile.parentFile?.mkdirs()
+        val tempFile = File(context.cacheDir, "media_export_${System.currentTimeMillis()}.mp4")
+        tempFile.parentFile?.mkdirs()
+        if (tempFile.exists()) tempFile.delete()
 
         val mediaItem = MediaItem.Builder()
             .setUri(android.net.Uri.fromFile(inputFile))
@@ -117,7 +122,9 @@ internal suspend fun exportLocalMediaToFile(
 
         val listener = object : Transformer.Listener {
             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
-                val ok = outputFile.exists() && outputFile.length() > 0L
+                val ok = tempFile.exists() && tempFile.length() > 0L &&
+                    publishTempDownloadOutput(tempFile.absolutePath, outputPath)
+                tempFile.delete()
                 if (continuation.isActive) continuation.resume(ok)
             }
 
@@ -141,9 +148,10 @@ internal suspend fun exportLocalMediaToFile(
         }
 
         try {
-            transformer.start(mediaItem, outputFile.absolutePath)
+            transformer.start(mediaItem, tempFile.absolutePath)
         } catch (e: Exception) {
             e.printStackTrace()
+            tempFile.delete()
             if (continuation.isActive) continuation.resume(false)
         }
     }
@@ -155,10 +163,11 @@ internal fun remuxToMkvWithRxFfmpeg(
     subtitles: List<Pair<String, String>>,
     outputPath: String,
 ): Boolean {
-    // Resolve content:// SAF URIs to real filesystem paths so native FFmpeg can read/write.
+    val context = androidAppContext
+
+    // Resolve input paths (content:// → real fs path for FFmpeg to read)
     val realVideoPath = resolveContentUriToFilePath(videoPath)
     val realAudioPath = audioPath?.let { resolveContentUriToFilePath(it) }
-    val realOutputPath = resolveContentUriToFilePath(outputPath)
     val realSubs = subtitles.map { (path, label) -> resolveContentUriToFilePath(path) to label }
 
     val inputFile = File(realVideoPath)
@@ -167,9 +176,11 @@ internal fun remuxToMkvWithRxFfmpeg(
         return false
     }
 
-    val outFile = File(realOutputPath)
-    outFile.parentFile?.mkdirs()
-    if (outFile.exists()) outFile.delete()
+    // ALWAYS mux into app cache dir — native FFmpeg has no scoped storage bypass
+    val ext = if (outputPath.endsWith(".mkv", ignoreCase = true)) "mkv" else "mp4"
+    val tempFile = File(context.cacheDir, "mux_temp_${System.currentTimeMillis()}.$ext")
+    tempFile.parentFile?.mkdirs()
+    if (tempFile.exists()) tempFile.delete()
 
     val cmd = mutableListOf("ffmpeg", "-y", "-i", realVideoPath)
     val audioFile = realAudioPath?.let { File(it) }?.takeIf { it.exists() && it.length() > 0L }
@@ -178,9 +189,8 @@ internal fun remuxToMkvWithRxFfmpeg(
     }
 
     val validSubs = realSubs.mapNotNull { (path, label) ->
-        // WebVTT cannot be stream-copied into MKV; keep as separate file alongside the output.
-        val ext = path.substringAfterLast('.', "").lowercase()
-        if (ext == "vtt") {
+        val ext2 = path.substringAfterLast('.', "").lowercase()
+        if (ext2 == "vtt") {
             println("[RxFFmpeg] skipping VTT subtitle (saved alongside MKV): $label")
             return@mapNotNull null
         }
@@ -212,18 +222,31 @@ internal fun remuxToMkvWithRxFfmpeg(
     validSubs.forEachIndexed { index, (_, label) ->
         cmd.addAll(listOf("-metadata:s:s:$index", "title=$label"))
     }
-    cmd.add(realOutputPath)
+
+    // Output goes to cache, NOT to the final path
+    cmd.add(tempFile.absolutePath)
 
     return try {
         val rc = RxFFmpegInvoke.getInstance().runCommand(cmd.toTypedArray(), null)
-        val ok = outFile.exists() && outFile.length() > 1024L
-        if (!ok) {
-            println("[RxFFmpeg] remux failed rc=$rc inputBytes=${inputFile.length()} subs=${validSubs.size} outputBytes=${outFile.length()}")
+        val muxOk = tempFile.exists() && tempFile.length() > 1024L
+        if (!muxOk) {
+            println("[RxFFmpeg] remux failed rc=$rc inputBytes=${inputFile.length()} subs=${validSubs.size} tempBytes=${tempFile.length()}")
+            tempFile.delete()
+            return false
         }
-        ok
+
+        // Now copy from cache to the final destination via publishTempDownloadOutput
+        val copyOk = publishTempDownloadOutput(tempFile.absolutePath, outputPath)
+        tempFile.delete()
+
+        if (!copyOk) {
+            println("[RxFFmpeg] failed to copy temp mux result to final path: $outputPath")
+        }
+        copyOk
     } catch (e: Exception) {
         println("[RxFFmpeg] remux error: ${e.message}")
         e.printStackTrace()
+        tempFile.delete()
         false
     }
 }
