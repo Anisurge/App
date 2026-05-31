@@ -32,6 +32,8 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
@@ -158,24 +160,9 @@ fun DownloadEpisodeDialog(
         }
     }
 
-    // When sub/dub is first chosen, auto-pick first matching server
-    LaunchedEffect(selectedSubDub, selectableServers) {
-        if (selectedSubDub != null && selectableServers.isNotEmpty() && selectedServer.isBlank()) {
-            selectedServer = if (isSeasonBatch) {
-                selectableServers.firstOrNull { it.id.equals("anitaku-1", ignoreCase = true) }?.id
-                    ?: selectableServers.firstOrNull { it.id.equals("anitaku", ignoreCase = true) }?.id
-                    ?: selectableServers.firstOrNull { it.id.equals("anikage", ignoreCase = true) }?.id
-                    ?: selectableServers.first().id
-            } else {
-                selectableServers.first().id
-            }
-        }
-    }
-
-    // Reset API data when sub/dub changes
+    // When sub/dub changes: reset API data and auto-pick first matching server (atomic to avoid race)
     LaunchedEffect(selectedSubDub) {
         if (selectedSubDub != null) {
-            selectedServer = ""
             availableQualities = emptyList()
             availableSubtitles = emptyList()
             availableAudioTracks = emptyList()
@@ -183,6 +170,18 @@ fun DownloadEpisodeDialog(
             selectedQualityIndex = 0
             selectedSubLang = null
             selectedAudioLang = null
+            selectedServer = if (selectableServers.isNotEmpty()) {
+                if (isSeasonBatch) {
+                    selectableServers.firstOrNull { it.id.equals("anitaku-1", ignoreCase = true) }?.id
+                        ?: selectableServers.firstOrNull { it.id.equals("anitaku", ignoreCase = true) }?.id
+                        ?: selectableServers.firstOrNull { it.id.equals("anikage", ignoreCase = true) }?.id
+                        ?: selectableServers.first().id
+                } else {
+                    selectableServers.first().id
+                }
+            } else {
+                ""
+            }
         }
     }
 
@@ -262,6 +261,7 @@ fun DownloadEpisodeDialog(
             selectedQualityIndex = preferredDownloadQualityIndex(qualities)
             val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStreamSection(streamSection)
                 .mapNotNull { it.title ?: it.resolvedLang }
+                .filter { isLikelyLanguageLabel(it) }
                 .distinct()
             availableSubtitles = subLabels
             if (selectedSubLang == null || selectedSubLang !in availableSubtitles) {
@@ -284,6 +284,7 @@ fun DownloadEpisodeDialog(
         val section = batchStreamSection ?: return@LaunchedEffect
         val subLabels = to.kuudere.anisuge.utils.BatchSubtitleExtract.fromStreamSection(section)
             .mapNotNull { it.title ?: it.resolvedLang }
+            .filter { isLikelyLanguageLabel(it) }
             .distinct()
         availableSubtitles = subLabels
         if (selectedSubLang == null || selectedSubLang !in availableSubtitles) {
@@ -435,9 +436,11 @@ fun DownloadEpisodeDialog(
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.border) }
     ) {
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -968,4 +971,13 @@ fun formatFileSize(bytes: Long): String {
         unitIndex++
     }
     return "${formatFloat(size, 1)} ${units[unitIndex]}"
+}
+
+private fun isLikelyLanguageLabel(label: String): Boolean {
+    val cleaned = label.trim().lowercase()
+    if (cleaned.isEmpty()) return false
+    if (cleaned.contains("://")) return false
+    // Known non-language values that appear in sub_N query params
+    if (cleaned in setOf("home", "default", "auto", "none", "na")) return false
+    return true
 }

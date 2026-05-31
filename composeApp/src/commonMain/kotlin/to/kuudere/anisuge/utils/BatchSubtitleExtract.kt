@@ -133,7 +133,12 @@ object BatchSubtitleExtract {
             }
 
             captions.forEach { (index, captionUrl) ->
-                val label = names[index]?.ifBlank { null } ?: "English"
+                val rawName = names[index]
+                val label = if (rawName.isNullOrBlank() || !isLikelyLanguageName(rawName)) {
+                    "English"
+                } else {
+                    rawName
+                }
                 add(captionUrl, label, default = results.isEmpty())
             }
         }
@@ -175,4 +180,13 @@ object BatchSubtitleExtract {
 
     private fun decodeQueryValue(raw: String): String =
         runCatching { raw.decodeURLQueryComponent() }.getOrDefault(raw)
+
+    private fun isLikelyLanguageName(name: String): Boolean {
+        val cleaned = name.trim().lowercase()
+        if (cleaned.isEmpty()) return false
+        if (cleaned.contains("://")) return false
+        // Known non-language values that appear in sub_N query params
+        if (cleaned in setOf("home", "default", "auto", "none", "na")) return false
+        return true
+    }
 }
