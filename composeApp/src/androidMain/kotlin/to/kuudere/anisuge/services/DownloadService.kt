@@ -19,10 +19,24 @@ class DownloadService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // MUST call startForeground immediately (within ~5s of startForegroundService)
+        // to avoid ForegroundServiceDidNotStartInTimeException on Android 8+.
+        // Channel and notification are created here before any other work.
+        createChannelIfNeeded()
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(to.kuudere.anisuge.R.mipmap.ic_launcher_foreground)
+            .setContentTitle("Anisurge Downloads")
+            .setContentText("Downloads are running in background...")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        startForeground(NOTIFICATION_ID, notification)
+
         val powerManager = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
-        wakeLock = powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Anisurge::DownloadWakeLock").apply {
-            acquire()
-        }
+        wakeLock =
+            powerManager.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Anisurge::DownloadWakeLock").apply {
+                acquire()
+            }
     }
 
     override fun onDestroy() {
@@ -33,10 +47,15 @@ class DownloadService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        
-        // Ensure channel exists
+        // startForeground already called in onCreate; nothing extra needed here.
+        return START_NOT_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun createChannelIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             if (manager.getNotificationChannel(CHANNEL_ID) == null) {
                 val channel = NotificationChannel(
                     CHANNEL_ID,
@@ -51,21 +70,5 @@ class DownloadService : Service() {
                 manager.createNotificationChannel(channel)
             }
         }
-
-        // We use a persistent notification for the service.
-        // Platform.kt will update this same notification ID regularly.
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(to.kuudere.anisuge.R.mipmap.ic_launcher_foreground)
-            .setContentTitle("Anisurge Downloads")
-            .setContentText("Downloads are running in background...")
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
-
-        startForeground(NOTIFICATION_ID, notification)
-        
-        return START_NOT_STICKY
     }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 }

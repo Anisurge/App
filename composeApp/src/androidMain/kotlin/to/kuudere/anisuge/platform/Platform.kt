@@ -1,4 +1,5 @@
 package to.kuudere.anisuge.platform
+
 import okio.Sink
 import okio.Source
 import okio.sink
@@ -50,10 +51,10 @@ actual val isAndroidTvPlatform: Boolean
             appInfo.metaData?.getBoolean("to.kuudere.anisuge.FORCE_TV_UI") == true
         }.getOrDefault(false)
         return uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
-            forcedTvUi ||
-            (androidAppContext.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION ||
-            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
-            packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
+                forcedTvUi ||
+                (androidAppContext.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION ||
+                packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+                packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
     }
 actual val PlatformName: String = "Android"
 actual val UpdatePlatform: String = "android"
@@ -88,7 +89,8 @@ actual fun LockScreenOrientation(landscape: Boolean) {
         val originalOrientation = activity.requestedOrientation
         activity.requestedOrientation = if (landscape) {
             insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            insetsController.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            insetsController.systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
             insetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
@@ -133,51 +135,73 @@ actual fun SyncCursorHidden(hidden: Boolean) {
 }
 
 
-
-
 actual fun isFolderWritable(path: String): Boolean {
     if (path.isEmpty()) return true
-    
+
     // Support SAF URIs for SD Cards/Scoped Storage
     if (path.startsWith("content://")) {
-        return try {
-            val uri = Uri.parse(path)
-            // Check if it's a tree URI
-            if (DocumentsContract.isTreeUri(uri)) {
-                // Check persisted permissions first (efficient)
-                val hasPersisted = androidAppContext.contentResolver.persistedUriPermissions.any { 
-                    it.uri == uri && it.isWritePermission 
-                }
-                if (hasPersisted) return true
-                
-                // If not persisted, check if we can actually write right now
-                // We'll use DocumentFile if available, or try a test write if we had a document URI.
-                // For trees, DocumentFile is the standard way.
-                val document = androidx.documentfile.provider.DocumentFile.fromTreeUri(androidAppContext, uri)
-                document?.canWrite() ?: false
-            } else {
-                // Single document URI
-                val document = androidx.documentfile.provider.DocumentFile.fromSingleUri(androidAppContext, uri)
-                document?.canWrite() ?: false
-            }
-        } catch (e: Exception) {
-            // If DocumentFile is missing from classpath, this might throw NoClassDefFoundError
-            // but we'll add the dependency next.
-            e.printStackTrace()
-            false
-        }
+        return isSafFolderWritable(path)
     }
 
+    // Regular file path — on Android 11+ File.canWrite() is unreliable due
+    // to scoped storage, so always prefer the test-write approach.
     val file = java.io.File(path)
+    val dir = if (file.isDirectory) file else file.parentFile ?: file
     return try {
-        val testFile = java.io.File(file, ".anisug_test_write")
+        val testFile = java.io.File(dir, ".anisug_test_write")
         if (testFile.createNewFile()) {
             testFile.delete()
             true
+        } else if (testFile.exists()) {
+            // Leftover from a previous crash; try delete + recreate
+            testFile.delete()
+            val retry = testFile.createNewFile()
+            if (retry) testFile.delete()
+            retry
         } else {
-             file.canWrite()
+            // createNewFile returned false without the file existing —
+            // scoped storage likely blocked the write; don't trust canWrite()
+            println("[isFolderWritable] test-write blocked by scoped storage: $path")
+            false
         }
     } catch (e: Exception) {
+        println("[isFolderWritable] check failed for $path: ${e.message}")
+        false
+    }
+}
+
+private fun isSafFolderWritable(path: String): Boolean {
+    return try {
+        val uri = Uri.parse(path)
+        if (DocumentsContract.isTreeUri(uri)) {
+            // Compare by normalised URI string — Uri.equals() can differ on encoding
+            val uriStr = uri.toString().trimEnd('/')
+            val hasPersisted = androidAppContext.contentResolver.persistedUriPermissions.any { perm ->
+                perm.isWritePermission && perm.uri.toString().trimEnd('/') == uriStr
+            }
+            if (hasPersisted) return true
+
+            // Fallback: DocumentFile check
+            val document = androidx.documentfile.provider.DocumentFile.fromTreeUri(androidAppContext, uri)
+                ?: return false
+            if (document.canWrite()) return true
+
+            // Last resort: attempt a real write via DocumentFile
+            val testName = ".anisug_test_${System.currentTimeMillis()}"
+            val testFile = document.createFile("application/octet-stream", testName)
+            if (testFile != null) {
+                testFile.delete()
+                true
+            } else {
+                println("[isFolderWritable] SAF write test failed for tree $uriStr")
+                false
+            }
+        } else {
+            androidx.documentfile.provider.DocumentFile.fromSingleUri(androidAppContext, uri)
+                ?.canWrite() ?: false
+        }
+    } catch (e: Exception) {
+        println("[isFolderWritable] SAF check failed for $path: ${e.message}")
         false
     }
 }
@@ -192,8 +216,10 @@ actual fun persistFolderPermission(path: String) {
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
             }
+        } catch (e: SecurityException) {
+            println("[persistFolderPermission] permission denied by system for $path: ${e.message}")
         } catch (e: Exception) {
-            e.printStackTrace()
+            println("[persistFolderPermission] failed to persist for $path: ${e.message}")
         }
     }
 }
@@ -209,8 +235,8 @@ actual object KmpFileSystem {
 
     actual fun createDirectories(path: String, mustCreate: Boolean) {
         if (path.startsWith("content://")) {
-           getOrCreateDocumentFromPath(path, isDirectory = true)
-           return
+            getOrCreateDocumentFromPath(path, isDirectory = true)
+            return
         }
         val f = java.io.File(path)
         if (!f.exists()) f.mkdirs()
@@ -251,8 +277,8 @@ actual object KmpFileSystem {
         if (path.startsWith("content://")) {
             val doc = getOrCreateDocumentFromPath(path, isDirectory = false)
             doc?.uri?.let { uri ->
-                androidAppContext.contentResolver.openOutputStream(uri)?.use { 
-                    it.write(data) 
+                androidAppContext.contentResolver.openOutputStream(uri)?.use {
+                    it.write(data)
                 }
             }
             return
@@ -277,28 +303,28 @@ actual object KmpFileSystem {
         }
     }
 
-    // This is a naive implementation: it assumes the path string for URIs was constructed 
+    // This is a naive implementation: it assumes the path string for URIs was constructed
     // by appending segments to a base URI, which is what DownloadManager does.
     private fun getOrCreateDocumentFromPath(path: String, isDirectory: Boolean): DocumentFile? {
         if (!path.startsWith("content://")) return null
-        
+
         // 1. Find the base tree URI (the part we have permission for)
         val persisted = androidAppContext.contentResolver.persistedUriPermissions
             .filter { it.isWritePermission }
             .map { it.uri.toString() }
             .find { path.startsWith(it) } ?: return null
-            
+
         var currentDoc = DocumentFile.fromTreeUri(androidAppContext, Uri.parse(persisted)) ?: return null
-        
+
         // 2. Extract relative path and traverse
         val relative = path.removePrefix(persisted).trim('/')
         if (relative.isEmpty()) return currentDoc
-        
+
         val segments = relative.split("/")
         for (i in segments.indices) {
             val name = segments[i]
             if (name.isEmpty()) continue
-            
+
             val nextDoc = currentDoc.findFile(name)
             currentDoc = if (nextDoc != null) {
                 nextDoc
@@ -323,7 +349,7 @@ actual fun updateDownloadNotification(
     isInitial: Boolean
 ) {
     val manager = androidAppContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    
+
     if (activeTasksCount > 0) {
         val serviceIntent = Intent(androidAppContext, DownloadService::class.java)
         try {
@@ -336,7 +362,7 @@ actual fun updateDownloadNotification(
             e.printStackTrace()
         }
     }
-    
+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         if (manager.getNotificationChannel(DOWNLOAD_CHANNEL_ID) == null) {
             val channel = NotificationChannel(
@@ -356,14 +382,14 @@ actual fun updateDownloadNotification(
     val progressInt = (totalProgress * 100).toInt()
     val contentTitle = if (activeTasksCount == 1) "Downloading Anime" else "Downloading $activeTasksCount items"
     val contentText = if (progressInt >= 0) "$progressInt% total progress" else "Calculating..."
-    
+
     val intent = Intent(androidAppContext, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
     val pendingIntent = android.app.PendingIntent.getActivity(
-        androidAppContext, 
-        0, 
-        intent, 
+        androidAppContext,
+        0,
+        intent,
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0
     )
 
@@ -445,7 +471,7 @@ actual fun updateSyncProgressNotification(
         SYNC_NOTIF_ID,
         intent,
         PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0,
     )
 
     val shortSummary = statusText.lineSequence().firstOrNull { it.isNotBlank() }?.take(200)
