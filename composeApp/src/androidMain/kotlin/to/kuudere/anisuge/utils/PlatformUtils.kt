@@ -36,10 +36,7 @@ actual fun getCacheDirectory(): String {
 
 actual fun hasStoragePermission(): Boolean {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        return ContextCompat.checkSelfPermission(
-            androidAppContext,
-            Manifest.permission.MANAGE_EXTERNAL_STORAGE
-        ) == PackageManager.PERMISSION_GRANTED
+        return Environment.isExternalStorageManager()
     }
 
     return ContextCompat.checkSelfPermission(
@@ -55,19 +52,31 @@ actual fun RequestStoragePermission(onResult: (Boolean) -> Unit) {
         return
     }
 
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        onResult(isGranted)
-    }
-
-    SideEffect {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Manifest.permission.MANAGE_EXTERNAL_STORAGE
-        } else {
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        // MANAGE_EXTERNAL_STORAGE is a special permission that requires navigating
+        // to app settings, not a runtime permission that can be requested via dialog
+        SideEffect {
+            try {
+                val intent = Intent(
+                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:${androidAppContext.packageName}")
+                )
+                androidAppContext.startActivity(intent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                onResult(false)
+            }
         }
-        launcher.launch(permission)
+    } else {
+        val launcher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            onResult(isGranted)
+        }
+
+        SideEffect {
+            launcher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
     }
 }
 
