@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Color
+import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -52,17 +53,17 @@ import to.kuudere.anisuge.ui.resolveProfileMediaUrl
 import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 import to.kuudere.anisuge.data.models.Comment
 
-// ── Colour palette — mirrors Kuudere's zinc/black dark theme ─────────────────
-private val BgBlack      = Color(0xFF000000)
-private val BgDark       = Color(0xFF000000)    // zinc-950
-private val BgCard       = Color(0xFF000000)    // zinc-900
-private val BgInput      = Color(0xFF000000)    // zinc-800 / 50%
-private val BorderSub    = Color(0xFF3F3F46)    // zinc-700 / 50%
-private val BorderLine   = Color(0xFF000000)    // zinc-800 / 80% — thread lines
-private val TextPrimary  = Color(0xFFE4E4E7)    // zinc-200
-private val TextSec      = Color(0xFFA1A1AA)    // zinc-400
-private val TextMuted    = Color(0xFF71717A)    // zinc-500
-private val AccentRed    = Color(0xFFBF80FF)
+// ── Colour palette — theme-driven (see theme/AppColors.kt) ───────────────────
+private val BgBlack: Color      get() = AppColors.background
+private val BgDark: Color       get() = AppColors.background
+private val BgCard: Color       get() = AppColors.surface
+private val BgInput: Color      get() = AppColors.surface
+private val BorderSub: Color    get() = AppColors.border
+private val BorderLine: Color   get() = AppColors.border
+private val TextPrimary: Color  get() = AppColors.text
+private val TextSec: Color      get() = AppColors.textMuted
+private val TextMuted: Color    get() = AppColors.textDim
+private val AccentRed: Color    get() = AppColors.accent
 private val AccentBlue   = Color(0xFF3B82F6)
 
 // ── Internal mutable UI model ─────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.kuudere.anisuge.theme.AppColors
 
 data class WatchlistOption(
     val label: String,
@@ -43,7 +44,7 @@ fun WatchlistBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF000000),
+        containerColor = AppColors.surface,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         dragHandle = {
             Box(
@@ -55,7 +56,7 @@ fun WatchlistBottomSheet(
                         .width(40.dp)
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(Color.White.copy(alpha = 0.3f))
+                        .background(AppColors.textMuted.copy(alpha = 0.6f))
                 )
             }
         }
@@ -68,7 +69,7 @@ fun WatchlistBottomSheet(
         ) {
             Text(
                 "Add to Watchlist",
-                color = Color.White,
+                color = AppColors.text,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 16.dp)
@@ -83,7 +84,7 @@ fun WatchlistBottomSheet(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
                         .background(
-                            if (isSelected) Color.White.copy(alpha = 0.1f)
+                            if (isSelected) AppColors.accent.copy(alpha = 0.15f)
                             else Color.Transparent
                         )
                         .clickable { onSelect(option.label) }
@@ -98,12 +99,12 @@ fun WatchlistBottomSheet(
                         Icon(
                             imageVector = option.icon,
                             contentDescription = null,
-                            tint = if (isRemove) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.7f),
+                            tint = if (isRemove) AppColors.textDim else AppColors.textMuted,
                             modifier = Modifier.size(22.dp)
                         )
                         Text(
                             text = option.label,
-                            color = if (isRemove) Color.White.copy(alpha = 0.4f) else Color.White,
+                            color = if (isRemove) AppColors.textDim else AppColors.text,
                             fontSize = 15.sp,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                         )
@@ -112,7 +113,7 @@ fun WatchlistBottomSheet(
                         Icon(
                             Icons.Default.Check,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = AppColors.accent,
                             modifier = Modifier.size(18.dp)
                         )
                     }

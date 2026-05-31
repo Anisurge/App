@@ -20,13 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-internal val ShopBerryMuted = Color(0xFF9E9E9E)
+internal val ShopBerryMuted: Color get() = AppColors.textMuted
 internal val ShopBerryGold = Color(0xFFFFD54F)
 internal val ShopBerryGoldDim = Color(0xFFFFB300)
 internal val ShopBerryPanel = Color(0xFF1E1808)

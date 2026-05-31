@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.LatestEpisodeLang
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.data.models.latestEpisodeLang
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 
@@ -79,7 +80,7 @@ fun AnimeCard(
                 .fillMaxWidth()
                 .aspectRatio(3f / 4f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF0C0C0C))
+                .background(AppColors.surfaceVariant)
         ) {
             // main-image
             val url = when {
@@ -255,7 +256,7 @@ fun AnimeCard(
                 // .title: font-size:14px; font-weight:500; line-clamp:1
                 Text(
                     text       = item.resolveDisplayTitle(),
-                    color      = Color.White,
+                    color      = AppColors.text,
                     fontSize   = 14.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines   = 1,
@@ -276,13 +277,13 @@ fun AnimeCard(
             ) {
                 if (!item.type.isNullOrBlank()) {
                     // .metadata-item { color:#9ca3af; font-size:12px; font-weight:400 }
-                    Text(item.type, color = Color(0xFF9ca3af), fontSize = 12.sp)
+                    Text(item.type, color = AppColors.textMuted, fontSize = 12.sp)
                 }
                 if (!item.type.isNullOrBlank()) {
                     // .metadata-separator { color:#6b7280; font-size:12px }
-                    Text("•", color = Color(0xFF6b7280), fontSize = 12.sp)
+                    Text("•", color = AppColors.textDim, fontSize = 12.sp)
                 }
-                Text("${item.duration ?: 24}m", color = Color(0xFF9ca3af), fontSize = 12.sp)
+                Text("${item.duration ?: 24}m", color = AppColors.textMuted, fontSize = 12.sp)
             }
         }
     }

@@ -20,12 +20,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.kuudere.anisuge.data.models.BffShopItem
 import to.kuudere.anisuge.data.models.UserProfile
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ProfileAvatar
 
 @Composable
@@ -41,21 +41,21 @@ fun ProfileFramePickerSection(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1A1A1A))
+            .background(AppColors.surface)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Animated frames", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text("Animated frames", color = AppColors.text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         Text(
             "Tap a frame to equip — saves instantly for profile and chat.",
-            color = Color(0xFF9E9E9E),
+            color = AppColors.textMuted,
             fontSize = 11.sp,
             lineHeight = 16.sp,
         )
 
         if (isLoadingOwned && ownedFrames.isEmpty()) {
             CircularProgressIndicator(
-                color = Color.White,
+                color = AppColors.text,
                 modifier = Modifier
                     .size(28.dp)
                     .align(Alignment.CenterHorizontally),
@@ -67,7 +67,7 @@ fun ProfileFramePickerSection(
         if (ownedFrames.isEmpty()) {
             Text(
                 "No frames yet — buy some in the Store.",
-                color = Color(0xFF9E9E9E),
+                color = AppColors.textMuted,
                 fontSize = 12.sp,
             )
             return@Column
@@ -88,7 +88,7 @@ fun ProfileFramePickerSection(
                         Modifier
                             .size(48.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF333333)),
+                            .background(AppColors.border),
                     )
                 }
             }
@@ -114,7 +114,7 @@ fun ProfileFramePickerSection(
 
         if (isSaving) {
             CircularProgressIndicator(
-                color = Color.White,
+                color = AppColors.text,
                 modifier = Modifier.size(20.dp).align(Alignment.CenterHorizontally),
                 strokeWidth = 2.dp,
             )
@@ -136,17 +136,17 @@ private fun FramePickChip(
             .clip(RoundedCornerShape(12.dp))
             .border(
                 width = if (selected) 2.dp else 1.dp,
-                color = if (selected) Color(0xFFE50914) else Color(0xFF333333),
+                color = if (selected) AppColors.accent else AppColors.border,
                 shape = RoundedCornerShape(12.dp),
             )
-            .background(Color(0xFF111111))
+            .background(AppColors.surface)
             .clickable(enabled = !isSaving, onClick = onClick)
             .padding(10.dp),
     ) {
         preview()
         Text(
             label,
-            color = Color.White,
+            color = AppColors.text,
             fontSize = 10.sp,
             maxLines = 1,
             modifier = Modifier.padding(top = 6.dp),

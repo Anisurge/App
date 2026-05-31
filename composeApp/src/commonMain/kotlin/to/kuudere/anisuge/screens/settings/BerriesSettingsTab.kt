@@ -18,12 +18,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val BG_CARD = Color(0xFF141414)
-private val TEXT = Color.White
+private val BG_CARD: Color get() = AppColors.surfaceVariant
+private val TEXT: Color get() = AppColors.text
 
 @Composable
 fun BerriesSettingsTab(

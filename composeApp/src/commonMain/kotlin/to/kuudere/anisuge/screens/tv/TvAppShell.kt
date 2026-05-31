@@ -63,6 +63,7 @@ import to.kuudere.anisuge.screens.home.HomeUiState
 import to.kuudere.anisuge.screens.home.HomeViewModel
 import to.kuudere.anisuge.screens.search.SearchViewModel
 import to.kuudere.anisuge.screens.watchlist.WatchlistViewModel
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.AnimeCard
 import to.kuudere.anisuge.ui.tvFocusableClick
 
@@ -103,7 +104,7 @@ fun TvAppShell(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(AppColors.background),
     ) {
         TvRail(
             currentTab = currentTab,
@@ -119,7 +120,7 @@ fun TvAppShell(
             modifier = Modifier
                 .width(1.dp)
                 .fillMaxHeight()
-                .background(Color.White.copy(alpha = 0.08f)),
+                .background(AppColors.border),
         )
 
         Box(
@@ -175,7 +176,7 @@ private fun TvRail(
         modifier = Modifier
             .width(132.dp)
             .fillMaxHeight()
-            .background(Color(0xFF050505))
+            .background(AppColors.background)
             .padding(horizontal = 14.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -185,7 +186,7 @@ private fun TvRail(
         ) {
             Text(
                 text = "AniSuge",
-                color = Color.White,
+                color = AppColors.text,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp),
@@ -249,8 +250,8 @@ private fun TvRailButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val bgColor = if (selected) Color.White.copy(alpha = 0.12f) else Color.Transparent
-    val borderColor = if (selected) Color.White.copy(alpha = 0.16f) else Color.Transparent
+    val bgColor = if (selected) AppColors.surfaceVariant else Color.Transparent
+    val borderColor = if (selected) AppColors.border else Color.Transparent
 
     Row(
         modifier = modifier
@@ -263,8 +264,8 @@ private fun TvRailButton(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = Color.White)
-        Text(label, color = Color.White, fontSize = 14.sp)
+        Icon(icon, contentDescription = null, tint = AppColors.text)
+        Text(label, color = AppColors.text, fontSize = 14.sp)
     }
 }
 
@@ -420,7 +421,7 @@ private fun TvHero(
         ) {
             Text(
                 text = title,
-                color = Color.White,
+                color = AppColors.text,
                 fontSize = 38.sp,
                 fontWeight = FontWeight.Bold,
                 lineHeight = 42.sp,
@@ -433,7 +434,7 @@ private fun TvHero(
             if (desc.isNotBlank()) {
                 Text(
                     text = desc,
-                    color = Color.White.copy(alpha = 0.78f),
+                    color = AppColors.textMuted,
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
                     maxLines = 3,
@@ -445,17 +446,17 @@ private fun TvHero(
             ) {
                 Row(
                     modifier = Modifier
-                        .background(Color.White, RoundedCornerShape(999.dp))
+                        .background(AppColors.accent, RoundedCornerShape(999.dp))
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
-                    Text("Open", color = Color.Black, fontWeight = FontWeight.SemiBold)
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = AppColors.onAccent)
+                    Text("Open", color = AppColors.onAccent, fontWeight = FontWeight.SemiBold)
                 }
                 Text(
                     text = "DPAD OK to open",
-                    color = Color.White.copy(alpha = 0.55f),
+                    color = AppColors.textMuted,
                     fontSize = 13.sp,
                 )
             }
@@ -483,7 +484,7 @@ private fun TvContinueWatchingCard(
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF101010)),
+                .background(AppColors.surface),
         ) {
             AsyncImage(
                 model = item.banner ?: item.cover,
@@ -505,7 +506,7 @@ private fun TvContinueWatchingCard(
                     modifier = Modifier
                         .fillMaxWidth(progressFrac)
                         .height(5.dp)
-                        .background(Color(0xFFBF80FF)),
+                        .background(AppColors.accent),
                 )
             }
 

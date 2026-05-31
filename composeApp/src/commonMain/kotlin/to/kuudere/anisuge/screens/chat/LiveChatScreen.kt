@@ -79,6 +79,7 @@ import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ChatAction
 import to.kuudere.anisuge.data.models.ChatAnimeCard
 import to.kuudere.anisuge.data.models.ChatMessage
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ChatUsernameLabel
 import to.kuudere.anisuge.ui.ChatDecoratedAvatar
 import to.kuudere.anisuge.ui.chatAccentColor
@@ -274,7 +275,7 @@ fun LiveChatScreen(
                     if (state.error != null) {
                         Text(
                             state.error ?: "",
-                            color = Color(0xFFFF6B6B),
+                            color = AppColors.error,
                             fontSize = 13.sp,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -367,7 +368,7 @@ fun LiveChatScreen(
                             if (state.cooldownSecondsLeft > 0) {
                                 Text(
                                     "Wait ${state.cooldownSecondsLeft}s",
-                                    color = Color(0xFFFF6B6B).copy(alpha = 0.8f),
+                                    color = AppColors.error.copy(alpha = 0.8f),
                                     fontSize = 11.sp,
                                     modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
                                 )
@@ -384,11 +385,11 @@ fun LiveChatScreen(
                                     Text("Message…", color = Color.White.copy(alpha = 0.4f))
                                 },
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White,
-                                    cursorColor = Color(0xFFE50914),
-                                    focusedBorderColor = Color(0xFFE50914),
-                                    unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                                    focusedTextColor = AppColors.text,
+                                    unfocusedTextColor = AppColors.text,
+                                    cursorColor = AppColors.accent,
+                                    focusedBorderColor = AppColors.accent,
+                                    unfocusedBorderColor = AppColors.border,
                                 ),
                                 shape = RoundedCornerShape(24.dp),
                                 maxLines = 4,
@@ -403,9 +404,9 @@ fun LiveChatScreen(
                                 .clip(CircleShape)
                                 .background(
                                     when {
-                                        state.cooldownSecondsLeft > 0 -> Color(0xFF333333)
-                                        state.draft.isNotBlank() -> Color(0xFFE50914)
-                                        else -> Color(0xFF333333)
+                                        state.cooldownSecondsLeft > 0 -> AppColors.border
+                                        state.draft.isNotBlank() -> AppColors.accent
+                                        else -> AppColors.border
                                     },
                                 ),
                         ) {
@@ -826,7 +827,7 @@ private fun AnimePickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF111111),
+        containerColor = AppColors.surface,
         titleContentColor = Color.White,
         textContentColor = Color.White,
         title = { Text("Share anime") },
@@ -841,14 +842,14 @@ private fun AnimePickerDialog(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color.White,
-                        cursorColor = Color(0xFFE50914),
-                        focusedBorderColor = Color(0xFFE50914),
+                        cursorColor = AppColors.accent,
+                        focusedBorderColor = AppColors.accent,
                         unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
                     ),
                 )
 
                 if (error != null) {
-                    Text(error, color = Color(0xFFFF6B6B), fontSize = 12.sp)
+                    Text(error, color = AppColors.error, fontSize = 12.sp)
                 }
 
                 Box(Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 390.dp)) {

@@ -30,6 +30,7 @@ import io.ktor.client.request.header
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.utils.formatFloat
 
 internal fun formatBytesOneDecimalPreferredUnit(bytes: Long): String =
@@ -96,7 +97,7 @@ fun DirectMp4QualityPicker(
             options.forEach { (quality, url, hdrs) ->
                 val sizeText = sizeByQuality[quality]
                 val stillLoading = loadingByQuality.containsKey(quality)
-                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                HorizontalDivider(color = AppColors.border)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -106,7 +107,7 @@ fun DirectMp4QualityPicker(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             quality,
-                            color = Color.White,
+                            color = AppColors.text,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -133,10 +134,10 @@ fun DirectMp4QualityPicker(
                         modifier = Modifier
                             .heightIn(min = 40.dp)
                             .padding(start = 8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
                         shape = RoundedCornerShape(8.dp),
                     ) {
-                        Text("Download", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("Download", color = AppColors.onAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
             }

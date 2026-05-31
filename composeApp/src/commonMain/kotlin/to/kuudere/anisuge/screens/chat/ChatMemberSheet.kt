@@ -46,6 +46,7 @@ import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.ChatMemberProfile
 import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.data.models.ChatProfileLibraryItem
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ChatDecoratedAvatar
 import to.kuudere.anisuge.ui.ChatUsernameLabel
 
@@ -83,7 +84,7 @@ fun ChatMemberSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF141414),
+        containerColor = AppColors.surface,
         modifier = Modifier.fillMaxHeight(0.92f),
         dragHandle = {
             Box(
@@ -129,7 +130,7 @@ fun ChatMemberSheet(
                 member.detailError != null -> item {
                     Text(
                         member.detailError,
-                        color = Color(0xFFFF6B6B),
+                        color = AppColors.error,
                         fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -192,11 +193,11 @@ fun ChatMemberSheet(
                                 Text("Search ${member.watchlist.size} saved titles", color = Color.White.copy(alpha = 0.38f))
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                cursorColor = Color(0xFFE50914),
-                                focusedBorderColor = Color.White.copy(alpha = 0.24f),
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.14f),
+                                focusedTextColor = AppColors.text,
+                                unfocusedTextColor = AppColors.text,
+                                cursorColor = AppColors.accent,
+                                focusedBorderColor = AppColors.border,
+                                unfocusedBorderColor = AppColors.border,
                             ),
                             shape = RoundedCornerShape(10.dp),
                         )

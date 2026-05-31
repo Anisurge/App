@@ -98,6 +98,7 @@ import anisurge.composeapp.generated.resources.logo_txt
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.theme.Border
 import to.kuudere.anisuge.theme.Muted
 import kotlin.math.PI
@@ -189,8 +190,8 @@ fun AuthScreen(
         ) { data ->
             Snackbar(
                 snackbarData = data,
-                containerColor = Color(0xFFBF80FF),
-                contentColor = Color.White,
+                containerColor = AppColors.accent,
+                contentColor = AppColors.onAccent,
                 shape = RoundedCornerShape(8.dp),
             )
         }
@@ -207,7 +208,7 @@ private fun TvPasswordAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.fillMaxSize().background(AppColors.background), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier
                 .widthIn(max = 520.dp)
@@ -251,7 +252,7 @@ private fun DesktopAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
                 Text(
                     text = "Stream, Discover &\nDownload",
                     style = MaterialTheme.typography.headlineLarge,
-                    color = Color.White,
+                    color = AppColors.text,
                     fontSize = 42.sp,
                     lineHeight = 46.sp,
                     letterSpacing = (-1.5).sp
@@ -260,7 +261,7 @@ private fun DesktopAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
                 Text(
                     text = "Find and download torrents, watch trailers, manage your list, search, browse and discover anime, watch together with friends and more, all in the same interface.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF999999),
+                    color = AppColors.textMuted,
                     fontSize = 16.sp,
                     lineHeight = 25.sp,
                 )
@@ -298,7 +299,7 @@ private fun DesktopAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
                         }
                     }
                 }
-                .background(Color(0xFF000000)),
+                .background(AppColors.surface),
             contentAlignment = Alignment.Center,
         ) {
             Column(
@@ -357,7 +358,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                     AuthMode.RESET_PASSWORD -> "Reset password"
                 },
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
+                color = AppColors.text,
                 fontSize = 26.sp,
                 fontWeight = FontWeight.W700,
                 letterSpacing = (-0.5).sp
@@ -377,7 +378,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                     AuthMode.RESET_PASSWORD -> "Enter the code from your email and choose a new password"
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF999999),
+                color = AppColors.textMuted,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.W400,
             )
@@ -429,21 +430,21 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.08f))
-                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+                .background(AppColors.surface)
+                .border(1.dp, AppColors.border, RoundedCornerShape(12.dp))
                 .padding(14.dp),
         ) {
             Column {
                 Text(
                     "Code sent",
-                    color = Color.White,
+                    color = AppColors.text,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.W700,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "Check ${state.identifier.ifBlank { "your email" }} for a 6-digit Anisurge reset code.",
-                    color = Color.White.copy(alpha = 0.72f),
+                    color = AppColors.textMuted,
                     fontSize = 12.sp,
                     lineHeight = 17.sp,
                 )
@@ -518,7 +519,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
                 ) {
                     Text(
                         text = "Forgot password?",
-                        color = Color.White,
+                        color = AppColors.textMuted,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.W500,
                     )
@@ -536,14 +537,14 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
         modifier = Modifier.fillMaxWidth().height(48.dp),
         shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color.White,
-            contentColor = Color.Black,
-            disabledContainerColor = Color.White.copy(alpha = 0.6f),
-            disabledContentColor = Color.Black,
+            containerColor = AppColors.accent,
+            contentColor = AppColors.onAccent,
+            disabledContainerColor = AppColors.accent.copy(alpha = 0.6f),
+            disabledContentColor = AppColors.onAccent,
         ),
     ) {
         if (state.isLoading) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = AppColors.onAccent, strokeWidth = 2.dp)
         } else {
             Text(
                 text = when (state.mode) {
@@ -619,7 +620,7 @@ private fun AnisugTextField(
             fontSize = 14.sp,
             fontWeight = FontWeight.W600,
             letterSpacing = 0.2.sp,
-            color = Color.White,
+            color = AppColors.text,
             modifier = Modifier.padding(bottom = 8.dp),
         )
         BasicTextField(
@@ -630,7 +631,7 @@ private fun AnisugTextField(
                 .height(48.dp)
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
             textStyle = TextStyle(
-                color = Color.White,
+                color = AppColors.text,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.W400,
             ),
@@ -639,15 +640,15 @@ private fun AnisugTextField(
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
             keyboardActions = KeyboardActions(onAny = { onImeAction() }),
             interactionSource = interactionSource,
-            cursorBrush = SolidColor(Color.White),
+            cursorBrush = SolidColor(AppColors.text),
             decorationBox = { innerTextField ->
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                        .background(AppColors.surface, RoundedCornerShape(6.dp))
                         .border(
                             width = if (isFocused) 1.5.dp else 1.dp,
-                            color = if (isFocused) Color.White else Color(0xFF000000),
+                            color = if (isFocused) AppColors.accent else AppColors.border,
                             shape = RoundedCornerShape(6.dp)
                         )
                         .padding(horizontal = 14.dp),
@@ -656,8 +657,8 @@ private fun AnisugTextField(
                     Box(modifier = Modifier.weight(1f)) {
                         if (value.isEmpty()) {
                             Text(
-                                text = placeholder, 
-                                color = Color.White.copy(alpha = 0.7f), 
+                                text = placeholder,
+                                color = AppColors.textMuted,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.W400,
                             )
@@ -672,7 +673,7 @@ private fun AnisugTextField(
                             Icon(
                                 imageVector = if (showPassword) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
                                 contentDescription = if (showPassword) "Hide password" else "Show password",
-                                tint = if (isFocused) Color.White else Color(0xFF666666),
+                                tint = if (isFocused) AppColors.text else AppColors.textDim,
                                 modifier = Modifier.size(20.dp)
                             )
                         }

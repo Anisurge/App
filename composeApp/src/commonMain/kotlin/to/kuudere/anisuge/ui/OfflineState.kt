@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.kuudere.anisuge.i18n.LocalAppStrings
+import to.kuudere.anisuge.theme.AppColors
 
 @Composable
 fun OfflineState(
@@ -40,7 +41,7 @@ fun OfflineState(
     val strings = LocalAppStrings.current
     Box(
         modifier = modifier
-            .background(Color(0xFF000000)),
+            .background(AppColors.background),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -53,13 +54,13 @@ fun OfflineState(
                 modifier = Modifier
                     .size(80.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.05f)),
+                    .background(AppColors.text.copy(alpha = 0.05f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Outlined.WifiOff,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.4f),
+                    tint = AppColors.textMuted,
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -68,7 +69,7 @@ fun OfflineState(
 
             Text(
                 text = strings.noInternetConnection,
-                color = Color.White,
+                color = AppColors.text,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center
@@ -76,7 +77,7 @@ fun OfflineState(
 
             Text(
                 text = strings.offlineDescription,
-                color = Color.White.copy(alpha = 0.5f),
+                color = AppColors.textMuted,
                 fontSize = 14.sp,
                 lineHeight = 22.sp,
                 textAlign = TextAlign.Center
@@ -88,17 +89,17 @@ fun OfflineState(
                 onClick = onRetry,
                 enabled = !isLoading,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White,
-                    contentColor   = Color.Black,
-                    disabledContainerColor = Color.White.copy(alpha = 0.7f),
-                    disabledContentColor   = Color.Black.copy(alpha = 0.5f)
+                    containerColor = AppColors.accent,
+                    contentColor   = AppColors.onAccent,
+                    disabledContainerColor = AppColors.accent.copy(alpha = 0.7f),
+                    disabledContentColor   = AppColors.onAccent.copy(alpha = 0.5f)
                 ),
                 shape = RoundedCornerShape(12.dp),
                 contentPadding = PaddingValues(horizontal = 32.dp, vertical = 14.dp)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
-                        color = Color.Black.copy(alpha = 0.6f),
+                        color = AppColors.onAccent.copy(alpha = 0.6f),
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(18.dp)
                     )

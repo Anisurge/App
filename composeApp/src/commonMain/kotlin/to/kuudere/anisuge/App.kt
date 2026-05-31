@@ -51,6 +51,7 @@ import to.kuudere.anisuge.screens.latest.LatestViewModel
 import to.kuudere.anisuge.screens.newonapp.NewOnAppScreen
 import to.kuudere.anisuge.screens.tv.TvAppShell
 import to.kuudere.anisuge.theme.AnisugTheme
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.theme.AppThemeId
 import androidx.navigation.NamedNavArgument
 import androidx.navigation.navArgument
@@ -292,7 +293,7 @@ fun App(
             LocalAppStrings provides appStrings,
             LocalPreferRomajiAnimeTitles provides preferRomajiAnimeTitles,
         ) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            Box(modifier = Modifier.fillMaxSize().background(AppColors.background)) {
                 if (!isWatchScreen) {
                     LockScreenOrientation(landscape = isAndroidTvPlatform)
                 }

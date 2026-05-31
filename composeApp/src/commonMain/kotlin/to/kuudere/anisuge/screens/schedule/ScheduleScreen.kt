@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -83,13 +84,13 @@ import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.OfflineState
 import to.kuudere.anisuge.ui.tvFocusableClick
 
-private val BG = Color(0xFF000000)
-private val CARD = Color(0xFF0A0A0A)
-private val CARD_HOVER = Color(0xFF121212)
-private val BORDER = Color.White.copy(alpha = 0.10f)
-private val MUTED = Color.White.copy(alpha = 0.55f)
-private val DIM = Color.White.copy(alpha = 0.34f)
-private val ACCENT = Color(0xFFBF80FF)
+private val BG: Color get() = AppColors.background
+private val CARD: Color get() = AppColors.surface
+private val CARD_HOVER: Color get() = AppColors.surfaceVariant
+private val BORDER: Color get() = AppColors.border
+private val MUTED: Color get() = AppColors.textMuted
+private val DIM: Color get() = AppColors.textDim
+private val ACCENT: Color get() = AppColors.accent
 
 private val DOW_NAMES = arrayOf("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
 private val DOW_SHORT = arrayOf("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")

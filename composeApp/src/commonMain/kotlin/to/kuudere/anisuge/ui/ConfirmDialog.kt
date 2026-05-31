@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import to.kuudere.anisuge.i18n.LocalAppStrings
+import to.kuudere.anisuge.theme.AppColors
 
 @Composable
 fun ConfirmDialog(
@@ -77,8 +78,8 @@ fun ConfirmDialog(
                         .widthIn(max = 380.dp)
                         .padding(horizontal = 24.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Color(0xFF000000))
-                        .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(20.dp))
+                        .background(AppColors.surface)
+                        .border(1.dp, AppColors.border, RoundedCornerShape(20.dp))
                         .clickable(
                             onClick = {},
                             indication = null,
@@ -95,14 +96,14 @@ fun ConfirmDialog(
                     ) {
                         Text(
                             text = title,
-                            color = Color.White,
+                            color = AppColors.text,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
                         )
                         Text(
                             text = message,
-                            color = Color.White.copy(alpha = 0.55f),
+                            color = AppColors.textMuted,
                             fontSize = 13.sp,
                             lineHeight = 19.sp,
                             textAlign = TextAlign.Center,
@@ -110,7 +111,7 @@ fun ConfirmDialog(
                     }
 
                     // Divider
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.07f)))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(AppColors.border))
 
                     // Action row
                     Row(modifier = Modifier.fillMaxWidth().height(52.dp)) {
@@ -120,7 +121,7 @@ fun ConfirmDialog(
                             modifier = Modifier.weight(1f),
                             onClick = onDismiss,
                         )
-                        Box(Modifier.width(1.dp).fillMaxHeight().background(Color.White.copy(alpha = 0.08f)))
+                        Box(Modifier.width(1.dp).fillMaxHeight().background(AppColors.border))
                         DialogActionCell(
                             label = confirmLabel,
                             icon = Icons.Default.Delete,
@@ -144,7 +145,7 @@ private fun DialogActionCell(
     onClick: () -> Unit,
 ) {
     val tint by animateColorAsState(
-        targetValue = if (isPrimary) Color.White else Color.White.copy(alpha = 0.65f),
+        targetValue = if (isPrimary) AppColors.text else AppColors.textMuted,
         animationSpec = tween(200),
     )
 

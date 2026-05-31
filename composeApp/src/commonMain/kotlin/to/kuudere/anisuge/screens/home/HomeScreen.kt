@@ -1,6 +1,7 @@
 package to.kuudere.anisuge.screens.home
 
 import to.kuudere.anisuge.ui.OfflineState
+import to.kuudere.anisuge.theme.AppColors
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -309,7 +310,7 @@ fun HomeScreen(
         )
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF000000))) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(AppColors.background)) {
         val isDesktop = maxWidth >= 800.dp
 
         Row(Modifier.fillMaxSize()) {
@@ -567,7 +568,7 @@ private fun TabContent(
                     when {
                         isLoading ->
                             Box(Modifier.fillMaxSize(), Alignment.Center) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+                                CircularProgressIndicator(color = AppColors.accent, strokeWidth = 3.dp)
                             }
 
                         homeState.isOffline && homeState.latestAired.isEmpty() ->
@@ -584,12 +585,12 @@ private fun TabContent(
                                 ) {
                                     Text(
                                         homeState.error!!,
-                                        color = Color.White.copy(alpha = 0.7f),
+                                        color = AppColors.textMuted,
                                         textAlign = TextAlign.Center
                                     )
                                     Button(
                                         onClick = { homeViewModel.refresh(force = true) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))
+                                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent)
                                     ) { Text("Retry") }
                                 }
                             }
@@ -806,8 +807,8 @@ private fun EmptyLayoutPlaceholder(onOpenEditor: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(strings.homeLayoutEmptyMessage, color = Color.White.copy(alpha = 0.72f), textAlign = TextAlign.Center)
-        Button(onClick = onOpenEditor, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))) {
+        Text(strings.homeLayoutEmptyMessage, color = AppColors.textMuted, textAlign = TextAlign.Center)
+        Button(onClick = onOpenEditor, colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent)) {
             Text(strings.openLayoutEditor)
         }
     }
@@ -866,7 +867,7 @@ private fun HeroCarousel(
             }
         } else {
             // ── Desktop: full-bleed hero ─────────────────────────────────
-            val bgColor = Color(0xFF000000)
+            val bgColor = AppColors.background
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -1232,7 +1233,7 @@ private fun HeroCarouselExpanded(
                             0.28f to Color.Transparent,
                             0.58f to Color.Black.copy(alpha = 0.42f),
                             0.82f to Color.Black.copy(alpha = 0.80f),
-                            1.0f to Color(0xFF000000)
+                            1.0f to AppColors.background
                         )
                         onDrawBehind { drawRect(gradient) }
                     }
@@ -1787,9 +1788,9 @@ private fun SectionHeader(title: String, onViewMore: (() -> Unit)?) {
                     .width(3.dp)
                     .height(20.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(Color(0xFFBF80FF))
+                    .background(AppColors.accent)
             )
-            Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(title, color = AppColors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
         if (onViewMore != null) {
             Row(
@@ -1800,11 +1801,11 @@ private fun SectionHeader(title: String, onViewMore: (() -> Unit)?) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text("See all", color = Color(0xFFBF80FF), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("See all", color = AppColors.accent, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = null,
-                    tint = Color(0xFFBF80FF),
+                    tint = AppColors.accent,
                     modifier = Modifier.size(14.dp)
                 )
             }
@@ -1925,7 +1926,7 @@ private fun AnisugSidebar(
         Column(
             Modifier
                 .fillMaxSize()
-                .background(Color(0xFF000000)),
+                .background(AppColors.background),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -2291,8 +2292,8 @@ private fun AnisugBottomBar(
             )
     } else {
         Modifier
-            .background(Color(0xFF0D0D0D).copy(alpha = 0.86f))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), navShape)
+            .background(AppColors.surface.copy(alpha = 0.92f))
+            .border(1.dp, AppColors.border, navShape)
             .hazeChild(
                 state = hazeState,
                 style = HazeStyle(
@@ -2367,7 +2368,7 @@ private fun NormalAnisugBottomBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF080808))
+            .background(AppColors.surface)
             .hazeChild(
                 state = hazeState,
                 style = HazeStyle(
@@ -2431,11 +2432,11 @@ private fun RowScope.BottomNavItem(
     onClick: () -> Unit,
 ) {
     val tint by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFFBF80FF) else Color.White.copy(alpha = 0.38f),
+        targetValue = if (isSelected) AppColors.accent else AppColors.textMuted,
         animationSpec = tween(220)
     )
     val bgColor by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFFBF80FF).copy(alpha = 0.13f) else Color.Transparent,
+        targetValue = if (isSelected) AppColors.accent.copy(alpha = 0.13f) else Color.Transparent,
         animationSpec = tween(220)
     )
 
@@ -2468,8 +2469,8 @@ private fun RowScope.BottomNavItem(
 private fun BottomBarIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     isSelected: Boolean,
-    selectedTint: Color = Color(0xFFBF80FF),
-    defaultTint: Color = Color.White.copy(alpha = 0.38f),
+    selectedTint: Color = AppColors.accent,
+    defaultTint: Color = AppColors.textMuted,
     liquidGlass: Boolean = false,
     onClick: () -> Unit = {}
 ) {
@@ -2485,7 +2486,7 @@ private fun BottomBarIcon(
     val animatedBg by animateColorAsState(
         targetValue = when {
             isSelected && liquidGlass -> Color.Black.copy(alpha = 0.08f)
-            isSelected -> Color(0xFFBF80FF).copy(alpha = 0.13f)
+            isSelected -> AppColors.accent.copy(alpha = 0.13f)
             else -> Color.Transparent
         },
         animationSpec = tween(durationMillis = 220)
@@ -2605,18 +2606,18 @@ fun DownloadsTab(
                 Icon(
                     imageVector = androidx.compose.material.icons.Icons.Outlined.Download,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.25f),
+                    tint = AppColors.textDim,
                     modifier = Modifier.size(56.dp),
                 )
                 Text(
                     text = "No downloads yet",
-                    color = Color.White,
+                    color = AppColors.text,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     text = "Episodes you download will appear here\nand play without an internet connection.",
-                    color = Color.White.copy(alpha = 0.45f),
+                    color = AppColors.textMuted,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 32.dp),
@@ -2627,7 +2628,7 @@ fun DownloadsTab(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF000000))
+                .background(AppColors.background)
         ) {
             val cols = when {
                 maxWidth >= 900.dp -> 3
@@ -2656,14 +2657,14 @@ fun DownloadsTab(
                         Column {
                             Text(
                                 "Downloads",
-                                color = Color.White,
+                                color = AppColors.text,
                                 fontSize = 28.sp,
                                 fontWeight = FontWeight.Bold,
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 text = "Offline-ready episodes, live progress, and quick actions in one place.",
-                                color = Color.White.copy(alpha = 0.55f),
+                                color = AppColors.textMuted,
                                 fontSize = 14.sp,
                                 lineHeight = 20.sp,
                             )
@@ -2675,7 +2676,7 @@ fun DownloadsTab(
                                 DownloadsStatChip(
                                     label = "Active",
                                     value = activeCount.toString(),
-                                    accent = Color.White
+                                    accent = AppColors.accent
                                 )
                                 DownloadsStatChip(
                                     label = "Finished",
@@ -2695,7 +2696,7 @@ fun DownloadsTab(
                                 Modifier
                                     .fillMaxWidth()
                                     .height(1.dp)
-                                    .background(Color.White.copy(alpha = 0.08f))
+                                    .background(AppColors.border)
                             )
                         }
                     }
@@ -2752,7 +2753,7 @@ private fun DownloadAnimeHeader(group: DownloadAnimeGroup) {
             modifier = Modifier
                 .size(42.dp)
                 .clip(RoundedCornerShape(7.dp))
-                .background(Color.White.copy(alpha = 0.06f)),
+                .background(AppColors.surfaceVariant),
         ) {
             group.coverImage?.let {
                 AsyncImage(
@@ -2766,7 +2767,7 @@ private fun DownloadAnimeHeader(group: DownloadAnimeGroup) {
         Column(Modifier.weight(1f)) {
             Text(
                 group.title,
-                color = Color.White,
+                color = AppColors.text,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -2774,7 +2775,7 @@ private fun DownloadAnimeHeader(group: DownloadAnimeGroup) {
             )
             Text(
                 "${group.tasks.size} episode${if (group.tasks.size == 1) "" else "s"} queued • $active active • $finished ready",
-                color = Color.White.copy(alpha = 0.52f),
+                color = AppColors.textMuted,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -2836,8 +2837,8 @@ private fun DownloadsStatChip(
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(Color.White.copy(alpha = 0.035f))
-            .border(1.dp, Color.White.copy(alpha = 0.09f), RoundedCornerShape(999.dp))
+            .background(AppColors.surfaceVariant)
+            .border(1.dp, AppColors.border, RoundedCornerShape(999.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2848,8 +2849,8 @@ private fun DownloadsStatChip(
                 .clip(CircleShape)
                 .background(accent)
         )
-        Text(label, color = Color.White.copy(alpha = 0.68f), fontSize = 12.sp)
-        Text(value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, color = AppColors.textMuted, fontSize = 12.sp)
+        Text(value, color = AppColors.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -2865,11 +2866,11 @@ private fun DownloadTaskCard(
     var showConfirmRemove by remember { mutableStateOf(false) }
 
     val backgroundColor by animateColorAsState(
-        targetValue = if (hovered) Color.White.copy(alpha = 0.055f) else Color.White.copy(alpha = 0.03f),
+        targetValue = if (hovered) AppColors.surfaceVariant else AppColors.surface,
         animationSpec = tween(260, easing = FastOutSlowInEasing)
     )
     val borderColor by animateColorAsState(
-        targetValue = if (hovered) Color.White.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.10f),
+        targetValue = if (hovered) AppColors.border.copy(alpha = 0.5f) else AppColors.border,
         animationSpec = tween(260, easing = FastOutSlowInEasing)
     )
     val scale by animateFloatAsState(
@@ -2884,8 +2885,8 @@ private fun DownloadTaskCard(
     val accentColor = when {
         isTaskFinishedStatus(task.status) -> Color(0xFF48E27A)
         task.status.startsWith("Failed") -> Color(0xFFFF6B6B)
-        task.isPaused -> Color.White.copy(alpha = 0.65f)
-        else -> Color.White
+        task.isPaused -> AppColors.textMuted
+        else -> AppColors.text
     }
     val statusLabel = when {
         isTaskFinishedStatus(task.status) -> "Ready offline"
@@ -2929,7 +2930,7 @@ private fun DownloadTaskCard(
                     .fillMaxHeight()
                     .aspectRatio(0.72f)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.05f))
+                    .background(AppColors.surfaceVariant)
             ) {
                 if (task.coverImage != null) {
                     AsyncImage(
@@ -2951,7 +2952,7 @@ private fun DownloadTaskCard(
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = task.title,
-                        color = Color.White,
+                        color = AppColors.text,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -2960,13 +2961,13 @@ private fun DownloadTaskCard(
                     )
                     Text(
                         text = "Episode ${task.episodeNumber}",
-                        color = Color.White.copy(alpha = 0.45f),
+                        color = AppColors.textDim,
                         fontSize = 11.sp,
                     )
                     if (!isActive) {
                         Text(
                             text = detailText,
-                            color = Color.White.copy(alpha = 0.55f),
+                            color = AppColors.textMuted,
                             fontSize = 11.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
@@ -2976,7 +2977,7 @@ private fun DownloadTaskCard(
                     if (isActive) {
                         Text(
                             text = detailText,
-                            color = Color.White.copy(alpha = 0.50f),
+                            color = AppColors.textMuted,
                             fontSize = 10.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -3002,7 +3003,7 @@ private fun DownloadTaskCard(
                             )
                             Text(
                                 text = "${(progressValue * 100).toInt()}%",
-                                color = Color.White.copy(alpha = 0.45f),
+                                color = AppColors.textDim,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
                             )
@@ -3011,7 +3012,7 @@ private fun DownloadTaskCard(
                             progress = { progressValue },
                             modifier = Modifier.fillMaxWidth().height(3.dp).clip(CircleShape),
                             color = accentColor,
-                            trackColor = Color.White.copy(alpha = 0.08f),
+                            trackColor = AppColors.border,
                         )
                     }
                 }
@@ -3019,7 +3020,7 @@ private fun DownloadTaskCard(
         }
 
         // ── Divider ───────────────────────────────────────────────────
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.07f)))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(AppColors.border))
 
         // ── Bottom action bar: 3 equal columns ────────────────────────
         Row(modifier = Modifier.fillMaxWidth().height(52.dp)) {
@@ -3031,7 +3032,7 @@ private fun DownloadTaskCard(
                     modifier = Modifier.weight(1f),
                     onClick = { task.localPath?.let { to.kuudere.anisuge.utils.openDirectory(it) } },
                 )
-                Box(Modifier.width(1.dp).fillMaxSize().background(Color.White.copy(alpha = 0.07f)))
+                Box(Modifier.width(1.dp).fillMaxSize().background(AppColors.border))
                 // Play button (primary)
                 CardActionCell(
                     icon = Icons.Default.PlayArrow,
@@ -3059,11 +3060,11 @@ private fun DownloadTaskCard(
                         if (task.isPaused) manager.resumeDownload(task.id) else manager.pauseDownload(task.id)
                     },
                 )
-                Box(Modifier.width(1.dp).fillMaxSize().background(Color.White.copy(alpha = 0.07f)))
+                Box(Modifier.width(1.dp).fillMaxSize().background(AppColors.border))
                 // Spacer column (placeholder to keep 3-column structure)
                 Box(Modifier.weight(1f))
             }
-            Box(Modifier.width(1.dp).fillMaxSize().background(Color.White.copy(alpha = 0.07f)))
+            Box(Modifier.width(1.dp).fillMaxSize().background(AppColors.border))
             // Remove button — always last
             CardActionCell(
                 icon = Icons.Default.Close,
@@ -3100,10 +3101,10 @@ private fun CardActionCell(
 
     val bg by animateColorAsState(
         targetValue = when {
-            isPrimary && hovered -> Color.White.copy(alpha = 0.14f)
+            isPrimary && hovered -> AppColors.text.copy(alpha = 0.14f)
             isPrimary -> Color.Transparent
             isDanger && hovered -> Color(0xFFFF6B6B).copy(alpha = 0.12f)
-            hovered -> Color.White.copy(alpha = 0.07f)
+            hovered -> AppColors.text.copy(alpha = 0.07f)
             else -> Color.Transparent
         },
         animationSpec = tween(200, easing = FastOutSlowInEasing)
@@ -3112,7 +3113,7 @@ private fun CardActionCell(
         targetValue = when {
             isPrimary -> Color(0xFF48E27A)
             isDanger -> Color(0xFFFF6B6B).copy(alpha = 0.85f)
-            else -> Color.White.copy(alpha = 0.75f)
+            else -> AppColors.textMuted
         },
         animationSpec = tween(200, easing = FastOutSlowInEasing)
     )

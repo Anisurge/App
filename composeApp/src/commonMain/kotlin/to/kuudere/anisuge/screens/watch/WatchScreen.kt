@@ -48,6 +48,7 @@ import to.kuudere.anisuge.platform.DiscordPresenceActivity
 import to.kuudere.anisuge.platform.DiscordRichPresenceManager
 import to.kuudere.anisuge.platform.LockScreenOrientation
 import to.kuudere.anisuge.platform.isAndroidPlatform
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.platform.isDesktopPlatform
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.platform.rememberPipManager
@@ -345,7 +346,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
     Column(
         Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(AppColors.background)
     ) {
         // Removed bulky gray header - using floating close button instead
 
@@ -461,7 +462,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                     .width(posterWidth)
                                                     .height(posterHeight)
                                                     .clip(RoundedCornerShape(8.dp))
-                                                    .background(Color(0xFF000000))
+                                                    .background(AppColors.surfaceVariant)
                                             )
                                             Spacer(Modifier.width(16.dp))
                                             Column(Modifier.weight(1f)) {
@@ -478,7 +479,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                 Box(
                                                     Modifier
                                                         .clip(RoundedCornerShape(8.dp))
-                                                        .background(Color(0xFF1D1D1D))
+                                                        .background(AppColors.surfaceVariant)
                                                         .clickable { showWatchlistSheet = true }
                                                         .padding(horizontal = 16.dp, vertical = 8.dp)
                                                 ) {
@@ -486,13 +487,13 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                         Icon(
                                                             if (episodeData?.folder != null) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                                             null,
-                                                            tint = Color.White,
+                                                            tint = AppColors.text,
                                                             modifier = Modifier.size(16.dp)
                                                         )
                                                         Spacer(Modifier.width(8.dp))
                                                         Text(
                                                             text = watchlistButtonLabel,
-                                                            color = Color.White,
+                                                            color = AppColors.text,
                                                             fontSize = 14.sp,
                                                             fontWeight = FontWeight.Medium,
                                                             maxLines = 1,
@@ -517,17 +518,17 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                     Box(
                                                         modifier = Modifier
                                                             .clip(RoundedCornerShape(999.dp))
-                                                            .background(Color(0xFF1C1C1C))
+                                                            .background(AppColors.surface)
                                                             .border(
                                                                 width = 1.dp,
-                                                                color = Color.White.copy(alpha = 0.15f),
+                                                                color = AppColors.border,
                                                                 shape = RoundedCornerShape(999.dp)
                                                             )
                                                             .padding(horizontal = 10.dp, vertical = 6.dp)
                                                     ) {
                                                         Text(
                                                             text = chip,
-                                                            color = Color.White.copy(alpha = 0.95f),
+                                                            color = AppColors.text,
                                                             fontSize = 12.sp,
                                                             fontWeight = FontWeight.Medium,
                                                         )
@@ -540,7 +541,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                         if (anime?.genres?.isNotEmpty() == true) {
                                             Text(
                                                 text = "Genres",
-                                                color = Color.White,
+                                                color = AppColors.text,
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -557,17 +558,17 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                     Box(
                                                         modifier = Modifier
                                                             .clip(RoundedCornerShape(6.dp))
-                                                            .background(Color(0xFF141414))
+                                                            .background(AppColors.surface)
                                                             .border(
                                                                 width = 1.dp,
-                                                                color = Color.White.copy(alpha = 0.10f),
+                                                                color = AppColors.border,
                                                                 shape = RoundedCornerShape(6.dp)
                                                             )
                                                             .padding(horizontal = 10.dp, vertical = 6.dp)
                                                     ) {
                                                         Text(
                                                             text = genre,
-                                                            color = Color.LightGray,
+                                                            color = AppColors.textMuted,
                                                             fontSize = 12.sp,
                                                         )
                                                     }
@@ -579,7 +580,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                         if (animeDescription.isNotBlank()) {
                                             Text(
                                                 text = "Synopsis",
-                                                color = Color.White,
+                                                color = AppColors.text,
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -587,7 +588,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                             Spacer(Modifier.height(8.dp))
                                             Text(
                                                 text = animeDescription,
-                                                color = Color(0xFFD3D3D3),
+                                                color = AppColors.textMuted,
                                                 fontSize = 13.sp,
                                                 lineHeight = 20.sp,
                                                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -733,10 +734,10 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                         .clip(RoundedCornerShape(10.dp))
                                                         .border(
                                                             1.dp,
-                                                            Color.White.copy(alpha = 0.1f),
+                                                            AppColors.border,
                                                             RoundedCornerShape(10.dp)
                                                         )
-                                                        .background(Color.Black)
+                                                        .background(AppColors.surface)
                                                         .clickable(enabled = searchQuery.isBlank() && pageGroups.size > 1) {
                                                             isPageDropdownExpanded = !isPageDropdownExpanded
                                                         }
@@ -837,10 +838,10 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                             .clip(RoundedCornerShape(10.dp))
                                                             .border(
                                                                 1.dp,
-                                                                Color.White.copy(alpha = 0.1f),
+                                                                AppColors.border,
                                                                 RoundedCornerShape(10.dp)
                                                             )
-                                                            .background(Color.Black)
+                                                            .background(AppColors.surface)
                                                     ) {
                                                         Icon(
                                                             imageVector = if (isAscending) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -874,13 +875,13 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                     .fillMaxWidth()
                                                     .clip(RoundedCornerShape(10.dp))
                                                     .background(
-                                                        if (isSelected) Color(0xFF1E1E1E)
-                                                        else Color(0xFF0D0D0D)
+                                                        if (isSelected) AppColors.surfaceVariant
+                                                        else AppColors.surface
                                                     )
                                                     .then(
                                                         if (isSelected) Modifier.border(
                                                             1.dp,
-                                                            Color.White.copy(alpha = 0.15f),
+                                                            AppColors.border,
                                                             RoundedCornerShape(10.dp)
                                                         ) else Modifier
                                                     )
@@ -927,7 +928,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                 Column(Modifier.weight(1f)) {
                                                     Text(
                                                         "Episode ${episode.number}",
-                                                        color = if (isSelected) Color.White else Color.White.copy(alpha = 0.9f),
+                                                        color = if (isSelected) AppColors.text else AppColors.textMuted,
                                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                                         fontSize = 14.sp
                                                     )
@@ -936,7 +937,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                         Spacer(Modifier.height(3.dp))
                                                         Text(
                                                             title,
-                                                            color = if (isSelected) Color.White.copy(alpha = 0.6f) else Color.Gray,
+                                                            color = if (isSelected) AppColors.textMuted else AppColors.textDim,
                                                             fontSize = 12.sp,
                                                             maxLines = 2,
                                                             overflow = TextOverflow.Ellipsis
@@ -949,13 +950,13 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                     Box(
                                                         Modifier
                                                             .size(28.dp)
-                                                            .background(Color.White.copy(alpha = 0.15f), CircleShape),
+                                                            .background(AppColors.accent.copy(alpha = 0.15f), CircleShape),
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         Icon(
                                                             Icons.Default.PlayArrow,
                                                             null,
-                                                            tint = Color.White,
+                                                            tint = AppColors.accent,
                                                             modifier = Modifier.size(16.dp)
                                                         )
                                                     }
@@ -985,7 +986,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                         .width(with(density) { pageDropdownAnchorSize.width.toDp() })
                                         .heightIn(max = pageDropdownItemHeight * pageDropdownVisibleItems)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(Color(0xFF1D1D1D)),
+                                        .background(AppColors.surface),
                                     verticalArrangement = Arrangement.spacedBy(0.dp)
                                 ) {
                                     items(pageGroups, key = { it }) { start ->
@@ -1157,21 +1158,21 @@ private fun WatchPageTabs(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Black),
+            .background(AppColors.background),
     ) {
-        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+        HorizontalDivider(color = AppColors.border)
         TabRow(
             selectedTabIndex = selectedTab.ordinal,
-            containerColor = Color.Black,
-            contentColor = Color.White,
+            containerColor = AppColors.background,
+            contentColor = AppColors.text,
             indicator = { positions ->
                 TabRowDefaults.SecondaryIndicator(
                     modifier = Modifier.tabIndicatorOffset(positions[selectedTab.ordinal]),
-                    color = Color.White,
+                    color = AppColors.accent,
                 )
             },
             divider = {
-                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                HorizontalDivider(color = AppColors.border)
             },
             modifier = Modifier.height(88.dp),
         ) {
@@ -1396,7 +1397,7 @@ private fun EpisodeListContent(
                     .width(with(density) { pageDropdownAnchorSize.width.toDp() })
                     .heightIn(max = pageDropdownItemHeight * pageDropdownVisibleItems)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF1D1D1D)),
+                    .background(AppColors.surface),
                 verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 items(pageGroups, key = { it }) { start ->
@@ -1458,8 +1459,8 @@ private fun EpisodeListHeader(
                     onAnchorPositioned(coordinates.size, coordinates.positionInRoot())
                 }
                 .clip(RoundedCornerShape(10.dp))
-                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
-                .background(Color.Black)
+                .border(1.dp, AppColors.border, RoundedCornerShape(10.dp))
+                .background(AppColors.surface)
                 .clickable(enabled = searchQuery.isBlank() && pageGroups.size > 1) {
                     onPageDropdownClick()
                 }
@@ -1550,13 +1551,13 @@ private fun EpisodeListHeader(
                 modifier = Modifier
                     .size(50.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
-                    .background(Color.Black),
+                    .border(1.dp, AppColors.border, RoundedCornerShape(10.dp))
+                    .background(AppColors.surface),
             ) {
                 Icon(
                     imageVector = if (isAscending) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (isAscending) "Ascending" else "Descending",
-                    tint = Color.White,
+                    tint = AppColors.text,
                 )
             }
         }

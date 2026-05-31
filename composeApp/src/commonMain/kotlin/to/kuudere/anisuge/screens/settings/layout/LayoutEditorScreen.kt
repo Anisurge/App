@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ConfirmDialog
 
 @Composable
@@ -69,7 +70,7 @@ fun LayoutEditorScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(AppColors.background)
             .verticalScroll(rememberScrollState())
             .padding(20.dp),
     ) {
@@ -79,9 +80,9 @@ fun LayoutEditorScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = AppColors.text)
             }
-            Text(strings.homeLayout, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(strings.homeLayout, color = AppColors.text, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             OutlinedButton(onClick = { showResetConfirm = true }) {
                 Text(strings.resetToDefaults)
             }
@@ -94,13 +95,13 @@ fun LayoutEditorScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(strings.homeLayoutSaveFailed, color = Color.White, modifier = Modifier.weight(1f))
+                Text(strings.homeLayoutSaveFailed, color = AppColors.text, modifier = Modifier.weight(1f))
                 Button(
                     onClick = settingsViewModel::retrySaveHomeLayout,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF)),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
                 ) { Text(strings.retry) }
                 IconButton(onClick = settingsViewModel::dismissLayoutSaveError) {
-                    Icon(Icons.Default.Close, contentDescription = null, tint = Color.White)
+                    Icon(Icons.Default.Close, contentDescription = null, tint = AppColors.text)
                 }
             }
         }

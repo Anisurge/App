@@ -43,6 +43,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import to.kuudere.anisuge.i18n.LocalAppStrings
+import to.kuudere.anisuge.theme.AppColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -377,9 +378,9 @@ fun DownloadEpisodeDialog(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0D0D0D),
+        containerColor = AppColors.surface,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.2f)) }
+        dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.border) }
     ) {
         Column(
             modifier = Modifier
@@ -416,7 +417,7 @@ fun DownloadEpisodeDialog(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) Color.White else Color(0xFF000000))
+                                .background(if (isSelected) AppColors.accent else AppColors.surface)
                                 .clickable {
                                     selectedServer = server.id
                                 }
@@ -425,7 +426,7 @@ fun DownloadEpisodeDialog(
                         ) {
                             Text(
                                 text = server.displayName,
-                                color = if (isSelected) Color.Black else Color.White,
+                                color = if (isSelected) AppColors.onAccent else AppColors.text,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -477,7 +478,7 @@ fun DownloadEpisodeDialog(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isSelected) Color.White else Color(0xFF000000))
+                                        .background(if (isSelected) AppColors.accent else AppColors.surface)
                                         .clickable {
                                             selectedQualityIndex = index
                                             currentHeaders = availableQualities[index].third
@@ -487,7 +488,7 @@ fun DownloadEpisodeDialog(
                                 ) {
                                     Text(
                                         text = label,
-                                        color = if (isSelected) Color.Black else Color.White,
+                                        color = if (isSelected) AppColors.onAccent else AppColors.text,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -528,14 +529,14 @@ fun DownloadEpisodeDialog(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) Color.White else Color(0xFF000000))
+                                    .background(if (isSelected) AppColors.accent else AppColors.surface)
                                     .clickable { selectedAudioLang = code }
                                     .padding(vertical = 10.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = name,
-                                    color = if (isSelected) Color.Black else Color.White,
+                                    color = if (isSelected) AppColors.onAccent else AppColors.text,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -573,14 +574,14 @@ fun DownloadEpisodeDialog(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) Color.White else Color(0xFF000000))
+                                    .background(if (isSelected) AppColors.accent else AppColors.surface)
                                     .clickable { selectedSubLang = sub }
                                     .padding(horizontal = 16.dp, vertical = 10.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = sub,
-                                    color = if (isSelected) Color.Black else Color.White,
+                                    color = if (isSelected) AppColors.onAccent else AppColors.text,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -691,10 +692,10 @@ fun DownloadEpisodeDialog(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().height(50.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF000000)),
+                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.surface),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text(strings.delete, color = Color(0xFFBF80FF), fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
+                            Text(strings.delete, color = AppColors.accent, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1)
                         }
                     }
                 }

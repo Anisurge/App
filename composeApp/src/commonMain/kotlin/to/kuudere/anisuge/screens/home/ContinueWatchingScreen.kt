@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.utils.latestPerAnime
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,7 +69,7 @@ fun ContinueWatchingScreen(
                 title = {
                     Text(
                         "Continue Watching",
-                        color = Color.White,
+                        color = AppColors.text,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -78,14 +79,14 @@ fun ContinueWatchingScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint = AppColors.text
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background)
             )
         },
-        containerColor = Color.Black
+        containerColor = AppColors.background
     ) { paddingValues ->
         BoxWithConstraints(
             Modifier
@@ -101,7 +102,7 @@ fun ContinueWatchingScreen(
             when {
                 state.isLoading && state.continueWatchingAll.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color.White)
+                        CircularProgressIndicator(color = AppColors.accent)
                     }
                 }
 
@@ -109,7 +110,7 @@ fun ContinueWatchingScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             "Nothing to continue yet",
-                            color = Color.White.copy(alpha = 0.65f),
+                            color = AppColors.textMuted,
                             fontSize = 15.sp
                         )
                     }
@@ -131,7 +132,7 @@ fun ContinueWatchingScreen(
                         item {
                             Text(
                                 "Showing latest episode per series",
-                                color = Color.White.copy(alpha = 0.62f),
+                                color = AppColors.textMuted,
                                 fontSize = 13.sp,
                                 modifier = Modifier.padding(bottom = 2.dp)
                             )
@@ -174,7 +175,7 @@ private fun ContinueWatchingGridCard(
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF111111))
+                .background(AppColors.surfaceVariant)
         ) {
             AsyncImage(
                 model = item.cover,
@@ -256,7 +257,7 @@ private fun ContinueWatchingGridCard(
         Spacer(Modifier.height(8.dp))
         Text(
             item.resolveDisplayTitle(),
-            color = Color.White,
+            color = AppColors.text,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 2,

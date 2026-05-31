@@ -151,17 +151,18 @@ import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.screens.settings.SettingsTab
 import to.kuudere.anisuge.platform.openUrl
 import to.kuudere.anisuge.theme.AppThemeId
+import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 
-// ── Colors ── Black & white theme ────────────────────────────────────────────────
-private val BG = Color(0xFF000000)
-private val BG_CARD = Color(0xFF0A0A0A)
-private val BG_HOVER = Color(0xFF141414)
-private val BORDER = Color.White.copy(alpha = 0.08f)
-private val MUTED = Color.White.copy(alpha = 0.5f)
-private val TEXT = Color.White
+// ── Colors ── theme-driven (see theme/AppColors.kt) ──────────────────────────────
+private val BG: Color get() = AppColors.background
+private val BG_CARD: Color get() = AppColors.surface
+private val BG_HOVER: Color get() = AppColors.surfaceVariant
+private val BORDER: Color get() = AppColors.border
+private val MUTED: Color get() = AppColors.textMuted
+private val TEXT: Color get() = AppColors.text
 
 private const val ANISURGE_DISCORD_URL = "https://discord.gg/yR4T2dbeCx"
 private const val ANISURGE_TELEGRAM_URL = "https://t.me/anisurge"
@@ -346,7 +347,7 @@ fun SettingsScreen(
                 Snackbar(
                     snackbarData = data,
                     containerColor = if (uiState.errorMessage != null) Color(0xFFBF80FF) else Color(0xFF1B5E20),
-                    contentColor = Color.White
+                    contentColor = AppColors.onAccent
                 )
             }
         },
@@ -605,7 +606,7 @@ private fun Sidebar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isLoggingOut) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                CircularProgressIndicator(color = TEXT, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             } else {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ExitToApp,
@@ -780,7 +781,7 @@ private fun MobileSettingsList(
                     TextButton(
                         onClick = onRetry
                     ) {
-                        Text("Retry", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Retry", color = TEXT, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -798,7 +799,7 @@ private fun MobileSettingsList(
                     .height(100.dp),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                CircularProgressIndicator(color = AppColors.accent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             }
         } else {
             Spacer(modifier = Modifier.height(16.dp))
@@ -903,7 +904,7 @@ private fun MobileSettingsItem(
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (isLoading) {
                 CircularProgressIndicator(
-                    color = Color.White,
+                    color = AppColors.accent,
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp
                 )
@@ -1051,7 +1052,6 @@ private fun MobileSettingsDetail(
                     onDisconnectMal = viewModel::disconnectMal,
                     onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                     onDisconnectAnilist = viewModel::disconnectAnilist,
-                    onWatchHistorySync = viewModel::startWatchHistorySync,
                     onImportFromMAL = viewModel::importLibraryFromMal,
                     onImportFromAniList = viewModel::importLibraryFromAniList,
                     onSyncToMAL = viewModel::syncAllToMAL,
@@ -1212,7 +1212,6 @@ private fun SettingsContent(
                 onDisconnectMal = viewModel::disconnectMal,
                 onConnectAnilist = { viewModel.connectAnilist { url -> openUrl(url) } },
                 onDisconnectAnilist = viewModel::disconnectAnilist,
-                onWatchHistorySync = viewModel::startWatchHistorySync,
                 onImportFromMAL = viewModel::importLibraryFromMal,
                 onImportFromAniList = viewModel::importLibraryFromAniList,
                 onSyncToMAL = viewModel::syncAllToMAL,
@@ -1310,7 +1309,7 @@ private fun AppearanceTab(
 
         SettingCard(
             title = "Theme presets",
-            description = "Pick a built-in color preset. Some legacy screens still use fixed black surfaces, but Material controls update instantly.",
+            description = "Pick a theme. It instantly recolors the whole app — backgrounds, cards, text and accents.",
             modifier = Modifier.fillMaxWidth()
         ) {
             FlowRow(
@@ -1356,7 +1355,7 @@ private fun AppearanceTab(
                 )
                 Button(
                     onClick = onOpenHomeLayout,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent)
                 ) {
                     Text(strings.homeLayout)
                 }
@@ -1417,10 +1416,10 @@ private fun ThemePresetChip(
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(if (selected) Color.White else BG_HOVER)
+            .background(if (selected) AppColors.accent else BG_HOVER)
             .border(
                 width = 1.dp,
-                color = if (selected) Color.White else BORDER,
+                color = if (selected) AppColors.accent else BORDER,
                 shape = RoundedCornerShape(999.dp),
             )
             .clickable(onClick = onClick)
@@ -1437,7 +1436,7 @@ private fun ThemePresetChip(
         )
         Text(
             theme.label,
-            color = if (selected) Color.Black else TEXT,
+            color = if (selected) AppColors.onAccent else TEXT,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -1445,10 +1444,13 @@ private fun ThemePresetChip(
 }
 
 private fun themePreviewColor(theme: AppThemeId): Color = when (theme) {
+    AppThemeId.Light -> Color(0xFFF5F6F8)
     AppThemeId.Default -> Color.White
     AppThemeId.Amoled -> Color(0xFF2A2A2A)
     AppThemeId.Purple -> Color(0xFFBF80FF)
     AppThemeId.Red -> Color(0xFFE50914)
+    AppThemeId.Ocean -> Color(0xFF38BDF8)
+    AppThemeId.Midnight -> Color(0xFF818CF8)
     AppThemeId.HighContrast -> Color(0xFFFFFF00)
 }
 
@@ -1459,7 +1461,6 @@ private fun SyncTab(
     onDisconnectMal: () -> Unit,
     onConnectAnilist: () -> Unit,
     onDisconnectAnilist: () -> Unit,
-    onWatchHistorySync: () -> Unit,
     onImportFromMAL: () -> Unit,
     onImportFromAniList: () -> Unit,
     onSyncToMAL: () -> Unit,
@@ -1475,7 +1476,7 @@ private fun SyncTab(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            "Link MAL and/or AniList, then use Sync library to update your connected accounts.",
+            "Link MAL and/or AniList to import lists and sync progress.",
             color = MUTED,
             fontSize = 14.sp,
             modifier = Modifier.padding(bottom = 32.dp)
@@ -1491,202 +1492,74 @@ private fun SyncTab(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        val anyTrackingLinked = uiState.malConnected || uiState.anilistConnected
-        val showLibraryImportCard =
-            uiState.isSignedIn && (anyTrackingLinked || uiState.isWatchHistorySyncing)
-        val syncLibraryEnabled =
-            anyTrackingLinked &&
-                    !uiState.isWatchHistorySyncing &&
-                    !uiState.isSyncingMal &&
-                    !uiState.isSyncingAnilist &&
-                    !uiState.isOffline
-
-        if (uiState.isSignedIn) {
-            if (showLibraryImportCard) {
-                val cardHighlighted = anyTrackingLinked || uiState.isWatchHistorySyncing
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (cardHighlighted) Color(0xFF6C4AB6) else BG_CARD)
-                        .border(
-                            1.dp,
-                            if (cardHighlighted) Color(0xFF6C4AB6) else BORDER,
-                            RoundedCornerShape(14.dp)
-                        )
-                        .clickable(enabled = syncLibraryEnabled) { onWatchHistorySync() }
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (uiState.isWatchHistorySyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text(
-                            "Sync library",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-
-            if (uiState.isWatchHistorySyncing) {
-                Spacer(modifier = Modifier.height(12.dp))
-                if (uiState.watchHistoryTotal > 0) {
-                    val p =
-                        (uiState.watchHistoryCurrent.toFloat() / uiState.watchHistoryTotal.toFloat()).coerceIn(0f, 1f)
-                    LinearProgressIndicator(
-                        progress = { p },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF6C4AB6),
-                        trackColor = Color.White.copy(alpha = 0.08f),
-                    )
-                    Text(
-                        "Syncing ${uiState.watchHistoryCurrent} / ${uiState.watchHistoryTotal} entries...",
-                        color = MUTED,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF6C4AB6),
-                        trackColor = Color.White.copy(alpha = 0.08f),
-                    )
-                    Text(
-                        "Fetching library export…",
-                        color = MUTED,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-
-                uiState.watchHistoryDetail?.trim()?.takeIf { it.isNotEmpty() }?.let { detail ->
-                    Text(
-                        detail,
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-                Text(
-                    "Large libraries can take a while. You can leave this screen — sync continues in the background (check the notification).",
-                    color = MUTED,
-                    fontSize = 11.sp,
-                    lineHeight = 15.sp,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    if (uiState.malConnected) {
-                        val malLabel = when {
-                            uiState.watchHistoryMalDone -> "✓"
-                            uiState.isWatchHistorySyncing -> "…"
-                            else -> ""
-                        }
-                        Text(
-                            text = "MAL $malLabel",
-                            color = if (uiState.watchHistoryMalDone) Color(0xFF4ADE80) else MUTED,
-                            fontSize = 13.sp,
-                        )
-                    }
-                    if (uiState.anilistConnected) {
-                        val alLabel = when {
-                            uiState.watchHistoryAnilistDone -> "✓"
-                            uiState.isWatchHistorySyncing -> "…"
-                            else -> ""
-                        }
-                        Text(
-                            text = "AniList $alLabel",
-                            color = if (uiState.watchHistoryAnilistDone) Color(0xFF4ADE80) else MUTED,
-                            fontSize = 13.sp,
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            val trackingBusy =
-                uiState.isWatchHistorySyncing ||
-                    uiState.isSyncingMal ||
+        val trackingBusy =
+            uiState.isSyncingMal ||
                     uiState.isSyncingAnilist ||
                     uiState.isImportingMal ||
                     uiState.isImportingAnilist ||
                     uiState.isOffline
-            SettingCard(
-                title = "Tracker import",
-                description = "Bring MAL/AniList lists into Anisurge, or push Anisurge progress back out.",
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TrackerSyncButton(
-                        label = "Import from MAL",
-                        loading = uiState.isImportingMal,
-                        enabled = uiState.malConnected && !trackingBusy,
-                        onClick = onImportFromMAL,
-                    )
-                    TrackerSyncButton(
-                        label = "Import from AniList",
-                        loading = uiState.isImportingAnilist,
-                        enabled = uiState.anilistConnected && !trackingBusy,
-                        onClick = onImportFromAniList,
-                    )
-                    HorizontalDivider(color = BORDER)
-                    TrackerSyncButton(
-                        label = "Sync to MAL",
-                        loading = uiState.isSyncingMal,
-                        enabled = uiState.malConnected && !trackingBusy,
-                        onClick = onSyncToMAL,
-                    )
-                    TrackerSyncButton(
-                        label = "Sync to AniList",
-                        loading = uiState.isSyncingAnilist,
-                        enabled = uiState.anilistConnected && !trackingBusy,
-                        onClick = onSyncToAniList,
-                    )
+        SettingCard(
+            title = "Tracker import",
+            description = "Bring MAL/AniList lists into Anisurge, or push Anisurge progress back out.",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                TrackerSyncButton(
+                    label = "Import from MAL",
+                    loading = uiState.isImportingMal,
+                    enabled = uiState.malConnected && !trackingBusy,
+                    onClick = onImportFromMAL,
+                )
+                TrackerSyncButton(
+                    label = "Import from AniList",
+                    loading = uiState.isImportingAnilist,
+                    enabled = uiState.anilistConnected && !trackingBusy,
+                    onClick = onImportFromAniList,
+                )
+                HorizontalDivider(color = BORDER)
+                TrackerSyncButton(
+                    label = "Sync to MAL",
+                    loading = uiState.isSyncingMal,
+                    enabled = uiState.malConnected && !trackingBusy,
+                    onClick = onSyncToMAL,
+                )
+                TrackerSyncButton(
+                    label = "Sync to AniList",
+                    loading = uiState.isSyncingAnilist,
+                    enabled = uiState.anilistConnected && !trackingBusy,
+                    onClick = onSyncToAniList,
+                )
 
-                    if (uiState.isImportingMal || uiState.isImportingAnilist) {
-                        val total = uiState.trackingImportTotal
-                        val progress = if (total > 0) {
-                            (uiState.trackingImportCurrent.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                if (uiState.isImportingMal || uiState.isImportingAnilist) {
+                    val total = uiState.trackingImportTotal
+                    val progress = if (total > 0) {
+                        (uiState.trackingImportCurrent.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                    } else {
+                        0f
+                    }
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF6C4AB6),
+                        trackColor = BORDER.copy(alpha = 0.3f),
+                    )
+                    Text(
+                        text = if (total > 0) {
+                            "Importing ${uiState.trackingImportCurrent} / $total"
                         } else {
-                            0f
-                        }
-                        LinearProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = Color(0xFF6C4AB6),
-                            trackColor = Color.White.copy(alpha = 0.08f),
-                        )
+                            "Preparing import..."
+                        },
+                        color = MUTED,
+                        fontSize = 12.sp,
+                    )
+                    uiState.trackingImportDetail?.takeIf { it.isNotBlank() }?.let { detail ->
                         Text(
-                            text = if (total > 0) {
-                                "Importing ${uiState.trackingImportCurrent} / $total"
-                            } else {
-                                "Preparing import..."
-                            },
-                            color = MUTED,
+                            text = detail,
+                            color = TEXT,
                             fontSize = 12.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        uiState.trackingImportDetail?.takeIf { it.isNotBlank() }?.let { detail ->
-                            Text(
-                                text = detail,
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 12.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
                     }
                 }
             }
@@ -1708,15 +1581,15 @@ private fun TrackerSyncButton(
         shape = RoundedCornerShape(10.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = Color(0xFF6C4AB6),
-            disabledContainerColor = Color.White.copy(alpha = 0.08f),
-            contentColor = Color.White,
+            disabledContainerColor = BG_HOVER,
+            contentColor = AppColors.onAccent,
             disabledContentColor = MUTED,
         ),
     ) {
         if (loading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(18.dp),
-                color = Color.White,
+                color = AppColors.onAccent,
                 strokeWidth = 2.dp,
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -1871,16 +1744,16 @@ private fun CommunityTab(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(if (selected) Color(0xFF1F1F1F) else BG_CARD)
+                                .background(if (selected) BG_HOVER else BG_CARD)
                                 .border(
                                     1.dp,
-                                    if (selected) Color.White.copy(alpha = 0.38f) else BORDER,
+                                    if (selected) TEXT.copy(alpha = 0.38f) else BORDER,
                                     RoundedCornerShape(999.dp)
                                 )
                                 .clickable { onCategoryChange(slug) }
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Text(slug, color = Color.White, fontSize = 12.sp)
+                            Text(slug, color = TEXT, fontSize = 12.sp)
                         }
                     }
                 }
@@ -1930,7 +1803,7 @@ private fun CommunityTab(
                         checked = uiState.communityDraftSpoiler,
                         onCheckedChange = onDraftSpoilerChange,
                     )
-                    Text("Mark as spoiler", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                    Text("Mark as spoiler", color = TEXT, fontSize = 13.sp)
                 }
                 Button(
                     onClick = onCreatePost,
@@ -1941,7 +1814,7 @@ private fun CommunityTab(
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
-                            color = Color.White
+                            color = AppColors.onAccent
                         )
                     } else {
                         Text("Create Community Post")
@@ -1988,7 +1861,7 @@ private fun CommunityTab(
                         ) {
                             Text(
                                 "#${user.rank} ${user.displayName ?: user.name}",
-                                color = Color.White,
+                                color = TEXT,
                                 fontSize = 13.sp
                             )
                             Text("${user.aura} aura", color = MUTED, fontSize = 12.sp)
@@ -1996,79 +1869,79 @@ private fun CommunityTab(
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-        SettingCard(
-            title = "Posts",
-            description = "Community feed",
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (uiState.isLoadingCommunity) {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
-                    }
-                } else if (uiState.communityPosts.isEmpty()) {
-                    Text("No posts found.", color = MUTED, fontSize = 13.sp)
-                } else {
-                    uiState.communityPosts.forEach { post ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(BG_HOVER)
-                                .border(1.dp, BORDER, RoundedCornerShape(10.dp))
-                                .clickable { onOpenPost(post.id) }
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(post.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            CommunityPostContent(
-                                rawContent = post.content,
-                                onMediaClick = onImageClick,
-                            )
-                            Text(
-                                "${post.category} • ${post.comments} comments • ${post.views} views • ${post.time ?: ""}",
-                                color = MUTED,
-                                fontSize = 11.sp,
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+            SettingCard(
+                title = "Posts",
+                description = "Community feed",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (uiState.isLoadingCommunity) {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 24.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = AppColors.accent, strokeWidth = 2.dp)
+                        }
+                    } else if (uiState.communityPosts.isEmpty()) {
+                        Text("No posts found.", color = MUTED, fontSize = 13.sp)
+                    } else {
+                        uiState.communityPosts.forEach { post ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(BG_HOVER)
+                                    .border(1.dp, BORDER, RoundedCornerShape(10.dp))
+                                    .clickable { onOpenPost(post.id) }
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                val voting = uiState.isVotingCommunityPostIds.contains(post.id)
-                                OutlinedButton(
-                                    onClick = { onVote(post.id, 1) },
-                                    enabled = !voting,
-                                ) { Text("▲ ${post.votes}") }
-                                OutlinedButton(
-                                    onClick = { onVote(post.id, -1) },
-                                    enabled = !voting,
-                                ) { Text("▼") }
-                                OutlinedButton(
-                                    onClick = { onVote(post.id, 0) },
-                                    enabled = !voting,
-                                ) { Text("Clear vote") }
+                                Text(post.title, color = TEXT, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                CommunityPostContent(
+                                    rawContent = post.content,
+                                    onMediaClick = onImageClick,
+                                )
+                                Text(
+                                    "${post.category} • ${post.comments} comments • ${post.views} views • ${post.time ?: ""}",
+                                    color = MUTED,
+                                    fontSize = 11.sp,
+                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val voting = uiState.isVotingCommunityPostIds.contains(post.id)
+                                    OutlinedButton(
+                                        onClick = { onVote(post.id, 1) },
+                                        enabled = !voting,
+                                    ) { Text("▲ ${post.votes}") }
+                                    OutlinedButton(
+                                        onClick = { onVote(post.id, -1) },
+                                        enabled = !voting,
+                                    ) { Text("▼") }
+                                    OutlinedButton(
+                                        onClick = { onVote(post.id, 0) },
+                                        enabled = !voting,
+                                    ) { Text("Clear vote") }
+                                }
                             }
                         }
                     }
-                }
-                if (uiState.communityHasMore) {
-                    Button(
-                        onClick = onLoadMore,
-                        enabled = !uiState.isLoadingCommunityMore,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        if (uiState.isLoadingCommunityMore) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                                color = Color.White
-                            )
-                        } else {
-                            Text("Load More")
+                    if (uiState.communityHasMore) {
+                        Button(
+                            onClick = onLoadMore,
+                            enabled = !uiState.isLoadingCommunityMore,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (uiState.isLoadingCommunityMore) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = AppColors.onAccent
+                                )
+                            } else {
+                                Text("Load More")
+                            }
                         }
                     }
                 }
@@ -2089,7 +1962,7 @@ private fun CommunityFullscreenMediaDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black),
+                .background(AppColors.background),
         ) {
             AsyncImage(
                 model = imageUrl,
@@ -2103,7 +1976,7 @@ private fun CommunityFullscreenMediaDialog(
                 onClick = onDismiss,
                 modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
             ) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = AppColors.text)
             }
         }
     }
@@ -2130,7 +2003,7 @@ private fun CommunityPostDetailDialog(
 
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color(0xFF090909),
+            color = AppColors.background,
         ) {
             Column(Modifier.fillMaxSize()) {
                 Row(
@@ -2141,7 +2014,7 @@ private fun CommunityPostDetailDialog(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White,
+                            tint = TEXT,
                         )
                     }
                     Column(Modifier.weight(1f).padding(end = 8.dp)) {
@@ -2162,7 +2035,7 @@ private fun CommunityPostDetailDialog(
                         contentAlignment = Alignment.Center,
                     ) {
                         if (uiState.isLoadingCommunityDetail) {
-                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
+                            CircularProgressIndicator(color = AppColors.accent, strokeWidth = 2.dp)
                         } else {
                             Text("Post could not be loaded.", color = MUTED, fontSize = 14.sp)
                         }
@@ -2174,7 +2047,7 @@ private fun CommunityPostDetailDialog(
                     ) {
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(post.title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text(post.title, color = TEXT, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                 Text(
                                     "${post.category}${post.flair?.let { " • $it" } ?: ""} • ${post.comments} comments • ${post.views} views • ${post.time ?: ""}",
                                     color = MUTED,
@@ -2184,7 +2057,10 @@ private fun CommunityPostDetailDialog(
                                     OutlinedButton(onClick = { onVote(postId, 1) }, enabled = !voting) {
                                         Text("▲ ${post.votes}")
                                     }
-                                    OutlinedButton(onClick = { onVote(postId, -1) }, enabled = !voting) { Text("▼") }
+                                    OutlinedButton(
+                                        onClick = { onVote(postId, -1) },
+                                        enabled = !voting
+                                    ) { Text("▼") }
                                     OutlinedButton(
                                         onClick = { onVote(postId, 0) },
                                         enabled = !voting
@@ -2225,7 +2101,7 @@ private fun CommunityPostDetailDialog(
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF111111))
+                            .background(BG_HOVER)
                             .padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -2241,7 +2117,7 @@ private fun CommunityPostDetailDialog(
                                 checked = uiState.communityDetailCommentSpoiler,
                                 onCheckedChange = onCommentSpoilerChange,
                             )
-                            Text("Spoiler", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                            Text("Spoiler", color = TEXT, fontSize = 13.sp)
                         }
                         Button(
                             onClick = onSubmitComment,
@@ -2252,7 +2128,7 @@ private fun CommunityPostDetailDialog(
                                 CircularProgressIndicator(
                                     Modifier.size(16.dp),
                                     strokeWidth = 2.dp,
-                                    color = Color.White,
+                                    color = AppColors.onAccent,
                                 )
                             } else {
                                 Text("Post comment")
@@ -2280,7 +2156,7 @@ private fun CommunityCommentCard(
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         val name = comment.authorDisplayName?.takeIf { it.isNotBlank() } ?: comment.author.orEmpty()
-        Text(name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(name, color = TEXT, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         Text(comment.created_at ?: "", color = MUTED, fontSize = 10.sp)
         CommunityPostContent(
             rawContent = comment.content,
@@ -2318,7 +2194,7 @@ private fun CommunityPostContent(
         if (cleanedText.isNotBlank()) {
             Text(
                 cleanedText,
-                color = Color.White.copy(alpha = 0.75f),
+                color = TEXT.copy(alpha = 0.75f),
                 fontSize = 12.sp,
                 maxLines = if (bodyUnlimited) Int.MAX_VALUE else maxBodyLines,
                 overflow = if (bodyUnlimited) TextOverflow.Visible else TextOverflow.Ellipsis,
@@ -2491,8 +2367,8 @@ private fun PreferencesTab(
                     valueRange = 50f..100f,
                     steps = 49,
                     colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
-                        activeTrackColor = Color.White,
+                        thumbColor = AppColors.accent,
+                        activeTrackColor = AppColors.accent,
                         inactiveTrackColor = BORDER
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -2516,8 +2392,8 @@ private fun PreferencesTab(
                     valueRange = 60f..200f,
                     steps = 13,
                     colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
-                        activeTrackColor = Color.White,
+                        thumbColor = AppColors.accent,
+                        activeTrackColor = AppColors.accent,
                         inactiveTrackColor = BORDER
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -2537,7 +2413,7 @@ private fun PreferencesTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black)
+                    .background(BG)
                     .border(1.dp, BORDER, RoundedCornerShape(12.dp))
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -2569,12 +2445,12 @@ private fun PreferencesTab(
 
                 Text(
                     text = strings.change,
-                    color = Color.Black,
+                    color = AppColors.onAccent,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White)
+                        .background(AppColors.accent)
                         .clickable { directoryPickerLauncher.launch() }
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 )
@@ -2587,8 +2463,8 @@ private fun PreferencesTab(
             onClick = onSave,
             enabled = uiState.hasSettingsChanges && !uiState.isSaving,
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (uiState.hasSettingsChanges) Color.White else BG_CARD,
-                contentColor = if (uiState.hasSettingsChanges) Color.Black else MUTED,
+                containerColor = if (uiState.hasSettingsChanges) AppColors.accent else BG_CARD,
+                contentColor = if (uiState.hasSettingsChanges) AppColors.onAccent else MUTED,
                 disabledContainerColor = BG_CARD,
                 disabledContentColor = MUTED
             ),
@@ -2596,7 +2472,11 @@ private fun PreferencesTab(
             modifier = Modifier.align(Alignment.End)
         ) {
             if (uiState.isSaving) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = AppColors.onAccent,
+                    strokeWidth = 2.dp
+                )
             } else {
                 Text(strings.saveChanges, fontWeight = FontWeight.Medium)
             }
@@ -2647,9 +2527,9 @@ private fun SettingToggle(
             onCheckedChange = onCheckedChange,
             enabled = enabled,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = Color.White.copy(alpha = 0.5f),
-                uncheckedThumbColor = Color.White,
+                checkedThumbColor = AppColors.onAccent,
+                checkedTrackColor = AppColors.accent,
+                uncheckedThumbColor = AppColors.textMuted,
                 uncheckedTrackColor = BORDER
             )
         )
@@ -2926,14 +2806,19 @@ private fun MobilePreferencesContent(
                 valueRange = 50f..100f,
                 steps = 49,
                 colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color.White,
+                    thumbColor = AppColors.accent,
+                    activeTrackColor = AppColors.accent,
                     inactiveTrackColor = BORDER
                 ),
                 modifier = Modifier.weight(1f)
             )
             Spacer(modifier = Modifier.width(16.dp))
-            Text("${uiState.settings.syncPercentage}%", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "${uiState.settings.syncPercentage}%",
+                color = TEXT,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
 
         HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
@@ -2961,8 +2846,8 @@ private fun MobilePreferencesContent(
                 valueRange = 60f..200f,
                 steps = 13,
                 colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
-                    activeTrackColor = Color.White,
+                    thumbColor = AppColors.accent,
+                    activeTrackColor = AppColors.accent,
                     inactiveTrackColor = BORDER
                 ),
                 modifier = Modifier.weight(1f)
@@ -2989,7 +2874,7 @@ private fun MobilePreferencesContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color.Black)
+                .background(BG)
                 .border(1.dp, BORDER, RoundedCornerShape(10.dp))
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -3021,12 +2906,12 @@ private fun MobilePreferencesContent(
 
             Text(
                 text = "Change",
-                color = Color.Black,
+                color = AppColors.onAccent,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White)
+                    .background(AppColors.accent)
                     .clickable { directoryPickerLauncher.launch() }
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             )
@@ -3045,7 +2930,11 @@ private fun MobilePreferencesContent(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (uiState.isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
                 } else {
                     Text("Save Changes", fontWeight = FontWeight.Medium)
                 }
@@ -3076,9 +2965,9 @@ private fun MobileSettingRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = Color.White.copy(alpha = 0.5f),
-                uncheckedThumbColor = Color.White,
+                checkedThumbColor = AppColors.onAccent,
+                checkedTrackColor = AppColors.accent,
+                uncheckedThumbColor = AppColors.textMuted,
                 uncheckedTrackColor = BORDER
             )
         )
@@ -3224,7 +3113,7 @@ private fun StorageTab(
 
         if (uiState.isLoadingStorage) {
             Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White)
+                CircularProgressIndicator(color = AppColors.accent)
             }
         } else {
             val storageInfo = uiState.storageInfo
@@ -3500,7 +3389,7 @@ private fun MobileStorageContent(
     Column(modifier = Modifier.fillMaxWidth()) {
         if (uiState.isLoadingStorage) {
             Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White)
+                CircularProgressIndicator(color = AppColors.accent)
             }
         } else {
             val storageInfo = uiState.storageInfo
@@ -3613,7 +3502,9 @@ private fun MobileStorageOverview(
                             .fillMaxHeight()
                             .weight(
                                 if (storageInfo.totalUsed > 0)
-                                    (storageInfo.downloads.size.toFloat() / storageInfo.totalUsed).coerceAtLeast(0.01f)
+                                    (storageInfo.downloads.size.toFloat() / storageInfo.totalUsed).coerceAtLeast(
+                                        0.01f
+                                    )
                                 else 0.01f
                             )
                             .background(Color(0xFF3B82F6))
@@ -3623,7 +3514,9 @@ private fun MobileStorageOverview(
                             .fillMaxHeight()
                             .weight(
                                 if (storageInfo.totalUsed > 0)
-                                    (storageInfo.fontCache.size.toFloat() / storageInfo.totalUsed).coerceAtLeast(0.01f)
+                                    (storageInfo.fontCache.size.toFloat() / storageInfo.totalUsed).coerceAtLeast(
+                                        0.01f
+                                    )
                                 else 0.01f
                             )
                             .background(Color(0xFF8B5CF6))
@@ -3633,7 +3526,9 @@ private fun MobileStorageOverview(
                             .fillMaxHeight()
                             .weight(
                                 if (storageInfo.totalUsed > 0)
-                                    (storageInfo.settings.size.toFloat() / storageInfo.totalUsed).coerceAtLeast(0.01f)
+                                    (storageInfo.settings.size.toFloat() / storageInfo.totalUsed).coerceAtLeast(
+                                        0.01f
+                                    )
                                 else 0.01f
                             )
                             .background(Color(0xFF10B981))
@@ -3693,7 +3588,7 @@ private fun ServersTab(
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
                 border = ButtonDefaults.outlinedButtonBorder.copy(
                     brush = androidx.compose.ui.graphics.SolidColor(
-                        Color.White.copy(
+                        TEXT.copy(
                             alpha = 0.3f
                         )
                     )
@@ -4397,7 +4292,7 @@ private fun ProfileAccountSection(
     val usernameChanged = uiState.usernameDraft.trim() != (user.username.orEmpty())
     val profileDetailsChanged =
         uiState.bioDraft.trim() != user.bio.orEmpty() ||
-            uiState.websiteDraft.trim() != user.website.orEmpty()
+                uiState.websiteDraft.trim() != user.website.orEmpty()
 
     Column(
         modifier = Modifier
@@ -4458,7 +4353,7 @@ private fun ProfileAccountSection(
                     unfocusedTextColor = TEXT,
                     focusedBorderColor = BORDER,
                     unfocusedBorderColor = BORDER,
-                    cursorColor = Color.White,
+                    cursorColor = TEXT,
                 ),
             )
             Text(
@@ -4503,7 +4398,7 @@ private fun ProfileAccountSection(
                     unfocusedTextColor = TEXT,
                     focusedBorderColor = BORDER,
                     unfocusedBorderColor = BORDER,
-                    cursorColor = Color.White,
+                    cursorColor = TEXT,
                 ),
             )
             Text(
@@ -4526,7 +4421,7 @@ private fun ProfileAccountSection(
                     unfocusedTextColor = TEXT,
                     focusedBorderColor = BORDER,
                     unfocusedBorderColor = BORDER,
-                    cursorColor = Color.White,
+                    cursorColor = TEXT,
                 ),
             )
             Text(
@@ -4577,9 +4472,9 @@ private fun ChangePasswordSection(
     onChangePassword: () -> Unit,
 ) {
     val canSubmit = uiState.currentPassword.isNotBlank() &&
-        uiState.newPassword.length >= 8 &&
-        uiState.confirmPassword.isNotBlank() &&
-        !uiState.isChangingPassword
+            uiState.newPassword.length >= 8 &&
+            uiState.confirmPassword.isNotBlank() &&
+            !uiState.isChangingPassword
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Change password", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -5243,7 +5138,7 @@ private fun ConnectTab(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(bottom = 20.dp)
                     )
-                    
+
                     OutlinedTextField(
                         value = reanimeEmail,
                         onValueChange = { reanimeEmail = it },
@@ -5258,7 +5153,7 @@ private fun ConnectTab(
                             cursorColor = Color.White,
                         )
                     )
-                    
+
                     OutlinedTextField(
                         value = reanimePassword,
                         onValueChange = { reanimePassword = it },
@@ -5274,7 +5169,7 @@ private fun ConnectTab(
                             cursorColor = Color.White,
                         )
                     )
-                    
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -5286,7 +5181,7 @@ private fun ConnectTab(
                         ) {
                             Text("Cancel", color = MUTED)
                         }
-                        
+
                         Button(
                             onClick = { onConnectReanime(reanimeEmail, reanimePassword) },
                             enabled = !uiState.isConnectingReanime && reanimeEmail.isNotBlank() && reanimePassword.isNotBlank(),
@@ -5295,7 +5190,11 @@ private fun ConnectTab(
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             if (uiState.isConnectingReanime) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
                             } else {
                                 Text("Connect", color = Color.White)
                             }
@@ -5377,9 +5276,9 @@ private fun ConnectTab(
                                 )
                             }
                         }
-                        
+
                         Spacer(modifier = Modifier.width(16.dp))
-                        
+
                         Button(
                             onClick = onDisconnectReanime,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914)),
@@ -5387,15 +5286,19 @@ private fun ConnectTab(
                             enabled = !uiState.isDisconnectingReanime
                         ) {
                             if (uiState.isDisconnectingReanime) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
                             } else {
                                 Text("Disconnect", color = Color.White, fontSize = 12.sp, maxLines = 1)
                             }
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
-                    
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -5408,9 +5311,18 @@ private fun ConnectTab(
                             enabled = !uiState.isLoading && !uiState.isImportingReanime && !uiState.isExportingReanime
                         ) {
                             if (uiState.isImportingReanime) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
                             } else {
-                                Text("Import", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Import",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                         Button(
@@ -5421,9 +5333,18 @@ private fun ConnectTab(
                             enabled = !uiState.isLoading && !uiState.isImportingReanime && !uiState.isExportingReanime
                         ) {
                             if (uiState.isExportingReanime) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
                             } else {
-                                Text("Export", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Export",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }
@@ -5432,7 +5353,10 @@ private fun ConnectTab(
                         Spacer(modifier = Modifier.height(12.dp))
                         if (uiState.lunarSyncTotal > 0) {
                             val progress =
-                                (uiState.lunarSyncCurrent.toFloat() / uiState.lunarSyncTotal.toFloat()).coerceIn(0f, 1f)
+                                (uiState.lunarSyncCurrent.toFloat() / uiState.lunarSyncTotal.toFloat()).coerceIn(
+                                    0f,
+                                    1f
+                                )
                             LinearProgressIndicator(
                                 progress = { progress },
                                 modifier = Modifier.fillMaxWidth(),
@@ -5489,7 +5413,12 @@ private fun ConnectTab(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("ReAnime Account", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "ReAnime Account",
+                                color = TEXT,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                             Text("Not connected", color = MUTED, fontSize = 12.sp)
                         }
                     }
@@ -5552,9 +5481,9 @@ private fun ConnectTab(
                                 )
                             }
                         }
-                        
+
                         Spacer(modifier = Modifier.width(16.dp))
-                        
+
                         Button(
                             onClick = onDisconnectLunar,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914)),
@@ -5562,7 +5491,11 @@ private fun ConnectTab(
                             enabled = !uiState.isConnectingLunar
                         ) {
                             if (uiState.isConnectingLunar) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
                             } else {
                                 Text("Disconnect", color = Color.White, fontSize = 12.sp, maxLines = 1)
                             }
@@ -5583,9 +5516,18 @@ private fun ConnectTab(
                             enabled = !uiState.isImportingLunar && !uiState.isExportingLunar
                         ) {
                             if (uiState.isImportingLunar) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
                             } else {
-                                Text("Import", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Import",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                         Button(
@@ -5596,9 +5538,18 @@ private fun ConnectTab(
                             enabled = !uiState.isImportingLunar && !uiState.isExportingLunar
                         ) {
                             if (uiState.isExportingLunar) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
                             } else {
-                                Text("Export", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Export",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }
@@ -5628,14 +5579,28 @@ private fun ConnectTab(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("LunarAnime Account", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "LunarAnime Account",
+                                color = TEXT,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                             Text("Not connected", color = MUTED, fontSize = 12.sp)
                         }
                     }
                     if (uiState.isConnectingLunar) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
                     } else {
-                        Text("Connect", color = Color(0xFF2196F3), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Connect",
+                            color = Color(0xFF2196F3),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }

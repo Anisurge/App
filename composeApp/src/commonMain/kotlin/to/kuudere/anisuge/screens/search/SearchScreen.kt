@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.OfflineState
 import to.kuudere.anisuge.i18n.LocalAppStrings
 
@@ -70,7 +71,7 @@ fun SearchScreen(
     }
 
     Scaffold(
-        containerColor = Color(0xFF000000)
+        containerColor = AppColors.background
     ) { _ ->
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val isSmall = maxWidth < 800.dp
@@ -106,7 +107,7 @@ fun SearchScreen(
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         text = strings.resultsCount(state.results.size),
-                        color = Color.White,
+                        color = AppColors.text,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(vertical = 12.dp)
@@ -116,7 +117,7 @@ fun SearchScreen(
                 if (state.isLoading && state.results.isEmpty()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Color.White)
+                            CircularProgressIndicator(color = AppColors.accent)
                         }
                     }
                 } else if (!state.isLoading && state.results.isEmpty()) {
@@ -138,7 +139,7 @@ fun SearchScreen(
                                 )
                                 Text(
                                     text = strings.noResultsFound,
-                                    color = Color.White,
+                                    color = AppColors.text,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -165,7 +166,7 @@ fun SearchScreen(
                 if (state.isLoadingMore && !state.isLoading) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(color = AppColors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
                         }
                     }
                 }
@@ -206,7 +207,7 @@ private val KUUDERE_ORIGINS  = listOf("Japan", "South Korea", "China", "Taiwan")
 private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchViewModel) {
     val strings = LocalAppStrings.current
     Column(Modifier.fillMaxWidth()) {
-        Text(strings.search, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text(strings.search, color = AppColors.text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(20.dp))
 
         // Row 1: Search | Genres | Sort by | Reset
@@ -249,7 +250,7 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                    .border(1.dp, AppColors.border, RoundedCornerShape(10.dp))
                     .background(Color.Transparent)
                     .clickable { viewModel.clearFilters() },
                 contentAlignment = Alignment.Center
@@ -306,7 +307,7 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
     }
 
     Column(Modifier.fillMaxWidth()) {
-        Text(strings.search, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(strings.search, color = AppColors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             KSearchInput(state.keyword, viewModel::onKeywordChange, onSearch = { viewModel.search() }, modifier = Modifier.weight(1f))
@@ -315,14 +316,14 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
                 Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF000000))
+                    .background(AppColors.surface)
                     .clickable { isExpanded = !isExpanded },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Tune,
                     contentDescription = strings.filters,
-                    tint = if (isExpanded) Color.White else Color.Gray,
+                    tint = if (isExpanded) AppColors.text else Color.Gray,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -395,25 +396,25 @@ private fun KSearchInput(
             .height(44.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF000000))
-            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+            .background(AppColors.surface)
+            .border(1.dp, AppColors.border, RoundedCornerShape(10.dp))
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Search, null, tint = Color(0xFF71717A), modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.Search, null, tint = AppColors.textMuted, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) Text(strings.searchPlaceholder, color = Color(0xFF71717A), fontSize = 14.sp)
+                if (value.isEmpty()) Text(strings.searchPlaceholder, color = AppColors.textMuted, fontSize = 14.sp)
                 androidx.compose.foundation.text.BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
                     modifier = Modifier.fillMaxWidth(),
-                    textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
+                    textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.text, fontSize = 14.sp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { onSearch() }),
                     singleLine = true,
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White)
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(AppColors.text)
                 )
             }
         }
@@ -447,8 +448,8 @@ private fun KAdvancedFilterDropdown(
                 .fillMaxWidth()
                 .onSizeChanged { triggerWidthPx = it.width }
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF000000))
-                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                .background(AppColors.surface)
+                .border(1.dp, AppColors.border, RoundedCornerShape(10.dp))
                 .clickable { expanded = !expanded }
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.CenterStart
@@ -458,7 +459,7 @@ private fun KAdvancedFilterDropdown(
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = selected ?: hint,
-                    color = if (selected == null) Color(0xFF71717A) else Color.White,
+                    color = if (selected == null) AppColors.textMuted else AppColors.text,
                     fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -474,7 +475,7 @@ private fun KAdvancedFilterDropdown(
                     ) {
                         Icon(
                             Icons.Default.Close, strings.clearLabel,
-                            tint = Color(0xFF71717A),
+                            tint = AppColors.textMuted,
                             modifier = Modifier.size(14.dp)
                         )
                     }
@@ -483,7 +484,7 @@ private fun KAdvancedFilterDropdown(
                 Icon(
                     if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     null,
-                    tint = Color(0xFF71717A),
+                    tint = AppColors.textMuted,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -496,9 +497,9 @@ private fun KAdvancedFilterDropdown(
                 .width(triggerWidthDp.coerceAtLeast(160.dp))
                 .heightIn(max = 280.dp),
             offset = DpOffset(0.dp, 6.dp),
-            containerColor = Color(0xFF000000),
+            containerColor = AppColors.surface,
             shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+            border = BorderStroke(1.dp, AppColors.border),
             shadowElevation = 8.dp,
             tonalElevation = 0.dp,
         ) {
@@ -518,7 +519,7 @@ private fun KAdvancedFilterDropdown(
                     text = {
                         Text(
                             item,
-                            color = if (isHovered || (!multiSelect && isSelected)) Color(0xFFBF80FF) else if (isSelected) Color.White else Color(0xFFD4D4D8),
+                            color = if (isHovered || (!multiSelect && isSelected)) AppColors.accent else if (isSelected) AppColors.text else AppColors.text,
                             fontSize = 13.sp,
                             fontWeight = if (isSelected || isHovered) FontWeight.SemiBold else FontWeight.Normal
                         )
@@ -542,15 +543,15 @@ private fun KAdvancedFilterDropdown(
                                     .size(18.dp)
                                     .clip(RoundedCornerShape(4.dp))
                                     .background(
-                                        if (isSelected) Color(0xFFBF80FF)
-                                        else Color.White.copy(alpha = 0.12f)
+                                        if (isSelected) AppColors.accent
+                                        else AppColors.border
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (isSelected) {
                                     Icon(
                                         Icons.Default.Check, null,
-                                        tint = Color.White,
+                                        tint = AppColors.text,
                                         modifier = Modifier.size(12.dp)
                                     )
                                 }
@@ -558,13 +559,13 @@ private fun KAdvancedFilterDropdown(
                         } else if (isSelected) {
                             Icon(
                                 Icons.Default.CheckCircle, null,
-                                tint = Color(0xFFBF80FF),
+                                tint = AppColors.accent,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
                     },
                     colors = MenuDefaults.itemColors(
-                        textColor = Color.White,
+                        textColor = AppColors.text,
                         disabledTextColor = Color.Gray,
                     ),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)

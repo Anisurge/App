@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 
 import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.AnimeCard
 import to.kuudere.anisuge.ui.OfflineState
 
@@ -80,7 +81,7 @@ fun WatchlistScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .background(Color(0xFF000000)),
+                .background(AppColors.background),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             val searchOptionsBlock = @Composable { modifier: Modifier ->
@@ -108,7 +109,7 @@ fun WatchlistScreen(
                                     .height(44.dp)
                                     .weight(0.3f)
                                     .onSizeChanged { folderTriggerWidthPx = it.width }
-                                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
                                     .clickable { showFolderDropdown = true },
                                 contentAlignment = Alignment.CenterStart
                             ) {
@@ -117,7 +118,7 @@ fun WatchlistScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(selectedList, color = Color.White, fontSize = 14.sp)
+                                    Text(selectedList, color = AppColors.text, fontSize = 14.sp)
                                     Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.Gray)
                                 }
 
@@ -126,8 +127,8 @@ fun WatchlistScreen(
                                     onDismissRequest = { showFolderDropdown = false },
                                     modifier = Modifier
                                         .width(folderTriggerWidthDp)
-                                        .background(Color(0xFF000000))
-                                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                                        .background(AppColors.surface)
+                                        .border(1.dp, AppColors.border, RoundedCornerShape(8.dp)),
                                     offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)
                                 ) {
                                     folderOptions.forEach { folder ->
@@ -139,7 +140,7 @@ fun WatchlistScreen(
                                             text = { 
                                                 Text(
                                                     text = folder, 
-                                                    color = if (isHovered || isSelected) Color(0xFFBF80FF) else Color(0xFFD4D4D8),
+                                                    color = if (isHovered || isSelected) AppColors.accent else AppColors.text,
                                                     fontSize = 13.sp,
                                                     fontWeight = if (isSelected || isHovered) FontWeight.SemiBold else FontWeight.Normal
                                                 ) 
@@ -157,7 +158,7 @@ fun WatchlistScreen(
                                                 if (isSelected) {
                                                     Icon(
                                                         Icons.Default.CheckCircle, null,
-                                                        tint = Color(0xFFBF80FF),
+                                                        tint = AppColors.accent,
                                                         modifier = Modifier.size(16.dp)
                                                     )
                                                 }
@@ -173,7 +174,7 @@ fun WatchlistScreen(
                                     .height(44.dp)
                                     .weight(0.6f)
                                     .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(8.dp))
-                                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
                                     .padding(horizontal = 16.dp),
                                 contentAlignment = Alignment.CenterStart
                             ) {
@@ -186,9 +187,9 @@ fun WatchlistScreen(
                                     androidx.compose.foundation.text.BasicTextField(
                                         value = searchQuery,
                                         onValueChange = { searchQuery = it },
-                                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.text, fontSize = 14.sp),
                                         singleLine = true,
-                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(AppColors.text),
                                         modifier = Modifier.weight(1f),
                                         decorationBox = { innerTextField ->
                                             if (searchQuery.isEmpty()) {
@@ -204,7 +205,7 @@ fun WatchlistScreen(
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
-                                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
                                     .background(Color.Transparent),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -273,7 +274,7 @@ fun WatchlistScreen(
                                     .height(44.dp)
                                     .weight(1f)
                                     .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(8.dp))
-                                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
                                     .padding(horizontal = 16.dp),
                                 contentAlignment = Alignment.CenterStart
                             ) {
@@ -286,9 +287,9 @@ fun WatchlistScreen(
                                     androidx.compose.foundation.text.BasicTextField(
                                         value = searchQuery,
                                         onValueChange = { searchQuery = it },
-                                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.text, fontSize = 14.sp),
                                         singleLine = true,
-                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(AppColors.text),
                                         modifier = Modifier.weight(1f),
                                         decorationBox = { innerTextField ->
                                             if (searchQuery.isEmpty()) {
@@ -304,7 +305,7 @@ fun WatchlistScreen(
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
-                                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
                                     .background(Color.Transparent),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -322,7 +323,7 @@ fun WatchlistScreen(
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
-                                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                    .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
                                     .background(Color.Transparent)
                                     .clickable { expandedFilters = !expandedFilters }
                                     .padding(10.dp),
@@ -343,7 +344,7 @@ fun WatchlistScreen(
                                         .fillMaxWidth()
                                         .height(44.dp)
                                         .onSizeChanged { folderTriggerWidthPxMobile = it.width }
-                                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                        .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
                                         .clickable { showFolderDropdownMobile = true },
                                     contentAlignment = Alignment.CenterStart
                                 ) {
@@ -352,7 +353,7 @@ fun WatchlistScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(selectedList, color = Color.White, fontSize = 14.sp)
+                                        Text(selectedList, color = AppColors.text, fontSize = 14.sp)
                                         Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.Gray)
                                     }
 
@@ -361,8 +362,8 @@ fun WatchlistScreen(
                                         onDismissRequest = { showFolderDropdownMobile = false },
                                         modifier = Modifier
                                             .width(folderTriggerWidthDpMobile)
-                                            .background(Color(0xFF000000))
-                                            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(8.dp)),
+                                            .background(AppColors.surface)
+                                            .border(1.dp, AppColors.border, RoundedCornerShape(8.dp)),
                                         offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)
                                     ) {
                                         folderOptions.forEach { folder ->
@@ -374,7 +375,7 @@ fun WatchlistScreen(
                                                 text = { 
                                                     Text(
                                                         text = folder, 
-                                                        color = if (isHovered || isSelected) Color(0xFFBF80FF) else Color(0xFFD4D4D8),
+                                                        color = if (isHovered || isSelected) AppColors.accent else AppColors.text,
                                                         fontSize = 13.sp,
                                                         fontWeight = if (isSelected || isHovered) FontWeight.SemiBold else FontWeight.Normal
                                                     ) 
@@ -392,7 +393,7 @@ fun WatchlistScreen(
                                                     if (isSelected) {
                                                         Icon(
                                                             Icons.Default.CheckCircle, null,
-                                                            tint = Color(0xFFBF80FF),
+                                                            tint = AppColors.accent,
                                                             modifier = Modifier.size(16.dp)
                                                         )
                                                     }
@@ -497,7 +498,7 @@ fun WatchlistScreen(
                     if (state.isLoading && state.items.isEmpty()) {
                         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                             Box(Modifier.fillMaxWidth().height(300.dp), Alignment.Center) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+                                CircularProgressIndicator(color = AppColors.accent, strokeWidth = 3.dp)
                             }
                         }
                     } else {
@@ -552,7 +553,7 @@ fun WatchlistScreen(
                     if (state.isPaginating || (state.isLoading && state.items.isNotEmpty())) {
                         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                             Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) {
-                                CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+                                CircularProgressIndicator(color = AppColors.accent, strokeWidth = 3.dp)
                             }
                         }
                     } else if (!hasAnyItems && !state.isLoading) {
@@ -570,7 +571,7 @@ fun WatchlistScreen(
                                     )
                                     Text(
                                         text = "Nothing here",
-                                        color = Color.White,
+                                        color = AppColors.text,
                                         fontSize = 18.sp,
                                         fontWeight = FontWeight.SemiBold,
                                     )
@@ -614,8 +615,8 @@ fun AdvancedFilterDropdown(
             .height(40.dp)
             .onSizeChanged { triggerWidthPx = it.width }
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF000000))
-            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+            .background(AppColors.surface)
+            .border(1.dp, AppColors.border, RoundedCornerShape(10.dp))
             .clickable { expanded = !expanded },
         contentAlignment = Alignment.CenterStart
     ) {
@@ -627,7 +628,7 @@ fun AdvancedFilterDropdown(
             Spacer(Modifier.width(8.dp))
             Text(
                 text = value ?: hint, 
-                color = if (value == null) Color.Gray else Color.White, 
+                color = if (value == null) Color.Gray else AppColors.text, 
                 fontSize = 13.sp, 
                 maxLines = 1, 
                 overflow = TextOverflow.Ellipsis,
@@ -659,9 +660,9 @@ fun AdvancedFilterDropdown(
                 .width(triggerWidthDp.coerceAtLeast(160.dp))
                 .heightIn(max = 280.dp),
             offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp),
-            containerColor = Color(0xFF000000),
+            containerColor = AppColors.surface,
             shape = RoundedCornerShape(10.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, AppColors.border),
             shadowElevation = 8.dp,
             tonalElevation = 0.dp,
         ) {
@@ -681,7 +682,7 @@ fun AdvancedFilterDropdown(
                     text = { 
                         Text(
                             text = option, 
-                            color = if (isHovered || (!multiSelect && isSelected)) Color(0xFFBF80FF) else if (isSelected) Color.White else Color(0xFFD4D4D8),
+                            color = if (isHovered || (!multiSelect && isSelected)) AppColors.accent else if (isSelected) AppColors.text else AppColors.text,
                             fontSize = 13.sp,
                             fontWeight = if (isSelected || isHovered) FontWeight.SemiBold else FontWeight.Normal
                         ) 
@@ -705,15 +706,15 @@ fun AdvancedFilterDropdown(
                                     .size(18.dp)
                                     .clip(RoundedCornerShape(4.dp))
                                     .background(
-                                        if (isSelected) Color(0xFFBF80FF)
-                                        else Color.White.copy(alpha = 0.12f)
+                                        if (isSelected) AppColors.accent
+                                        else AppColors.border
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (isSelected) {
                                     Icon(
                                         Icons.Default.Check, null,
-                                        tint = Color.White,
+                                        tint = AppColors.text,
                                         modifier = Modifier.size(12.dp)
                                     )
                                 }
@@ -721,13 +722,13 @@ fun AdvancedFilterDropdown(
                         } else if (isSelected) {
                             Icon(
                                 Icons.Default.CheckCircle, null,
-                                tint = Color(0xFFBF80FF),
+                                tint = AppColors.accent,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
                     },
                     colors = MenuDefaults.itemColors(
-                        textColor = Color.White,
+                        textColor = AppColors.text,
                         disabledTextColor = Color.Gray,
                     ),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
@@ -743,7 +744,7 @@ fun SectionHeader(title: String, count: Int) {
         modifier = Modifier.padding(bottom = 8.dp, top = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        Text(title, color = AppColors.text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.width(12.dp))
         Text(count.toString(), color = Color.Gray, fontSize = 16.sp, fontWeight = FontWeight.Medium)
     }

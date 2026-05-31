@@ -25,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
@@ -37,6 +36,7 @@ import to.kuudere.anisuge.data.models.LayoutRow
 import to.kuudere.anisuge.data.models.RowId
 import to.kuudere.anisuge.i18n.AppStrings
 import to.kuudere.anisuge.i18n.LocalAppStrings
+import to.kuudere.anisuge.theme.AppColors
 
 @Composable
 fun LayoutEditorRow(
@@ -57,7 +57,7 @@ fun LayoutEditorRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.White.copy(alpha = 0.07f), RoundedCornerShape(12.dp))
+            .background(AppColors.surfaceVariant, RoundedCornerShape(12.dp))
             .semantics {
                 stateDescription = "$title, ${index + 1} of $total, ${if (row.visible) strings.shownLabel else strings.hiddenLabel}"
             }
@@ -68,7 +68,7 @@ fun LayoutEditorRow(
         Icon(
             Icons.Default.DragIndicator,
             contentDescription = null,
-            tint = Color.White.copy(alpha = 0.55f),
+            tint = AppColors.textMuted,
             modifier = Modifier.pointerInput(row.id, index) {
                 detectDragGestures(
                     onDrag = { _, amount -> dragY += amount.y },
@@ -81,8 +81,8 @@ fun LayoutEditorRow(
             },
         )
         Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text(visibility, color = Color.White.copy(alpha = 0.62f), fontSize = 12.sp)
+            Text(title, color = AppColors.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(visibility, color = AppColors.textMuted, fontSize = 12.sp)
         }
         Switch(checked = row.visible, onCheckedChange = onToggle)
         Spacer(Modifier.width(4.dp))
@@ -91,14 +91,14 @@ fun LayoutEditorRow(
             enabled = index > 0,
             modifier = Modifier.semantics { if (index == 0) disabled() },
         ) {
-            Icon(Icons.Default.KeyboardArrowUp, contentDescription = strings.moveUp, tint = Color.White)
+            Icon(Icons.Default.KeyboardArrowUp, contentDescription = strings.moveUp, tint = AppColors.text)
         }
         IconButton(
             onClick = onMoveDown,
             enabled = index < total - 1,
             modifier = Modifier.semantics { if (index == total - 1) disabled() },
         ) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = strings.moveDown, tint = Color.White)
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = strings.moveDown, tint = AppColors.text)
         }
     }
 }

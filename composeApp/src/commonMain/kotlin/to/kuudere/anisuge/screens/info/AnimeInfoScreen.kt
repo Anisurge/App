@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeDetails
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.WatchlistBottomSheet
 import to.kuudere.anisuge.data.models.EpisodeItem
@@ -67,7 +68,9 @@ fun AnimeInfoScreen(
     }
 
     val state by viewModel.uiState.collectAsState()
-    val preferRomajiAnimeTitles by to.kuudere.anisuge.AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(initial = false)
+    val preferRomajiAnimeTitles by to.kuudere.anisuge.AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(
+        initial = false
+    )
     var showEpisodes by remember { mutableStateOf(true) }
     var selectedEpisodeForDownload by remember { mutableStateOf<to.kuudere.anisuge.data.models.EpisodeItem?>(null) }
     var batchPickerEpisodes by remember { mutableStateOf<List<to.kuudere.anisuge.data.models.EpisodeItem>>(emptyList()) }
@@ -141,11 +144,15 @@ fun AnimeInfoScreen(
                         preferDub = preferDub,
                         onStatus = { batchPreflightMessage = it },
                         onFailure = { failedServer, failedEpisodes ->
-                            batchPreflightMessage = "$failedServer ($audioLabel) failed for ${failedEpisodes.size} episode${if (failedEpisodes.size == 1) "" else "s"}: ${failedEpisodes.take(8).joinToString(", ") { "Ep ${it.number}" }}. Trying a backup server..."
+                            batchPreflightMessage =
+                                "$failedServer ($audioLabel) failed for ${failedEpisodes.size} episode${if (failedEpisodes.size == 1) "" else "s"}: ${
+                                    failedEpisodes.take(8).joinToString(", ") { "Ep ${it.number}" }
+                                }. Trying a backup server..."
                         },
                     )
                     if (server == null) {
-                        batchPreflightError = "Batch check failed for $audioLabel on $chosenServer and backups. Some selected episodes did not return a usable stream. Try the other audio, fewer episodes, or single download for the failing ones."
+                        batchPreflightError =
+                            "Batch check failed for $audioLabel on $chosenServer and backups. Some selected episodes did not return a usable stream. Try the other audio, fewer episodes, or single download for the failing ones."
                         batchPreflightMessage = null
                         return@launch
                     }
@@ -176,11 +183,11 @@ fun AnimeInfoScreen(
     if (batchPreflightMessage != null || batchPreflightError != null) {
         AlertDialog(
             onDismissRequest = { if (batchPreflightError != null) batchPreflightError = null },
-            containerColor = Color(0xFF141414),
+            containerColor = AppColors.surface,
             title = {
                 Text(
                     if (batchPreflightError == null) "Checking episodes" else "Batch check failed",
-                    color = Color.White,
+                    color = AppColors.text,
                     fontWeight = FontWeight.Bold,
                 )
             },
@@ -190,11 +197,15 @@ fun AnimeInfoScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (batchPreflightError == null) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            color = AppColors.text,
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp
+                        )
                     }
                     Text(
                         batchPreflightError ?: batchPreflightMessage.orEmpty(),
-                        color = Color.White.copy(alpha = 0.72f),
+                        color = AppColors.textMuted,
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
                     )
@@ -204,7 +215,10 @@ fun AnimeInfoScreen(
                 if (batchPreflightError != null) {
                     Button(
                         onClick = { batchPreflightError = null },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AppColors.accent,
+                            contentColor = AppColors.onAccent
+                        ),
                     ) {
                         Text("OK")
                     }
@@ -219,18 +233,18 @@ fun AnimeInfoScreen(
         batchPickerEpisodes = sorted
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(modifier = Modifier.fillMaxSize().background(AppColors.background)) {
         to.kuudere.anisuge.platform.DraggableWindowArea(
             modifier = Modifier.fillMaxWidth().height(84.dp).align(Alignment.TopStart)
         ) { }
 
         if (state.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+                CircularProgressIndicator(color = AppColors.accent, strokeWidth = 3.dp)
             }
         } else if (state.error != null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(state.error ?: "Unknown error", color = Color.White)
+                Text(state.error ?: "Unknown error", color = AppColors.text)
             }
         } else if (state.details != null) {
             val anime = state.details!!
@@ -297,7 +311,8 @@ fun AnimeInfoScreen(
 }
 
 private fun stripHtmlTags(htmlContent: String): String {
-    return htmlContent.replace(Regex("<.*?>"), "").replace("&quot;", "\"").replace("&amp;", "&").replace("&#039;", "'").replace("<br>", "\n").replace("<br/>", "\n")
+    return htmlContent.replace(Regex("<.*?>"), "").replace("&quot;", "\"").replace("&amp;", "&").replace("&#039;", "'")
+        .replace("<br>", "\n").replace("<br/>", "\n")
 }
 
 private fun buildAnimeShareText(
@@ -370,7 +385,7 @@ private fun TvLayout(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(AppColors.background)
             .padding(horizontal = 34.dp, vertical = 26.dp),
         horizontalArrangement = Arrangement.spacedBy(26.dp),
     ) {
@@ -389,13 +404,16 @@ private fun TvLayout(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.10f))
+                        .background(AppColors.surface)
                         .tvFocusableClick(shape = RoundedCornerShape(14.dp), onClick = onBack)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                        Text("Back", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.text)
+                        Text("Back", color = AppColors.text, fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -404,15 +422,18 @@ private fun TvLayout(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color.White.copy(alpha = 0.10f))
+                            .background(AppColors.surface)
                             .tvFocusableClick(shape = RoundedCornerShape(14.dp), onClick = { showSheet = true })
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Icon(
                                 if (state.inWatchlist) Icons.Default.Check else Icons.Default.Add,
                                 contentDescription = "Watchlist",
-                                tint = Color.White,
+                                tint = AppColors.text,
                             )
                             Text(
                                 if (state.inWatchlist) "In Watchlist" else "Add Watchlist",
@@ -444,7 +465,7 @@ private fun TvLayout(
                         .width(240.dp)
                         .aspectRatio(2f / 3f)
                         .clip(RoundedCornerShape(18.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(18.dp)),
+                        .border(1.dp, AppColors.border, RoundedCornerShape(18.dp)),
                 )
 
                 Column(
@@ -469,19 +490,25 @@ private fun TvLayout(
                     }.joinToString(" • ")
 
                     if (meta.isNotBlank()) {
-                        Text(meta, color = Color.White.copy(alpha = 0.65f), fontSize = 15.sp)
+                        Text(meta, color = AppColors.textMuted, fontSize = 15.sp)
                     }
 
                     val genres = anime.genres?.take(3)?.joinToString(" • ").orEmpty()
                     if (genres.isNotBlank()) {
-                        Text(genres, color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            genres,
+                            color = AppColors.textMuted,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
 
                     val desc = stripHtmlTags(anime.description ?: "").trim()
                     if (desc.isNotBlank()) {
                         Text(
                             text = desc,
-                            color = Color.White.copy(alpha = 0.78f),
+                            color = AppColors.text,
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
                             maxLines = 6,
@@ -489,11 +516,12 @@ private fun TvLayout(
                         )
                     }
 
-                    val watchText = if (anime.watchProgress?.episode != null) "Continue • EP ${anime.watchProgress.episode}" else "Watch Now"
+                    val watchText =
+                        if (anime.watchProgress?.episode != null) "Continue • EP ${anime.watchProgress.episode}" else "Watch Now"
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(18.dp))
-                            .background(Color.White)
+                            .background(AppColors.accent)
                             .tvFocusableClick(
                                 shape = RoundedCornerShape(18.dp),
                                 onClick = {
@@ -503,16 +531,19 @@ private fun TvLayout(
                             )
                             .padding(horizontal = 18.dp, vertical = 12.dp),
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
-                            Text(watchText, color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = AppColors.onAccent)
+                            Text(watchText, color = AppColors.onAccent, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                     }
                     watchedProgressSummary(anime)?.let { summary ->
                         Spacer(Modifier.height(8.dp))
                         Text(
                             text = summary,
-                            color = Color.White.copy(alpha = 0.72f),
+                            color = AppColors.textMuted,
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
                         )
@@ -527,8 +558,8 @@ private fun TvLayout(
                 .weight(0.42f)
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(18.dp))
-                .background(Color.White.copy(alpha = 0.06f))
-                .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(18.dp))
+                .background(AppColors.surface)
+                .border(1.dp, AppColors.border, RoundedCornerShape(18.dp))
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -541,11 +572,11 @@ private fun TvLayout(
 
             if (state.isLoadingEpisodes) {
                 Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+                    CircularProgressIndicator(color = AppColors.accent, strokeWidth = 3.dp)
                 }
             } else if (state.episodes.isEmpty()) {
                 Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
-                    Text("No episodes", color = Color.White.copy(alpha = 0.6f))
+                    Text("No episodes", color = AppColors.textMuted)
                 }
             } else {
                 LazyColumn(
@@ -561,8 +592,10 @@ private fun TvLayout(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(Color.White.copy(alpha = 0.08f))
-                                .tvFocusableClick(shape = RoundedCornerShape(14.dp), onClick = { onWatchEpisode(ep.number) })
+                                .background(AppColors.surface)
+                                .tvFocusableClick(
+                                    shape = RoundedCornerShape(14.dp),
+                                    onClick = { onWatchEpisode(ep.number) })
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                         ) {
                             Row(
@@ -577,7 +610,7 @@ private fun TvLayout(
                                     ) {
                                         Text(
                                             text = "EP ${ep.number}",
-                                            color = Color.White,
+                                            color = AppColors.text,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 15.sp,
                                         )
@@ -585,6 +618,7 @@ private fun TvLayout(
                                             watchedEp != null && ep.number < watchedEp -> {
                                                 ProgressBadge("WATCHED")
                                             }
+
                                             watchedEp != null && ep.number == watchedEp -> {
                                                 ProgressBadge(
                                                     if ((progressSecs ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED",
@@ -595,14 +629,18 @@ private fun TvLayout(
                                     if (!title.isNullOrBlank()) {
                                         Text(
                                             text = title,
-                                            color = Color.White.copy(alpha = 0.70f),
+                                            color = AppColors.textMuted,
                                             fontSize = 13.sp,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                         )
                                     }
                                 }
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White.copy(alpha = 0.9f))
+                                Icon(
+                                    Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.9f)
+                                )
                             }
                         }
                     }
@@ -631,12 +669,12 @@ private fun MobileLayout(
 ) {
     val scrollState = rememberScrollState()
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(AppColors.background)) {
         Box(Modifier.fillMaxSize().verticalScroll(scrollState)) {
-             // Header Background (Image + Gradient) — stays under but is not in the flow
-             Box(Modifier.fillMaxWidth().height(250.dp)) {
+            // Header Background (Image + Gradient) — stays under but is not in the flow
+            Box(Modifier.fillMaxWidth().height(250.dp)) {
                 // Blur Background — use cover as fallback with stronger blur
-                val bannerUrl = anime.banner?.takeIf { 
+                val bannerUrl = anime.banner?.takeIf {
                     it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
                 }
                 val bgImage = bannerUrl ?: (anime.image ?: anime.poster ?: anime.cover)
@@ -664,10 +702,10 @@ private fun MobileLayout(
                             )
                         )
                 )
-             }
+            }
 
-             // Foreground content (starts partially overlapping the header)
-             Column(Modifier.fillMaxWidth()) {
+            // Foreground content (starts partially overlapping the header)
+            Column(Modifier.fillMaxWidth()) {
                 // Top Bar for Mobile positioned over the image
                 Row(
                     modifier = Modifier
@@ -678,7 +716,7 @@ private fun MobileLayout(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.text)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onShareAnime) {
@@ -697,216 +735,257 @@ private fun MobileLayout(
                 Spacer(Modifier.height(50.dp)) // Added space so the details start at ~100dp from top (150dp overlap)
 
                 Column {
-             
-             // Top details block
-             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Top) {
-                 // Poster
-                 AsyncImage(
-                    model = anime.image ?: anime.poster ?: anime.cover,
-                    contentDescription = "Cover",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .width(130.dp)
-                        .height(190.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                 )
-                 Spacer(Modifier.width(16.dp))
-                 // Right Details
-                 Column(Modifier.weight(1f)) {
-                     // Title
-                    Text(
-                        text = anime.resolveDisplayTitle(),
-                        color = Color.White,
-                        fontSize = 24.sp,
-                         fontWeight = FontWeight.Bold,
-                         maxLines = 2,
-                         overflow = TextOverflow.Ellipsis
-                     )
-                     Spacer(Modifier.height(8.dp))
-                     // Stars
-                     val ratingValue = ((anime.score ?: 0)) / 20.0
-                     Row(verticalAlignment = Alignment.CenterVertically) {
-                         repeat(5) { i ->
-                             if (i < ratingValue.toInt()) {
-                                 Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
-                             } else {
-                                 Icon(Icons.Default.StarBorder, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
-                             }
-                         }
-                         if (ratingValue > 0.0) {
-                             Spacer(Modifier.width(4.dp))
-                             Text(formatFloat(ratingValue * 2.0, 1), color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                         }
-                     }
-                     Spacer(Modifier.height(8.dp))
-                     // Duration - Genres
-                     Text(
-                         text = "${anime.status} • ${anime.genres?.take(2)?.joinToString(" / ") ?: ""}",
-                         color = Color.Gray,
-                         fontSize = 13.sp
-                     )
-                     Spacer(Modifier.height(16.dp))
 
-                     // Play Movie button
-                     Box(
-                         Modifier
-                             .clip(RoundedCornerShape(8.dp))
-                             .background(Color(0xFF1D1D1D))
-                             .clickable {
-                                 if (anime.watchProgress != null && anime.watchProgress.episode != null) {
-                                     onWatchEpisode(anime.watchProgress.episode)
-                                 } else {
-                                     onWatchNow()
-                                 }
-                             }
-                             .padding(horizontal = 16.dp, vertical = 8.dp)
-                     ) {
-                         Row(verticalAlignment = Alignment.CenterVertically) {
-                             Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                             Spacer(Modifier.width(8.dp))
-                            val watchText = if (anime.watchProgress != null && anime.watchProgress.episode != null) {
-                                "Continue - EP ${anime.watchProgress.episode}"
-                             } else {
-                                 "Watch Now"
-                             }
-                             Text(watchText, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                         }
-                     }
-                    watchedProgressSummary(anime)?.let { summary ->
-                        Spacer(Modifier.height(10.dp))
+                    // Top details block
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Top) {
+                        // Poster
+                        AsyncImage(
+                            model = anime.image ?: anime.poster ?: anime.cover,
+                            contentDescription = "Cover",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .width(130.dp)
+                                .height(190.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        // Right Details
+                        Column(Modifier.weight(1f)) {
+                            // Title
+                            Text(
+                                text = anime.resolveDisplayTitle(),
+                                color = Color.White,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            // Stars
+                            val ratingValue = ((anime.score ?: 0)) / 20.0
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                repeat(5) { i ->
+                                    if (i < ratingValue.toInt()) {
+                                        Icon(
+                                            Icons.Default.Star,
+                                            null,
+                                            tint = Color(0xFFFFD700),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Default.StarBorder,
+                                            null,
+                                            tint = Color(0xFFFFD700),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                if (ratingValue > 0.0) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        formatFloat(ratingValue * 2.0, 1),
+                                        color = AppColors.text,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            // Duration - Genres
+                            Text(
+                                text = "${anime.status} • ${anime.genres?.take(2)?.joinToString(" / ") ?: ""}",
+                                color = AppColors.textMuted,
+                                fontSize = 13.sp
+                            )
+                            Spacer(Modifier.height(16.dp))
+
+                            // Play Movie button
+                            Box(
+                                Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(AppColors.surface)
+                                    .clickable {
+                                        if (anime.watchProgress != null && anime.watchProgress.episode != null) {
+                                            onWatchEpisode(anime.watchProgress.episode)
+                                        } else {
+                                            onWatchNow()
+                                        }
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.PlayArrow,
+                                        null,
+                                        tint = AppColors.text,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    val watchText =
+                                        if (anime.watchProgress != null && anime.watchProgress.episode != null) {
+                                            "Continue - EP ${anime.watchProgress.episode}"
+                                        } else {
+                                            "Watch Now"
+                                        }
+                                    Text(
+                                        watchText,
+                                        color = AppColors.text,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                            watchedProgressSummary(anime)?.let { summary ->
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    text = summary,
+                                    color = AppColors.textMuted,
+                                    fontSize = 12.sp,
+                                    lineHeight = 17.sp,
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Storyline
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        var isExpanded by remember { mutableStateOf(false) }
+
+                        Text("Storyline", color = AppColors.text, fontSize = 20.sp, fontWeight = FontWeight.Normal)
+                        Spacer(Modifier.height(12.dp))
                         Text(
-                            text = summary,
-                            color = Color.White.copy(alpha = 0.72f),
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
+                            text = stripHtmlTags(anime.description ?: ""),
+                            color = AppColors.textMuted,
+                            fontSize = 14.sp,
+                            lineHeight = 22.sp,
+                            maxLines = if (isExpanded) Int.MAX_VALUE else 4,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable { isExpanded = !isExpanded }
                         )
                     }
-                 }
-             }
 
-             Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(16.dp))
 
-             // Storyline
-             Column(Modifier.padding(horizontal = 16.dp)) {
-                 var isExpanded by remember { mutableStateOf(false) }
+                    // Custom Tabs
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                    ) {
+                        Text(
+                            "Episodes",
+                            color = if (showEpisodes) AppColors.text else AppColors.textMuted,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Normal,
+                            modifier = Modifier.clickable { onToggleEpisodes(true) }
+                        )
+                        Text(
+                            "Details",
+                            color = if (!showEpisodes) AppColors.text else AppColors.textMuted,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Normal,
+                            modifier = Modifier.clickable { onToggleEpisodes(false) }
+                        )
+                    }
 
-                 Text("Storyline", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Normal)
-                 Spacer(Modifier.height(12.dp))
-                 Text(
-                     text = stripHtmlTags(anime.description ?: ""),
-                     color = Color.Gray,
-                     fontSize = 14.sp,
-                     lineHeight = 22.sp,
-                     maxLines = if (isExpanded) Int.MAX_VALUE else 4,
-                     overflow = TextOverflow.Ellipsis,
-                     modifier = Modifier.clickable { isExpanded = !isExpanded }
-                 )
-             }
+                    Spacer(Modifier.height(16.dp))
 
-             Spacer(Modifier.height(16.dp))
+                    if (showEpisodes) {
+                        Box(Modifier.padding(horizontal = 16.dp)) {
+                            EpisodeListSection(
+                                state = state,
+                                onWatchEpisode = onWatchEpisode,
+                                onDownloadEpisode = onDownloadEpisode,
+                                onDownloadSeason = onDownloadSeason,
+                                isPremiumUser = isPremiumUser,
+                                watchedEpisode = anime.watchProgress?.episode,
+                                currentProgressSeconds = anime.watchProgress?.currentTime,
+                            )
+                        }
+                    } else {
+                        Column(Modifier.padding(horizontal = 16.dp)) {
+                            if (!anime.genres.isNullOrEmpty()) {
+                                Text("Genres", color = AppColors.text, fontSize = 16.sp)
+                                Spacer(Modifier.height(8.dp))
+                                @OptIn(ExperimentalLayoutApi::class)
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    anime.genres.forEach { genre ->
+                                        Box(
+                                            Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(AppColors.surface)
+                                                .clickable { onGenreClick(genre) }
+                                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(genre, color = AppColors.text, fontSize = 13.sp)
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.height(24.dp))
+                            }
 
-             // Custom Tabs
-             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                 Text(
-                     "Episodes",
-                     color = if (showEpisodes) Color.White else Color.Gray,
-                     fontSize = 20.sp,
-                     fontWeight = FontWeight.Normal,
-                     modifier = Modifier.clickable { onToggleEpisodes(true) }
-                 )
-                 Text(
-                     "Details",
-                     color = if (!showEpisodes) Color.White else Color.Gray,
-                     fontSize = 20.sp,
-                     fontWeight = FontWeight.Normal,
-                     modifier = Modifier.clickable { onToggleEpisodes(false) }
-                 )
-             }
+                            if (!anime.studios.isNullOrEmpty()) {
+                                Text("Studios", color = AppColors.text, fontSize = 16.sp)
+                                Spacer(Modifier.height(8.dp))
+                                @OptIn(ExperimentalLayoutApi::class)
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    anime.studios.forEach { studioObj ->
+                                        val studioName = studioObj["name"]?.toString()?.trim('"') ?: ""
+                                        if (studioName.isNotBlank()) {
+                                            Box(
+                                                Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(AppColors.surface)
+                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                            ) {
+                                                Text(
+                                                    studioName,
+                                                    color = AppColors.text,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.height(24.dp))
+                            }
 
-             Spacer(Modifier.height(16.dp))
-
-             if (showEpisodes) {
-                 Box(Modifier.padding(horizontal = 16.dp)) {
-                    EpisodeListSection(
-                        state = state,
-                        onWatchEpisode = onWatchEpisode,
-                        onDownloadEpisode = onDownloadEpisode,
-                        onDownloadSeason = onDownloadSeason,
-                        isPremiumUser = isPremiumUser,
-                        watchedEpisode = anime.watchProgress?.episode,
-                        currentProgressSeconds = anime.watchProgress?.currentTime,
-                    )
-                 }
-             } else {
-                 Column(Modifier.padding(horizontal = 16.dp)) {
-                     if (!anime.genres.isNullOrEmpty()) {
-                         Text("Genres", color = Color.White, fontSize = 16.sp)
-                         Spacer(Modifier.height(8.dp))
-                         @OptIn(ExperimentalLayoutApi::class)
-                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                             anime.genres.forEach { genre ->
-                                 Box(
-                                     Modifier
-                                         .clip(RoundedCornerShape(8.dp))
-                                         .background(Color(0xFF000000))
-                                         .clickable { onGenreClick(genre) }
-                                         .padding(horizontal = 12.dp, vertical = 6.dp)
-                                 ) {
-                                     Text(genre, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
-                                 }
-                             }
-                         }
-                         Spacer(Modifier.height(24.dp))
-                     }
-
-                     if (!anime.studios.isNullOrEmpty()) {
-                         Text("Studios", color = Color.White, fontSize = 16.sp)
-                         Spacer(Modifier.height(8.dp))
-                         @OptIn(ExperimentalLayoutApi::class)
-                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            anime.studios.forEach { studioObj ->
-                                val studioName = studioObj["name"]?.toString()?.trim('"') ?: ""
-                                if (studioName.isNotBlank()) {
-                                    Box(
-                                        Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFF000000))
-                                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Text(studioName, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
+                            if (!anime.tags.isNullOrEmpty()) {
+                                Text("Tags", color = AppColors.text, fontSize = 16.sp)
+                                Spacer(Modifier.height(8.dp))
+                                @OptIn(ExperimentalLayoutApi::class)
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    anime.tags.forEach { tagObj ->
+                                        val tagName = tagObj["name"]?.toString()?.trim('"') ?: ""
+                                        if (tagName.isNotBlank()) {
+                                            Box(
+                                                Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(AppColors.surface)
+                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                            ) {
+                                                Text(tagName, color = AppColors.textMuted, fontSize = 13.sp)
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                        Spacer(Modifier.height(24.dp))
-                     }
-
-                     if (!anime.tags.isNullOrEmpty()) {
-                         Text("Tags", color = Color.White, fontSize = 16.sp)
-                         Spacer(Modifier.height(8.dp))
-                         @OptIn(ExperimentalLayoutApi::class)
-                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                             anime.tags.forEach { tagObj ->
-                                 val tagName = tagObj["name"]?.toString()?.trim('"') ?: ""
-                                 if (tagName.isNotBlank()) {
-                                     Box(
-                                         Modifier
-                                             .clip(RoundedCornerShape(8.dp))
-                                             .background(Color(0xFF000000))
-                                             .padding(horizontal = 12.dp, vertical = 6.dp)
-                                     ) {
-                                         Text(tagName, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
-                                     }
-                                 }
-                             }
-                         }
-                      }
-                  }
-              }
-          }
-      }
-  }
-}
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -929,634 +1008,777 @@ private fun DesktopLayout(
         val baseWidth = 1400.dp
         val scaleFactor = (maxWidth / baseWidth).coerceAtLeast(1f)
         val currentDensity = androidx.compose.ui.platform.LocalDensity.current
-        val scaledDensity = androidx.compose.ui.unit.Density(currentDensity.density * scaleFactor, currentDensity.fontScale)
+        val scaledDensity =
+            androidx.compose.ui.unit.Density(currentDensity.density * scaleFactor, currentDensity.fontScale)
 
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides scaledDensity) {
             val scrollState = rememberScrollState()
 
-            Column(Modifier.fillMaxSize().background(Color.Black).verticalScroll(scrollState)) {
+            Column(Modifier.fillMaxSize().background(AppColors.background).verticalScroll(scrollState)) {
                 // Hero Section Box
-        Box(Modifier.fillMaxWidth().height(500.dp)) {
-            val bannerUrl = anime.banner?.takeIf { 
-                it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
-            }
-            val bgImage = bannerUrl ?: (anime.image ?: anime.poster ?: anime.cover)
-            val hasBanner = bannerUrl != null
+                Box(Modifier.fillMaxWidth().height(500.dp)) {
+                    val bannerUrl = anime.banner?.takeIf {
+                        it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
+                    }
+                    val bgImage = bannerUrl ?: (anime.image ?: anime.poster ?: anime.cover)
+                    val hasBanner = bannerUrl != null
 
-            AsyncImage(
-                model = bgImage,
-                contentDescription = "Banner",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(if (hasBanner) 16.dp else 48.dp)
-                    .alpha(if (hasBanner) 0.6f else 0.75f),
-                alignment = Alignment.TopCenter
-            )
-            
-            // Replicate Nuvio gradient layers exactly
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.horizontalGradient(
-                        0.0f to Color.Black,
-                        0.22f to Color.Black.copy(alpha = 0.84f),
-                        0.52f to Color.Black.copy(alpha = 0.34f),
-                        0.78f to Color.Black.copy(alpha = 0.07f),
-                        1.0f to Color.Transparent
+                    AsyncImage(
+                        model = bgImage,
+                        contentDescription = "Banner",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .blur(if (hasBanner) 16.dp else 48.dp)
+                            .alpha(if (hasBanner) 0.6f else 0.75f),
+                        alignment = Alignment.TopCenter
                     )
-                )
-            )
-            Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.38f to Color.Transparent,
-                        0.60f to Color.Black.copy(alpha = 0.38f),
-                        0.91f to Color.Black.copy(alpha = 0.91f),
-                        1.0f to Color.Black
-                    )
-                )
-            )
 
-            // Window management buttons and Back button - inside scrollable Column
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        .align(Alignment.TopStart)
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                }
-
-                to.kuudere.anisuge.platform.WindowManagementButtons(
-                    onClose = onExit,
-                    modifier = Modifier.align(Alignment.TopEnd)
-                )
-            }
-
-            // Constrained inner content
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-                Row(
-                    modifier = Modifier
-                        .widthIn(max = 1400.dp)
-                        .fillMaxWidth()
-                        .padding(start = 48.dp, bottom = 48.dp, end = 48.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    // Left aligned content matching Nuvio TV HeroSection
-                    Column(
-                        modifier = Modifier.fillMaxWidth(0.6f)
-                    ) {
-                Text(
-                    text = anime.resolveDisplayTitle(),
-                    color = Color.White,
-                    fontSize = 44.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 52.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                
-                Spacer(Modifier.height(24.dp))
-
-                // "For a chance..." Text
-                Text(
-                    text = stripHtmlTags(anime.description ?: ""),
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 17.sp,
-                    lineHeight = 26.sp,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(Modifier.height(24.dp))
-
-                // Meta Info Row
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Genres
-                    val genresText = anime.genres?.take(3)?.joinToString(" • ")
-                    if (!genresText.isNullOrEmpty()) {
-                        Text(genresText, color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
-                        Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
-                    }
-                    
-                    // Duration
-                    if (anime.duration != null && anime.duration!! > 0) {
-                        Text("${anime.duration}m", color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
-                        Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
-                    }
-                    
-                    // Year
-                    if (anime.year != null && anime.year!! > 0) {
-                        Text("${anime.year}", color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
-                        Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
-                    }
-                    
-                    // Rating
-                    if (anime.malScore != null && anime.malScore > 0) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Box(Modifier.background(Color(0xFFE6B91E), RoundedCornerShape(2.dp)).padding(horizontal = 4.dp, vertical = 1.dp)) {
-                                Text("MAL", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Text(anime.malScore.toString(), color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
-                        }
-                        Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
-                    }
-                    
-                    // Anisurge Score
-                    if (anime.score != null && anime.score!! > 0) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Box(Modifier.background(Color(0xFF6C5CE7), RoundedCornerShape(2.dp)).padding(horizontal = 4.dp, vertical = 1.dp)) {
-                                Text("★", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Text(anime.score.toString(), color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
-                        }
-                        Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
-                    }
-
-                    // Language/Format
-                    if (anime.status != null) {
-                        Text(anime.status.uppercase(), color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
-                        Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
-                    }
-                    if (anime.type != null) {
-                        Text(anime.type.uppercase(), color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
-                        Text("•", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("🇯🇵", fontSize = 14.sp)
-                        Text("JP", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
-
-                // Buttons (Watch Now, Watchlist)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(
-                        onClick = {
-                            if (anime.watchProgress != null && anime.watchProgress.episode != null) {
-                                onWatchEpisode(anime.watchProgress.episode)
-                            } else {
-                                onWatchNow()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D1D1D), contentColor = Color.White),
-                        shape = RoundedCornerShape(32.dp),
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(20.dp))
-                            val watchText = if (anime.watchProgress != null && anime.watchProgress.episode != null) {
-                                "CONTINUE - EP ${anime.watchProgress.episode}"
-                            } else {
-                                "WATCH NOW"
-                            }
-                            Text(watchText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Box {
-                        var showSheet by remember { mutableStateOf(false) }
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(if (state.inWatchlist) Color.White else Color(0xFF000000))
-                                .border(2.dp, if (state.inWatchlist) Color.Transparent else Color.Transparent, CircleShape)
-                                .clickable { showSheet = true },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (state.isUpdatingWatchlist) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = if (state.inWatchlist) Color.Black else Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Icon(
-                                    if (state.inWatchlist) Icons.Default.Check else Icons.Default.Add,
-                                    contentDescription = "Watchlist",
-                                    tint = if (state.inWatchlist) Color.Black else Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-
-                        if (showSheet) {
-                            WatchlistBottomSheet(
-                                currentFolder = state.folder,
-                                onSelect = { option ->
-                                    showSheet = false
-                                    onWatchlistUpdate(option)
-                                },
-                                onDismiss = { showSheet = false }
+                    // Replicate Nuvio gradient layers exactly
+                    Box(
+                        Modifier.fillMaxSize().background(
+                            Brush.horizontalGradient(
+                                0.0f to Color.Black,
+                                0.22f to Color.Black.copy(alpha = 0.84f),
+                                0.52f to Color.Black.copy(alpha = 0.34f),
+                                0.78f to Color.Black.copy(alpha = 0.07f),
+                                1.0f to Color.Transparent
                             )
-                        }
-                    }
+                        )
+                    )
+                    Box(
+                        Modifier.fillMaxSize().background(
+                            Brush.verticalGradient(
+                                0.0f to Color.Transparent,
+                                0.38f to Color.Transparent,
+                                0.60f to Color.Black.copy(alpha = 0.38f),
+                                0.91f to Color.Black.copy(alpha = 0.91f),
+                                1.0f to Color.Black
+                            )
+                        )
+                    )
 
+                    // Window management buttons and Back button - inside scrollable Column
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF000000))
-                            .clickable(onClick = onShareAnime),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = "Share",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp),
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                .align(Alignment.TopStart)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.text)
+                        }
+
+                        to.kuudere.anisuge.platform.WindowManagementButtons(
+                            onClose = onExit,
+                            modifier = Modifier.align(Alignment.TopEnd)
                         )
                     }
-                }
 
-                watchedProgressSummary(anime)?.let { summary ->
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = summary,
-                        color = Color.White.copy(alpha = 0.78f),
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp,
-                    )
-                }
-            } // End Column
-            
-            // Cover Image on the right side
-            AsyncImage(
-                model = anime.image ?: anime.poster ?: anime.cover,
-                contentDescription = "Cover Image",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .width(180.dp) // Adjusted slightly for optimal fit
-                    .aspectRatio(2f / 3f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .border(2.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-            )
-                } // End inner Row
-            } // End inner content alignment Box
-        } // End of Hero Box
-
-        // Season Chunks and Episodes section below Hero Box
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-            Column(
-                Modifier
-                    .widthIn(max = 1400.dp)
-                    .fillMaxWidth()
-                    .padding(start = 48.dp, bottom = 48.dp, end = 48.dp)
-            ) {
-            val episodesPerPage = 100
-            val totalEpisodes = state.episodes.size
-            var currentPageStart by remember(totalEpisodes > 0) { 
-                mutableStateOf(if (totalEpisodes > 0) maxOf(1, ((totalEpisodes - 1) / episodesPerPage) * episodesPerPage + 1) else 1)
-            }
-            
-            if (state.isLoadingEpisodes) {
-                Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.White)
-                }
-            } else if (totalEpisodes == 0) {
-                Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                    Text("No episodes available.", color = Color.White.copy(alpha = 0.5f), fontSize = 16.sp)
-                }
-            } else {
-                var isAscending by remember { mutableStateOf(false) }
-                var searchQuery by remember { mutableStateOf("") }
-                val pageGroups = (1..totalEpisodes step episodesPerPage).toList()
-                val displayGroups = if (isAscending) pageGroups else pageGroups.reversed()
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Search bar
-                        androidx.compose.foundation.text.BasicTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 15.sp),
-                            cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+                    // Constrained inner content
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                        Row(
                             modifier = Modifier
-                                .width(220.dp)
-                                .clip(RoundedCornerShape(32.dp))
-                                .background(Color.White.copy(alpha = 0.1f))
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            decorationBox = { innerTextField ->
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Icon(Icons.Default.Search, contentDescription = "Search", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        if (searchQuery.isEmpty()) {
-                                            Text("Search episodes...", color = Color.White.copy(alpha = 0.5f), fontSize = 15.sp)
-                                        }
-                                        innerTextField()
+                                .widthIn(max = 1400.dp)
+                                .fillMaxWidth()
+                                .padding(start = 48.dp, bottom = 48.dp, end = 48.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            // Left aligned content matching Nuvio TV HeroSection
+                            Column(
+                                modifier = Modifier.fillMaxWidth(0.6f)
+                            ) {
+                                Text(
+                                    text = anime.resolveDisplayTitle(),
+                                    color = Color.White,
+                                    fontSize = 44.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = 52.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(Modifier.height(24.dp))
+
+                                // "For a chance..." Text
+                                Text(
+                                    text = stripHtmlTags(anime.description ?: ""),
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    fontSize = 17.sp,
+                                    lineHeight = 26.sp,
+                                    maxLines = 4,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Spacer(Modifier.height(24.dp))
+
+                                // Meta Info Row
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Genres
+                                    val genresText = anime.genres?.take(3)?.joinToString(" • ")
+                                    if (!genresText.isNullOrEmpty()) {
+                                        Text(genresText, color = AppColors.text, fontSize = 15.sp)
+                                        Text("•", color = AppColors.textMuted, fontSize = 15.sp)
                                     }
-                                    if (searchQuery.isNotEmpty()) {
+
+                                    // Duration
+                                    if (anime.duration != null && anime.duration!! > 0) {
+                                        Text(
+                                            "${anime.duration}m",
+                                            color = AppColors.text,
+                                            fontSize = 15.sp
+                                        )
+                                        Text("•", color = AppColors.textMuted, fontSize = 15.sp)
+                                    }
+
+                                    // Year
+                                    if (anime.year != null && anime.year!! > 0) {
+                                        Text("${anime.year}", color = AppColors.text, fontSize = 15.sp)
+                                        Text("•", color = AppColors.textMuted, fontSize = 15.sp)
+                                    }
+
+                                    // Rating
+                                    if (anime.malScore != null && anime.malScore > 0) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Box(
+                                                Modifier.background(Color(0xFFE6B91E), RoundedCornerShape(2.dp))
+                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    "MAL",
+                                                    color = Color.Black,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Text(
+                                                anime.malScore.toString(),
+                                                color = AppColors.text,
+                                                fontSize = 15.sp
+                                            )
+                                        }
+                                        Text("•", color = AppColors.textMuted, fontSize = 15.sp)
+                                    }
+
+                                    // Anisurge Score
+                                    if (anime.score != null && anime.score!! > 0) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Box(
+                                                Modifier.background(Color(0xFF6C5CE7), RoundedCornerShape(2.dp))
+                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    "★",
+                                                    color = Color.White,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Text(
+                                                anime.score.toString(),
+                                                color = AppColors.text,
+                                                fontSize = 15.sp
+                                            )
+                                        }
+                                        Text("•", color = AppColors.textMuted, fontSize = 15.sp)
+                                    }
+
+                                    // Language/Format
+                                    if (anime.status != null) {
+                                        Text(
+                                            anime.status.uppercase(),
+                                            color = AppColors.textMuted,
+                                            fontSize = 14.sp
+                                        )
+                                        Text("•", color = AppColors.textMuted, fontSize = 15.sp)
+                                    }
+                                    if (anime.type != null) {
+                                        Text(
+                                            anime.type.uppercase(),
+                                            color = AppColors.textMuted,
+                                            fontSize = 14.sp
+                                        )
+                                        Text("•", color = AppColors.textMuted, fontSize = 15.sp)
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text("🇯🇵", fontSize = 14.sp)
+                                        Text("JP", color = AppColors.textMuted, fontSize = 14.sp)
+                                    }
+                                }
+
+                                Spacer(Modifier.height(24.dp))
+
+                                // Buttons (Watch Now, Watchlist)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            if (anime.watchProgress != null && anime.watchProgress.episode != null) {
+                                                onWatchEpisode(anime.watchProgress.episode)
+                                            } else {
+                                                onWatchNow()
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = AppColors.surface,
+                                            contentColor = AppColors.text
+                                        ),
+                                        shape = RoundedCornerShape(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(20.dp))
+                                            val watchText =
+                                                if (anime.watchProgress != null && anime.watchProgress.episode != null) {
+                                                    "CONTINUE - EP ${anime.watchProgress.episode}"
+                                                } else {
+                                                    "WATCH NOW"
+                                                }
+                                            Text(watchText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    Box {
+                                        var showSheet by remember { mutableStateOf(false) }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(CircleShape)
+                                                .background(if (state.inWatchlist) AppColors.accent else AppColors.surface)
+                                                .border(
+                                                    2.dp,
+                                                    if (state.inWatchlist) Color.Transparent else Color.Transparent,
+                                                    CircleShape
+                                                )
+                                                .clickable { showSheet = true },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (state.isUpdatingWatchlist) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(20.dp),
+                                                    color = if (state.inWatchlist) AppColors.onAccent else AppColors.text,
+                                                    strokeWidth = 2.dp
+                                                )
+                                            } else {
+                                                Icon(
+                                                    if (state.inWatchlist) Icons.Default.Check else Icons.Default.Add,
+                                                    contentDescription = "Watchlist",
+                                                    tint = if (state.inWatchlist) AppColors.onAccent else AppColors.text,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                        }
+
+                                        if (showSheet) {
+                                            WatchlistBottomSheet(
+                                                currentFolder = state.folder,
+                                                onSelect = { option ->
+                                                    showSheet = false
+                                                    onWatchlistUpdate(option)
+                                                },
+                                                onDismiss = { showSheet = false }
+                                            )
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(CircleShape)
+                                            .background(AppColors.surface)
+                                            .clickable(onClick = onShareAnime),
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         Icon(
-                                            Icons.Default.Clear,
-                                            contentDescription = "Clear",
-                                            tint = Color.White.copy(alpha = 0.5f),
-                                            modifier = Modifier.size(16.dp).clickable { searchQuery = "" }
+                                            Icons.Default.Share,
+                                            contentDescription = "Share",
+                                            tint = AppColors.text,
+                                            modifier = Modifier.size(22.dp),
                                         )
                                     }
                                 }
-                            }
-                        )
 
-                        // Episode Chunks Dropdown
-                        Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
-                        var chunkExpanded by remember { mutableStateOf(false) }
-                        val end = (currentPageStart + episodesPerPage - 1).coerceAtMost(totalEpisodes)
-                        val currentText = if (pageGroups.size > 1) "Eps $currentPageStart-$end" else "Season 1"
-                        
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(32.dp))
-                                .background(Color.White.copy(alpha = 0.1f))
-                                .clickable { chunkExpanded = true }
-                                .padding(horizontal = 20.dp, vertical = 10.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = currentText,
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Icon(
-                                    imageVector = if (chunkExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Expand",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                                watchedProgressSummary(anime)?.let { summary ->
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        text = summary,
+                                        color = AppColors.text,
+                                        fontSize = 14.sp,
+                                        lineHeight = 20.sp,
+                                    )
+                                }
+                            } // End Column
+
+                            // Cover Image on the right side
+                            AsyncImage(
+                                model = anime.image ?: anime.poster ?: anime.cover,
+                                contentDescription = "Cover Image",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .width(180.dp) // Adjusted slightly for optimal fit
+                                    .aspectRatio(2f / 3f)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .border(2.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+                            )
+                        } // End inner Row
+                    } // End inner content alignment Box
+                } // End of Hero Box
+
+                // Season Chunks and Episodes section below Hero Box
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                    Column(
+                        Modifier
+                            .widthIn(max = 1400.dp)
+                            .fillMaxWidth()
+                            .padding(start = 48.dp, bottom = 48.dp, end = 48.dp)
+                    ) {
+                        val episodesPerPage = 100
+                        val totalEpisodes = state.episodes.size
+                        var currentPageStart by remember(totalEpisodes > 0) {
+                            mutableStateOf(
+                                if (totalEpisodes > 0) maxOf(
+                                    1,
+                                    ((totalEpisodes - 1) / episodesPerPage) * episodesPerPage + 1
+                                ) else 1
+                            )
                         }
 
-                        if (chunkExpanded) {
-                            androidx.compose.ui.window.Popup(
-                                alignment = Alignment.TopStart,
-                                onDismissRequest = { chunkExpanded = false },
+                        if (state.isLoadingEpisodes) {
+                            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = AppColors.accent)
+                            }
+                        } else if (totalEpisodes == 0) {
+                            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                                Text("No episodes available.", color = AppColors.textMuted, fontSize = 16.sp)
+                            }
+                        } else {
+                            var isAscending by remember { mutableStateOf(false) }
+                            var searchQuery by remember { mutableStateOf("") }
+                            val pageGroups = (1..totalEpisodes step episodesPerPage).toList()
+                            val displayGroups = if (isAscending) pageGroups else pageGroups.reversed()
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(top = 48.dp) // Offset below the button
-                                        .width(200.dp)
-                                        .heightIn(max = 300.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Color(0xFF000000))
-                                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                                        .verticalScroll(rememberScrollState())
-                                        .padding(vertical = 8.dp)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    displayGroups.forEachIndexed { index, start ->
-                                        val itemEnd = (start + episodesPerPage - 1).coerceAtMost(totalEpisodes)
-                                        val isSelected = start == currentPageStart
-                                        val text = if (pageGroups.size > 1) "Eps $start-$itemEnd" else "Season 1"
-                                        
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { 
-                                                    currentPageStart = start 
-                                                    chunkExpanded = false 
+                                    // Search bar
+                                    androidx.compose.foundation.text.BasicTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it },
+                                        textStyle = androidx.compose.ui.text.TextStyle(
+                                            color = Color.White,
+                                            fontSize = 15.sp
+                                        ),
+                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(AppColors.text),
+                                        modifier = Modifier
+                                            .width(220.dp)
+                                            .clip(RoundedCornerShape(32.dp))
+                                            .background(AppColors.surfaceVariant)
+                                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                                        decorationBox = { innerTextField ->
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Search,
+                                                    contentDescription = "Search",
+                                                    tint = AppColors.textMuted,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Box(modifier = Modifier.weight(1f)) {
+                                                    if (searchQuery.isEmpty()) {
+                                                        Text(
+                                                            "Search episodes...",
+                                                            color = AppColors.textMuted,
+                                                            fontSize = 15.sp
+                                                        )
+                                                    }
+                                                    innerTextField()
                                                 }
-                                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                if (searchQuery.isNotEmpty()) {
+                                                    Icon(
+                                                        Icons.Default.Clear,
+                                                        contentDescription = "Clear",
+                                                        tint = AppColors.textMuted,
+                                                        modifier = Modifier.size(16.dp).clickable { searchQuery = "" }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    )
+
+                                    // Episode Chunks Dropdown
+                                    Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
+                                        var chunkExpanded by remember { mutableStateOf(false) }
+                                        val end = (currentPageStart + episodesPerPage - 1).coerceAtMost(totalEpisodes)
+                                        val currentText =
+                                            if (pageGroups.size > 1) "Eps $currentPageStart-$end" else "Season 1"
+
+                                        Box(
+                                            Modifier
+                                                .clip(RoundedCornerShape(32.dp))
+                                                .background(AppColors.surfaceVariant)
+                                                .clickable { chunkExpanded = true }
+                                                .padding(horizontal = 20.dp, vertical = 10.dp)
                                         ) {
                                             Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
-                                                Text(text, color = Color.White, fontSize = 14.sp)
-                                                if (isSelected) {
-                                                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                                Text(
+                                                    text = currentText,
+                                                    color = Color.White,
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Icon(
+                                                    imageVector = if (chunkExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                    contentDescription = "Expand",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+
+                                        if (chunkExpanded) {
+                                            androidx.compose.ui.window.Popup(
+                                                alignment = Alignment.TopStart,
+                                                onDismissRequest = { chunkExpanded = false },
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .padding(top = 48.dp) // Offset below the button
+                                                        .width(200.dp)
+                                                        .heightIn(max = 300.dp)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .background(AppColors.surface)
+                                                        .border(
+                                                            1.dp,
+                                                            Color.White.copy(alpha = 0.05f),
+                                                            RoundedCornerShape(12.dp)
+                                                        )
+                                                        .verticalScroll(rememberScrollState())
+                                                        .padding(vertical = 8.dp)
+                                                ) {
+                                                    displayGroups.forEachIndexed { index, start ->
+                                                        val itemEnd =
+                                                            (start + episodesPerPage - 1).coerceAtMost(totalEpisodes)
+                                                        val isSelected = start == currentPageStart
+                                                        val text =
+                                                            if (pageGroups.size > 1) "Eps $start-$itemEnd" else "Season 1"
+
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .clickable {
+                                                                    currentPageStart = start
+                                                                    chunkExpanded = false
+                                                                }
+                                                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                        ) {
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                Text(text, color = AppColors.text, fontSize = 14.sp)
+                                                                if (isSelected) {
+                                                                    Icon(
+                                                                        Icons.Default.Check,
+                                                                        null,
+                                                                        tint = Color.White,
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+
+                                                        if (index < displayGroups.size - 1) {
+                                                            Box(
+                                                                Modifier.fillMaxWidth().height(1.dp)
+                                                                    .background(AppColors.border)
+                                                            )
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
-                                        
-                                        if (index < displayGroups.size - 1) {
-                                            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))
-                                        }
                                     }
-                                }
-                            }
-                        }
-                    }
 
-                    } // Close inner Row
+                                } // Close inner Row
 
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(32.dp))
-                            .background(if (isPremiumUser) Color.White else Color.White.copy(alpha = 0.1f))
-                            .clickable(enabled = isPremiumUser && state.episodes.isNotEmpty()) {
-                                onDownloadSeason(state.episodes)
-                            }
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(
-                                if (isPremiumUser) Icons.Default.Download else Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = if (isPremiumUser) Color.Black else Color.White.copy(alpha = 0.65f),
-                                modifier = Modifier.size(17.dp),
-                            )
-                            Text(
-                                if (isPremiumUser) "Download Batch (${state.episodes.size})" else "Premium Batch",
-                                color = if (isPremiumUser) Color.Black else Color.White.copy(alpha = 0.65f),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                            )
-                        }
-                    }
-
-                    // Sort Button Dropdown
-                    Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
-                        var expanded by remember { mutableStateOf(false) }
-                        
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(32.dp))
-                                .background(Color.White.copy(alpha = 0.1f))
-                                .clickable { expanded = true }
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = if (isAscending) "Oldest" else "Newest",
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Icon(
-                                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Expand",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-
-                        if (expanded) {
-                            androidx.compose.ui.window.Popup(
-                                alignment = Alignment.TopEnd,
-                                onDismissRequest = { expanded = false },
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(top = 48.dp) // Offset below the button
-                                        .width(180.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Color(0xFF000000))
-                                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
-                                        .padding(vertical = 8.dp)
+                                Box(
+                                    Modifier
+                                        .clip(RoundedCornerShape(32.dp))
+                                        .background(if (isPremiumUser) AppColors.accent else AppColors.surfaceVariant)
+                                        .clickable(enabled = isPremiumUser && state.episodes.isNotEmpty()) {
+                                            onDownloadSeason(state.episodes)
+                                        }
+                                        .padding(horizontal = 16.dp, vertical = 10.dp)
                                 ) {
-                                    // Oldest Option
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            if (isPremiumUser) Icons.Default.Download else Icons.Default.Lock,
+                                            contentDescription = null,
+                                            tint = if (isPremiumUser) AppColors.onAccent else AppColors.textMuted,
+                                            modifier = Modifier.size(17.dp),
+                                        )
+                                        Text(
+                                            if (isPremiumUser) "Download Batch (${state.episodes.size})" else "Premium Batch",
+                                            color = if (isPremiumUser) AppColors.onAccent else AppColors.textMuted,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                        )
+                                    }
+                                }
+
+                                // Sort Button Dropdown
+                                Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+                                    var expanded by remember { mutableStateOf(false) }
+
                                     Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { 
-                                                isAscending = true 
-                                                expanded = false 
-                                            }
-                                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                                        Modifier
+                                            .clip(RoundedCornerShape(32.dp))
+                                            .background(AppColors.surfaceVariant)
+                                            .clickable { expanded = true }
+                                            .padding(horizontal = 16.dp, vertical = 10.dp)
                                     ) {
                                         Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Text("Oldest First", color = Color.White, fontSize = 14.sp)
-                                            if (isAscending) {
-                                                Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                            }
+                                            Text(
+                                                text = if (isAscending) "Oldest" else "Newest",
+                                                color = Color.White,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Icon(
+                                                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                contentDescription = "Expand",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
                                         }
                                     }
-                                    
-                                    // Divider
-                                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.05f)))
 
-                                    // Newest Option
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { 
-                                                isAscending = false 
-                                                expanded = false 
-                                            }
-                                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                    if (expanded) {
+                                        androidx.compose.ui.window.Popup(
+                                            alignment = Alignment.TopEnd,
+                                            onDismissRequest = { expanded = false },
                                         ) {
-                                            Text("Newest First", color = Color.White, fontSize = 14.sp)
-                                            if (!isAscending) {
-                                                Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                            Column(
+                                                modifier = Modifier
+                                                    .padding(top = 48.dp) // Offset below the button
+                                                    .width(180.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(AppColors.surface)
+                                                    .border(
+                                                        1.dp,
+                                                        Color.White.copy(alpha = 0.05f),
+                                                        RoundedCornerShape(12.dp)
+                                                    )
+                                                    .padding(vertical = 8.dp)
+                                            ) {
+                                                // Oldest Option
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            isAscending = true
+                                                            expanded = false
+                                                        }
+                                                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text("Oldest First", color = AppColors.text, fontSize = 14.sp)
+                                                        if (isAscending) {
+                                                            Icon(
+                                                                Icons.Default.Check,
+                                                                null,
+                                                                tint = Color.White,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                // Divider
+                                                Box(
+                                                    Modifier.fillMaxWidth().height(1.dp)
+                                                        .background(AppColors.border)
+                                                )
+
+                                                // Newest Option
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            isAscending = false
+                                                            expanded = false
+                                                        }
+                                                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text("Newest First", color = AppColors.text, fontSize = 14.sp)
+                                                        if (!isAscending) {
+                                                            Icon(
+                                                                Icons.Default.Check,
+                                                                null,
+                                                                tint = Color.White,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                    }
-                }
 
-                // Episode List
-                val filteredEpisodes = state.episodes.filter { 
-                    if (searchQuery.isNotBlank()) {
-                        val numMatch = it.number.toString().contains(searchQuery)
-                        val titleMatch = (it.title ?: it.titles?.filterNotNull()?.firstOrNull())?.contains(searchQuery, ignoreCase = true) == true
-                        numMatch || titleMatch
-                    } else {
-                        it.number in currentPageStart until (currentPageStart + episodesPerPage)
-                    }
-                }.let { list ->
-                    if (isAscending) list.sortedBy { it.number } else list.sortedByDescending { it.number }
-                }
-                
-                val listState = rememberLazyListState()
-                val coroutineScope = rememberCoroutineScope()
+                            // Episode List
+                            val filteredEpisodes = state.episodes.filter {
+                                if (searchQuery.isNotBlank()) {
+                                    val numMatch = it.number.toString().contains(searchQuery)
+                                    val titleMatch = (it.title ?: it.titles?.filterNotNull()?.firstOrNull())?.contains(
+                                        searchQuery,
+                                        ignoreCase = true
+                                    ) == true
+                                    numMatch || titleMatch
+                                } else {
+                                    it.number in currentPageStart until (currentPageStart + episodesPerPage)
+                                }
+                            }.let { list ->
+                                if (isAscending) list.sortedBy { it.number } else list.sortedByDescending { it.number }
+                            }
 
-                androidx.compose.runtime.LaunchedEffect(currentPageStart, isAscending, searchQuery) {
-                    if (filteredEpisodes.isNotEmpty()) {
-                        listState.animateScrollToItem(0)
-                    }
-                }
+                            val listState = rememberLazyListState()
+                            val coroutineScope = rememberCoroutineScope()
 
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    LazyRow(
-                        state = listState,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .pointerInput(Unit) {
-                                detectHorizontalDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    coroutineScope.launch {
-                                        listState.scrollBy(-dragAmount)
+                            androidx.compose.runtime.LaunchedEffect(currentPageStart, isAscending, searchQuery) {
+                                if (filteredEpisodes.isNotEmpty()) {
+                                    listState.animateScrollToItem(0)
+                                }
+                            }
+
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                LazyRow(
+                                    state = listState,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .pointerInput(Unit) {
+                                            detectHorizontalDragGestures { change, dragAmount ->
+                                                change.consume()
+                                                coroutineScope.launch {
+                                                    listState.scrollBy(-dragAmount)
+                                                }
+                                            }
+                                        }
+                                ) {
+                                    items(filteredEpisodes, key = { it.number }) { episode ->
+                                        DesktopEpisodeCard(
+                                            episode = episode,
+                                            thumbnail = anime.image ?: anime.poster ?: anime.cover,
+                                            watchedEpisode = anime.watchProgress?.episode,
+                                            currentProgressSeconds = anime.watchProgress?.currentTime,
+                                            episodeProgress = state.episodeProgress[episode.number],
+                                            modifier = Modifier.animateItem(),
+                                            onClick = { onWatchEpisode(episode.number) },
+                                            onDownloadClick = { onDownloadEpisode(episode) }
+                                        )
+                                    }
+                                }
+
+                                // Navigation Arrows
+                                if (listState.canScrollBackward) {
+                                    IconButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                listState.animateScrollToItem(
+                                                    maxOf(
+                                                        0,
+                                                        listState.firstVisibleItemIndex - 3
+                                                    )
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .align(Alignment.CenterStart)
+                                            .offset(x = (-24).dp)
+                                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                    ) {
+                                        Icon(Icons.Default.ChevronLeft, "Previous", tint = Color.White)
+                                    }
+                                }
+
+                                if (listState.canScrollForward) {
+                                    IconButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                listState.animateScrollToItem(
+                                                    minOf(
+                                                        filteredEpisodes.size - 1,
+                                                        listState.firstVisibleItemIndex + 3
+                                                    )
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .align(Alignment.CenterEnd)
+                                            .offset(x = (-24).dp)
+                                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                    ) {
+                                        Icon(Icons.Default.ChevronRight, "Next", tint = Color.White)
                                     }
                                 }
                             }
-                    ) {
-                        items(filteredEpisodes, key = { it.number }) { episode ->
-                            DesktopEpisodeCard(
-                                episode = episode,
-                                thumbnail = anime.image ?: anime.poster ?: anime.cover,
-                                watchedEpisode = anime.watchProgress?.episode,
-                                currentProgressSeconds = anime.watchProgress?.currentTime,
-                                episodeProgress = state.episodeProgress[episode.number],
-                                modifier = Modifier.animateItem(),
-                                onClick = { onWatchEpisode(episode.number) },
-                                onDownloadClick = { onDownloadEpisode(episode) }
-                            )
-                        }
-                    }
-
-                    // Navigation Arrows
-                    if (listState.canScrollBackward) {
-                        IconButton(
-                            onClick = { coroutineScope.launch { listState.animateScrollToItem(maxOf(0, listState.firstVisibleItemIndex - 3)) } },
-                            modifier = Modifier
-                                .align(Alignment.CenterStart)
-                                .offset(x = (-24).dp)
-                                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.ChevronLeft, "Previous", tint = Color.White)
-                        }
-                    }
-
-                    if (listState.canScrollForward) {
-                        IconButton(
-                            onClick = { coroutineScope.launch { listState.animateScrollToItem(minOf(filteredEpisodes.size - 1, listState.firstVisibleItemIndex + 3)) } },
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .offset(x = (-24).dp)
-                                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.ChevronRight, "Next", tint = Color.White)
-                        }
-                    }
-                }
-            } // Close Box (Navigation + LazyRow)
-        } // Close Column
-    } // Close Outer Box for episodes
-    } // Close Main Scroll Column
-    } // Close CompositionLocalProvider
+                        } // Close Box (Navigation + LazyRow)
+                    } // Close Column
+                } // Close Outer Box for episodes
+            } // Close Main Scroll Column
+        } // Close CompositionLocalProvider
     } // Close BoxWithConstraints
 }
 
@@ -1585,7 +1807,7 @@ private fun DesktopEpisodeCard(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
-        
+
         // Gradient overlay for bottom section text readability
         Box(
             Modifier.fillMaxSize().background(
@@ -1646,9 +1868,17 @@ private fun DesktopEpisodeCard(
                     .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                     .padding(horizontal = 8.dp, vertical = 2.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("EPISODE ${episode.number}", color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                    
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "EPISODE ${episode.number}",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
                     val hasDetailedProgress = episodeProgress != null
                     val progressPercent = if (hasDetailedProgress && episodeProgress!!.duration > 0) {
                         (episodeProgress.currentTime / episodeProgress.duration).coerceIn(0.0, 1.0)
@@ -1658,12 +1888,20 @@ private fun DesktopEpisodeCard(
                         hasDetailedProgress && progressPercent >= 0.9 -> {
                             Text("WATCHED", color = Color(0xFF66BB6A), fontSize = 8.sp, fontWeight = FontWeight.Bold)
                         }
+
                         hasDetailedProgress && progressPercent > 0.0 -> {
-                            Text("IN PROGRESS", color = Color(0xFFFFD54F), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                "IN PROGRESS",
+                                color = Color(0xFFFFD54F),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
+
                         !hasDetailedProgress && watchedEpisode != null && episode.number < watchedEpisode -> {
                             Text("WATCHED", color = Color(0xFF66BB6A), fontSize = 8.sp, fontWeight = FontWeight.Bold)
                         }
+
                         !hasDetailedProgress && watchedEpisode != null && episode.number == watchedEpisode -> {
                             Text(
                                 if ((currentProgressSeconds ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED",
@@ -1682,42 +1920,43 @@ private fun DesktopEpisodeCard(
                     }
                 }
             }
-            
+
             Spacer(Modifier.height(4.dp))
-            
+
             val title = episode.title ?: episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
             Text(
                 text = title,
-                color = Color.White,
+                color = AppColors.text,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            
+
             Spacer(Modifier.height(4.dp))
-            
+
             // Description equivalent text (or skip if empty)
             Text(
                 text = "Watch episode ${episode.number} right now.",
-                color = Color.LightGray,
+                color = AppColors.textDim,
                 fontSize = 11.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 lineHeight = 14.sp
             )
-            
+
             Spacer(Modifier.height(4.dp))
-            
+
             // Date (ago) at bottom right logically
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Text(episode.ago ?: "", color = Color.Gray, fontSize = 10.sp)
+                Text(episode.ago ?: "", color = AppColors.textMuted, fontSize = 10.sp)
             }
         }
 
         // Red progress bar at the very bottom
         if (episodeProgress != null && episodeProgress.duration > 0 && episodeProgress.currentTime > 0) {
-            val progressPercentValue = (episodeProgress.currentTime / episodeProgress.duration).toFloat().coerceIn(0f, 1f)
+            val progressPercentValue =
+                (episodeProgress.currentTime / episodeProgress.duration).toFloat().coerceIn(0f, 1f)
             LinearProgressIndicator(
                 progress = { progressPercentValue },
                 modifier = Modifier
@@ -1763,7 +2002,6 @@ private fun WatchlistDropdownIcon(
 }
 
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SeasonBatchPickerDialog(
@@ -1784,7 +2022,12 @@ private fun SeasonBatchPickerDialog(
                 "anidb" -> to.kuudere.anisuge.data.models.ServerInfo(id = "anidb", label = "AniDB", type = "sub_dub")
                 "miruro" -> to.kuudere.anisuge.data.models.ServerInfo(id = "miruro", label = "Miruro", type = "sub_dub")
                 "anikage" -> to.kuudere.anisuge.data.models.ServerInfo(id = "anikage", label = "Anikage", type = "sub")
-                "anitaku-1" -> to.kuudere.anisuge.data.models.ServerInfo(id = "anitaku-1", label = "Anitaku 1", type = "sub")
+                "anitaku-1" -> to.kuudere.anisuge.data.models.ServerInfo(
+                    id = "anitaku-1",
+                    label = "Anitaku 1",
+                    type = "sub"
+                )
+
                 "anitaku" -> to.kuudere.anisuge.data.models.ServerInfo(id = "anitaku", label = "Anitaku", type = "sub")
                 else -> null
             }
@@ -1814,8 +2057,17 @@ private fun SeasonBatchPickerDialog(
     var selectedNumbers by remember(sortedEpisodes) {
         mutableStateOf(sortedEpisodes.take(12).map { it.number }.toSet())
     }
-    var rangeStart by remember(sortedEpisodes) { mutableStateOf(sortedEpisodes.firstOrNull()?.number?.toString().orEmpty()) }
-    var rangeEnd by remember(sortedEpisodes) { mutableStateOf(sortedEpisodes.getOrNull(11)?.number?.toString() ?: sortedEpisodes.lastOrNull()?.number?.toString().orEmpty()) }
+    var rangeStart by remember(sortedEpisodes) {
+        mutableStateOf(
+            sortedEpisodes.firstOrNull()?.number?.toString().orEmpty()
+        )
+    }
+    var rangeEnd by remember(sortedEpisodes) {
+        mutableStateOf(
+            sortedEpisodes.getOrNull(11)?.number?.toString() ?: sortedEpisodes.lastOrNull()?.number?.toString()
+                .orEmpty()
+        )
+    }
     var searchQuery by remember { mutableStateOf("") }
     val filteredEpisodes = remember(sortedEpisodes, searchQuery) {
         if (searchQuery.isBlank()) {
@@ -1824,7 +2076,7 @@ private fun SeasonBatchPickerDialog(
             val query = searchQuery.trim().lowercase()
             sortedEpisodes.filter {
                 it.number.toString().contains(query) ||
-                it.title?.lowercase()?.contains(query) == true
+                        it.title?.lowercase()?.contains(query) == true
             }
         }
     }
@@ -1838,15 +2090,15 @@ private fun SeasonBatchPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF141414),
+        containerColor = AppColors.surface,
         title = {
-            Text("Batch download", color = Color.White, fontWeight = FontWeight.Bold)
+            Text("Batch download", color = AppColors.text, fontWeight = FontWeight.Bold)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
                     "Choose up to ${to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES} episodes. You can use a quick range or pick episodes manually.",
-                    color = Color.White.copy(alpha = 0.68f),
+                    color = AppColors.textMuted,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                 )
@@ -1868,7 +2120,9 @@ private fun SeasonBatchPickerDialog(
                     }
                     AssistChip(
                         onClick = {
-                            selectedNumbers = sortedEpisodes.take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES).map { it.number }.toSet()
+                            selectedNumbers =
+                                sortedEpisodes.take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
+                                    .map { it.number }.toSet()
                         },
                         label = { Text("Select All") },
                         enabled = sortedEpisodes.isNotEmpty(),
@@ -1882,7 +2136,10 @@ private fun SeasonBatchPickerDialog(
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     OutlinedTextField(
                         value = rangeStart,
                         onValueChange = { rangeStart = it.filter(Char::isDigit).take(4) },
@@ -1890,12 +2147,12 @@ private fun SeasonBatchPickerDialog(
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color.White,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.24f),
-                            focusedLabelColor = Color.White,
-                            unfocusedLabelColor = Color.White.copy(alpha = 0.6f),
+                            focusedTextColor = AppColors.text,
+                            unfocusedTextColor = AppColors.text,
+                            focusedBorderColor = AppColors.border,
+                            unfocusedBorderColor = AppColors.border,
+                            focusedLabelColor = AppColors.text,
+                            unfocusedLabelColor = AppColors.textMuted,
                         ),
                     )
                     OutlinedTextField(
@@ -1905,12 +2162,12 @@ private fun SeasonBatchPickerDialog(
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color.White,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.24f),
-                            focusedLabelColor = Color.White,
-                            unfocusedLabelColor = Color.White.copy(alpha = 0.6f),
+                            focusedTextColor = AppColors.text,
+                            unfocusedTextColor = AppColors.text,
+                            focusedBorderColor = AppColors.border,
+                            unfocusedBorderColor = AppColors.border,
+                            focusedLabelColor = AppColors.text,
+                            unfocusedLabelColor = AppColors.textMuted,
                         ),
                     )
                     Button(
@@ -1927,7 +2184,10 @@ private fun SeasonBatchPickerDialog(
                                     .toSet()
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AppColors.accent,
+                            contentColor = AppColors.onAccent
+                        ),
                     ) {
                         Text("Use")
                     }
@@ -1936,29 +2196,35 @@ private fun SeasonBatchPickerDialog(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search episode number or title...", color = Color.White.copy(alpha = 0.4f), fontSize = 13.sp) },
+                    placeholder = {
+                        Text(
+                            "Search episode number or title...",
+                            color = AppColors.textMuted,
+                            fontSize = 13.sp
+                        )
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color.White,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.24f),
-                        focusedLabelColor = Color.White,
-                        unfocusedLabelColor = Color.White.copy(alpha = 0.6f),
+                        focusedTextColor = AppColors.text,
+                        unfocusedTextColor = AppColors.text,
+                        focusedBorderColor = AppColors.border,
+                        unfocusedBorderColor = AppColors.border,
+                        focusedLabelColor = AppColors.text,
+                        unfocusedLabelColor = AppColors.textMuted,
                     ),
                 )
 
                 Text(
                     "Selected ${selectedEpisodes.size} episode${if (selectedEpisodes.size == 1) "" else "s"}",
-                    color = Color.White,
+                    color = AppColors.text,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
 
                 // ── Audio (Sub / Dub) ─────────────────────────────────────────
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Audio", color = Color.Gray, fontSize = 13.sp)
+                    Text("Audio", color = AppColors.textMuted, fontSize = 13.sp)
                     val dubSupported = selectedServerInfo?.supportsDub != false
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         listOf(false to "Sub", true to "Dub").forEach { (dub, label) ->
@@ -1970,8 +2236,8 @@ private fun SeasonBatchPickerDialog(
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(
                                         when {
-                                            isSelected -> Color.White
-                                            else -> Color(0xFF000000)
+                                            isSelected -> AppColors.accent
+                                            else -> AppColors.surface
                                         }
                                     )
                                     .then(if (enabled) Modifier.clickable { preferDub = dub } else Modifier)
@@ -1981,7 +2247,7 @@ private fun SeasonBatchPickerDialog(
                             ) {
                                 Text(
                                     text = label,
-                                    color = if (isSelected) Color.Black else Color.White,
+                                    color = if (isSelected) AppColors.onAccent else AppColors.text,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -1991,7 +2257,7 @@ private fun SeasonBatchPickerDialog(
                     if (selectedServerInfo?.supportsDub == false) {
                         Text(
                             "${selectedServerInfo.displayName} is Sub-only.",
-                            color = Color.Gray.copy(alpha = 0.85f),
+                            color = AppColors.textDim,
                             fontSize = 11.sp,
                         )
                     }
@@ -1999,21 +2265,21 @@ private fun SeasonBatchPickerDialog(
 
                 // ── Server (recommended first) ────────────────────────────────
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Server", color = Color.Gray, fontSize = 13.sp)
+                    Text("Server", color = AppColors.textMuted, fontSize = 13.sp)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(batchServers, key = { it.id }) { server ->
                             val isSelected = server.id.equals(selectedServer, ignoreCase = true)
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) Color.White else Color(0xFF000000))
+                                    .background(if (isSelected) AppColors.accent else AppColors.surface)
                                     .clickable { selectedServer = server.id }
                                     .padding(horizontal = 16.dp, vertical = 10.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     text = server.displayName,
-                                    color = if (isSelected) Color.Black else Color.White,
+                                    color = if (isSelected) AppColors.onAccent else AppColors.text,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
@@ -2022,7 +2288,7 @@ private fun SeasonBatchPickerDialog(
                     }
                     Text(
                         "If the selected server fails, we try Anikage, Anitaku, AniDB, then Miruro automatically.",
-                        color = Color.Gray.copy(alpha = 0.85f),
+                        color = AppColors.textDim,
                         fontSize = 11.sp,
                         lineHeight = 15.sp,
                     )
@@ -2038,7 +2304,7 @@ private fun SeasonBatchPickerDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (checked) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.035f))
+                                .background(if (checked) AppColors.surfaceVariant else AppColors.surface)
                                 .clickable {
                                     selectedNumbers = if (checked) {
                                         selectedNumbers - episode.number
@@ -2062,22 +2328,22 @@ private fun SeasonBatchPickerDialog(
                                     }
                                 },
                                 colors = CheckboxDefaults.colors(
-                                    checkedColor = Color.White,
-                                    uncheckedColor = Color.White.copy(alpha = 0.55f),
-                                    checkmarkColor = Color.Black,
+                                    checkedColor = AppColors.accent,
+                                    uncheckedColor = AppColors.textMuted,
+                                    checkmarkColor = AppColors.onAccent,
                                 ),
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(
                                     "Episode ${episode.number}",
-                                    color = Color.White,
+                                    color = AppColors.text,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 episode.title?.takeIf { it.isNotBlank() }?.let {
                                     Text(
                                         it,
-                                        color = Color.White.copy(alpha = 0.50f),
+                                        color = AppColors.textMuted,
                                         fontSize = 11.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -2093,14 +2359,17 @@ private fun SeasonBatchPickerDialog(
             Button(
                 enabled = selectedEpisodes.isNotEmpty(),
                 onClick = { onConfirm(selectedEpisodes, selectedServer, preferDub) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AppColors.accent,
+                    contentColor = AppColors.onAccent
+                ),
             ) {
                 Text("Continue")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Color.White.copy(alpha = 0.72f))
+                Text("Cancel", color = AppColors.textMuted)
             }
         },
     )
@@ -2119,14 +2388,14 @@ private fun EpisodeListSection(
 ) {
     if (state.isLoadingEpisodes) {
         Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
+            CircularProgressIndicator(color = AppColors.accent, strokeWidth = 2.dp)
         }
         return
     }
 
     if (state.episodes.isEmpty()) {
         Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-            Text("No episodes found", color = Color.Gray)
+            Text("No episodes found", color = AppColors.textMuted)
         }
         return
     }
@@ -2144,7 +2413,7 @@ private fun EpisodeListSection(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF1D1D1D))
+                .background(AppColors.surface)
                 .clickable { showGroupSheet = true }
                 .padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
@@ -2157,21 +2426,21 @@ private fun EpisodeListSection(
                     val end = (currentPageStart + episodesPerPage - 1).coerceAtMost(totalEpisodes)
                     Text(
                         "Episodes $currentPageStart - $end",
-                        color = Color.White,
+                        color = AppColors.text,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "$totalEpisodes episodes / Released ${state.details?.subbed ?: totalEpisodes}",
-                        color = Color.Gray,
+                        color = AppColors.textMuted,
                         fontSize = 13.sp
                     )
                 }
                 Icon(
                     Icons.Default.KeyboardArrowDown,
                     contentDescription = "Expand",
-                    tint = Color.White
+                    tint = AppColors.text
                 )
             }
         }
@@ -2179,7 +2448,7 @@ private fun EpisodeListSection(
         if (showGroupSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showGroupSheet = false },
-                containerColor = Color(0xFF1D1D1D),
+                containerColor = AppColors.surface,
                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
                 dragHandle = {
                     Box(
@@ -2191,7 +2460,7 @@ private fun EpisodeListSection(
                                 .width(40.dp)
                                 .height(4.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White.copy(alpha = 0.3f))
+                                .background(AppColors.textMuted.copy(alpha = 0.3f))
                         )
                     }
                 }
@@ -2206,7 +2475,7 @@ private fun EpisodeListSection(
                 ) {
                     Text(
                         "Select Episode Range",
-                        color = Color.White,
+                        color = AppColors.text,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -2218,7 +2487,7 @@ private fun EpisodeListSection(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (isSelected) Color.White.copy(alpha = 0.1f) else Color.Transparent)
+                                .background(if (isSelected) AppColors.surfaceVariant else Color.Transparent)
                                 .clickable {
                                     currentPageStart = start
                                     showGroupSheet = false
@@ -2229,12 +2498,12 @@ private fun EpisodeListSection(
                         ) {
                             Text(
                                 "Episodes $start - $end",
-                                color = Color.White,
+                                color = AppColors.text,
                                 fontSize = 15.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                             )
                             if (isSelected) {
-                                Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Check, null, tint = AppColors.text, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
@@ -2256,8 +2525,8 @@ private fun EpisodeListSection(
                 },
                 enabled = state.episodes.isNotEmpty(),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isPremiumUser) Color.White else Color.White.copy(alpha = 0.14f),
-                    disabledContainerColor = Color.White.copy(alpha = 0.08f),
+                    containerColor = if (isPremiumUser) AppColors.accent else AppColors.surface.copy(alpha = 0.7f),
+                    disabledContainerColor = AppColors.surface.copy(alpha = 0.5f),
                 ),
                 shape = RoundedCornerShape(10.dp),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp),
@@ -2265,13 +2534,13 @@ private fun EpisodeListSection(
                 Icon(
                     if (isPremiumUser) Icons.Default.Download else Icons.Default.Lock,
                     contentDescription = null,
-                    tint = if (isPremiumUser) Color.Black else Color.White.copy(alpha = 0.72f),
+                    tint = if (isPremiumUser) AppColors.onAccent else AppColors.textMuted,
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = if (isPremiumUser) "Download Batch (${state.episodes.size})" else "Premium Batch",
-                    color = if (isPremiumUser) Color.Black else Color.White.copy(alpha = 0.72f),
+                    color = if (isPremiumUser) AppColors.onAccent else AppColors.textMuted,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -2286,23 +2555,35 @@ private fun EpisodeListSection(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth().height(50.dp),
-            placeholder = { Text("Search episode...", color = Color.White.copy(alpha = 0.4f), fontSize = 14.sp) },
-            leadingIcon = { Icon(Icons.Outlined.Search, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(20.dp)) },
+            placeholder = { Text("Search episode...", color = AppColors.textMuted, fontSize = 14.sp) },
+            leadingIcon = {
+                Icon(
+                    Icons.Outlined.Search,
+                    null,
+                    tint = AppColors.textMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
                     IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Default.Clear, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                        Icon(
+                            Icons.Default.Clear,
+                            null,
+                            tint = AppColors.textMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             },
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color.White.copy(alpha = 0.18f),
-                unfocusedBorderColor = Color.White.copy(alpha = 0.12f),
-                focusedContainerColor = Color(0xFF141414),
-                unfocusedContainerColor = Color(0xFF141414),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                cursorColor = Color.White
+                focusedBorderColor = AppColors.border,
+                unfocusedBorderColor = AppColors.border,
+                focusedContainerColor = AppColors.surface,
+                unfocusedContainerColor = AppColors.surface,
+                focusedTextColor = AppColors.text,
+                unfocusedTextColor = AppColors.text,
+                cursorColor = AppColors.text
             ),
             shape = RoundedCornerShape(10.dp),
             singleLine = true
@@ -2316,7 +2597,10 @@ private fun EpisodeListSection(
             val inRange = num >= currentPageStart && num < currentPageStart + episodesPerPage
             if (searchQuery.isEmpty()) return@filter inRange
             val matchNum = num.toString().contains(searchQuery)
-            val titleMatches = (it.title ?: it.titles?.filterNotNull()?.firstOrNull())?.contains(searchQuery, ignoreCase = true) == true
+            val titleMatches = (it.title ?: it.titles?.filterNotNull()?.firstOrNull())?.contains(
+                searchQuery,
+                ignoreCase = true
+            ) == true
             inRange && (matchNum || titleMatches)
         }.sortedBy { it.number }
 
@@ -2356,8 +2640,8 @@ private fun EpisodeItemRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.05f))
-            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+            .background(AppColors.surface)
+            .border(1.dp, AppColors.border, RoundedCornerShape(12.dp))
             .tvFocusableClick(shape = RoundedCornerShape(12.dp), onClick = onClick)
     ) {
         Row(
@@ -2373,7 +2657,7 @@ private fun EpisodeItemRow(
                     .weight(0.42f)
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF000000))
+                    .background(AppColors.surface)
             ) {
                 if (thumbnail != null) {
                     AsyncImage(
@@ -2383,7 +2667,7 @@ private fun EpisodeItemRow(
                         modifier = Modifier.fillMaxSize()
                     )
                 }
-                
+
                 // Gradient overlay
                 Box(
                     Modifier.fillMaxSize().background(
@@ -2402,7 +2686,7 @@ private fun EpisodeItemRow(
 
                 Text(
                     text = episode.number.toString().padStart(2, '0'),
-                    color = Color.White,
+                    color = AppColors.text,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
@@ -2423,19 +2707,23 @@ private fun EpisodeItemRow(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    val title = episode.title ?: episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
+                    val title =
+                        episode.title ?: episode.titles?.filterNotNull()?.firstOrNull() ?: "Episode ${episode.number}"
                     Text(
                         text = title,
-                        color = Color.White,
+                        color = AppColors.text,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text(
                             text = "EP ${episode.number}",
-                            color = Color.White.copy(alpha = 0.5f),
+                            color = AppColors.textMuted,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -2443,14 +2731,19 @@ private fun EpisodeItemRow(
                             episodeProgress != null && progressFraction >= 0.9 -> {
                                 ProgressBadge("WATCHED")
                             }
+
                             episodeProgress != null && progressFraction > 0.0 -> {
                                 ProgressBadge("IN PROGRESS")
                             }
+
                             watchedEpisode != null && episode.number < watchedEpisode -> {
                                 ProgressBadge("WATCHED")
                             }
+
                             watchedEpisode != null && episode.number == watchedEpisode -> {
-                                ProgressBadge(if ((currentProgressSeconds ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED")
+                                ProgressBadge(
+                                    if ((currentProgressSeconds ?: 0.0) > 0.0) "IN PROGRESS" else "LAST WATCHED"
+                                )
                             }
                         }
                         if (episode.filler == true) {
@@ -2485,12 +2778,12 @@ private fun EpisodeItemRow(
                     modifier = Modifier
                         .padding(start = 8.dp)
                         .size(32.dp)
-                        .background(Color.White.copy(alpha = 0.08f), CircleShape)
+                        .background(AppColors.surface, CircleShape)
                 ) {
                     Icon(
                         Icons.Default.Download,
                         contentDescription = "Download",
-                        tint = Color.White.copy(alpha = 0.7f),
+                        tint = AppColors.text,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -2503,7 +2796,7 @@ private fun EpisodeItemRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(3.dp)
-                    .background(Color.White.copy(alpha = 0.1f))
+                    .background(AppColors.surfaceVariant)
             ) {
                 Box(
                     modifier = Modifier
@@ -2521,13 +2814,13 @@ private fun ProgressBadge(text: String) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(Color.White.copy(alpha = 0.10f))
-            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+            .background(AppColors.surface)
+            .border(1.dp, AppColors.border, RoundedCornerShape(999.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         Text(
             text = text,
-            color = Color.White.copy(alpha = 0.88f),
+            color = AppColors.text,
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
         )

@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import to.kuudere.anisuge.screens.search.SearchViewModel
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.AnimeCard
 import to.kuudere.anisuge.ui.OfflineState
 
@@ -70,10 +71,10 @@ fun NewOnAppScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF000000)),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.background),
             )
         },
-        containerColor = Color(0xFF000000),
+        containerColor = AppColors.background,
     ) { paddingValues ->
         BoxWithConstraints(
             Modifier
@@ -128,7 +129,7 @@ fun NewOnAppScreen(
                                 Spacer(Modifier.height(12.dp))
                                 Button(
                                     onClick = { viewModel.search() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF)),
+                                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
                                 ) {
                                     Text("Retry")
                                 }

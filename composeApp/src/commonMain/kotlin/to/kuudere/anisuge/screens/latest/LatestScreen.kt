@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.OfflineState
 import to.kuudere.anisuge.ui.AnimeCard
 
@@ -60,11 +61,11 @@ fun LatestEpisodesScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF000000)
+                    containerColor = AppColors.background
                 )
             )
         },
-        containerColor = Color(0xFF000000)
+        containerColor = AppColors.background
     ) { paddingValues ->
         BoxWithConstraints(
             Modifier
@@ -86,7 +87,7 @@ fun LatestEpisodesScreen(
                         Spacer(Modifier.height(12.dp))
                         Button(
                             onClick = { viewModel.refresh() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))
+                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent)
                         ) {
                             Text("Retry")
                         }
@@ -134,7 +135,7 @@ fun LatestEpisodesScreen(
                                     Spacer(Modifier.height(12.dp))
                                     Button(
                                         onClick = { viewModel.refresh() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBF80FF))
+                                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent)
                                     ) {
                                         Text("Retry")
                                     }

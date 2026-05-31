@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
@@ -40,10 +41,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import to.kuudere.anisuge.data.models.BffShopItem
 import to.kuudere.anisuge.ui.ProfileAvatar
 
-private val BG_CARD = Color(0xFF141414)
-private val TEXT = Color.White
-private val MUTED = Color(0xFF9E9E9E)
-private val ACCENT = Color(0xFFE50914)
+private val BG_CARD: Color get() = AppColors.surfaceVariant
+private val TEXT: Color get() = AppColors.text
+private val MUTED: Color get() = AppColors.textMuted
+private val ACCENT: Color get() = AppColors.accent
 
 @Composable
 fun ShopSettingsTab(

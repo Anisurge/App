@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -413,7 +414,7 @@ fun SettingsOverlay(
                                             interactionSource = subtitleSizeInteractionSource,
                                             colors = SliderDefaults.colors(
                                                 thumbColor = Color.White,
-                                                activeTrackColor = Color.White,
+                                                activeTrackColor = AppColors.accent,
                                                 inactiveTrackColor = Color.White.copy(alpha = 0.18f)
                                             ),
                                             modifier = Modifier.fillMaxWidth()
@@ -720,7 +721,7 @@ private fun ToggleMenuItem(
                     uncheckedTrackColor = Color(0xFF222222),
                     uncheckedBorderColor = Color(0xFF444444),
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = Color.White.copy(alpha = 0.5f),
+                    checkedTrackColor = AppColors.accent.copy(alpha = 0.7f),
                     checkedBorderColor = Color.Transparent
                 )
             )
