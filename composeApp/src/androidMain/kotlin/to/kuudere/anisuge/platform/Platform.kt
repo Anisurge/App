@@ -159,13 +159,40 @@ actual fun isFolderWritable(path: String): Boolean {
             if (retry) testFile.delete()
             retry
         } else {
-            // createNewFile returned false without the file existing —
-            // scoped storage likely blocked the write; don't trust canWrite()
-            println("[isFolderWritable] test-write blocked by scoped storage: $path")
+            // createNewFile returned false without the file existing
+            println("[isFolderWritable] test-write blocked: $path")
+            
+            // On Android 11+, if this is an external storage path but write failed,
+            // it might still be writable via SAF. The file picker returns such paths
+            // but direct File API access is blocked by scoped storage.
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                if (path.startsWith("/storage/")) {
+                    // External storage path where File API write failed
+                    // Check if we have ANY write permissions via SAF - if so, assume accessible
+                    val hasPersistedSafPermission = androidAppContext.contentResolver.persistedUriPermissions
+                        .any { it.isWritePermission }
+                    
+                    if (hasPersistedSafPermission) {
+                        println("[isFolderWritable] SAF permissions exist; treating $path as writable")
+                        return true
+                    }
+                }
+            }
             false
         }
     } catch (e: Exception) {
-        println("[isFolderWritable] check failed for $path: ${e.message}")
+        println("[isFolderWritable] exception for $path: ${e.message}")
+        // If we get an exception, it might be due to scoped storage blocking
+        // Check if this looks like an external storage path on Android 11+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
+            path.startsWith("/storage/")) {
+            val hasPersistedSafPermission = androidAppContext.contentResolver.persistedUriPermissions
+                .any { it.isWritePermission }
+            if (hasPersistedSafPermission) {
+                println("[isFolderWritable] exception but SAF permissions exist; treating $path as writable")
+                return true
+            }
+        }
         false
     }
 }
