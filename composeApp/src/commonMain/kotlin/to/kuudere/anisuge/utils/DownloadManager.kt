@@ -1310,7 +1310,7 @@ object DownloadManager {
             }
             val animeSafe = task.animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
             val epDir = "$baseDir/$animeSafe/ep_${task.episodeNumber}"
-            deleteDirectoryRecursively(epDir)
+            deleteDirectoryContentsRecursively(epDir)
             task.localPath?.let { path ->
                 if (path != mp4Path && KmpFileSystem.exists(path)) {
                     KmpFileSystem.delete(path)
@@ -1321,13 +1321,13 @@ object DownloadManager {
         }
     }
 
-    private fun deleteDirectoryRecursively(dir: String) {
+    private fun deleteDirectoryContentsRecursively(dir: String) {
         if (!KmpFileSystem.exists(dir)) return
         try {
             KmpFileSystem.listDir(dir).forEach { name ->
                 val child = "$dir/$name"
                 try {
-                    deleteDirectoryRecursively(child)
+                    deleteDirectoryContentsRecursively(child)
                 } catch (_: Exception) {
                     try {
                         KmpFileSystem.delete(child)
@@ -1335,12 +1335,7 @@ object DownloadManager {
                     }
                 }
             }
-            KmpFileSystem.delete(dir)
         } catch (_: Exception) {
-            try {
-                KmpFileSystem.delete(dir)
-            } catch (_: Exception) {
-            }
         }
     }
 
