@@ -1070,7 +1070,11 @@ private fun DesktopLayout(
                                 .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                                 .align(Alignment.TopStart)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.text)
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = AppColors.text
+                            )
                         }
 
                         to.kuudere.anisuge.platform.WindowManagementButtons(
