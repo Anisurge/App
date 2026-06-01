@@ -36,6 +36,7 @@ data class ChatMessage(
     @SerialName("createdAt") val createdAt: String = "",
     @SerialName("joinedAt") val joinedAt: String? = null,
     @SerialName("isPremium") val isPremium: Boolean = false,
+    @SerialName("isStaff") val isStaff: Boolean = false,
     @SerialName("nameStyle") val nameStyle: ChatNameStyle? = null,
     val coins: Int = 0,
     val isBot: Boolean = userId == SURGE_BOT_USER_ID,
@@ -179,10 +180,12 @@ data class ChatWsEnvelope(
     val type: String = "",
     val data: ChatMessage? = null,
     val message: String? = null,
+    @SerialName("messageId") val messageId: String? = null,
 )
 
 sealed class ChatLiveEvent {
     data class Message(val message: ChatMessage) : ChatLiveEvent()
+    data class Delete(val messageId: String) : ChatLiveEvent()
     data class Error(val message: String) : ChatLiveEvent()
     data object Connected : ChatLiveEvent()
     data object Disconnected : ChatLiveEvent()

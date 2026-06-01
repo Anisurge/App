@@ -39,6 +39,15 @@ private val botGradientColors = listOf(
     Color(0xFFBF80FF), // wrap back
 )
 
+/** Staff gradient — blue → green → red → yellow cycling. */
+private val staffGradientColors = listOf(
+    Color(0xFF3B82F6), // blue
+    Color(0xFF10B981), // green
+    Color(0xFFEF4444), // red
+    Color(0xFFEAB308), // yellow
+    Color(0xFF3B82F6), // wrap back to start
+)
+
 @Composable
 fun ChatUsernameLabel(
     message: ChatMessage,
@@ -48,7 +57,7 @@ fun ChatUsernameLabel(
     fontWeight: FontWeight? = null,
 ) {
     val isBot = message.userId == SURGE_BOT_USER_ID || message.isBot
-    val showGradient = isBot || message.effectivePremium
+    val showGradient = isBot || message.effectivePremium || message.isStaff
 
     val gradient = if (showGradient) {
         val infiniteTransition = rememberInfiniteTransition(label = "proGradient")
@@ -62,10 +71,10 @@ fun ChatUsernameLabel(
             label = "gradientShift",
         )
 
-        val colors = if (isBot) {
-            botGradientColors
-        } else {
-            premiumGradientColors
+        val colors = when {
+            message.isStaff -> staffGradientColors
+            isBot -> botGradientColors
+            else -> premiumGradientColors
         }
 
         // Shift the gradient continuously for a flowing multi-color effect

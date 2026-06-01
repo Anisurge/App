@@ -3,6 +3,7 @@ package to.kuudere.anisuge.data.services
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -127,6 +128,23 @@ class ChatService(
         }
     }
 
+    suspend fun deleteMessage(messageId: String): Result<Unit> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.delete("${AnisurgeApi.v1Base}/chat/rooms/$GLOBAL_ROOM_SLUG/messages/$messageId") {
+                applyAnisurgeAuth(stored)
+            }
+            if (response.status.isSuccess()) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception(parseError(response)))
+            }
+        } catch (e: Exception) {
+            println("[ChatService] deleteMessage error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     suspend fun fetchMemberProfile(userId: String): ChatMemberProfileResponse? {
         val stored = sessionStore.get() ?: return null
         if (userId.isBlank()) return null
@@ -175,6 +193,7 @@ class ChatService(
 
                         when (envelope.type) {
                             "message" -> envelope.data?.let { trySend(ChatLiveEvent.Message(it)) }
+                            "delete" -> envelope.messageId?.let { trySend(ChatLiveEvent.Delete(it)) }
                             "error" -> envelope.message?.let { trySend(ChatLiveEvent.Error(it)) }
                         }
                     }

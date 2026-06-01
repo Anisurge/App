@@ -56,6 +56,7 @@ data class LiveChatUiState(
     val cooldownSecondsLeft: Int = 0,
     /** Messages from other users received while the chat screen was not open. */
     val unreadCount: Int = 0,
+    val isCurrentUserStaff: Boolean = false,
 )
 
 class LiveChatViewModel(
@@ -130,6 +131,7 @@ class LiveChatViewModel(
     private var hasInitialized = false
     private var lastSentAtMs: Long = 0L
     private var isCurrentUserPremium: Boolean = false
+    private var isCurrentUserStaff: Boolean = false
 
     companion object {
         private const val COOLDOWN_MS = 5_000L
@@ -250,6 +252,7 @@ class LiveChatViewModel(
             val historyMessages = (history?.messages ?: emptyList())
                 .map { enrichOwnMessage(it, _uiState.value) }
             prefetchChatFrames(historyMessages)
+            detectStaffStatus(historyMessages)
 
             _uiState.update {
                 it.copy(
@@ -311,6 +314,7 @@ class LiveChatViewModel(
             }
             val enriched = merged.map { enrichOwnMessage(it, state) }
             prefetchChatFrames(enriched)
+            detectStaffStatus(enriched)
             state.copy(
                 roomName = room?.name ?: state.roomName,
                 onlineCount = room?.onlineCount ?: state.onlineCount,
@@ -653,6 +657,7 @@ class LiveChatViewModel(
                         val snapshot = _uiState.value
                         val incoming = enrichOwnMessage(event.message, snapshot)
                         prefetchChatFrames(listOf(incoming))
+                        detectStaffStatus(listOf(incoming))
                         _uiState.update { state ->
                             state.copy(
                                 messages = mergeMessages(state.messages, listOf(incoming)),
@@ -661,7 +666,33 @@ class LiveChatViewModel(
                             )
                         }
                     }
+                    is ChatLiveEvent.Delete -> {
+                        _uiState.update { state ->
+                            state.copy(
+                                messages = state.messages.filter { it.id != event.messageId },
+                            )
+                        }
+                    }
                 }
+            }
+        }
+    }
+
+    private fun detectStaffStatus(messages: List<ChatMessage>) {
+        if (isCurrentUserStaff) return
+        val selfId = _uiState.value.currentUserId
+        if (selfId == null) return
+        if (messages.any { it.userId == selfId && it.isStaff }) {
+            isCurrentUserStaff = true
+            _uiState.update { it.copy(isCurrentUserStaff = true) }
+        }
+    }
+
+    fun deleteMessage(messageId: String) {
+        viewModelScope.launch {
+            val result = chatService.deleteMessage(messageId)
+            result.onFailure { e ->
+                _uiState.update { it.copy(error = e.message ?: "Failed to delete") }
             }
         }
     }

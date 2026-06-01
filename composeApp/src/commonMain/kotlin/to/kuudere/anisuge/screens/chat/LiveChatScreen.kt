@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -351,6 +353,7 @@ fun LiveChatScreen(
                                     isScrolling = isUserScrolling,
                                     onProfileClick = { viewModel.showMemberProfile(message) },
                                     onActionClick = onAction,
+                                    onDelete = if (state.isCurrentUserStaff) { { viewModel.deleteMessage(message.id) } } else null,
                                 )
                             }
                         }
@@ -458,6 +461,7 @@ private fun ChatMessageRow(
     isScrolling: Boolean,
     onProfileClick: () -> Unit,
     onActionClick: (String) -> Unit,
+    onDelete: (() -> Unit)? = null,
 ) {
     val bubbleColor = if (isMine) Color(0xFF8B1520) else Color(0xFF1E1E1E)
     val accent = chatAccentColor(message.userId, isMine)
@@ -470,7 +474,17 @@ private fun ChatMessageRow(
     // Extra top padding when this is the first message in a new group (visual separation)
     val topPadding = if (showHeader) 8.dp else 0.dp
 
-    Column(modifier = Modifier.padding(top = topPadding)) {
+    val deleteModifier = if (onDelete != null) {
+        Modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onLongPress = { onDelete() },
+            )
+        }
+    } else {
+        Modifier
+    }
+
+    Column(modifier = Modifier.padding(top = topPadding).then(deleteModifier)) {
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
@@ -514,6 +528,9 @@ private fun ChatMessageRow(
                         )
                         if (message.effectivePremium) {
                             PremiumChatBadge()
+                        }
+                        if (message.isStaff) {
+                            StaffBadge()
                         }
                     }
                     Spacer(Modifier.height(4.dp))
@@ -607,6 +624,21 @@ private fun PremiumChatBadge() {
             .clip(RoundedCornerShape(6.dp))
             .background(Color(0xFF2A2200))
             .border(1.dp, Color(0xFFFFD54F).copy(alpha = 0.38f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 5.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun StaffBadge() {
+    Text(
+        text = "STAFF",
+        color = Color.White,
+        fontSize = 9.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF1E40AF))
+            .border(1.dp, Color(0xFF60A5FA).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
             .padding(horizontal = 5.dp, vertical = 2.dp),
     )
 }

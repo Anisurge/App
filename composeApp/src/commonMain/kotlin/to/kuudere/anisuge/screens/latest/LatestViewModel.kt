@@ -69,7 +69,14 @@ class LatestViewModel(private val latestService: LatestService) : ViewModel() {
             // Fail fast instead of leaving the UI "stuck loading" on flaky networks.
             val response = withTimeout(15_000) { latestService.getLatestAired(lang = currentLang, cursor = cursor) }
             if (response != null) {
-                val newItems = response.episodes
+                val filter = _uiState.value.selectedFilter
+                val newItems = response.episodes.filter { item ->
+                    when (filter) {
+                        LangFilter.SUB -> item.subbed >= (item.episode?.episodeNumber ?: 0)
+                        LangFilter.DUB -> item.dubbed >= (item.episode?.episodeNumber ?: 0)
+                        LangFilter.ALL -> true
+                    }
+                }
                 val currentState = _uiState.value
                 _uiState.value = currentState.copy(
                     results = if (cursor == null) newItems else currentState.results + newItems,
