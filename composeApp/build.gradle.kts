@@ -145,7 +145,7 @@ kotlin {
             // Native libmpv for Android (has ASS support via libass)
             implementation("dev.jdtech.mpv:libmpv:0.5.1")
             implementation("net.java.dev.jna:jna:5.14.0@aar")
-            
+
             // MediaSession for earphone/headphone media button support
             implementation(libs.androidx.media3.session)
             implementation(libs.androidx.media3.exoplayer)
@@ -174,7 +174,7 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             // JNA for getting AWT canvas WID for MPV playback
             implementation(libs.jna)
-            
+
             // JNativeHook for cross-platform global media keys (earphone play/pause)
             implementation(libs.jnativehook)
             // D-Bus is Linux-only. The native transport requires libc which crashes on Windows.
@@ -228,10 +228,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    
+
     // Kotlin target options can also be here if using the newest KMP + AGP
     // but we'll stick to the androidTarget() registration above.
-    
+
     defaultConfig {
         applicationId = "to.kuudere.anisuge"
         minSdk = libs.versions.android.minSdk.get().toInt()
@@ -384,12 +384,12 @@ compose {
 compose.desktop {
     application {
         mainClass = "to.kuudere.anisuge.MainKt"
-        
+
         // Use Java 21 toolchain for running the application
         javaHome = javaToolchains.launcherFor {
             languageVersion.set(JavaLanguageVersion.of(21))
         }.get().metadata.installationPath.asFile.absolutePath
-        
+
         jvmArgs += listOf(
             "--add-opens=jdk.security.auth/com.sun.security.auth.module=ALL-UNNAMED",
             "--add-exports=jdk.security.auth/com.sun.security.auth.module=ALL-UNNAMED",
@@ -416,7 +416,7 @@ compose.desktop {
             copyright = "© 2026 Anisurge"
             vendor = "Anisurge"
 
-            modules("jdk.security.auth", "java.sql", "java.naming", "jdk.crypto.ec", "java.desktop", "java.management", "jdk.unsupported")
+            modules("jdk.security.auth", "jdk.crypto.ec", "java.desktop", "jdk.unsupported")
 
             if (onLinux) {
                 linux {
