@@ -560,11 +560,6 @@ private fun Sidebar(
 
         // Nav Items
         navItems.forEach { item ->
-            if (item.tab == SettingsTab.Notifications) {
-                SupportAndGiveawaysSection(
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
-            }
             val isSelected = selectedTab == item.tab
             val bgColor by animateColorAsState(
                 targetValue = if (isSelected) BG_CARD else Color.Transparent,
@@ -592,6 +587,10 @@ private fun Sidebar(
                 )
             }
         }
+
+        SupportAndGiveawaysSection(
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -832,11 +831,6 @@ private fun MobileSettingsList(
 
         // Menu Items
         navItems.forEach { item ->
-            if (item.tab == SettingsTab.Notifications) {
-                Spacer(modifier = Modifier.height(8.dp))
-                SupportAndGiveawaysSection()
-                Spacer(modifier = Modifier.height(8.dp))
-            }
             MobileSettingsItem(
                 icon = item.icon,
                 label = item.label,
@@ -844,6 +838,10 @@ private fun MobileSettingsList(
                 onClick = { onItemClick(item.tab) }
             )
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        SupportAndGiveawaysSection()
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Logout
         MobileSettingsItem(
