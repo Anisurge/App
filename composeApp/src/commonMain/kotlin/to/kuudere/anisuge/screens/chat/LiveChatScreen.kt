@@ -85,6 +85,7 @@ import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ChatUsernameLabel
 import to.kuudere.anisuge.ui.ChatDecoratedAvatar
 import to.kuudere.anisuge.ui.chatAccentColor
+import to.kuudere.anisuge.platform.copyToClipboard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -474,14 +475,51 @@ private fun ChatMessageRow(
     // Extra top padding when this is the first message in a new group (visual separation)
     val topPadding = if (showHeader) 8.dp else 0.dp
 
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
     val deleteModifier = if (onDelete != null) {
         Modifier.pointerInput(Unit) {
             detectTapGestures(
-                onLongPress = { onDelete() },
+                onLongPress = { showDeleteDialog = true },
             )
         }
     } else {
         Modifier
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Message options", color = Color.White) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick = {
+                            showDeleteDialog = false
+                            platformCopyToClipboard(message.body)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Copy text", color = Color.White)
+                    }
+                    TextButton(
+                        onClick = {
+                            showDeleteDialog = false
+                            onDelete?.invoke()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Delete", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.7f))
+                }
+            },
+            containerColor = Color(0xFF1E1E1E),
+        )
     }
 
     Column(modifier = Modifier.padding(top = topPadding).then(deleteModifier)) {
