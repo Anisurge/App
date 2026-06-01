@@ -466,25 +466,15 @@ private fun ChatMessageRow(
 ) {
     val bubbleColor = if (isMine) Color(0xFF8B1520) else Color(0xFF1E1E1E)
     val accent = chatAccentColor(message.userId, isMine)
-    val profileClick = Modifier.clickable(
-        interactionSource = remember { MutableInteractionSource() },
-        indication = null,
-        onClick = onProfileClick,
-    )
-
-    // Extra top padding when this is the first message in a new group (visual separation)
     val topPadding = if (showHeader) 8.dp else 0.dp
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    val deleteModifier = if (onDelete != null) {
-        Modifier.pointerInput(Unit) {
-            detectTapGestures(
-                onLongPress = { showDeleteDialog = true },
-            )
-        }
-    } else {
-        Modifier
+    val rowModifier = Modifier.pointerInput(onDelete, onProfileClick) {
+        detectTapGestures(
+            onTap = { onProfileClick() },
+            onLongPress = { if (onDelete != null) showDeleteDialog = true },
+        )
     }
 
     if (showDeleteDialog) {
@@ -522,7 +512,7 @@ private fun ChatMessageRow(
         )
     }
 
-    Column(modifier = Modifier.padding(top = topPadding).then(deleteModifier)) {
+    Column(modifier = Modifier.fillMaxWidth().then(rowModifier).padding(top = topPadding)) {
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
@@ -535,7 +525,7 @@ private fun ChatMessageRow(
                         frameUrl = message.avatarFrameUrl,
                         outerFrameUrl = message.avatarOuterUrl,
                         userId = message.userId,
-                        modifier = profileClick,
+                        modifier = Modifier,
                         avatarSize = 36.dp,
                         contentDescription = message.username,
                         playVideo = !isScrolling,
@@ -560,7 +550,7 @@ private fun ChatMessageRow(
                         ChatUsernameLabel(
                             message = message,
                             isMine = isMine,
-                            modifier = profileClick.weight(1f, fill = false),
+                            modifier = Modifier.weight(1f, fill = false),
                             fontSize = 11.sp,
                             fontWeight = if (isMine) FontWeight.Normal else FontWeight.SemiBold,
                         )
@@ -637,7 +627,7 @@ private fun ChatMessageRow(
                         frameUrl = message.avatarFrameUrl,
                         outerFrameUrl = message.avatarOuterUrl,
                         userId = message.userId,
-                        modifier = profileClick,
+                        modifier = Modifier,
                         avatarSize = 36.dp,
                         contentDescription = message.username,
                         playVideo = !isScrolling,
