@@ -164,7 +164,7 @@ fun ChatMemberSheet(
                             ) {
                                 items(
                                     member.watchHistory,
-                                    key = { "history-${it.animeId}-${it.subtitle}" },
+                                    key = { "history-${it.animeId}-${it.subtitle}-${it.updatedAt ?: it.hashCode()}" },
                                 ) { item ->
                                     ProfileAnimeTile(
                                         item = item,
