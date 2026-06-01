@@ -17,6 +17,7 @@ import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.StreamingData
 import to.kuudere.anisuge.data.models.WatchInfoResponse
+import to.kuudere.anisuge.data.models.expandForSelection
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.services.HomeService
@@ -81,6 +82,7 @@ data class WatchUiState(
     val isSyncingAnilist: Boolean = false,
     val syncSnackbar: String? = null,
     val berriesToast: String? = null,
+    val servers: List<ServerInfo> = emptyList(),
 )
 
 data class WatchEpisodeProgress(
@@ -112,6 +114,8 @@ class WatchViewModel(
 
     /** Last batch_scrape section (for per-stream subtitles when switching quality). */
     private var cachedStreamSection: BatchScrapeStreamData? = null
+    private var cachedEpisodeList: List<EpisodeItem>? = null
+    private var cachedEpisodeListKey: String? = null
     private var skipTimesJob: kotlinx.coroutines.Job? = null
     private var lastSkipEpisodeLengthSec = 0.0
     private var lastKnownDurationSec = 0.0
@@ -132,6 +136,17 @@ class WatchViewModel(
         viewModelScope.launch { settingsStore.syncPercentageFlow.collect { v -> _uiState.update { it.copy(syncPercentage = v) } } }
         viewModelScope.launch { settingsStore.subtitleSizeFlow.collect { v -> _uiState.update { it.copy(subtitleSize = v) } } }
         viewModelScope.launch { settingsStore.videoScaleModeFlow.collect { v -> _uiState.update { it.copy(videoScaleMode = v) } } }
+        viewModelScope.launch {
+            serverRepository.servers.collect { list ->
+                val expanded = list.expandForSelection()
+                val priority = serverRepository.getFallbackPriority()
+                val sorted = expanded.sortedBy { s ->
+                    val idx = priority.indexOf(s.id)
+                    if (idx == -1) Int.MAX_VALUE else idx
+                }
+                _uiState.update { it.copy(servers = sorted) }
+            }
+        }
     }
 
     fun initialize(
@@ -192,6 +207,10 @@ class WatchViewModel(
         }
 
         cachedStreamSection = null
+        if (newAnime) {
+            cachedEpisodeList = null
+            cachedEpisodeListKey = null
+        }
         loadJob = viewModelScope.launch {
             if (offlinePath != null) {
                 loadOfflineStream(offlinePath)
@@ -277,9 +296,8 @@ class WatchViewModel(
             return
         }
 
-        if (data != null) {
+            if (data != null) {
             val slug = data.anime?.animeId?.takeIf { it.isNotBlank() } ?: currentAnimeId
-            val priorEpisodeData = _uiState.value.episodeData
             _uiState.update { state ->
                 val mergedResume = mergeResumeHint(data.currentTime, state.savedWatchPosition)
                 state.copy(
@@ -297,7 +315,7 @@ class WatchViewModel(
                     }
                 }
                 val loadedEpisodesDeferred = async {
-                    reuseOrNullEpisodes(priorEpisodeData, data, slug) ?: fetchAllEpisodes(slug)
+                    reuseOrNullEpisodes(data, slug) ?: fetchAllEpisodes(slug)
                 }
                 val progressDeferred = async {
                     fetchEpisodeProgress(currentAnimeId, data)
@@ -312,6 +330,8 @@ class WatchViewModel(
                         synthesizeEpisodesFromCount(total)
                     }
                 }
+                cachedEpisodeList = mergedEpisodes.takeIf { it.isNotEmpty() }
+                cachedEpisodeListKey = slug
                 val dataWithEpisodes = data.copy(episodes = mergedEpisodes.takeIf { it.isNotEmpty() })
                 val progressMap = progressDeferred.await()
 
@@ -415,18 +435,17 @@ class WatchViewModel(
     }
 
     /**
-     * If [prior] already holds a non-empty episode list for the same anime as [newData], reuse it and
+     * If [cachedEpisodeList] holds a non-empty list for the same anime, reuse it and
      * avoid redundant paginated `/episodes` calls when only the episode number changed.
      */
     private fun reuseOrNullEpisodes(
-        prior: WatchInfoResponse?,
         newData: WatchInfoResponse,
         slug: String,
     ): List<EpisodeItem>? {
-        val list = prior?.episodes
+        val list = cachedEpisodeList
         if (list.isNullOrEmpty()) return null
         val newKey = newData.anime?.animeId?.takeIf { it.isNotBlank() } ?: slug
-        val oldKey = prior.anime?.animeId?.takeIf { it.isNotBlank() } ?: return null
+        val oldKey = cachedEpisodeListKey ?: return null
         return if (oldKey == newKey) list else null
     }
 
@@ -746,6 +765,23 @@ class WatchViewModel(
         loadJob = viewModelScope.launch {
             loadVideoStream(server)
         }
+    }
+
+    fun switchServer(serverId: String) {
+        val state = _uiState.value
+        changeServerWithState(
+            newServer = serverId,
+            position = lastPlaybackPositionSec,
+            targetAudioLang = lastPlaybackLanguage,
+            targetSubtitleLang = state.currentSubtitleUrl?.let {
+                state.availableSubtitles.firstOrNull { s -> s.url == it }?.title
+                    ?: state.availableSubtitles.firstOrNull { s -> s.url == it }?.resolvedLang
+            },
+            targetSubtitleLangCode = state.currentSubtitleUrl?.let {
+                state.availableSubtitles.firstOrNull { s -> s.url == it }?.language
+                    ?: state.availableSubtitles.firstOrNull { s -> s.url == it }?.lang
+            },
+        )
     }
 
     fun changeServerWithState(

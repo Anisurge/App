@@ -75,6 +75,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.SessionCheckResult
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import androidx.compose.animation.core.*
@@ -1123,7 +1124,13 @@ private fun AndroidWatchPageLayout(
             }
         }
 
-        if (!uiState.isFullscreen) {
+        if (!uiState.isFullscreen && uiState.offlinePath == null && uiState.servers.isNotEmpty()) {
+            InlineServerSelector(
+                servers = uiState.servers,
+                currentServerId = uiState.currentServer,
+                onServerSelected = { serverId -> viewModel.switchServer(serverId) },
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1148,6 +1155,106 @@ private fun AndroidWatchPageLayout(
             WatchPageTabs(
                 selectedTab = selectedTab,
                 onSelectTab = { selectedTab = it },
+            )
+        }
+    }
+}
+
+@Composable
+private fun InlineServerSelector(
+    servers: List<ServerInfo>,
+    currentServerId: String,
+    onServerSelected: (String) -> Unit,
+) {
+    val subServers = servers.filter { !it.id.endsWith("-dub", ignoreCase = true) }
+    val dubServers = servers.filter { it.id.endsWith("-dub", ignoreCase = true) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1A1A1A))
+    ) {
+        if (subServers.isNotEmpty()) {
+            Text(
+                text = "SUB",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp),
+            )
+            ServerChipRow(
+                servers = subServers,
+                currentServerId = currentServerId,
+                onServerSelected = onServerSelected,
+            )
+        }
+
+        if (dubServers.isNotEmpty()) {
+            Text(
+                text = "DUB",
+                color = Color.White.copy(alpha = 0.5f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
+            )
+            ServerChipRow(
+                servers = dubServers,
+                currentServerId = currentServerId,
+                onServerSelected = onServerSelected,
+            )
+        }
+
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun ServerChipRow(
+    servers: List<ServerInfo>,
+    currentServerId: String,
+    onServerSelected: (String) -> Unit,
+) {
+    val scrollState = rememberScrollState()
+
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(scrollState)
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            servers.forEach { server ->
+                val isSelected = server.id.equals(currentServerId, ignoreCase = true)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) Color(0xFF8B1520) else Color(0xFF333333))
+                        .clickable { onServerSelected(server.id) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = server.label,
+                        color = if (isSelected) Color.White else Color.White.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+
+        if (scrollState.maxValue > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .width(24.dp)
+                    .matchParentSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(Color.Transparent, Color(0xFF1A1A1A)),
+                        )
+                    )
             )
         }
     }
