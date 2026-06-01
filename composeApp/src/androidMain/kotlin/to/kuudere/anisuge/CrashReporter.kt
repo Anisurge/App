@@ -1,7 +1,9 @@
 package to.kuudere.anisuge
 
 import android.content.Context
+import android.content.Intent
 import android.os.Build
+import android.os.Process
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -33,7 +35,9 @@ object CrashReporter {
     private var appName: String = ""
     private var apiKey: String? = null
     private var crashDir: File? = null
+    private var latestCrashFile: File? = null
     private var previousHandler: Thread.UncaughtExceptionHandler? = null
+    private var appContext: Context? = null
 
     fun init(
         context: Context,
@@ -43,11 +47,12 @@ object CrashReporter {
     ) {
         if (backendUrl.isBlank()) return
 
-        val appContext = context.applicationContext
+        this.appContext = context.applicationContext
         this.backendUrl = backendUrl.trimEnd('/')
         this.appName = appName
         this.apiKey = apiKey
-        this.crashDir = File(appContext.filesDir, "crash-reporter").apply { mkdirs() }
+        this.crashDir = File(this.appContext!!.filesDir, "crash-reporter").apply { mkdirs() }
+        this.latestCrashFile = File(this.appContext!!.filesDir, "crash-reporter/latest_crash.json")
 
         retryPendingCrashes()
 
@@ -55,15 +60,33 @@ object CrashReporter {
         installed = true
         previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            val report = buildCrashReport(appContext, throwable)
-            val file = saveCrash(report)
+            val report = buildCrashReport(this.appContext!!, throwable)
             runCatching { postCrashBlocking(report) }
-                .onSuccess { posted -> if (posted) file?.delete() }
 
-            previousHandler?.uncaughtException(thread, throwable)
-                ?: kotlin.system.exitProcess(2)
+            // Save for the crash screen and restart the activity
+            runCatching { latestCrashFile?.writeText(report) }
+
+            val intent = this.appContext!!.packageManager
+                .getLaunchIntentForPackage(this.appContext!!.packageName)
+                ?.apply {
+                    flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+            if (intent != null) {
+                this.appContext!!.startActivity(intent)
+            }
+            Process.killProcess(Process.myPid())
         }
     }
+
+    /** Delete the latest crash file so the crash screen is not shown on next launch. */
+    fun clearLatestCrash() {
+        runCatching { latestCrashFile?.delete() }
+    }
+
+    /** Read the saved latest crash report if present. */
+    fun readLatestCrash(): String? = runCatching {
+        latestCrashFile?.takeIf { it.exists() }?.readText()
+    }.getOrNull()
 
     fun retryPendingCrashes() {
         val dir = crashDir ?: return

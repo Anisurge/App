@@ -73,6 +73,9 @@ import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.LocalPreferRomajiAnimeTitles
 import to.kuudere.anisuge.i18n.appStringsFor
+import to.kuudere.anisuge.screens.crash.CrashReportData
+import to.kuudere.anisuge.screens.crash.CrashScreen
+import to.kuudere.anisuge.screens.crash.parseCrashReportJson
 
 /** Compat helper: reads a String from the new KMP SavedState arguments type. */
 private fun SavedState?.str(key: String): String? =
@@ -105,8 +108,10 @@ fun App(
     /** When true (warm resume / deep link), start on home and do not show splash video. */
     skipSplash: Boolean = false,
     notificationLaunch: NotificationLaunch? = null,
+    crashReportJson: String? = null,
     onNotificationLaunchConsumed: () -> Unit = {},
     onAppExit: () -> Unit = {},
+    onAppRestart: () -> Unit = {},
 ) {
     val themeId by AppComponent.settingsStore.themeIdFlow.collectAsState(initial = "default")
     AnisugTheme(themeId = AppThemeId.fromId(themeId)) {
@@ -294,6 +299,16 @@ fun App(
             LocalPreferRomajiAnimeTitles provides preferRomajiAnimeTitles,
         ) {
             Box(modifier = Modifier.fillMaxSize().background(AppColors.background)) {
+                val crashData = remember { mutableStateOf(crashReportJson?.let { parseCrashReportJson(it) }) }
+
+                if (crashData.value != null) {
+                    CrashScreen(
+                        crashData = crashData.value!!,
+                        onRestart = onAppRestart,
+                    )
+                    return@Box
+                }
+
                 if (!isWatchScreen) {
                     LockScreenOrientation(landscape = isAndroidTvPlatform)
                 }

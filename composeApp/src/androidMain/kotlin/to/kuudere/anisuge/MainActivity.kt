@@ -32,6 +32,9 @@ class MainActivity : ComponentActivity() {
     private var notificationLaunch by mutableStateOf<NotificationLaunch?>(null)
     private var skipSplash by mutableStateOf(false)
 
+    /** Crash report JSON saved by CrashReporter before restarting */
+    private val crashReportJson: String? by lazy { CrashReporter.readLatestCrash() }
+
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -59,8 +62,17 @@ class MainActivity : ComponentActivity() {
             App(
                 skipSplash = skipSplash,
                 notificationLaunch = notificationLaunch,
+                crashReportJson = crashReportJson,
                 onNotificationLaunchConsumed = { notificationLaunch = null },
-                onAppExit = { finishAffinity() }
+                onAppExit = { finishAffinity() },
+                onAppRestart = {
+                    CrashReporter.clearLatestCrash()
+                    val intent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                        flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    if (intent != null) startActivity(intent)
+                    finishAffinity()
+                },
             )
         }
 
