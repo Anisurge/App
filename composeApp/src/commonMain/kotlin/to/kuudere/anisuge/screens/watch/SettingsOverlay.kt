@@ -246,7 +246,11 @@ fun SettingsOverlay(
                                         )
                                     },
                                     title = "Screen mode",
-                                    subtitle = if (uiState.videoScaleMode == "Zoom") "Screen fill" else "Screen fit",
+                                    subtitle = when (uiState.videoScaleMode) {
+                                        "Zoom" -> "Screen fill"
+                                        "Stretch" -> "Stretch"
+                                        else -> "Screen fit"
+                                    },
                                     onClick = { currentPage = SettingsMenuPage.SCALE }
                                 )
 
@@ -316,7 +320,11 @@ fun SettingsOverlay(
 
                     SettingsMenuPage.SERVER -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Server", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
+                            SubMenuHeader(
+                                "Server",
+                                onBack = { currentPage = SettingsMenuPage.MAIN },
+                                onClose = onDismiss
+                            )
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 items(servers) { server ->
                                     SubMenuItem(
@@ -331,7 +339,11 @@ fun SettingsOverlay(
 
                     SettingsMenuPage.QUALITY -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Quality", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
+                            SubMenuHeader(
+                                "Quality",
+                                onBack = { currentPage = SettingsMenuPage.MAIN },
+                                onClose = onDismiss
+                            )
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 items(uiState.availableQualities) { (quality, _) ->
                                     SubMenuItem(
@@ -347,7 +359,11 @@ fun SettingsOverlay(
                     SettingsMenuPage.SPEED -> {
                         val speeds = listOf(0.5, 0.75, 1.0, 1.25, 1.5, 2.0)
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Playback speed", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
+                            SubMenuHeader(
+                                "Playback speed",
+                                onBack = { currentPage = SettingsMenuPage.MAIN },
+                                onClose = onDismiss
+                            )
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 items(speeds) { speed ->
                                     val titleStr = if (speed == 1.0) "Normal" else "${speed}x"
@@ -362,9 +378,13 @@ fun SettingsOverlay(
                     }
 
                     SettingsMenuPage.SCALE -> {
-                        val modes = listOf("Fit" to "Screen fit", "Zoom" to "Screen fill")
+                        val modes = listOf("Fit" to "Screen fit", "Zoom" to "Screen fill", "Stretch" to "Stretch")
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Screen mode", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
+                            SubMenuHeader(
+                                "Screen mode",
+                                onBack = { currentPage = SettingsMenuPage.MAIN },
+                                onClose = onDismiss
+                            )
                             LazyColumn(modifier = Modifier.heightIn(max = 220.dp).fillMaxWidth()) {
                                 items(modes) { (mode, label) ->
                                     SubMenuItem(
@@ -379,7 +399,11 @@ fun SettingsOverlay(
 
                     SettingsMenuPage.SUBTITLES -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Captions", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
+                            SubMenuHeader(
+                                "Captions",
+                                onBack = { currentPage = SettingsMenuPage.MAIN },
+                                onClose = onDismiss
+                            )
                             LazyColumn(modifier = Modifier.heightIn(max = 340.dp).fillMaxWidth()) {
                                 item {
                                     Column(
@@ -459,7 +483,11 @@ fun SettingsOverlay(
                         val folders = listOf("Watching", "On Hold", "Plan To Watch", "Dropped", "Completed", "Remove")
                         val currentFolder = uiState.episodeData?.folder
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Watchlist", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
+                            SubMenuHeader(
+                                "Watchlist",
+                                onBack = { currentPage = SettingsMenuPage.MAIN },
+                                onClose = onDismiss
+                            )
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 items(folders) { folder ->
                                     SubMenuItem(
@@ -474,7 +502,11 @@ fun SettingsOverlay(
 
                     SettingsMenuPage.AUTOPLAY -> {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SubMenuHeader("Playback settings", onBack = { currentPage = SettingsMenuPage.MAIN }, onClose = onDismiss)
+                            SubMenuHeader(
+                                "Playback settings",
+                                onBack = { currentPage = SettingsMenuPage.MAIN },
+                                onClose = onDismiss
+                            )
                             LazyColumn(modifier = Modifier.heightIn(max = 260.dp).fillMaxWidth()) {
                                 item {
                                     ToggleMenuItem(

@@ -82,7 +82,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val appLocaleFlow: Flow<String> = dataStore.data.map { it[APP_LOCALE_KEY] ?: "en" }
     val preferRomajiAnimeTitlesFlow: Flow<Boolean> = dataStore.data.map { it[PREFER_ROMAJI_ANIME_TITLES_KEY] ?: false }
     val videoScaleModeFlow: Flow<String> = dataStore.data.map { preferences ->
-        preferences[VIDEO_SCALE_MODE_KEY]?.takeIf { it == "Fit" || it == "Zoom" } ?: "Fit"
+        preferences[VIDEO_SCALE_MODE_KEY]?.takeIf { it == "Fit" || it == "Zoom" || it == "Stretch" } ?: "Fit"
     }
     val themeIdFlow: Flow<String> = dataStore.data.map { it[THEME_ID_KEY] ?: "default" }
     val legacyScheduleUiFlow: Flow<Boolean> = dataStore.data.map { it[LEGACY_SCHEDULE_UI_KEY] ?: false }
@@ -202,7 +202,13 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     }
 
     suspend fun setVideoScaleMode(mode: String) {
-        dataStore.edit { it[VIDEO_SCALE_MODE_KEY] = if (mode == "Zoom") "Zoom" else "Fit" }
+        dataStore.edit {
+            it[VIDEO_SCALE_MODE_KEY] = when (mode) {
+                "Zoom" -> "Zoom"
+                "Stretch" -> "Stretch"
+                else -> "Fit"
+            }
+        }
     }
 
     suspend fun setThemeId(themeId: String) {
@@ -223,12 +229,14 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             is DecodeResult.Invalid -> {
                 dataStore.edit { it[HOME_LAYOUT_KEY] = LayoutConfigCodec.encode(LayoutConfig.DEFAULT) }
             }
+
             is DecodeResult.Success -> {
                 val healed = decoded.config.sanitize().mergeWithDefaults()
                 if (healed != decoded.config || healed != seen) {
                     dataStore.edit { it[HOME_LAYOUT_KEY] = LayoutConfigCodec.encode(healed) }
                 }
             }
+
             is DecodeResult.VersionTooNew -> Unit
         }
     }

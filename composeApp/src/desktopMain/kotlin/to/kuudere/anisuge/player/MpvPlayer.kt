@@ -19,19 +19,24 @@ import kotlinx.coroutines.withContext
  */
 internal class MpvPlayer(
     private val config: VideoPlayerConfig,
-    private val state:  VideoPlayerState,
+    private val state: VideoPlayerState,
     private val onFinished: (() -> Unit)? = null,
 ) {
     private val lib: LibMpv? = LibMpv.load()
     private var ctx: Pointer? = null
     private var currentUrl: String? = null
-    @Volatile private var isSeeking = false
+    @Volatile
+    private var isSeeking = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     // Track the in-flight sub-add job so we can cancel it before starting another.
     // This prevents SIGSEGV when rapid episode changes fire concurrent sub-add commands on a dying handle.
-    @Volatile private var subAddJob: kotlinx.coroutines.Job? = null
+    @Volatile
+    private var subAddJob: kotlinx.coroutines.Job? = null
+
     // The temp file currently loaded into MPV — delete it only after the next one is ready.
-    @Volatile private var activeTempFile: java.io.File? = null
+    @Volatile
+    private var activeTempFile: java.io.File? = null
 
     val isAvailable: Boolean get() = lib != null
 
@@ -64,7 +69,7 @@ internal class MpvPlayer(
         println("[MpvPlayer] set mute → $r")
         r = mpv.mpv_set_option_string(handle, "loop-file", if (config.loop) "inf" else "no")
         println("[MpvPlayer] set loop-file → $r")
-        
+
         // Reduce terminal noise — suppress ffmpeg PPS/SPS spam
         mpv.mpv_set_option_string(handle, "terminal", "yes")
         mpv.mpv_set_option_string(handle, "msg-level", "all=error,ffmpeg=fatal,osc=warn")
@@ -81,7 +86,7 @@ internal class MpvPlayer(
         mpv.mpv_set_option_string(handle, "sub-ass-override", "scale")
         mpv.mpv_set_option_string(handle, "sub-scale", (config.subtitleSize / 100.0).toString())
 
-        // UI: We disabled mpv's built-in OSC because we now render the 
+        // UI: We disabled mpv's built-in OSC because we now render the
         // Compose PlayerControls UI overlay directly
         mpv.mpv_set_option_string(handle, "osc", "no")
         mpv.mpv_set_option_string(handle, "osd-level", "0")
@@ -107,7 +112,7 @@ internal class MpvPlayer(
         mpv.mpv_set_option_string(handle, "hls-bitrate", "max")          // Skip quality probing
         mpv.mpv_set_option_string(handle, "stream-buffer-size", "256k")  // HLS chunks are small
         mpv.mpv_set_option_string(handle, "prefetch-playlist", "yes")
-        
+
         // demuxer-lavf-format is intentionally NEVER SET — even for HLS.
         // Setting it globally forces ALL files MPV opens in this session (including .ass subtitle
         // temp files via sub-add) to be demuxed as HLS → avformat_open_input() fails on text files.
@@ -117,8 +122,10 @@ internal class MpvPlayer(
         // analyzeduration are no-ops on text files, tcp_nodelay and reconnect only apply to HTTP.
         val isRemoteStream = url.startsWith("http://") || url.startsWith("https://")
         if (isRemoteStream) {
-            mpv.mpv_set_option_string(handle, "demuxer-lavf-o",
-                "probesize=32768,analyzeduration=0,tcp_nodelay=1,reconnect=1")
+            mpv.mpv_set_option_string(
+                handle, "demuxer-lavf-o",
+                "probesize=32768,analyzeduration=0,tcp_nodelay=1,reconnect=1"
+            )
         }
         mpv.mpv_set_option_string(handle, "cache-pause", "no") // Don't pause on small cache gaps
         mpv.mpv_set_option_string(handle, "vd-lavc-fast", "yes") // Fast decoding bits
@@ -129,7 +136,8 @@ internal class MpvPlayer(
 
         // Fix for Cloudflare/Anti-bot
         val headers = config.headers ?: emptyMap()
-        val ua = headers["User-Agent"] ?: headers["user-agent"] ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        val ua = headers["User-Agent"] ?: headers["user-agent"]
+        ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         mpv.mpv_set_option_string(handle, "user-agent", ua)
 
         val referer = headers["Referer"] ?: headers["referer"]
@@ -193,8 +201,13 @@ internal class MpvPlayer(
         println("[MpvPlayer] loadfile '$url' → $r")
     }
 
-    fun pause()  { ctx?.let { lib?.mpv_set_property_string(it, "pause", "yes") } }
-    fun resume() { ctx?.let { lib?.mpv_set_property_string(it, "pause", "no")  } }
+    fun pause() {
+        ctx?.let { lib?.mpv_set_property_string(it, "pause", "yes") }
+    }
+
+    fun resume() {
+        ctx?.let { lib?.mpv_set_property_string(it, "pause", "no") }
+    }
 
     fun seekTo(seconds: Double) {
         val handle = ctx ?: return
@@ -227,6 +240,7 @@ internal class MpvPlayer(
             println("[MpvPlayer] isSeeking=false after ${waited}ms, position now=${state.position}")
         }
     }
+
     fun setSubFile(url: String) {
         // Cancel any in-flight sub-add before starting a new one.
         // This prevents concurrent sub-add calls on the same (or a dying) MPV handle.
@@ -274,7 +288,13 @@ internal class MpvPlayer(
                         if (!isSeeking) {
                             val oldPos = state.position
                             if (kotlin.math.abs(pos - oldPos) > 3.0) {
-                                println("[MpvPlayer] POLL jump: %.2f → %.2f (delta=%.2f)".format(oldPos, pos, pos - oldPos))
+                                println(
+                                    "[MpvPlayer] POLL jump: %.2f → %.2f (delta=%.2f)".format(
+                                        oldPos,
+                                        pos,
+                                        pos - oldPos
+                                    )
+                                )
                             }
                             withContext(Dispatchers.Main) { state.position = pos }
                         }
@@ -285,8 +305,12 @@ internal class MpvPlayer(
                     val seekPtr = mpv.mpv_get_property_string(handle, "seeking")
 
                     var isBuf = false
-                    if (bufPtr != null) { isBuf = isBuf || bufPtr.getString(0) == "yes"; mpv.mpv_free(bufPtr) }
-                    if (seekPtr != null) { isBuf = isBuf || seekPtr.getString(0) == "yes"; mpv.mpv_free(seekPtr) }
+                    if (bufPtr != null) {
+                        isBuf = isBuf || bufPtr.getString(0) == "yes"; mpv.mpv_free(bufPtr)
+                    }
+                    if (seekPtr != null) {
+                        isBuf = isBuf || seekPtr.getString(0) == "yes"; mpv.mpv_free(seekPtr)
+                    }
 
                     // Only show buffering if we are NOT intentionally paused, OR if we are seeking
                     // Actually, if we are paused, paused-for-cache might still be true if it was buffering when paused
@@ -329,10 +353,11 @@ internal class MpvPlayer(
                 val event = mpv.mpv_wait_event(handle, 0.05)
                 if (event != null) {
                     when (event.mpvEventId()) {
-                        LibMpv.MPV_EVENT_END_FILE  -> {
+                        LibMpv.MPV_EVENT_END_FILE -> {
                             withContext(Dispatchers.Main) { state.isPlaying = false }
                             if (!config.loop) onFinished?.invoke()
                         }
+
                         LibMpv.MPV_EVENT_FILE_LOADED -> {
                             isSeeking = false
                             withContext(Dispatchers.Main) {
@@ -358,28 +383,29 @@ internal class MpvPlayer(
                                         if (typePtr != null) {
                                             val type = typePtr.getString(0)
                                             mpv.mpv_free(typePtr)
-                                            
+
                                             val idPtr = mpv.mpv_get_property_string(handle, "track-list/$i/id")
                                             val id = idPtr?.getString(0)?.toIntOrNull() ?: -1
                                             if (idPtr != null) mpv.mpv_free(idPtr)
                                             if (id == -1) continue
 
                                             val langPtr = mpv.mpv_get_property_string(handle, "track-list/$i/lang")
-                                            val lang = langPtr?.getString(0) ?: (if (type == "audio") "Audio $id" else "Subtitle $id")
+                                            val lang = langPtr?.getString(0)
+                                                ?: (if (type == "audio") "Audio $id" else "Subtitle $id")
                                             if (langPtr != null) mpv.mpv_free(langPtr)
-                                            
+
                                             val titlePtr = mpv.mpv_get_property_string(handle, "track-list/$i/title")
                                             val title = titlePtr?.getString(0)
                                             if (titlePtr != null) mpv.mpv_free(titlePtr)
-                                            
+
                                             val label = if (title != null) "$lang - $title" else lang
-                                            
+
                                             if (type == "audio") aTracks.add(id to label)
                                             else if (type == "sub") sTracks.add(id to label)
                                         }
                                     }
-                                    withContext(Dispatchers.Main) { 
-                                        state.audioTracks = aTracks 
+                                    withContext(Dispatchers.Main) {
+                                        state.audioTracks = aTracks
                                         state.subtitleTracks = sTracks
                                     }
                                 }
@@ -401,7 +427,10 @@ internal class MpvPlayer(
                                         val newFile = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitleFile(url)
                                         if (newFile != null) {
                                             val flag = if (isDefault) "select" else "auto"
-                                            lib?.mpv_command(handle, arrayOf("sub-add", newFile.absolutePath, flag, null))
+                                            lib?.mpv_command(
+                                                handle,
+                                                arrayOf("sub-add", newFile.absolutePath, flag, null)
+                                            )
                                             println("[MpvPlayer] sub-add [$flag] -> ${newFile.absolutePath}")
                                             if (isDefault) {
                                                 val old = activeTempFile
@@ -414,7 +443,7 @@ internal class MpvPlayer(
                                 withContext(Dispatchers.Main) { state.allSubUrls = null }
                                 pendingAllSubs = null
                             }
-                            
+
                             val singleSub = pendingSub
                             if (singleSub != null) {
                                 if (singleSub == "NONE") {
@@ -425,6 +454,7 @@ internal class MpvPlayer(
                                 pendingSub = null
                             }
                         }
+
                         LibMpv.MPV_EVENT_TICK -> {
                             if (!isSeeking) {
                                 val posPtr = mpv.mpv_get_property_string(handle, "time-pos")
@@ -433,12 +463,19 @@ internal class MpvPlayer(
                                     mpv.mpv_free(posPtr)
                                     val oldPos = state.position
                                     if (kotlin.math.abs(pos - oldPos) > 3.0) {
-                                        println("[MpvPlayer] TICK jump: %.2f → %.2f (delta=%.2f)".format(oldPos, pos, pos - oldPos))
+                                        println(
+                                            "[MpvPlayer] TICK jump: %.2f → %.2f (delta=%.2f)".format(
+                                                oldPos,
+                                                pos,
+                                                pos - oldPos
+                                            )
+                                        )
                                     }
                                     withContext(Dispatchers.Main) { state.position = pos }
                                 }
                             }
                         }
+
                         LibMpv.MPV_EVENT_SHUTDOWN -> break
                     }
                 }
@@ -519,10 +556,12 @@ internal class MpvPlayer(
                             mpv.mpv_set_option_string(handle, "video-aspect-override", "-1")
                             mpv.mpv_set_option_string(handle, "panscan", "0")
                         }
+
                         "Stretch" -> {
-                            mpv.mpv_set_option_string(handle, "video-aspect-override", "16:9")
+                            mpv.mpv_set_option_string(handle, "video-aspect-override", "0")
                             mpv.mpv_set_option_string(handle, "panscan", "0")
                         }
+
                         "Zoom" -> {
                             mpv.mpv_set_option_string(handle, "video-aspect-override", "-1")
                             mpv.mpv_set_option_string(handle, "panscan", "1.0")
@@ -530,7 +569,7 @@ internal class MpvPlayer(
                     }
                     lastSentAspectRatio = state.aspectRatio
                 }
-                
+
                 if (state.playbackSpeed != lastSentSpeed) {
                     mpv.mpv_set_property_string(handle, "speed", state.playbackSpeed.toString())
                     lastSentSpeed = state.playbackSpeed

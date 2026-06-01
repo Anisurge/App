@@ -81,7 +81,11 @@ actual fun VideoPlayerSurface(
                             MPVLib.setPropertyString("vo", "gpu")
 
                             // Check if the file is already loaded to avoid unnecessary reloads
-                            val currentPath = try { MPVLib.getPropertyString("path") } catch (e: Exception) { null }
+                            val currentPath = try {
+                                MPVLib.getPropertyString("path")
+                            } catch (e: Exception) {
+                                null
+                            }
 
                             if (currentPath != resolvedUrl) {
                                 // New file — only use the API-provided start position.
@@ -187,7 +191,7 @@ actual fun VideoPlayerSurface(
 
         // Shared native engine, so we set non-global options per-instance here
         MPVLib.setOptionString("vo", "gpu")
-        
+
         // Keep Android decoder setup close to Aniyomi/mpv-android defaults.
         // Forcing mediacodec-copy can produce audio-only black video on some
         // MediaTek/Helio devices; mpv's auto path plus a software retry is safer.
@@ -195,10 +199,10 @@ actual fun VideoPlayerSurface(
         MPVLib.setOptionString("hwdec", state.config.hwdec)
         MPVLib.setOptionString("vf", "format=yuv420p")
         MPVLib.setOptionString("vd-lavc-film-grain", "cpu")
-        
+
         // Fallback to software if hardware fails (crucial for problematic devices)
         MPVLib.setOptionString("vd-lavc-software-fallback", "yes")
-        
+
         val showOsc = if (state.config.showControls) "yes" else "no"
         MPVLib.setOptionString("osc", showOsc)
         MPVLib.setOptionString("osd-bar", showOsc)
@@ -214,7 +218,7 @@ actual fun VideoPlayerSurface(
         MPVLib.setOptionString("demuxer-readahead-secs", "3") // Start in ~1-2s, pipeline does the rest
         MPVLib.setOptionString("demuxer-max-bytes", "64M")    // Match Aniyomi's mobile cap
         MPVLib.setOptionString("demuxer-max-back-bytes", "64M")
-        
+
         // Fix video freeze/desync - prevent frame dropping that causes video to fall behind audio
         MPVLib.setOptionString("framedrop", "no")             // Never drop frames
         MPVLib.setOptionString("video-latency-hacks", "no")   // Don't sacrifice sync for latency
@@ -235,7 +239,10 @@ actual fun VideoPlayerSurface(
         // (it would force HLS mode on subtitle files loaded via sub-add → breaks them)
         val isRemoteStream = resolvedUrl.startsWith("http://") || resolvedUrl.startsWith("https://")
         if (isRemoteStream) {
-            MPVLib.setOptionString("demuxer-lavf-o", "probesize=1048576,analyzeduration=1000000,tcp_nodelay=1,reconnect=1")
+            MPVLib.setOptionString(
+                "demuxer-lavf-o",
+                "probesize=1048576,analyzeduration=1000000,tcp_nodelay=1,reconnect=1"
+            )
         }
         MPVLib.setOptionString("cache-pause", "no")           // Never stall on micro-gaps
         MPVLib.setOptionString("vd-lavc-fast", "yes")         // Skip unnecessary decode precision
@@ -243,9 +250,10 @@ actual fun VideoPlayerSurface(
 
         // Fix for Cloudflare/Anti-bot
         val headers = state.config.headers ?: emptyMap()
-        val ua = headers["User-Agent"] ?: headers["user-agent"] ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        val ua = headers["User-Agent"] ?: headers["user-agent"]
+        ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         MPVLib.setOptionString("user-agent", ua)
-        
+
         val referer = headers["Referer"] ?: headers["referer"]
         if (referer != null) {
             MPVLib.setOptionString("referrer", referer)
@@ -258,12 +266,12 @@ actual fun VideoPlayerSurface(
         if (headerStrings.isNotEmpty()) {
             MPVLib.setOptionString("http-header-fields", headerStrings)
         }
-        
+
         MPVLib.setOptionString("ytdl-raw-options", "extractor-args=generic:impersonate")
 
         // Use safe decoding threads (auto usually handles this best with hwdec)
-        MPVLib.setOptionString("vd-lavc-threads", "0") 
-        
+        MPVLib.setOptionString("vd-lavc-threads", "0")
+
         if (state.config.muted) {
             MPVLib.setOptionString("mute", "yes")
         }
@@ -286,7 +294,7 @@ actual fun VideoPlayerSurface(
         MPVLib.setOptionString("sub-ass", "yes")
         MPVLib.setOptionString("sub-ass-override", "scale")
         MPVLib.setOptionString("sub-scale", (state.config.subtitleSize / 100.0).toString())
-        
+
         // Only init once
         synchronized(MPVLibLock) {
             if (!isMPVInited) {
@@ -300,23 +308,25 @@ actual fun VideoPlayerSurface(
             override fun eventProperty(property: String) {}
             override fun eventProperty(property: String, value: Long) {}
             override fun eventProperty(property: String, value: String) {}
-            
+
             override fun eventProperty(property: String, value: Boolean) {
                 when (property) {
                     "paused-for-cache" -> {
                         isPausedForCache = value
                         state.isBuffering = isPausedForCache || isSeeking.value
                     }
+
                     "seeking" -> {
                         isSeeking.value = value
                         state.isBuffering = isPausedForCache || isSeeking.value
                     }
+
                     "pause" -> {
                         state.isPaused = value
                     }
                 }
             }
-            
+
             override fun eventProperty(property: String, value: Double) {
                 if (property == "time-pos") {
                     if (!isSeeking.value) {
@@ -332,7 +342,7 @@ actual fun VideoPlayerSurface(
                     MPVLib.MPV_EVENT_FILE_LOADED -> {
                         state.isPlaying = true
                         state.error = null
-                        
+
                         try {
                             val count = MPVLib.getPropertyInt("track-list/count") ?: 0
                             val aTracks = mutableListOf<Pair<Int, String>>()
@@ -340,10 +350,11 @@ actual fun VideoPlayerSurface(
                             for (i in 0 until count) {
                                 val type = MPVLib.getPropertyString("track-list/$i/type")
                                 val id = MPVLib.getPropertyInt("track-list/$i/id") ?: continue
-                                val lang = MPVLib.getPropertyString("track-list/$i/lang") ?: (if (type == "audio") "Audio $id" else "Subtitle $id")
+                                val lang = MPVLib.getPropertyString("track-list/$i/lang")
+                                    ?: (if (type == "audio") "Audio $id" else "Subtitle $id")
                                 val title = MPVLib.getPropertyString("track-list/$i/title")
                                 val label = if (title != null) "$lang - $title" else lang
-                                
+
                                 if (type == "audio") aTracks.add(id to label)
                                 else if (type == "sub") sTracks.add(id to label)
                             }
@@ -389,8 +400,10 @@ actual fun VideoPlayerSurface(
                                 val before = runCatching { MPVLib.getPropertyDouble("time-pos") }.getOrNull() ?: 0.0
                                 delay(1200)
                                 val after = runCatching { MPVLib.getPropertyDouble("time-pos") }.getOrNull() ?: before
-                                val videoHeight = runCatching { MPVLib.getPropertyInt("video-params/h") }.getOrNull() ?: 0
-                                val videoAspect = runCatching { MPVLib.getPropertyDouble("video-params/aspect") }.getOrNull() ?: 0.0
+                                val videoHeight =
+                                    runCatching { MPVLib.getPropertyInt("video-params/h") }.getOrNull() ?: 0
+                                val videoAspect =
+                                    runCatching { MPVLib.getPropertyDouble("video-params/aspect") }.getOrNull() ?: 0.0
                                 val voConfigured = runCatching { MPVLib.getPropertyString("vo-configured") }.getOrNull()
                                 val playbackAdvanced = after > before + 0.5
                                 val noVideoOutput = videoHeight <= 0 && videoAspect <= 0.0 && voConfigured != "yes"
@@ -408,6 +421,7 @@ actual fun VideoPlayerSurface(
                             }
                         }
                     }
+
                     MPVLib.MPV_EVENT_END_FILE -> {
                         state.isPlaying = false
                         val pos = runCatching { MPVLib.getPropertyDouble("time-pos") }
@@ -417,7 +431,7 @@ actual fun VideoPlayerSurface(
                         state.position = pos
                         state.duration = dur
                         val naturalEnd = dur >= 45.0 && pos >= 20.0 &&
-                            (pos >= dur - 2.5 || pos >= dur * 0.88)
+                                (pos >= dur - 2.5 || pos >= dur * 0.88)
                         if (naturalEnd) {
                             state.error = null
                             if (!state.config.loop) currentOnFinished?.invoke()
@@ -499,10 +513,12 @@ actual fun VideoPlayerSurface(
                     MPVLib.setOptionString("video-aspect-override", "-1")
                     MPVLib.setOptionString("panscan", "0")
                 }
+
                 "Stretch" -> {
-                    MPVLib.setOptionString("video-aspect-override", "16:9") 
+                    MPVLib.setOptionString("video-aspect-override", "0")
                     MPVLib.setOptionString("panscan", "0")
                 }
+
                 "Zoom" -> {
                     MPVLib.setOptionString("video-aspect-override", "-1")
                     MPVLib.setOptionString("panscan", "1.0")
@@ -529,7 +545,11 @@ actual fun VideoPlayerSurface(
             delay(100)
             waited += 100
             val pos = withContext(Dispatchers.IO) {
-                try { MPVLib.getPropertyDouble("time-pos") } catch (_: Exception) { null }
+                try {
+                    MPVLib.getPropertyDouble("time-pos")
+                } catch (_: Exception) {
+                    null
+                }
             } ?: continue
             if (lastPos >= 0 && kotlin.math.abs(pos - lastPos) < 1.0) {
                 state.position = pos
@@ -670,8 +690,8 @@ private var isMPVInitialized = false
 private var isMPVInited = false
 private fun subAddExternal(url: String, flag: String, headers: Map<String, String>): Boolean {
     val preferLocalText = url.contains(".vtt", ignoreCase = true) ||
-        url.contains(".srt", ignoreCase = true) ||
-        url.contains(".ass", ignoreCase = true)
+            url.contains(".srt", ignoreCase = true) ||
+            url.contains(".ass", ignoreCase = true)
     if (url.startsWith("http://") || url.startsWith("https://")) {
         if (preferLocalText) {
             val localPath = to.kuudere.anisuge.utils.SubtitleUtils.prepareSubtitle(url, headers)
@@ -728,7 +748,8 @@ private fun addExternalSubtitles(
     if (anyAdded) {
         try {
             MPVLib.setPropertyString("sub-visibility", "yes")
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+        }
     }
     refreshMpvSubtitleTracks(state)
 }

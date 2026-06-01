@@ -220,7 +220,8 @@ class WatchViewModel(
                         cachedEpisodeList = episodes
                         cachedEpisodeListKey = slug
                     }
-                } catch (_: Exception) { }
+                } catch (_: Exception) {
+                }
             }
         }
         loadJob = viewModelScope.launch {
@@ -308,7 +309,7 @@ class WatchViewModel(
             return
         }
 
-            if (data != null) {
+        if (data != null) {
             val slug = data.anime?.animeId?.takeIf { it.isNotBlank() } ?: currentAnimeId
             _uiState.update { state ->
                 val mergedResume = mergeResumeHint(data.currentTime, state.savedWatchPosition)
@@ -375,13 +376,13 @@ class WatchViewModel(
                     val itemAnimeIdStr = item.effectiveAnimeId
                     val matchId = itemAnimeId == requestedAnimeId || itemAnimeIdStr == requestedAnimeId
                     val matchDetailsId = detailsAnimeId != null &&
-                        (itemAnimeId == detailsAnimeId || itemAnimeIdStr == detailsAnimeId)
+                            (itemAnimeId == detailsAnimeId || itemAnimeIdStr == detailsAnimeId)
                     val matchAnilist = detailsAnilistId != null &&
-                        item.anime.anilistId != null &&
-                        detailsAnilistId == item.anime.anilistId
+                            item.anime.anilistId != null &&
+                            detailsAnilistId == item.anime.anilistId
                     val matchMal = detailsMalId != null &&
-                        item.anime.malId != null &&
-                        detailsMalId == item.anime.malId
+                            item.anime.malId != null &&
+                            detailsMalId == item.anime.malId
 
                     matchId || matchDetailsId || matchAnilist || matchMal
                 }
@@ -745,7 +746,11 @@ class WatchViewModel(
     }
 
     fun setVideoScaleMode(mode: String) {
-        val normalized = if (mode == "Zoom") "Zoom" else "Fit"
+        val normalized = when (mode) {
+            "Zoom" -> "Zoom"
+            "Stretch" -> "Stretch"
+            else -> "Fit"
+        }
         _uiState.update { it.copy(videoScaleMode = normalized) }
         viewModelScope.launch { settingsStore.setVideoScaleMode(normalized) }
     }
@@ -845,9 +850,9 @@ class WatchViewModel(
             .map { it.id.lowercase() }
             .filter {
                 it.isNotBlank() &&
-                    it != current &&
-                    it != "offline" &&
-                    it.removeSuffix("-dub") != failedBase
+                        it != current &&
+                        it != "offline" &&
+                        it.removeSuffix("-dub") != failedBase
             }
             .distinct()
         if (servers.isEmpty()) return

@@ -43,6 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import io.ktor.client.call.body
+import io.ktor.client.request.get
 import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
@@ -76,6 +78,7 @@ fun AnimeInfoScreen(
     var batchPickerEpisodes by remember { mutableStateOf<List<to.kuudere.anisuge.data.models.EpisodeItem>>(emptyList()) }
     var batchPreflightMessage by remember { mutableStateOf<String?>(null) }
     var batchPreflightError by remember { mutableStateOf<String?>(null) }
+    var previewImageUrl by remember { mutableStateOf<String?>(null) }
     val batchScope = rememberCoroutineScope()
 
     // Auto-load episodes since it's the default tab
@@ -265,6 +268,7 @@ fun AnimeInfoScreen(
                         onWatchlistUpdate = { viewModel.updateWatchlist(it) },
                         onWatchNow = { onWatchEpisode(anime.slug ?: anime.id, "sub", 1) },
                         onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
+                        onPosterClick = { previewImageUrl = it },
                     )
                 } else if (isDesktop) {
                     DesktopLayout(
@@ -280,7 +284,8 @@ fun AnimeInfoScreen(
                         onShareAnime = shareAnime,
                         onDownloadsClick = onDownloadsClick,
                         onExit = onExit,
-                        onBack = onBack
+                        onBack = onBack,
+                        onPosterClick = { previewImageUrl = it },
                     )
                 } else {
                     MobileLayout(
@@ -302,7 +307,17 @@ fun AnimeInfoScreen(
                         onDownloadSeason = { episodes -> openBatchPicker(episodes) },
                         isPremiumUser = isPremiumUser,
                         onShareAnime = shareAnime,
-                        onDownloadsClick = onDownloadsClick
+                        onDownloadsClick = onDownloadsClick,
+                        onPosterClick = { previewImageUrl = it },
+                    )
+                }
+
+                // Fullscreen image preview overlay
+                previewImageUrl?.let { url ->
+                    FullScreenImagePreview(
+                        imageUrl = url,
+                        animeTitle = anime.resolveDisplayTitle(),
+                        onDismiss = { previewImageUrl = null },
                     )
                 }
             }
@@ -379,6 +394,7 @@ private fun TvLayout(
     onWatchlistUpdate: (String) -> Unit,
     onWatchNow: () -> Unit,
     onWatchEpisode: (Int) -> Unit,
+    onPosterClick: (String) -> Unit = {},
 ) {
     val episodesState = rememberLazyListState()
 
@@ -465,25 +481,34 @@ private fun TvLayout(
                         .width(240.dp)
                         .aspectRatio(2f / 3f)
                         .clip(RoundedCornerShape(18.dp))
-                        .border(1.dp, AppColors.border, RoundedCornerShape(18.dp)),
+                        .border(1.dp, AppColors.border, RoundedCornerShape(18.dp))
+                        .clickable { onPosterClick(anime.image ?: anime.poster ?: anime.cover) },
                 )
 
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    var titleExpanded by remember { mutableStateOf(false) }
                     Text(
                         text = anime.resolveDisplayTitle(),
                         color = Color.White,
                         fontSize = 34.sp,
                         fontWeight = FontWeight.Bold,
                         lineHeight = 38.sp,
-                        maxLines = 2,
+                        maxLines = if (titleExpanded) Int.MAX_VALUE else 2,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { titleExpanded = !titleExpanded }
                     )
 
+                    val seasonStr = anime.season?.lowercase()?.replaceFirstChar { it.uppercase() }
+                    val seasonLabel = if (seasonStr != null && anime.seasonYear != null) {
+                        "$seasonStr ${anime.seasonYear}"
+                    } else null
+                    val formatLabel = anime.format?.takeIf { it.isNotBlank() }
                     val meta = buildList {
-                        anime.year?.takeIf { it > 0 }?.let { add(it.toString()) }
+                        seasonLabel?.let { add(it) }
+                        formatLabel?.let { add(it) }
                         anime.status?.takeIf { it.isNotBlank() }?.let { add(it) }
                         anime.type?.takeIf { it.isNotBlank() }?.let { add(it) }
                         anime.duration?.takeIf { it > 0 }?.let { add("${it}m") }
@@ -665,7 +690,8 @@ private fun MobileLayout(
     onDownloadSeason: (List<to.kuudere.anisuge.data.models.EpisodeItem>) -> Unit,
     isPremiumUser: Boolean,
     onShareAnime: () -> Unit,
-    onDownloadsClick: () -> Unit
+    onDownloadsClick: () -> Unit,
+    onPosterClick: (String) -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
 
@@ -747,18 +773,21 @@ private fun MobileLayout(
                                 .width(130.dp)
                                 .height(190.dp)
                                 .clip(RoundedCornerShape(8.dp))
+                                .clickable { onPosterClick(anime.image ?: anime.poster ?: anime.cover) }
                         )
                         Spacer(Modifier.width(16.dp))
                         // Right Details
                         Column(Modifier.weight(1f)) {
                             // Title
+                            var titleExpanded by remember { mutableStateOf(false) }
                             Text(
                                 text = anime.resolveDisplayTitle(),
                                 color = Color.White,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                                maxLines = if (titleExpanded) Int.MAX_VALUE else 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clickable { titleExpanded = !titleExpanded }
                             )
                             Spacer(Modifier.height(8.dp))
                             // Stars
@@ -791,7 +820,22 @@ private fun MobileLayout(
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
-                            // Duration - Genres
+                            // Season & Format info
+                            val seasonStr = anime.season?.lowercase()?.replaceFirstChar { it.uppercase() }
+                            val seasonLabel = if (seasonStr != null && anime.seasonYear != null) {
+                                "$seasonStr ${anime.seasonYear}"
+                            } else null
+                            val formatLabel = anime.format?.takeIf { it.isNotBlank() }
+                            val infoParts = listOfNotNull(seasonLabel, formatLabel)
+                            if (infoParts.isNotEmpty()) {
+                                Text(
+                                    text = infoParts.joinToString(" • "),
+                                    color = AppColors.textMuted,
+                                    fontSize = 13.sp
+                                )
+                                Spacer(Modifier.height(4.dp))
+                            }
+                            // Status - Genres
                             Text(
                                 text = "${anime.status} • ${anime.genres?.take(2)?.joinToString(" / ") ?: ""}",
                                 color = AppColors.textMuted,
@@ -1003,6 +1047,7 @@ private fun DesktopLayout(
     onDownloadsClick: () -> Unit,
     onExit: () -> Unit,
     onBack: () -> Unit,
+    onPosterClick: (String) -> Unit = {},
 ) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val baseWidth = 1400.dp
@@ -1097,14 +1142,16 @@ private fun DesktopLayout(
                             Column(
                                 modifier = Modifier.fillMaxWidth(0.6f)
                             ) {
+                                var titleExpanded by remember { mutableStateOf(false) }
                                 Text(
                                     text = anime.resolveDisplayTitle(),
                                     color = Color.White,
                                     fontSize = 44.sp,
                                     fontWeight = FontWeight.Bold,
                                     lineHeight = 52.sp,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
+                                    maxLines = if (titleExpanded) Int.MAX_VALUE else 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.clickable { titleExpanded = !titleExpanded }
                                 )
 
                                 Spacer(Modifier.height(24.dp))
@@ -1143,9 +1190,15 @@ private fun DesktopLayout(
                                         Text("•", color = AppColors.textMuted, fontSize = 15.sp)
                                     }
 
-                                    // Year
-                                    if (anime.year != null && anime.year!! > 0) {
-                                        Text("${anime.year}", color = AppColors.text, fontSize = 15.sp)
+                                    // Season & Year
+                                    val seasonStr = anime.season?.lowercase()?.replaceFirstChar { it.uppercase() }
+                                    val seasonLabel = if (seasonStr != null && anime.seasonYear != null) {
+                                        "$seasonStr ${anime.seasonYear}"
+                                    } else if (anime.year != null && anime.year!! > 0) {
+                                        "${anime.year}"
+                                    } else null
+                                    if (seasonLabel != null) {
+                                        Text(seasonLabel, color = AppColors.text, fontSize = 15.sp)
                                         Text("•", color = AppColors.textMuted, fontSize = 15.sp)
                                     }
 
@@ -1345,6 +1398,7 @@ private fun DesktopLayout(
                                     .aspectRatio(2f / 3f)
                                     .clip(RoundedCornerShape(16.dp))
                                     .border(2.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+                                    .clickable { onPosterClick(anime.image ?: anime.poster ?: anime.cover) }
                             )
                         } // End inner Row
                     } // End inner content alignment Box
@@ -2882,4 +2936,106 @@ private fun estimateDownloadDurationSeconds(ep: EpisodeItem?, animeFallbackMinut
     ep?.duration?.takeIf { it > 0 }?.let { return coerceToSeconds(it) }
     animeFallbackMinutes?.takeIf { it > 0 }?.let { return coerceToSeconds(it) }
     return 24L * 60L
+}
+
+@Composable
+private fun FullScreenImagePreview(
+    imageUrl: String,
+    animeTitle: String,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var isSaving by remember { mutableStateOf(false) }
+    var saveMessage by remember { mutableStateOf<String?>(null) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable { onDismiss() },
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = "Full screen poster",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        // Top close button
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+                .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Close",
+                tint = Color.White,
+            )
+        }
+
+        // Bottom save button
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.Black.copy(alpha = 0.6f))
+                .clickable(enabled = !isSaving) {
+                    scope.launch {
+                        isSaving = true
+                        saveMessage = null
+                        try {
+                            val response = to.kuudere.anisuge.AppComponent.httpClient.get(imageUrl)
+                            val bytes = response.body<ByteArray>()
+                            val safeName = animeTitle.take(50)
+                                .replace(Regex("[^a-zA-Z0-9 ]"), "")
+                                .trim()
+                                .ifBlank { "anime" }
+                            val fileName =
+                                "$safeName - ${kotlinx.datetime.Clock.System.now().toEpochMilliseconds()}.jpg"
+                            val dir = to.kuudere.anisuge.utils.getDownloadsDirectory()
+                            val imagesDir = "$dir/Images"
+                            to.kuudere.anisuge.platform.KmpFileSystem.createDirectories(imagesDir)
+                            to.kuudere.anisuge.platform.KmpFileSystem.write(
+                                "$imagesDir/$fileName",
+                                bytes
+                            )
+                            saveMessage = "Saved to $imagesDir"
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            saveMessage = "Failed to save image"
+                        } finally {
+                            isSaving = false
+                        }
+                    }
+                }
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (isSaving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (saveMessage != null) saveMessage!! else "Save Image",
+                color = Color.White,
+                fontSize = 14.sp,
+            )
+        }
+    }
 }
