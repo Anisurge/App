@@ -168,7 +168,7 @@ fun AnimeInfoScreen(
                         },
                         server = server,
                         subtitleLabels = if (preferDub) emptyList() else listOf("English"),
-                        audioLang = "sub",
+                        audioLang = if (preferDub) "dub" else "sub",
                         downloadFonts = true,
                         headers = null,
                         preferBatchDub = preferDub,
@@ -355,8 +355,8 @@ private suspend fun preflightBatchDownloadServer(
                             .getVideoStream(anilistId, episode.number, server)
                         val subOk = response?.sub?.streams?.any { !it.url.isNullOrBlank() } == true
                         val dubOk = response?.dub?.streams?.any { !it.url.isNullOrBlank() } == true
-                        // Require the audio the user asked for; fall back to the other only if it's all we have.
-                        if (preferDub) dubOk else subOk || (!subOk && dubOk)
+                        // Try to use the requested audio; fall back to the other if needed
+                        if (preferDub) dubOk || subOk else subOk || dubOk
                     }.getOrDefault(false)
                     if (usable) null else episode
                 }
@@ -2095,265 +2095,280 @@ private fun SeasonBatchPickerDialog(
             Text("Batch download", color = AppColors.text, fontWeight = FontWeight.Bold)
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    "Choose up to ${to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES} episodes. You can use a quick range or pick episodes manually.",
-                    color = AppColors.textMuted,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val quickActions = listOf(
-                        "12 eps" to 12,
-                        "24 eps" to 24,
-                    )
-                    quickActions.forEach { (label, count) ->
-                        AssistChip(
-                            onClick = { selectFirst(count) },
-                            label = { Text(label) },
-                            enabled = sortedEpisodes.isNotEmpty(),
-                        )
-                    }
-                    AssistChip(
-                        onClick = {
-                            selectedNumbers =
-                                sortedEpisodes.take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
-                                    .map { it.number }.toSet()
-                        },
-                        label = { Text("Select All") },
-                        enabled = sortedEpisodes.isNotEmpty(),
-                    )
-                    AssistChip(
-                        onClick = {
-                            selectedNumbers = emptySet()
-                        },
-                        label = { Text("Clear All") },
-                        enabled = selectedNumbers.isNotEmpty(),
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item {
+                    Text(
+                        "Choose up to ${to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES} episodes. You can use a quick range or pick episodes manually.",
+                        color = AppColors.textMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
                     )
                 }
 
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = {
-                        Text(
-                            "Search episode number or title...",
-                            color = AppColors.textMuted,
-                            fontSize = 13.sp
-                        )
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = AppColors.text,
-                        unfocusedTextColor = AppColors.text,
-                        focusedBorderColor = AppColors.border,
-                        unfocusedBorderColor = AppColors.border,
-                        focusedLabelColor = AppColors.text,
-                        unfocusedLabelColor = AppColors.textMuted,
-                    ),
-                )
-
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 320.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(filteredEpisodes, key = { it.number }) { episode ->
-                        val checked = episode.number in selectedNumbers
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (checked) AppColors.surfaceVariant else AppColors.surface)
-                                .clickable {
-                                    selectedNumbers = if (checked) {
-                                        selectedNumbers - episode.number
-                                    } else if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) {
-                                        selectedNumbers + episode.number
-                                    } else {
-                                        selectedNumbers
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            val quickActions = listOf(
+                                "12 eps" to 12,
+                                "24 eps" to 24,
+                            )
+                            quickActions.forEach { (label, count) ->
+                                AssistChip(
+                                    onClick = { selectFirst(count) },
+                                    label = { Text(label) },
+                                    enabled = sortedEpisodes.isNotEmpty(),
+                                )
+                            }
+                            AssistChip(
+                                onClick = {
+                                    selectedNumbers =
+                                        sortedEpisodes.take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
+                                            .map { it.number }.toSet()
+                                },
+                                label = { Text("Select All") },
+                                enabled = sortedEpisodes.isNotEmpty(),
+                            )
+                            AssistChip(
+                                onClick = {
+                                    selectedNumbers = emptySet()
+                                },
+                                label = { Text("Clear All") },
+                                enabled = selectedNumbers.isNotEmpty(),
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = {
+                                Text(
+                                    "Search episode number or title...",
+                                    color = AppColors.textMuted,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = AppColors.text,
+                                unfocusedTextColor = AppColors.text,
+                                focusedBorderColor = AppColors.border,
+                                unfocusedBorderColor = AppColors.border,
+                                focusedLabelColor = AppColors.text,
+                                unfocusedLabelColor = AppColors.textMuted,
+                            ),
+                        )
+                    }
+                }
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.heightIn(max = 320.dp).fillMaxWidth()) {
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(filteredEpisodes, key = { it.number }) { episode ->
+                                    val checked = episode.number in selectedNumbers
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (checked) AppColors.surfaceVariant else AppColors.surface)
+                                            .clickable {
+                                                selectedNumbers = if (checked) {
+                                                    selectedNumbers - episode.number
+                                                } else if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) {
+                                                    selectedNumbers + episode.number
+                                                } else {
+                                                    selectedNumbers
+                                                }
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Checkbox(
+                                            checked = checked,
+                                            onCheckedChange = { next ->
+                                                selectedNumbers = if (next) {
+                                                    if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) selectedNumbers + episode.number else selectedNumbers
+                                                } else {
+                                                    selectedNumbers - episode.number
+                                                }
+                                            },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = AppColors.accent,
+                                                uncheckedColor = AppColors.textMuted,
+                                                checkmarkColor = AppColors.onAccent,
+                                            ),
+                                        )
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                "Episode ${episode.number}",
+                                                color = AppColors.text,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                            )
+                                            episode.title?.takeIf { it.isNotBlank() }?.let {
+                                                Text(
+                                                    it,
+                                                    color = AppColors.textMuted,
+                                                    fontSize = 11.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                        }
                                     }
                                 }
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            }
+                        }
+
+                        Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Checkbox(
-                                checked = checked,
-                                onCheckedChange = { next ->
-                                    selectedNumbers = if (next) {
-                                        if (selectedNumbers.size < to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES) selectedNumbers + episode.number else selectedNumbers
-                                    } else {
-                                        selectedNumbers - episode.number
-                                    }
-                                },
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = AppColors.accent,
-                                    uncheckedColor = AppColors.textMuted,
-                                    checkmarkColor = AppColors.onAccent,
+                            OutlinedTextField(
+                                value = rangeStart,
+                                onValueChange = { rangeStart = it.filter(Char::isDigit).take(4) },
+                                label = { Text("From") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = AppColors.text,
+                                    unfocusedTextColor = AppColors.text,
+                                    focusedBorderColor = AppColors.border,
+                                    unfocusedBorderColor = AppColors.border,
+                                    focusedLabelColor = AppColors.text,
+                                    unfocusedLabelColor = AppColors.textMuted,
                                 ),
                             )
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    "Episode ${episode.number}",
-                                    color = AppColors.text,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                episode.title?.takeIf { it.isNotBlank() }?.let {
+                            OutlinedTextField(
+                                value = rangeEnd,
+                                onValueChange = { rangeEnd = it.filter(Char::isDigit).take(4) },
+                                label = { Text("To") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = AppColors.text,
+                                    unfocusedTextColor = AppColors.text,
+                                    focusedBorderColor = AppColors.border,
+                                    unfocusedBorderColor = AppColors.border,
+                                    focusedLabelColor = AppColors.text,
+                                    unfocusedLabelColor = AppColors.textMuted,
+                                ),
+                            )
+                            Button(
+                                onClick = {
+                                    val start = rangeStart.toIntOrNull()
+                                    val end = rangeEnd.toIntOrNull()
+                                    if (start != null && end != null) {
+                                        val low = minOf(start, end)
+                                        val high = maxOf(start, end)
+                                        selectedNumbers = sortedEpisodes
+                                            .filter { it.number in low..high }
+                                            .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
+                                            .map { it.number }
+                                            .toSet()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AppColors.accent,
+                                    contentColor = AppColors.onAccent
+                                ),
+                            ) {
+                                Text("Use")
+                            }
+                        }
+
+                        Text(
+                            "Selected ${selectedEpisodes.size} episode${if (selectedEpisodes.size == 1) "" else "s"}",
+                            color = AppColors.text,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+
+                // ── Audio (Sub / Dub) ─────────────────────────────────────────
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Audio", color = AppColors.textMuted, fontSize = 13.sp)
+                        val dubSupported = selectedServerInfo?.supportsDub != false
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf(false to "Sub", true to "Dub").forEach { (dub, label) ->
+                                val enabled = !dub || dubSupported
+                                val isSelected = preferDub == dub
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            when {
+                                                isSelected -> AppColors.accent
+                                                else -> AppColors.surface
+                                            }
+                                        )
+                                        .then(if (enabled) Modifier.clickable { preferDub = dub } else Modifier)
+                                        .alpha(if (enabled) 1f else 0.35f)
+                                        .padding(vertical = 10.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
                                     Text(
-                                        it,
-                                        color = AppColors.textMuted,
-                                        fontSize = 11.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+                                        text = label,
+                                        color = if (isSelected) AppColors.onAccent else AppColors.text,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
                                     )
                                 }
                             }
                         }
-                    }
-                }
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = rangeStart,
-                        onValueChange = { rangeStart = it.filter(Char::isDigit).take(4) },
-                        label = { Text("From") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = AppColors.text,
-                            unfocusedTextColor = AppColors.text,
-                            focusedBorderColor = AppColors.border,
-                            unfocusedBorderColor = AppColors.border,
-                            focusedLabelColor = AppColors.text,
-                            unfocusedLabelColor = AppColors.textMuted,
-                        ),
-                    )
-                    OutlinedTextField(
-                        value = rangeEnd,
-                        onValueChange = { rangeEnd = it.filter(Char::isDigit).take(4) },
-                        label = { Text("To") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = AppColors.text,
-                            unfocusedTextColor = AppColors.text,
-                            focusedBorderColor = AppColors.border,
-                            unfocusedBorderColor = AppColors.border,
-                            focusedLabelColor = AppColors.text,
-                            unfocusedLabelColor = AppColors.textMuted,
-                        ),
-                    )
-                    Button(
-                        onClick = {
-                            val start = rangeStart.toIntOrNull()
-                            val end = rangeEnd.toIntOrNull()
-                            if (start != null && end != null) {
-                                val low = minOf(start, end)
-                                val high = maxOf(start, end)
-                                selectedNumbers = sortedEpisodes
-                                    .filter { it.number in low..high }
-                                    .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
-                                    .map { it.number }
-                                    .toSet()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = AppColors.accent,
-                            contentColor = AppColors.onAccent
-                        ),
-                    ) {
-                        Text("Use")
-                    }
-                }
-
-                Text(
-                    "Selected ${selectedEpisodes.size} episode${if (selectedEpisodes.size == 1) "" else "s"}",
-                    color = AppColors.text,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-
-                // ── Audio (Sub / Dub) ─────────────────────────────────────────
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Audio", color = AppColors.textMuted, fontSize = 13.sp)
-                    val dubSupported = selectedServerInfo?.supportsDub != false
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        listOf(false to "Sub", true to "Dub").forEach { (dub, label) ->
-                            val enabled = !dub || dubSupported
-                            val isSelected = preferDub == dub
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        when {
-                                            isSelected -> AppColors.accent
-                                            else -> AppColors.surface
-                                        }
-                                    )
-                                    .then(if (enabled) Modifier.clickable { preferDub = dub } else Modifier)
-                                    .alpha(if (enabled) 1f else 0.35f)
-                                    .padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = label,
-                                    color = if (isSelected) AppColors.onAccent else AppColors.text,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
+                        if (selectedServerInfo?.supportsDub == false) {
+                            Text(
+                                "${selectedServerInfo.displayName} is Sub-only.",
+                                color = AppColors.textDim,
+                                fontSize = 11.sp,
+                            )
                         }
-                    }
-                    if (selectedServerInfo?.supportsDub == false) {
-                        Text(
-                            "${selectedServerInfo.displayName} is Sub-only.",
-                            color = AppColors.textDim,
-                            fontSize = 11.sp,
-                        )
                     }
                 }
 
                 // ── Server (recommended first) ────────────────────────────────
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Server", color = AppColors.textMuted, fontSize = 13.sp)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(batchServers, key = { it.id }) { server ->
-                            val isSelected = server.id.equals(selectedServer, ignoreCase = true)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) AppColors.accent else AppColors.surface)
-                                    .clickable { selectedServer = server.id }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = server.displayName,
-                                    color = if (isSelected) AppColors.onAccent else AppColors.text,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Server", color = AppColors.textMuted, fontSize = 13.sp)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(batchServers, key = { it.id }) { server ->
+                                val isSelected = server.id.equals(selectedServer, ignoreCase = true)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) AppColors.accent else AppColors.surface)
+                                        .clickable { selectedServer = server.id }
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = server.displayName,
+                                        color = if (isSelected) AppColors.onAccent else AppColors.text,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
                             }
                         }
+                        Text(
+                            "If the selected server fails, we try Anikage, Anitaku, AniDB, then Miruro automatically.",
+                            color = AppColors.textDim,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                        )
                     }
-                    Text(
-                        "If the selected server fails, we try Anikage, Anitaku, AniDB, then Miruro automatically.",
-                        color = AppColors.textDim,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp,
-                    )
                 }
-
             }
         },
         confirmButton = {

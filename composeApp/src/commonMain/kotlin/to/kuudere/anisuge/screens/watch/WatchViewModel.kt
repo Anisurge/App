@@ -211,6 +211,18 @@ class WatchViewModel(
             cachedEpisodeList = null
             cachedEpisodeListKey = null
         }
+        val slug = currentAnimeId
+        if (cachedEpisodeList == null && offlinePath == null) {
+            viewModelScope.launch {
+                try {
+                    val episodes = fetchAllEpisodes(slug)
+                    if (episodes.isNotEmpty() && cachedEpisodeList == null) {
+                        cachedEpisodeList = episodes
+                        cachedEpisodeListKey = slug
+                    }
+                } catch (_: Exception) { }
+            }
+        }
         loadJob = viewModelScope.launch {
             if (offlinePath != null) {
                 loadOfflineStream(offlinePath)
@@ -303,7 +315,6 @@ class WatchViewModel(
                 state.copy(
                     isLoading = false,
                     loadingMessage = "Fetching streaming URL...",
-                    episodeData = data,
                     savedWatchPosition = mergedResume,
                 )
             }
@@ -769,9 +780,10 @@ class WatchViewModel(
 
     fun switchServer(serverId: String) {
         val state = _uiState.value
+        val resumePosition = lastPlaybackPositionSec.coerceAtLeast(state.savedWatchPosition)
         changeServerWithState(
             newServer = serverId,
-            position = lastPlaybackPositionSec,
+            position = resumePosition,
             targetAudioLang = lastPlaybackLanguage,
             targetSubtitleLang = state.currentSubtitleUrl?.let {
                 state.availableSubtitles.firstOrNull { s -> s.url == it }?.title

@@ -25,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
@@ -351,7 +352,8 @@ fun CommentsSection(
         )
     }
 
-    Column(Modifier.fillMaxSize().background(BgBlack)) {
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().background(BgBlack).blur(16.dp)) {
         // ── Header with sort tabs ────────────────────────────────────────────
         Row(
             Modifier.fillMaxWidth().background(BgBlack)
@@ -693,6 +695,37 @@ fun CommentsSection(
                     }
                 }
             }
+        }
+    }
+
+    ComingSoonOverlay(onClose = onClose)
+    }
+}
+
+@Composable
+private fun ComingSoonOverlay(onClose: () -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).clickable { })
+        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "Coming Soon",
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "We're building a better experience!",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 13.sp,
+            )
+        }
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).size(28.dp),
+        ) {
+            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray)
         }
     }
 }
