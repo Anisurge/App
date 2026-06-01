@@ -67,46 +67,84 @@ fun LatestEpisodesScreen(
         },
         containerColor = AppColors.background
     ) { paddingValues ->
-        BoxWithConstraints(
+        Column(
             Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            val isSmall = maxWidth < 800.dp
-            val columns = if (isSmall) GridCells.Fixed(3) else GridCells.Adaptive(minSize = 160.dp)
-            val hPadding = if (isSmall) 12.dp else 24.dp
-            val itemSpacing = if (isSmall) 8.dp else 16.dp
-            val showOffline = state.isOffline && state.results.isEmpty()
+            // Filter row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LangFilter.values().forEach { filter ->
+                    FilterChip(
+                        selected = state.selectedFilter == filter,
+                        onClick = { viewModel.setFilter(filter) },
+                        label = {
+                            Text(
+                                filter.name,
+                                fontSize = 13.sp,
+                                fontWeight = if (state.selectedFilter == filter) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = AppColors.accent.copy(alpha = 0.3f),
+                            containerColor = Color.White.copy(alpha = 0.08f),
+                            labelColor = Color.White.copy(alpha = 0.9f),
+                            selectedLabelColor = Color.White,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderColor = Color.White.copy(alpha = 0.15f),
+                            selectedBorderColor = AppColors.accent,
+                            enabled = true,
+                            selected = state.selectedFilter == filter,
+                        ),
+                    )
+                }
+            }
 
-            if (showOffline) {
-                OfflineState(onRetry = { viewModel.refresh() }, isLoading = state.isLoading)
-            } else if (state.error != null && state.results.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(state.error!!, color = Color.White.copy(alpha = 0.7f))
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = { viewModel.refresh() },
-                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent)
-                        ) {
-                            Text("Retry")
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxSize()
+            ) {
+                val isSmall = maxWidth < 800.dp
+                val columns = if (isSmall) GridCells.Fixed(3) else GridCells.Adaptive(minSize = 160.dp)
+                val hPadding = if (isSmall) 12.dp else 24.dp
+                val itemSpacing = if (isSmall) 8.dp else 16.dp
+                val showOffline = state.isOffline && state.results.isEmpty()
+
+                if (showOffline) {
+                    OfflineState(onRetry = { viewModel.refresh() }, isLoading = state.isLoading)
+                } else if (state.error != null && state.results.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(state.error!!, color = Color.White.copy(alpha = 0.7f))
+                            Spacer(Modifier.height(12.dp))
+                            Button(
+                                onClick = { viewModel.refresh() },
+                                colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent)
+                            ) {
+                                Text("Retry")
+                            }
                         }
                     }
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = columns,
-                    state = scrollState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = hPadding,
-                        end = hPadding,
-                        top = 8.dp,
-                        bottom = 100.dp
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(itemSpacing),
-                    verticalArrangement = Arrangement.spacedBy(itemSpacing)
-                ) {
+                } else {
+                    LazyVerticalGrid(
+                        columns = columns,
+                        state = scrollState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = hPadding,
+                            end = hPadding,
+                            top = 8.dp,
+                            bottom = 100.dp
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(itemSpacing),
+                        verticalArrangement = Arrangement.spacedBy(itemSpacing)
+                    ) {
                     if (state.isLoading && state.results.isEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Box(
@@ -173,4 +211,5 @@ fun LatestEpisodesScreen(
             }
         }
     }
+}
 }

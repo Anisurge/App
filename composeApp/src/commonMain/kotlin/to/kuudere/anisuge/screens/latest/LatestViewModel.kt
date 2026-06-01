@@ -11,6 +11,12 @@ import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.services.LatestService
 import to.kuudere.anisuge.utils.isNetworkError
 
+enum class LangFilter(val apiValue: String?) {
+    ALL(null),
+    SUB("sub"),
+    DUB("dub"),
+}
+
 data class LatestUiState(
     val results: List<AnimeItem> = emptyList(),
     val isLoading: Boolean = false,
@@ -19,13 +25,23 @@ data class LatestUiState(
     val hasMore: Boolean = true,
     val isOffline: Boolean = false,
     val error: String? = null,
+    val selectedFilter: LangFilter = LangFilter.ALL,
 )
 
 class LatestViewModel(private val latestService: LatestService) : ViewModel() {
     private val _uiState = MutableStateFlow(LatestUiState())
     val uiState: StateFlow<LatestUiState> = _uiState.asStateFlow()
 
+    private var currentLang: String? = null
+
     init {
+        refresh()
+    }
+
+    fun setFilter(filter: LangFilter) {
+        if (_uiState.value.selectedFilter == filter) return
+        currentLang = filter.apiValue
+        _uiState.value = _uiState.value.copy(selectedFilter = filter)
         refresh()
     }
 
@@ -51,7 +67,7 @@ class LatestViewModel(private val latestService: LatestService) : ViewModel() {
     private suspend fun loadPage(cursor: String?) {
         try {
             // Fail fast instead of leaving the UI "stuck loading" on flaky networks.
-            val response = withTimeout(15_000) { latestService.getLatestAired(cursor = cursor) }
+            val response = withTimeout(15_000) { latestService.getLatestAired(lang = currentLang, cursor = cursor) }
             if (response != null) {
                 val newItems = response.episodes
                 val currentState = _uiState.value
