@@ -1139,13 +1139,8 @@ private fun SettingsContent(
     modifier: Modifier = Modifier,
 ) {
     val uriHandler = LocalUriHandler.current
-    AnimatedContent(
-        targetState = selectedTab,
-        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
-        label = "settings_content",
-        modifier = modifier
-    ) { tab ->
-        when (tab) {
+    Box(modifier = modifier.fillMaxSize()) {
+        when (selectedTab) {
             is SettingsTab.Profile -> ProfileTab(
                 uiState = uiState,
                 onRetry = { viewModel.refresh() },
