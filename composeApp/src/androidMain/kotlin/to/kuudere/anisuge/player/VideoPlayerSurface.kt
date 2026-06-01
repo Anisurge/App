@@ -512,16 +512,19 @@ actual fun VideoPlayerSurface(
                 "Fit" -> {
                     MPVLib.setOptionString("video-aspect-override", "-1")
                     MPVLib.setOptionString("panscan", "0")
+                    MPVLib.setOptionString("keepaspect", "yes")
                 }
 
                 "Stretch" -> {
-                    MPVLib.setOptionString("video-aspect-override", "0")
+                    MPVLib.setOptionString("video-aspect-override", "-1")
                     MPVLib.setOptionString("panscan", "0")
+                    MPVLib.setOptionString("keepaspect", "no")
                 }
 
                 "Zoom" -> {
                     MPVLib.setOptionString("video-aspect-override", "-1")
                     MPVLib.setOptionString("panscan", "1.0")
+                    MPVLib.setOptionString("keepaspect", "yes")
                 }
             }
         }

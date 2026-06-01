@@ -555,16 +555,19 @@ internal class MpvPlayer(
                         "Fit" -> {
                             mpv.mpv_set_option_string(handle, "video-aspect-override", "-1")
                             mpv.mpv_set_option_string(handle, "panscan", "0")
+                            mpv.mpv_set_option_string(handle, "keepaspect", "yes")
                         }
 
                         "Stretch" -> {
-                            mpv.mpv_set_option_string(handle, "video-aspect-override", "0")
+                            mpv.mpv_set_option_string(handle, "video-aspect-override", "-1")
                             mpv.mpv_set_option_string(handle, "panscan", "0")
+                            mpv.mpv_set_option_string(handle, "keepaspect", "no")
                         }
 
                         "Zoom" -> {
                             mpv.mpv_set_option_string(handle, "video-aspect-override", "-1")
                             mpv.mpv_set_option_string(handle, "panscan", "1.0")
+                            mpv.mpv_set_option_string(handle, "keepaspect", "yes")
                         }
                     }
                     lastSentAspectRatio = state.aspectRatio
