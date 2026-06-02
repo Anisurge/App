@@ -1,19 +1,21 @@
-# Anisurge 0.11.14 — Build 51
+# Anisurge 0.11.15 — Build 54
 
-**Full Changelog**: [v0.11.13...v0.11.14](https://github.com/Anisurge/App/compare/v0.11.13...v0.11.14)
+**Full Changelog**: [v0.11.14...v0.11.15](https://github.com/Anisurge/App/compare/v0.11.14...v0.11.15)
+
+## 💬 Episode Comments (Now Live!)
+
+- Removed the "Coming Soon" overlay — comments are fully accessible
+- Animated profile frames (APNG rings/outers) on every comment
+- Post comments, reply, like/dislike, spoiler tags, image insert
+- Comments persist when switching episodes or changing sort order
+- **BFF fix:** fixed `ANY(($1,$2))` SQL crash that caused comments to disappear on sort change
 
 ## 🛡️ VirusTotal False Positive Cleanup
 
-### Windows installer — trimmed JRE modules
-- Removed unused JRE modules (`java.sql`, `java.naming`, `java.management`) from the bundled runtime
-- Smaller installer footprint + fewer heuristic triggers for AV engines
-- Added Windows code signing guide (`signing/WINDOWS_SIGNING.md`) for EV-cert-based elimination
-- Added false-positive submission helper (`scripts/submit-false-positive.sh`) for quick AV whitelisting
+- Trimmed unused JRE modules (`java.sql`, `java.naming`, `java.management`)
+- Added Windows code signing guide + false-positive submission helper
 
-## 🎬 Download Fix — Bundled FFmpeg for Windows
+## 🎬 Desktop Download Fix
 
-### FFmpeg now bundled with the Windows installer
-- FFmpeg static binary (`ffmpeg.exe`) is now downloaded and bundled in CI alongside MPV DLLs
-- Solves the "missing DLL" issue when remuxing HLS streams to MKV on Windows
-- `muxToMkv()` now checks for the bundled binary first, then falls back to `DefaultFFMPEGLocator` or system `ffmpeg`
-- Cache directory extraction means it only unpacks once per user
+- FFmpeg static binary now bundled in Windows CI for MKV remux
+- `muxToMkv()` finds bundled ffmpeg first, falls back to system install
