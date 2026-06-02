@@ -957,7 +957,7 @@ class WatchViewModel(
         _uiState.update {
             it.copy(
                 currentEpisodeNumber = episodeNumber,
-                activeSidePanel = null,
+                activeSidePanel = it.activeSidePanel,
                 didMarkWatched = false,
                 offlinePath = null,
                 isLoading = true,
