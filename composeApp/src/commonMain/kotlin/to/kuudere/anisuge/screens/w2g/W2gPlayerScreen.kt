@@ -246,9 +246,6 @@ fun W2gPlayerScreen(
                                     onBack()
                                 }
                             },
-                            onEpisodesClick = {
-                                if (state.isHost) viewModel.openHostPicker()
-                            },
                             onChatClick = {
                                 // Scroll chat list to bottom
                                 scope.launch {

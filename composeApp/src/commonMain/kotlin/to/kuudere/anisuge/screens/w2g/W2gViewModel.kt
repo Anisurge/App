@@ -180,8 +180,7 @@ class W2gViewModel(
         return W2gResolvedIds(resolvedAnilistId, resolvedMalId)
     }
 
-    private fun loadPlaybackFor(room: W2gRoomDetail?) {
-        playbackLoadJob?.cancel()
+    private suspend fun loadPlaybackFor(room: W2gRoomDetail?) {
         val animeId = room?.animeId
         val initialAnilistId = room?.anilistId
         val initialMalId = room?.malId
@@ -203,91 +202,89 @@ class W2gViewModel(
             return
         }
 
-        playbackLoadJob = viewModelScope.launch {
-            _state.value = _state.value.copy(isLoadingPlayback = true, playbackSource = null)
-            val resolvedIds = resolveStreamingIds(animeId, initialAnilistId, initialMalId)
-            val anilistId = resolvedIds.anilistId
-            if (anilistId == null) {
-                _state.value = _state.value.copy(
-                    isLoadingPlayback = false,
-                    playbackSource = null,
-                    error = "Could not resolve streaming ID for this anime",
-                )
-                return@launch
-            }
-            if (resolvedIds.anilistId != initialAnilistId || resolvedIds.malId != initialMalId) {
-                val current = _state.value.roomDetail
-                if (current != null && current.inviteCode == room?.inviteCode) {
-                    _state.value = _state.value.copy(
-                        roomDetail = current.copy(
-                            anilistId = resolvedIds.anilistId,
-                            malId = resolvedIds.malId,
-                        ),
-                    )
-                }
-            }
-
-            val apiSource = if (server.endsWith("-dub", ignoreCase = true)) server.dropLast(4) else server
-            val response = runCatching {
-                var result = infoService.getVideoStream(anilistId, episode, apiSource)
-                if (
-                    result == null ||
-                    (result.sub?.streams.isNullOrEmpty() && result.dub?.streams.isNullOrEmpty())
-                ) {
-                    val fallback = when {
-                        apiSource.equals("anitaku-1", ignoreCase = true) -> "anitaku"
-                        apiSource.equals("anitaku-2", ignoreCase = true) -> "anitaku"
-                        else -> null
-                    }
-                    if (fallback != null) result = infoService.getVideoStream(anilistId, episode, fallback)
-                }
-                result
-            }.getOrNull()
-
-            var subStreams = response?.sub
-            var dubStreams = response?.dub
-            if (apiSource.equals("suzu", ignoreCase = true)) {
-                val embedUrl = subStreams?.episodeId ?: dubStreams?.episodeId
-                if (!embedUrl.isNullOrBlank()) {
-                    val fresh = infoService.fetchSuzuEmbedStreams(embedUrl).orEmpty()
-                    if (fresh.isNotEmpty()) {
-                        val referer = embedUrl.substringBeforeLast("/", "https://senshi.live")
-                        val mapped = fresh.map {
-                            to.kuudere.anisuge.data.models.StreamInfo(
-                                url = it.url,
-                                quality = it.status ?: "Auto",
-                                headers = StreamHeaders(Referer = referer),
-                            )
-                        }
-                        val dubFresh = mapped.filter { it.quality.equals("Dub", ignoreCase = true) }
-                        val subFresh = mapped.filter { !it.quality.equals("Dub", ignoreCase = true) }
-                        if (subFresh.isNotEmpty()) subStreams = (subStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(streams = subFresh)
-                        if (dubFresh.isNotEmpty()) dubStreams = (dubStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(streams = dubFresh)
-                    }
-                }
-            }
-
-            val wantsDub = server.endsWith("-dub", ignoreCase = true) || language == "dub"
-            val section = (if (wantsDub) dubStreams else subStreams)
-                ?.takeIf { it.streams.isNotEmpty() }
-                ?: (if (wantsDub) subStreams else dubStreams)?.takeIf { it.streams.isNotEmpty() }
-            val stream = section?.streams?.firstOrNull { it.url.isNotBlank() }
-            val resolvedUrl = stream?.url
-            val resolvedHeaders = stream?.headers.asHttpHeaderMap()
+        _state.value = _state.value.copy(isLoadingPlayback = true, playbackSource = null)
+        val resolvedIds = resolveStreamingIds(animeId, initialAnilistId, initialMalId)
+        val anilistId = resolvedIds.anilistId
+        if (anilistId == null) {
             _state.value = _state.value.copy(
                 isLoadingPlayback = false,
-                playbackSource = resolvedUrl?.let { W2gPlaybackSource(it, resolvedHeaders) },
-                error = if (stream == null) "No stream found for this episode/server" else _state.value.error,
+                playbackSource = null,
+                error = "Could not resolve streaming ID for this anime",
             )
+            return
+        }
+        if (resolvedIds.anilistId != initialAnilistId || resolvedIds.malId != initialMalId) {
+            val current = _state.value.roomDetail
+            if (current != null && current.inviteCode == room?.inviteCode) {
+                _state.value = _state.value.copy(
+                    roomDetail = current.copy(
+                        anilistId = resolvedIds.anilistId,
+                        malId = resolvedIds.malId,
+                    ),
+                )
+            }
+        }
 
-            // Host: store resolved stream URL on the room so late joiners can use it
-            if (resolvedUrl != null && isCurrentUserHost(room?.hostUserId)) {
-                val detail = _state.value.roomDetail
-                if (detail != null) {
-                    _state.value = _state.value.copy(
-                        roomDetail = detail.copy(streamUrl = resolvedUrl, streamHeaders = resolvedHeaders),
-                    )
+        val apiSource = if (server.endsWith("-dub", ignoreCase = true)) server.dropLast(4) else server
+        val response = runCatching {
+            var result = infoService.getVideoStream(anilistId, episode, apiSource)
+            if (
+                result == null ||
+                (result.sub?.streams.isNullOrEmpty() && result.dub?.streams.isNullOrEmpty())
+            ) {
+                val fallback = when {
+                    apiSource.equals("anitaku-1", ignoreCase = true) -> "anitaku"
+                    apiSource.equals("anitaku-2", ignoreCase = true) -> "anitaku"
+                    else -> null
                 }
+                if (fallback != null) result = infoService.getVideoStream(anilistId, episode, fallback)
+            }
+            result
+        }.getOrNull()
+
+        var subStreams = response?.sub
+        var dubStreams = response?.dub
+        if (apiSource.equals("suzu", ignoreCase = true)) {
+            val embedUrl = subStreams?.episodeId ?: dubStreams?.episodeId
+            if (!embedUrl.isNullOrBlank()) {
+                val fresh = infoService.fetchSuzuEmbedStreams(embedUrl).orEmpty()
+                if (fresh.isNotEmpty()) {
+                    val referer = embedUrl.substringBeforeLast("/", "https://senshi.live")
+                    val mapped = fresh.map {
+                        to.kuudere.anisuge.data.models.StreamInfo(
+                            url = it.url,
+                            quality = it.status ?: "Auto",
+                            headers = StreamHeaders(Referer = referer),
+                        )
+                    }
+                    val dubFresh = mapped.filter { it.quality.equals("Dub", ignoreCase = true) }
+                    val subFresh = mapped.filter { !it.quality.equals("Dub", ignoreCase = true) }
+                    if (subFresh.isNotEmpty()) subStreams = (subStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(streams = subFresh)
+                    if (dubFresh.isNotEmpty()) dubStreams = (dubStreams ?: to.kuudere.anisuge.data.models.BatchScrapeStreamData()).copy(streams = dubFresh)
+                }
+            }
+        }
+
+        val wantsDub = server.endsWith("-dub", ignoreCase = true) || language == "dub"
+        val section = (if (wantsDub) dubStreams else subStreams)
+            ?.takeIf { it.streams.isNotEmpty() }
+            ?: (if (wantsDub) subStreams else dubStreams)?.takeIf { it.streams.isNotEmpty() }
+        val stream = section?.streams?.firstOrNull { it.url.isNotBlank() }
+        val resolvedUrl = stream?.url
+        val resolvedHeaders = stream?.headers.asHttpHeaderMap()
+        _state.value = _state.value.copy(
+            isLoadingPlayback = false,
+            playbackSource = resolvedUrl?.let { W2gPlaybackSource(it, resolvedHeaders) },
+            error = if (stream == null) "No stream found for this episode/server" else _state.value.error,
+        )
+
+        // Host: store resolved stream URL on the room so late joiners can use it
+        if (resolvedUrl != null && isCurrentUserHost(room?.hostUserId)) {
+            val detail = _state.value.roomDetail
+            if (detail != null) {
+                _state.value = _state.value.copy(
+                    roomDetail = detail.copy(streamUrl = resolvedUrl, streamHeaders = resolvedHeaders),
+                )
             }
         }
     }
@@ -778,21 +775,25 @@ class W2gViewModel(
             ),
             playerState = W2gPlayerState(),
         )
-        loadPlaybackFor(_state.value.roomDetail)
-        val detail = _state.value.roomDetail
-        wsClient?.sendChangeEpisode(
-            animeId,
-            episodeNumber,
-            server,
-            language,
-            quality,
-            animeTitle,
-            animePoster,
-            anilistId,
-            malId,
-            streamUrl = detail?.streamUrl,
-            streamHeaders = detail?.streamHeaders,
-        )
+        playbackLoadJob?.cancel()
+        playbackLoadJob = viewModelScope.launch {
+            loadPlaybackFor(_state.value.roomDetail)
+            // After resolution, streamUrl/streamHeaders are set on roomDetail
+            val detail = _state.value.roomDetail
+            wsClient?.sendChangeEpisode(
+                animeId,
+                episodeNumber,
+                server,
+                language,
+                quality,
+                animeTitle,
+                animePoster,
+                anilistId,
+                malId,
+                streamUrl = detail?.streamUrl,
+                streamHeaders = detail?.streamHeaders,
+            )
+        }
     }
 
     fun sendMessage(body: String) = wsClient?.sendChat(body)

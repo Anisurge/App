@@ -67,7 +67,6 @@ fun W2gPlayerControls(
     onNextEpisode: () -> Unit = {},
     onPrevEpisode: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
-    onEpisodesClick: () -> Unit = {},
     onChatClick: () -> Unit = {},
     onBoostSpeedChange: (Boolean) -> Unit = {},
     onPlayPause: ((isPlaying: Boolean) -> Unit)? = null,
@@ -776,21 +775,9 @@ fun W2gPlayerControls(
 
                                 Spacer(Modifier.weight(1f))
 
-                                // Right actions: Episodes, Chat, Fullscreen/PiP.
+                                // Right actions: Chat, Fullscreen/PiP.
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (showLibraryActions) {
-                                        IconButton(onClick = {
-                                            if (!isOffline) onEpisodesClick(); recordInteraction(
-                                            forceShow = false
-                                        )
-                                        }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
-                                            Icon(
-                                                Icons.AutoMirrored.Filled.FormatListBulleted,
-                                                null,
-                                                tint = if (isOffline) Color.Gray else Color.White,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                        }
                                         IconButton(onClick = {
                                             onChatClick(); recordInteraction(forceShow = false)
                                         }, modifier = Modifier.size(40.dp)) {
