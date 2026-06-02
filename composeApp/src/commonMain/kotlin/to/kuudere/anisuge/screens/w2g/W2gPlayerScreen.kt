@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -71,9 +72,13 @@ fun W2gPlayerScreen(
     var chatInput by remember { mutableStateOf("") }
     val chatListState = rememberLazyListState()
 
-    LaunchedEffect(inviteCode) {
-        viewModel.setCurrentUserId(userId ?: "")
-        viewModel.connect(inviteCode)
+    LaunchedEffect(inviteCode, userId) {
+        val currentUserId = userId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        viewModel.setCurrentUserId(currentUserId)
+        viewModel.joinRoom(inviteCode)
+            .onSuccess {
+                viewModel.connect(inviteCode)
+            }
     }
 
     LaunchedEffect(state.chatMessages.size) {
@@ -82,8 +87,10 @@ fun W2gPlayerScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.disconnect()
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.disconnect()
+        }
     }
 
     Scaffold(

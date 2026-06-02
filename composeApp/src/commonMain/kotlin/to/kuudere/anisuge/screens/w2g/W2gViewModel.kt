@@ -50,6 +50,11 @@ class W2gViewModel(
     private var wsJob: Job? = null
     private var currentUserId: String? = null
 
+    private fun isCurrentUserHost(hostUserId: String?): Boolean {
+        val userId = currentUserId?.takeIf { it.isNotBlank() } ?: return false
+        return hostUserId == userId
+    }
+
     fun loadRooms() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoadingRooms = true, error = null)
@@ -78,11 +83,13 @@ class W2gViewModel(
                 roomDetail = room,
                 members = room.members,
                 playerState = room.playerState ?: W2gPlayerState(),
-                isHost = room.hostUserId == currentUserId,
+                isHost = isCurrentUserHost(room.hostUserId),
             )
             return Result.success(room)
         }
-        return Result.failure(Exception("Failed to join room"))
+        val error = "Failed to join room"
+        _state.value = _state.value.copy(error = error)
+        return Result.failure(Exception(error))
     }
 
     fun setCurrentUserId(userId: String) {
@@ -122,7 +129,7 @@ class W2gViewModel(
                             roomDetail = event.room,
                             members = event.room.members,
                             playerState = event.room.playerState ?: W2gPlayerState(),
-                            isHost = event.room.hostUserId == currentUserId,
+                            isHost = isCurrentUserHost(event.room.hostUserId),
                         )
                     }
 
@@ -165,7 +172,7 @@ class W2gViewModel(
 
                     is W2gWsClient.Event.HostChanged -> {
                         _state.value = _state.value.copy(
-                            isHost = event.userId == currentUserId
+                            isHost = isCurrentUserHost(event.userId)
                         )
                     }
 
