@@ -469,6 +469,7 @@ fun HomeScreen(
                             switchTab(AnisugTab.Settings, SettingsTab.Profile)
                         },
                         onLiveChatClick = onLiveChatClick,
+                        onW2gClick = onW2gClick,
                         chatUnreadCount = chatUnreadCount,
                         hazeState = hazeState,
                         modifier = Modifier
@@ -702,6 +703,7 @@ private fun HomeContent(
                             )
                             Spacer(Modifier.height(24.dp))
                         }
+
                         RowId.LATEST_EPISODES -> AnimeSection(
                             title = strings.rowTitle(rowId),
                             items = state.latestAired,
@@ -709,36 +711,42 @@ private fun HomeContent(
                             showLatestLangBadge = true,
                             onViewMoreClick = onViewLatestEpisodesMore,
                         )
+
                         RowId.TRENDING_WEEK -> AnimeSection(
                             title = strings.rowTitle(rowId),
                             items = state.trendingWeek,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
                         )
+
                         RowId.NEW_SEASONS -> AnimeSection(
                             title = strings.rowTitle(rowId),
                             items = state.newSeasons,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
                         )
+
                         RowId.NEW_ON_APP -> AnimeSection(
                             title = strings.rowTitle(rowId),
                             items = state.newOnSite,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             onViewMoreClick = onViewNewOnAppMore,
                         )
+
                         RowId.RECOMMENDED -> AnimeSection(
                             title = strings.rowTitle(rowId),
                             items = state.recommended,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
                         )
+
                         RowId.UPCOMING -> AnimeSection(
                             title = strings.rowTitle(rowId),
                             items = state.upcoming,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
                         )
+
                         RowId.HIDDEN_GEMS -> AnimeSection(
                             title = strings.rowTitle(rowId),
                             items = state.hiddenGems,
@@ -2169,6 +2177,7 @@ private fun MobileTopBar(
     onDownloadClick: () -> Unit,
     onProfileClick: () -> Unit,
     onLiveChatClick: () -> Unit,
+    onW2gClick: () -> Unit = {},
     chatUnreadCount: Int = 0,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
@@ -2224,6 +2233,19 @@ private fun MobileTopBar(
                         badgeColor = Color(0xFFE50914),
                         modifier = Modifier.align(Alignment.TopEnd).offset(x = (-1).dp, y = (-1).dp),
                     )
+                }
+                Box(modifier = Modifier.size(36.dp)) {
+                    IconButton(
+                        onClick = onW2gClick,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Group,
+                            contentDescription = "Watch Together",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                 }
                 Box(modifier = Modifier.size(36.dp)) {
                     IconButton(
@@ -2718,7 +2740,9 @@ fun DownloadsTab(
                         }
                     }
                     val rows = group.tasks.chunked(cols)
-                    itemsIndexed(rows, key = { rowIdx, _ -> "anime-${group.animeId}-row-$rowIdx" }) { rowIdx, rowTasks ->
+                    itemsIndexed(
+                        rows,
+                        key = { rowIdx, _ -> "anime-${group.animeId}-row-$rowIdx" }) { rowIdx, rowTasks ->
                         DownloadsAnimatedEntry(delayMs = ((groupIndex + rowIdx) * 40).coerceAtMost(400)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
