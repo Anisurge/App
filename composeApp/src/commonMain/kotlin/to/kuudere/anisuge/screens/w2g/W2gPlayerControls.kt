@@ -66,15 +66,12 @@ fun W2gPlayerControls(
     onBack: () -> Unit = {},
     onNextEpisode: () -> Unit = {},
     onPrevEpisode: () -> Unit = {},
-    onCaptionsClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
-    onInfoClick: () -> Unit = {},
     onEpisodesClick: () -> Unit = {},
-    onCommentsClick: () -> Unit = {},
-    onWatchlistClick: () -> Unit = {},
+    onChatClick: () -> Unit = {},
     onBoostSpeedChange: (Boolean) -> Unit = {},
-    isInWatchlist: Boolean = false,
-    currentFolder: String? = null,
+    onPlayPause: ((isPlaying: Boolean) -> Unit)? = null,
+    onSeek: ((position: Double) -> Unit)? = null,
     isOffline: Boolean = false,
     onExit: () -> Unit = {},
     // Sync button callbacks
@@ -86,6 +83,7 @@ fun W2gPlayerControls(
     showLibraryActions: Boolean = true,
     showFullscreenButton: Boolean = to.kuudere.anisuge.platform.isDesktopPlatform,
     compactControls: Boolean = false,
+    showMediaControls: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val hideDelayMillis = 1500L
@@ -101,7 +99,7 @@ fun W2gPlayerControls(
     val isLoading =
         playerState.isBuffering || (!playerState.isPlaying && playerState.duration <= 0.0) || expectedPosition != null
 
-    fun shouldKeepControlsVisible(): Boolean = playerState.isLocked || isSeeking || isLoading
+    fun shouldKeepControlsVisible(): Boolean = isSeeking || isLoading
     fun recordInteraction(forceShow: Boolean = true) {
         lastInteractionAt = Clock.System.now().toEpochMilliseconds()
         if (forceShow) controlsVisible = true
@@ -141,12 +139,6 @@ fun W2gPlayerControls(
     // Restart idle timer after scrubbing ends.
     LaunchedEffect(isSeeking) {
         if (!isSeeking) recordInteraction(forceShow = false)
-    }
-
-    // Keep controls visible while locked and reset idle baseline on lock changes.
-    LaunchedEffect(playerState.isLocked) {
-        if (playerState.isLocked) controlsVisible = true
-        recordInteraction(forceShow = false)
     }
 
     // Single auto-hide owner with final-state guards.
@@ -285,7 +277,9 @@ fun W2gPlayerControls(
                             }
                         } else {
                             // Center double tap toggles play/pause
-                            playerState.pauseRequested = !playerState.isPaused
+                            val wasPaused = playerState.isPaused
+                            playerState.pauseRequested = !wasPaused
+                            onPlayPause?.invoke(wasPaused)
                         }
 
                         controlsVisible = true
@@ -435,14 +429,6 @@ fun W2gPlayerControls(
                                 } else {
                                     Spacer(Modifier.weight(1f))
                                 }
-                                IconButton(onClick = onCaptionsClick) {
-                                    Icon(
-                                        getCCIcon(),
-                                        contentDescription = "Captions",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(26.dp)
-                                    )
-                                }
                                 IconButton(onClick = onSettingsClick) {
                                     Icon(
                                         Icons.Default.Settings,
@@ -516,21 +502,7 @@ fun W2gPlayerControls(
                         )
                         .then(if (isFullscreen) Modifier.windowInsetsPadding(WindowInsets.safeDrawing) else Modifier)
                 ) {
-                    if (playerState.isLocked) {
-                        // Only show Lock button if locked
-                        Row(
-                            Modifier.fillMaxWidth().padding(32.dp),
-                            horizontalArrangement = Arrangement.Start
-                        ) {
-                            IconButton(
-                                onClick = { playerState.isLocked = false; recordInteraction(forceShow = false) },
-                                modifier = Modifier.size(56.dp).background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            ) {
-                                Icon(Icons.Default.Lock, null, tint = Color.White, modifier = Modifier.size(32.dp))
-                            }
-                        }
-                    } else {
-                        Column(Modifier.fillMaxWidth().padding(bottom = 0.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(bottom = 0.dp)) {
                             // 1. Progress Bar Row
                             val duration = playerState.duration
                             val activePosition =
@@ -557,46 +529,53 @@ fun W2gPlayerControls(
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(28.dp)
-                                        .pointerInput(duration) {
-                                            detectTapGestures(
-                                                onTap = { offset ->
-                                                    if (duration <= 0) return@detectTapGestures
-                                                    val tapValue =
-                                                        ((offset.x / size.width) * duration).coerceIn(0.0, duration)
-                                                    playerState.seekTarget = tapValue
-                                                    expectedPosition = tapValue
-                                                    recordInteraction(forceShow = false)
-                                                }
-                                            )
-                                        }
-                                        .pointerInput(duration) {
-                                            detectDragGestures(
-                                                onDragStart = { offset ->
-                                                    if (duration <= 0) return@detectDragGestures
-                                                    isSeeking = true
-                                                    controlsVisible = true
-                                                    recordInteraction(forceShow = false)
-                                                    seekValue = ((offset.x / size.width) * duration).toFloat()
-                                                        .coerceIn(0f, duration.toFloat())
-                                                },
-                                                onDrag = { change, _ ->
-                                                    if (duration <= 0) return@detectDragGestures
-                                                    seekValue = ((change.position.x / size.width) * duration).toFloat()
-                                                        .coerceIn(0f, duration.toFloat())
-                                                },
+                                        .then(
+                                            if (showMediaControls) Modifier.pointerInput(duration) {
+                                                detectTapGestures(
+                                                    onTap = { offset ->
+                                                        if (duration <= 0) return@detectTapGestures
+                                                        val tapValue =
+                                                            ((offset.x / size.width) * duration).coerceIn(0.0, duration)
+                                                        playerState.seekTarget = tapValue
+                                                        onSeek?.invoke(tapValue)
+                                                        expectedPosition = tapValue
+                                                        recordInteraction(forceShow = false)
+                                                    }
+                                                )
+                                            } else Modifier
+                                        )
+                                        .then(
+                                            if (showMediaControls) Modifier.pointerInput(duration) {
+                                                detectDragGestures(
+                                                    onDragStart = { offset ->
+                                                        if (duration <= 0) return@detectDragGestures
+                                                        isSeeking = true
+                                                        controlsVisible = true
+                                                        recordInteraction(forceShow = false)
+                                                        seekValue = ((offset.x / size.width) * duration).toFloat()
+                                                            .coerceIn(0f, duration.toFloat())
+                                                    },
+                                                    onDrag = { change, _ ->
+                                                        if (duration <= 0) return@detectDragGestures
+                                                        seekValue = ((change.position.x / size.width) * duration).toFloat()
+                                                            .coerceIn(0f, duration.toFloat())
+                                                    },
                                                 onDragEnd = {
                                                     if (duration > 0) {
-                                                        playerState.seekTarget = seekValue.toDouble()
-                                                        expectedPosition = seekValue.toDouble()
+                                                        val target = seekValue.toDouble()
+                                                        playerState.seekTarget = target
+                                                        onSeek?.invoke(target)
+                                                        expectedPosition = target
                                                         isSeeking = false
                                                         recordInteraction(forceShow = false)
                                                     }
                                                 },
-                                                onDragCancel = {
-                                                    isSeeking = false; recordInteraction(forceShow = false)
-                                                }
-                                            )
-                                        },
+                                                    onDragCancel = {
+                                                        isSeeking = false; recordInteraction(forceShow = false)
+                                                    }
+                                                )
+                                            } else Modifier
+                                        ),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     val bufferedProgress =
@@ -681,20 +660,8 @@ fun W2gPlayerControls(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Left actions: Lock, Volume, Watchlist
+                                // Left actions: Volume
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (!compactControls) {
-                                        IconButton(onClick = {
-                                            playerState.isLocked = true; recordInteraction(forceShow = false)
-                                        }, modifier = Modifier.size(36.dp)) {
-                                            Icon(
-                                                Icons.Default.LockOpen,
-                                                null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
                                     IconButton(onClick = {
                                         playerState.isMuted = !playerState.isMuted; recordInteraction(forceShow = false)
                                     }, modifier = Modifier.size(38.dp)) {
@@ -721,17 +688,87 @@ fun W2gPlayerControls(
                                             )
                                         }
                                     }
-                                    if (!compactControls) {
+                                }
+
+                                Spacer(Modifier.weight(1f))
+
+                                if (showMediaControls) {
+                                    // Main Playback controls
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         IconButton(onClick = {
-                                            if (!isOffline) onWatchlistClick(); recordInteraction(
-                                            forceShow = false
-                                        )
-                                        }, modifier = Modifier.size(38.dp), enabled = !isOffline) {
+                                            val nPos = (playerState.position - 10).coerceAtLeast(0.0)
+                                            playerState.seekTarget = nPos
+                                            onSeek?.invoke(nPos)
+                                            expectedPosition = nPos
+                                            recordInteraction(forceShow = false)
+                                        }, modifier = Modifier.size(40.dp)) {
                                             Icon(
-                                                if (isInWatchlist) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                                Icons.Default.Replay10,
                                                 null,
-                                                tint = if (isOffline) Color.Gray else Color.White,
-                                                modifier = Modifier.size(22.dp)
+                                                tint = Color.White,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                        if (!compactControls) {
+                                            IconButton(
+                                                onClick = { onPrevEpisode(); recordInteraction(forceShow = false) },
+                                                enabled = playerState.hasPrevEpisode,
+                                                modifier = Modifier.size(40.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.SkipPrevious,
+                                                    null,
+                                                    tint = if (playerState.hasPrevEpisode) Color.White else Color.Gray,
+                                                    modifier = Modifier.size(26.dp)
+                                                )
+                                            }
+                                        }
+
+                                        // BIG PLAY BUTTON
+                                        Box(
+                                            Modifier.size(54.dp).padding(4.dp).clip(CircleShape).background(Color.White)
+                                                .clickable {
+                                                    val wasPaused = playerState.isPaused
+                                                    playerState.pauseRequested = !wasPaused
+                                                    onPlayPause?.invoke(wasPaused)
+                                                    recordInteraction(forceShow = false)
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                if (playerState.isPaused || !playerState.isPlaying) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                                null,
+                                                tint = Color.Black,
+                                                modifier = Modifier.size(32.dp)
+                                            )
+                                        }
+
+                                        if (!compactControls) {
+                                            IconButton(
+                                                onClick = { onNextEpisode(); recordInteraction(forceShow = false) },
+                                                enabled = playerState.hasNextEpisode,
+                                                modifier = Modifier.size(40.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.SkipNext,
+                                                    null,
+                                                    tint = if (playerState.hasNextEpisode) Color.White else Color.Gray,
+                                                    modifier = Modifier.size(26.dp)
+                                                )
+                                            }
+                                        }
+                                        IconButton(onClick = {
+                                            val nPos = (playerState.position + 10).coerceAtMost(duration)
+                                            playerState.seekTarget = nPos
+                                            onSeek?.invoke(nPos)
+                                            expectedPosition = nPos
+                                            recordInteraction(forceShow = false)
+                                        }, modifier = Modifier.size(40.dp)) {
+                                            Icon(
+                                                Icons.Default.Forward10,
+                                                null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(24.dp)
                                             )
                                         }
                                     }
@@ -739,99 +776,9 @@ fun W2gPlayerControls(
 
                                 Spacer(Modifier.weight(1f))
 
-                                // Main Playback controls
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = {
-                                        val nPos = (playerState.position - 10).coerceAtLeast(0.0)
-                                        playerState.seekTarget = nPos; expectedPosition = nPos; recordInteraction(
-                                        forceShow = false
-                                    )
-                                    }, modifier = Modifier.size(40.dp)) {
-                                        Icon(
-                                            Icons.Default.Replay10,
-                                            null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                    if (!compactControls) {
-                                        IconButton(
-                                            onClick = { onPrevEpisode(); recordInteraction(forceShow = false) },
-                                            enabled = playerState.hasPrevEpisode,
-                                            modifier = Modifier.size(40.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.SkipPrevious,
-                                                null,
-                                                tint = if (playerState.hasPrevEpisode) Color.White else Color.Gray,
-                                                modifier = Modifier.size(26.dp)
-                                            )
-                                        }
-                                    }
-
-                                    // BIG PLAY BUTTON
-                                    Box(
-                                        Modifier.size(54.dp).padding(4.dp).clip(CircleShape).background(Color.White)
-                                            .clickable {
-                                                playerState.pauseRequested = !playerState.isPaused
-                                                recordInteraction(forceShow = false)
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            if (playerState.isPaused || !playerState.isPlaying) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                            null,
-                                            tint = Color.Black,
-                                            modifier = Modifier.size(32.dp)
-                                        )
-                                    }
-
-                                    if (!compactControls) {
-                                        IconButton(
-                                            onClick = { onNextEpisode(); recordInteraction(forceShow = false) },
-                                            enabled = playerState.hasNextEpisode,
-                                            modifier = Modifier.size(40.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.SkipNext,
-                                                null,
-                                                tint = if (playerState.hasNextEpisode) Color.White else Color.Gray,
-                                                modifier = Modifier.size(26.dp)
-                                            )
-                                        }
-                                    }
-                                    IconButton(onClick = {
-                                        val nPos = (playerState.position + 10).coerceAtMost(duration)
-                                        playerState.seekTarget = nPos; expectedPosition = nPos; recordInteraction(
-                                        forceShow = false
-                                    )
-                                    }, modifier = Modifier.size(40.dp)) {
-                                        Icon(
-                                            Icons.Default.Forward10,
-                                            null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                }
-
-                                Spacer(Modifier.weight(1f))
-
-                                // Right actions: Info, Episodes, Comments, Fullscreen/PiP.
+                                // Right actions: Episodes, Chat, Fullscreen/PiP.
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (showLibraryActions) {
-                                        IconButton(
-                                            onClick = { if (!isOffline) onInfoClick(); recordInteraction(forceShow = false) },
-                                            modifier = Modifier.size(38.dp),
-                                            enabled = !isOffline
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Info,
-                                                null,
-                                                tint = if (isOffline) Color.Gray else Color.White,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                        }
                                         IconButton(onClick = {
                                             if (!isOffline) onEpisodesClick(); recordInteraction(
                                             forceShow = false
@@ -845,14 +792,12 @@ fun W2gPlayerControls(
                                             )
                                         }
                                         IconButton(onClick = {
-                                            if (!isOffline) onCommentsClick(); recordInteraction(
-                                            forceShow = false
-                                        )
-                                        }, modifier = Modifier.size(40.dp), enabled = !isOffline) {
+                                            onChatClick(); recordInteraction(forceShow = false)
+                                        }, modifier = Modifier.size(40.dp)) {
                                             Icon(
-                                                Icons.Default.ChatBubbleOutline,
+                                                Icons.Default.Chat,
                                                 null,
-                                                tint = if (isOffline) Color.Gray else Color.White,
+                                                tint = Color.White,
                                                 modifier = Modifier.size(22.dp)
                                             )
                                         }
@@ -918,7 +863,6 @@ fun W2gPlayerControls(
                                             )
                                         }
                                     }
-                                }
                             }
                         }
                     }
@@ -1068,35 +1012,4 @@ private fun getPictureInPictureIcon(): ImageVector {
     }.build()
 }
 
-private fun getCCIcon(): ImageVector {
-    return ImageVector.Builder(
-        name = "ClosedCaption",
-        defaultWidth = 24.dp,
-        defaultHeight = 24.dp,
-        viewportWidth = 24f,
-        viewportHeight = 24f
-    ).apply {
-        path(
-            stroke = SolidColor(Color.White),
-            strokeLineWidth = 2f,
-            strokeLineCap = StrokeCap.Round,
-            strokeLineJoin = StrokeJoin.Round
-        ) {
-            moveTo(10f, 9.17f)
-            arcToRelative(3f, 3f, 0f, isMoreThanHalf = true, isPositiveArc = false, 0f, 5.66f)
-            moveTo(17f, 9.17f)
-            arcToRelative(3f, 3f, 0f, isMoreThanHalf = true, isPositiveArc = false, 0f, 5.66f)
 
-            moveTo(4f, 5f)
-            horizontalLineToRelative(16f)
-            arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 2f, 2f)
-            verticalLineToRelative(10f)
-            arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, -2f, 2f)
-            horizontalLineToRelative(-16f)
-            arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, -2f, -2f)
-            verticalLineToRelative(-10f)
-            arcToRelative(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 2f, -2f)
-            close()
-        }
-    }.build()
-}

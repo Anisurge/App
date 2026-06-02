@@ -82,6 +82,7 @@ import to.kuudere.anisuge.player.VideoPlayerSurface
 import to.kuudere.anisuge.player.rememberVideoPlayerState
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ProfileAvatar
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -230,36 +231,44 @@ fun W2gPlayerScreen(
                             )
                         }
 
-                        // Host overlay controls
-                        if (state.isHost) {
-                            HostW2gOverlay(
-                                isPlaying = videoState.isPlaying,
-                                isPaused = videoState.isPaused,
-                                position = videoState.position,
-                                duration = videoState.duration,
-                                isFullscreen = isFullscreen,
-                                onPlayPause = {
-                                    if (videoState.isPlaying) {
-                                        videoState.pauseRequested = true
-                                        viewModel.pause(videoState.position)
-                                    } else {
-                                        videoState.pauseRequested = false
-                                        viewModel.play(videoState.position)
+                        // W2GPlayerControls overlay (reusable from WatchScreen)
+                        W2gPlayerControls(
+                            playerState = videoState,
+                            streamingData = null,
+                            title = state.roomDetail?.animeTitle ?: "",
+                            isFullscreen = isFullscreen,
+                            showMediaControls = state.isHost,
+                            showFullscreenButton = true,
+                            onFullscreenToggle = { isFullscreen = !isFullscreen },
+                            onBack = {
+                                scope.launch {
+                                    viewModel.leaveRoom(inviteCode)
+                                    onBack()
+                                }
+                            },
+                            onEpisodesClick = {
+                                if (state.isHost) viewModel.openHostPicker()
+                            },
+                            onChatClick = {
+                                // Scroll chat list to bottom
+                                scope.launch {
+                                    if (state.chatMessages.isNotEmpty()) {
+                                        chatListState.animateScrollToItem(state.chatMessages.size - 1)
                                     }
-                                },
-                                onSeek = { pos ->
-                                    videoState.seekTarget = pos
-                                    viewModel.seek(pos)
-                                },
-                                onFullscreenToggle = { isFullscreen = !isFullscreen },
-                            )
-                        } else {
-                            // Non-host: minimal overlay (fullscreen only)
-                            NonHostW2gOverlay(
-                                isFullscreen = isFullscreen,
-                                onFullscreenToggle = { isFullscreen = !isFullscreen },
-                            )
-                        }
+                                }
+                            },
+                            onSettingsClick = {
+                                // TODO: show minimal settings sheet with screen mode only
+                            },
+                            onPlayPause = if (state.isHost) { isPlaying ->
+                                if (!isPlaying) viewModel.play(videoState.position)
+                                else viewModel.pause(videoState.position)
+                            } else null,
+                            onSeek = if (state.isHost) { pos ->
+                                viewModel.seek(pos)
+                            } else null,
+                            modifier = Modifier.fillMaxSize(),
+                        )
 
                         // Remote sync for non-host (host's own actions already applied locally)
                         if (!state.isHost) {
@@ -515,131 +524,6 @@ fun W2gPlayerScreen(
             onLanguageSelected = viewModel::setHostLanguage,
             onServerSelected = viewModel::setHostServer,
             onStart = viewModel::applyHostPickerSelection,
-        )
-    }
-}
-
-@Composable
-private fun HostW2gOverlay(
-    isPlaying: Boolean,
-    isPaused: Boolean,
-    position: Double,
-    duration: Double,
-    isFullscreen: Boolean,
-    onPlayPause: () -> Unit,
-    onSeek: (Double) -> Unit,
-    onFullscreenToggle: () -> Unit,
-) {
-    Box(Modifier.fillMaxSize()) {
-        // Top-right buttons
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp),
-        ) {
-            IconButton(onClick = onFullscreenToggle, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                    "Fullscreen",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-
-        // Center play/pause button
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable(onClick = onPlayPause),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                if (isPlaying) "Pause" else "Play",
-                tint = Color.White,
-                modifier = Modifier.size(28.dp),
-            )
-        }
-
-        // Seek bar at bottom
-        if (duration > 0) {
-            var sliderValue by remember(position, duration) { mutableStateOf((position / duration).toFloat().coerceIn(0f, 1f)) }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                    .pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            val fraction = (offset.x / size.width).coerceIn(0f, 1f)
-                            sliderValue = fraction
-                            onSeek(fraction * duration)
-                        }
-                    }
-            ) {
-                Slider(
-                    value = sliderValue,
-                    onValueChange = { sliderValue = it },
-                    onValueChangeFinished = {
-                        onSeek(sliderValue * duration)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = AppColors.accent,
-                        activeTrackColor = AppColors.accent,
-                        inactiveTrackColor = Color.White.copy(alpha = 0.3f),
-                    ),
-                )
-            }
-            Text(
-                "${formatDuration(position.toLong())} / ${formatDuration(duration.toLong())}",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 11.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 28.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun NonHostW2gOverlay(
-    isFullscreen: Boolean,
-    onFullscreenToggle: () -> Unit,
-) {
-    Box(Modifier.fillMaxSize()) {
-        // Top-right buttons
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp),
-        ) {
-            IconButton(onClick = onFullscreenToggle, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                    "Fullscreen",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-
-        // "Watching with host" indicator
-        Text(
-            "Synced with host",
-            color = Color.White.copy(alpha = 0.5f),
-            fontSize = 12.sp,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(Color.Black.copy(alpha = 0.5f))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
 }
