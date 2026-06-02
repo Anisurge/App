@@ -188,8 +188,18 @@ class W2gViewModel(
         val episode = room?.episodeNumber
         val server = room?.server?.takeIf { it.isNotBlank() }
         val language = room?.language
+        val roomStreamUrl = room?.streamUrl?.takeIf { it.isNotBlank() }
         if (episode == null || server == null) {
             _state.value = _state.value.copy(playbackSource = null, isLoadingPlayback = false)
+            return
+        }
+
+        // Non-host with shared stream URL: use it directly
+        if (!isCurrentUserHost(room?.hostUserId) && roomStreamUrl != null) {
+            _state.value = _state.value.copy(
+                isLoadingPlayback = false,
+                playbackSource = W2gPlaybackSource(roomStreamUrl, room?.streamHeaders ?: emptyMap()),
+            )
             return
         }
 
@@ -262,11 +272,23 @@ class W2gViewModel(
                 ?.takeIf { it.streams.isNotEmpty() }
                 ?: (if (wantsDub) subStreams else dubStreams)?.takeIf { it.streams.isNotEmpty() }
             val stream = section?.streams?.firstOrNull { it.url.isNotBlank() }
+            val resolvedUrl = stream?.url
+            val resolvedHeaders = stream?.headers.asHttpHeaderMap()
             _state.value = _state.value.copy(
                 isLoadingPlayback = false,
-                playbackSource = stream?.let { W2gPlaybackSource(it.url, it.headers.asHttpHeaderMap()) },
+                playbackSource = resolvedUrl?.let { W2gPlaybackSource(it, resolvedHeaders) },
                 error = if (stream == null) "No stream found for this episode/server" else _state.value.error,
             )
+
+            // Host: store resolved stream URL on the room so late joiners can use it
+            if (resolvedUrl != null && isCurrentUserHost(room?.hostUserId)) {
+                val detail = _state.value.roomDetail
+                if (detail != null) {
+                    _state.value = _state.value.copy(
+                        roomDetail = detail.copy(streamUrl = resolvedUrl, streamHeaders = resolvedHeaders),
+                    )
+                }
+            }
         }
     }
 
@@ -628,24 +650,34 @@ class W2gViewModel(
                             _state.value = _state.value.copy(playerState = event.state)
                         }
 
-                        is W2gWsClient.Event.EpisodeChange -> {
-                            val current = _state.value.roomDetail
-                            _state.value = _state.value.copy(
-                                roomDetail = current?.copy(
-                                    animeId = event.animeId,
-                                    animeTitle = event.animeTitle,
-                                    animePoster = event.animePoster,
-                                    anilistId = event.anilistId,
-                                    malId = event.malId,
-                                    episodeNumber = event.episodeNumber,
-                                    server = event.server,
-                                    language = event.language,
-                                    quality = event.quality,
-                                ),
-                                playerState = W2gPlayerState(),
-                            )
-                            loadPlaybackFor(_state.value.roomDetail)
-                        }
+                    is W2gWsClient.Event.EpisodeChange -> {
+                        val current = _state.value.roomDetail
+                        _state.value = _state.value.copy(
+                            roomDetail = current?.copy(
+                                animeId = event.animeId,
+                                animeTitle = event.animeTitle,
+                                animePoster = event.animePoster,
+                                anilistId = event.anilistId,
+                                malId = event.malId,
+                                episodeNumber = event.episodeNumber,
+                                server = event.server,
+                                language = event.language,
+                                quality = event.quality,
+                                streamUrl = event.streamUrl,
+                                streamHeaders = event.streamHeaders,
+                            ),
+                            playerState = W2gPlayerState(),
+                        )
+                        loadPlaybackFor(_state.value.roomDetail)
+                    }
+
+                    is W2gWsClient.Event.RoomClosed -> {
+                        _state.value = _state.value.copy(
+                            error = "Room was closed by the host",
+                            isConnected = false,
+                        )
+                        disconnect()
+                    }
 
                         is W2gWsClient.Event.MemberJoined -> {
                             val newMember = W2gRoomMember(
@@ -747,6 +779,7 @@ class W2gViewModel(
             playerState = W2gPlayerState(),
         )
         loadPlaybackFor(_state.value.roomDetail)
+        val detail = _state.value.roomDetail
         wsClient?.sendChangeEpisode(
             animeId,
             episodeNumber,
@@ -757,6 +790,8 @@ class W2gViewModel(
             animePoster,
             anilistId,
             malId,
+            streamUrl = detail?.streamUrl,
+            streamHeaders = detail?.streamHeaders,
         )
     }
 

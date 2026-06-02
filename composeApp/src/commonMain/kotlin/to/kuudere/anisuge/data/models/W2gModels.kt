@@ -55,6 +55,8 @@ data class W2gRoomUpdateRequest(
     val server: String? = null,
     val language: String? = null,
     val quality: String? = null,
+    @SerialName("stream_url") val streamUrl: String? = null,
+    @SerialName("stream_headers") val streamHeaders: Map<String, String>? = null,
 )
 
 @Serializable
@@ -72,6 +74,8 @@ data class W2gRoomDetail(
     val server: String? = null,
     val language: String? = null,
     val quality: String? = null,
+    @SerialName("stream_url") val streamUrl: String? = null,
+    @SerialName("stream_headers") val streamHeaders: Map<String, String>? = null,
     @SerialName("member_count") val memberCount: Int = 0,
     val members: List<W2gRoomMember> = emptyList(),
     @SerialName("player_state") val playerState: W2gPlayerState? = null,

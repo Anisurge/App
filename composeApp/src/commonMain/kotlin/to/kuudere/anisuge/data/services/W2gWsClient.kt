@@ -42,7 +42,11 @@ class W2gWsClient(
             val server: String,
             val language: String?,
             val quality: String?,
+            val streamUrl: String?,
+            val streamHeaders: Map<String, String>?,
         ) : Event()
+
+        data object RoomClosed : Event()
 
         data class MemberJoined(val userId: String, val username: String?, val avatarUrl: String?) : Event()
         data class MemberLeft(val userId: String, val username: String?) : Event()
@@ -144,6 +148,10 @@ class W2gWsClient(
                 }
                 "episode_change" -> {
                     val obj = data.jsonObject
+                    val rawHeaders = obj["stream_headers"]
+                    val headers = if (rawHeaders != null && rawHeaders is kotlinx.serialization.json.JsonObject) {
+                        rawHeaders.mapValues { it.value.jsonPrimitive.content }
+                    } else null
                     Event.EpisodeChange(
                         animeId = obj["anime_id"]?.jsonPrimitive?.contentOrNull ?: "",
                         animeTitle = obj["anime_title"]?.jsonPrimitive?.contentOrNull,
@@ -154,8 +162,11 @@ class W2gWsClient(
                         server = obj["server"]?.jsonPrimitive?.content ?: "suzu",
                         language = obj["language"]?.jsonPrimitive?.contentOrNull,
                         quality = obj["quality"]?.jsonPrimitive?.contentOrNull,
+                        streamUrl = obj["stream_url"]?.jsonPrimitive?.contentOrNull,
+                        streamHeaders = headers,
                     )
                 }
+                "room_closed" -> Event.RoomClosed
                 "member_joined" -> {
                     val obj = data.jsonObject
                     Event.MemberJoined(
@@ -234,6 +245,8 @@ class W2gWsClient(
         animePoster: String? = null,
         anilistId: Int? = null,
         malId: Int? = null,
+        streamUrl: String? = null,
+        streamHeaders: Map<String, String>? = null,
     ) {
         sendRaw(json.encodeToString(W2gWsEnvelope("change_episode", buildJsonObject {
             put("anime_id", animeId)
@@ -245,6 +258,12 @@ class W2gWsClient(
             put("server", server)
             language?.let { put("language", it) }
             quality?.let { put("quality", it) }
+            streamUrl?.let { put("stream_url", it) }
+            streamHeaders?.let {
+                put("stream_headers", buildJsonObject {
+                    it.forEach { (k, v) -> put(k, v) }
+                })
+            }
         })))
     }
 
