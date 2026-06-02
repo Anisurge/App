@@ -204,7 +204,7 @@ private fun findBundledFfmpeg(): String? {
         }
 
         // Extract from classpath resource
-        val resourceStream = this::class.java.getResourceAsStream(resourceName)
+        val resourceStream = object {}::class.java.getResourceAsStream(resourceName)
         if (resourceStream != null) {
             cachedFile.outputStream().use { out ->
                 resourceStream.use { `in` -> `in`.copyTo(out) }
