@@ -161,6 +161,10 @@ object AppComponent {
         to.kuudere.anisuge.data.services.CommunityService(sessionStore, httpClient)
     }
 
+    val w2gRoomService: to.kuudere.anisuge.data.services.W2gRoomService by lazy {
+        to.kuudere.anisuge.data.services.W2gRoomService(sessionStore, httpClient)
+    }
+
     val syncManager: to.kuudere.anisuge.data.services.SyncManager by lazy {
         to.kuudere.anisuge.data.services.SyncManager(trackingService)
     }

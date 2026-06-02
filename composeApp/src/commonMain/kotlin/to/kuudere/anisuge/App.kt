@@ -33,6 +33,9 @@ import to.kuudere.anisuge.screens.home.HomeViewModel
 import to.kuudere.anisuge.screens.home.ContinueWatchingScreen
 import to.kuudere.anisuge.screens.chat.LiveChatScreen
 import to.kuudere.anisuge.screens.chat.LiveChatViewModel
+import to.kuudere.anisuge.screens.w2g.W2gRoomListScreen
+import to.kuudere.anisuge.screens.w2g.W2gPlayerScreen
+import to.kuudere.anisuge.screens.w2g.W2gViewModel
 import to.kuudere.anisuge.screens.search.SearchScreen
 import to.kuudere.anisuge.screens.search.SearchViewModel
 import to.kuudere.anisuge.screens.search.KUUDERE_GENRES
@@ -173,6 +176,9 @@ fun App(
         val updateVm = remember { UpdateViewModel(AppComponent.updateService) }
         val liveChatVm = remember {
             LiveChatViewModel(AppComponent.chatService, AppComponent.authService, AppComponent.searchService)
+        }
+        val w2gVm = remember {
+            W2gViewModel(AppComponent.sessionStore, AppComponent.w2gRoomService)
         }
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
@@ -492,6 +498,7 @@ fun App(
                                 onOpenLayoutEditor = { navController.navigate(Screen.HomeLayout.route) },
                                 liveChatViewModel = liveChatVm,
                                 onLiveChatClick = { navController.navigate(Screen.LiveChat.route) },
+                                onW2gClick = { navController.navigate(Screen.W2gRoomList.route) },
                                 onLiveChatSignIn = {
                                     navController.navigate(Screen.Auth.route) {
                                         popUpTo(Screen.Home().route) { inclusive = false }
@@ -650,6 +657,31 @@ fun App(
                                 }
                             },
                             onAction = handleChatAction,
+                        )
+                    }
+
+                    composable(Screen.W2gRoomList.route) {
+                        W2gRoomListScreen(
+                            viewModel = w2gVm,
+                            onRoomClick = { code, hasPassword ->
+                                navController.navigate(Screen.W2gRoom.route(code))
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+
+                    composable(
+                        route = Screen.W2gRoom.ROUTE,
+                        arguments = listOf(
+                            navArgument("inviteCode") { type = androidx.navigation.NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val inviteCode = backStackEntry.arguments.str("inviteCode") ?: return@composable
+                        W2gPlayerScreen(
+                            inviteCode = inviteCode,
+                            viewModel = w2gVm,
+                            userId = currentUserProfile?.effectiveId,
+                            onBack = { navController.popBackStack() },
                         )
                     }
 

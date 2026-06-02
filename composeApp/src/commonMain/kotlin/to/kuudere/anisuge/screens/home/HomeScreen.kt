@@ -89,6 +89,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.filled.Layers
@@ -216,6 +217,7 @@ fun HomeScreen(
     onViewNewOnAppMore: () -> Unit = {},
     liveChatViewModel: LiveChatViewModel,
     onLiveChatClick: () -> Unit = {},
+    onW2gClick: () -> Unit = {},
     onLiveChatSignIn: () -> Unit = {},
     onChatAction: (String) -> Unit = {},
     onOpenLayoutEditor: () -> Unit = {},
@@ -326,6 +328,7 @@ fun HomeScreen(
                         switchTab(tab, nested)
                     },
                     onLiveChatClick = { showDesktopLiveChat = true },
+                    onW2gClick = onW2gClick,
                     chatUnreadCount = chatUnreadCount,
                     onLogout = {
                         showLogoutConfirm = true
@@ -1913,6 +1916,7 @@ private fun AnisugSidebar(
     isLoggingOut: Boolean,
     onTabSelect: (AnisugTab, SettingsTab?) -> Unit,
     onLiveChatClick: () -> Unit,
+    onW2gClick: () -> Unit = {},
     chatUnreadCount: Int = 0,
     onLogout: () -> Unit,
 ) {
@@ -1981,6 +1985,11 @@ private fun AnisugSidebar(
                     badgeCount = chatUnreadCount,
                     badgeColor = Color(0xFFE50914),
                     onClick = onLiveChatClick,
+                )
+                SidebarIcon(
+                    Icons.Outlined.Group,
+                    isSelected = false,
+                    onClick = onW2gClick,
                 )
                 SidebarIcon(
                     Icons.Outlined.Settings,

@@ -70,6 +70,13 @@ sealed class Screen(val route: String) {
     data object LiveChat : Screen("live-chat") {
         const val displayName = "Community Chat"
     }
+    data object W2gRoomList : Screen("w2g")
+    data class W2gRoom(val inviteCode: String) : Screen("w2g-room/$inviteCode") {
+        companion object {
+            const val ROUTE = "w2g-room/{inviteCode}"
+            fun route(inviteCode: String) = "w2g-room/$inviteCode"
+        }
+    }
     data class Update(val nextRoute: String) : Screen("update?next=${nextRoute.replace("/", "_")}") {
         companion object {
             const val route = "update?next={next}"
