@@ -25,7 +25,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
@@ -387,7 +386,7 @@ fun CommentsSection(
     }
 
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().background(BgBlack).blur(16.dp)) {
+        Column(Modifier.fillMaxSize().background(BgBlack)) {
             // ── Header with sort tabs ────────────────────────────────────────────
             Row(
                 Modifier.fillMaxWidth().background(BgBlack)
