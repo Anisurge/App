@@ -55,17 +55,17 @@ import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 import to.kuudere.anisuge.data.models.Comment
 
 // ── Colour palette — theme-driven (see theme/AppColors.kt) ───────────────────
-private val BgBlack: Color      get() = AppColors.background
-private val BgDark: Color       get() = AppColors.background
-private val BgCard: Color       get() = AppColors.surface
-private val BgInput: Color      get() = AppColors.surface
-private val BorderSub: Color    get() = AppColors.border
-private val BorderLine: Color   get() = AppColors.border
-private val TextPrimary: Color  get() = AppColors.text
-private val TextSec: Color      get() = AppColors.textMuted
-private val TextMuted: Color    get() = AppColors.textDim
-private val AccentRed: Color    get() = AppColors.accent
-private val AccentBlue   = Color(0xFF3B82F6)
+private val BgBlack: Color get() = AppColors.background
+private val BgDark: Color get() = AppColors.background
+private val BgCard: Color get() = AppColors.surface
+private val BgInput: Color get() = AppColors.surface
+private val BorderSub: Color get() = AppColors.border
+private val BorderLine: Color get() = AppColors.border
+private val TextPrimary: Color get() = AppColors.text
+private val TextSec: Color get() = AppColors.textMuted
+private val TextMuted: Color get() = AppColors.textDim
+private val AccentRed: Color get() = AppColors.accent
+private val AccentBlue = Color(0xFF3B82F6)
 
 // ── Internal mutable UI model ─────────────────────────────────────────────────
 
@@ -133,7 +133,9 @@ fun CommentsSection(
 
     val listState = rememberLazyListState()
 
-    fun sortParam() = when (sortBy) { "oldest" -> "oldest"; "best" -> "best"; else -> "new" }
+    fun sortParam() = when (sortBy) {
+        "oldest" -> "oldest"; "best" -> "best"; else -> "new"
+    }
 
     fun prefetchCommentFrames(items: List<Comment>) {
         val entries = LinkedHashMap<String, Pair<String, String?>>()
@@ -180,7 +182,11 @@ fun CommentsSection(
     LaunchedEffect(animeId, episodeNumber, sortBy) { loadComments(1) }
 
     // ── Updater helpers ──────────────────────────────────────────────────────
-    fun updateCommentInternal(nodes: List<CommentUiModel>, id: String, fn: (CommentUiModel) -> CommentUiModel): List<CommentUiModel> {
+    fun updateCommentInternal(
+        nodes: List<CommentUiModel>,
+        id: String,
+        fn: (CommentUiModel) -> CommentUiModel
+    ): List<CommentUiModel> {
         return nodes.map { c ->
             if (c.data.id == id) fn(c) else {
                 val newReplies = updateCommentInternal(c.replies, id, fn)
@@ -188,6 +194,7 @@ fun CommentsSection(
             }
         }
     }
+
     fun updateComment(id: String, fn: (CommentUiModel) -> CommentUiModel) {
         comments = updateCommentInternal(comments, id, fn)
     }
@@ -225,13 +232,15 @@ fun CommentsSection(
             if (res?.success == true) {
                 val id = res.data?.commentId ?: res.data?.id ?: to.kuudere.anisuge.utils.currentTimeMillis().toString()
                 println("[CommentsSection] postRoot success! Assigning ID: $id")
-                comments = listOf(CommentUiModel(
-                    data = Comment(
-                        id = id, author = username, authorId = userId, authorPfp = userPfp,
-                        authorFrameUrl = userFrameUrl, authorOuterUrl = userOuterFrameUrl,
-                        content = rootText, isSpoiller = rootIsSpoiler, likes = 0, dislikes = 0
+                comments = listOf(
+                    CommentUiModel(
+                        data = Comment(
+                            id = id, author = username, authorId = userId, authorPfp = userPfp,
+                            authorFrameUrl = userFrameUrl, authorOuterUrl = userOuterFrameUrl,
+                            content = rootText, isSpoiller = rootIsSpoiler, likes = 0, dislikes = 0
+                        )
                     )
-                )) + comments
+                ) + comments
                 totalComments++
                 rootText = ""; rootIsSpoiler = false; rootFocused = false
             } else {
@@ -266,7 +275,13 @@ fun CommentsSection(
         if (!isAuthenticated || parent.replyText.isBlank()) return
         updateComment(parent.data.id) { it.copy(isSubmitting = true) }
         scope.launch {
-            val res = commentService.postComment(animeId, episodeNumber, parent.replyText, parent.data.id, spoiler = parent.replyIsSpoiler)
+            val res = commentService.postComment(
+                animeId,
+                episodeNumber,
+                parent.replyText,
+                parent.data.id,
+                spoiler = parent.replyIsSpoiler
+            )
             if (res?.success == true) {
                 val id = res.data?.commentId ?: res.data?.id ?: to.kuudere.anisuge.utils.currentTimeMillis().toString()
                 updateComment(parent.data.id) { c ->
@@ -278,7 +293,11 @@ fun CommentsSection(
                                 content = parent.replyText, isSpoiller = parent.replyIsSpoiler, likes = 0, dislikes = 0
                             )
                         ),
-                        replyText = "", replyIsSpoiler = false, isReplying = false, showReplies = true, isSubmitting = false
+                        replyText = "",
+                        replyIsSpoiler = false,
+                        isReplying = false,
+                        showReplies = true,
+                        isSubmitting = false
                     )
                 }
             } else {
@@ -295,6 +314,7 @@ fun CommentsSection(
                 if (newReps !== it.replies) it.copy(replies = newReps) else it
             }
         }
+
         val oldSize = comments.size
         comments = filterRecursive(comments)
         if (comments.size < oldSize) totalComments = maxOf(0, totalComments - 1)
@@ -309,7 +329,11 @@ fun CommentsSection(
             title = { Text("Insert Image", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Paste the URL of the image you want to include in your comment.", color = TextSec, fontSize = 13.sp)
+                    Text(
+                        "Paste the URL of the image you want to include in your comment.",
+                        color = TextSec,
+                        fontSize = 13.sp
+                    )
                     BasicTextField(
                         value = imageUrlInput,
                         onValueChange = { imageUrlInput = it },
@@ -321,7 +345,11 @@ fun CommentsSection(
                             .padding(horizontal = 12.dp, vertical = 10.dp)
                             .defaultMinSize(minHeight = 44.dp),
                         decorationBox = { inner ->
-                            if (imageUrlInput.isEmpty()) Text("https://example.com/image.png", color = TextMuted, fontSize = 13.sp)
+                            if (imageUrlInput.isEmpty()) Text(
+                                "https://example.com/image.png",
+                                color = TextMuted,
+                                fontSize = 13.sp
+                            )
                             inner()
                         }
                     )
@@ -330,7 +358,13 @@ fun CommentsSection(
             },
             dismissButton = {
                 TextButton(onClick = { rootImageDialog = false; imageUrlInput = "" }) {
-                    Text("Cancel", color = TextSec, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(
+                        "Cancel",
+                        color = TextSec,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
                 }
             },
             confirmButton = {
@@ -354,378 +388,425 @@ fun CommentsSection(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(BgBlack).blur(16.dp)) {
-        // ── Header with sort tabs ────────────────────────────────────────────
-        Row(
-            Modifier.fillMaxWidth().background(BgBlack)
-                .border(0.dp, Color.Transparent) // keeps structure
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("COMMENTS", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = 0.8.sp)
-            Spacer(Modifier.width(8.dp))
-            Text(totalComments.toString(), color = TextMuted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Spacer(Modifier.weight(1f))
-            // Sort Dropdown for compact mobile UI
-            var sortMenuExpanded by remember { mutableStateOf(false) }
-            val sortLabels = listOf("best" to "Best", "newest" to "Newest", "oldest" to "Oldest")
-            val activeLabel = sortLabels.find { it.first == sortBy }?.second ?: "Newest"
+            // ── Header with sort tabs ────────────────────────────────────────────
+            Row(
+                Modifier.fillMaxWidth().background(BgBlack)
+                    .border(0.dp, Color.Transparent) // keeps structure
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "COMMENTS",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    letterSpacing = 0.8.sp
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(totalComments.toString(), color = TextMuted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.weight(1f))
+                // Sort Dropdown for compact mobile UI
+                var sortMenuExpanded by remember { mutableStateOf(false) }
+                val sortLabels = listOf("best" to "Best", "newest" to "Newest", "oldest" to "Oldest")
+                val activeLabel = sortLabels.find { it.first == sortBy }?.second ?: "Newest"
 
-            Box {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(BgCard)
-                        .clickable { sortMenuExpanded = true }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(Modifier.size(10.dp), color = Color.White, strokeWidth = 1.5.dp)
-                        Spacer(Modifier.width(6.dp))
-                    }
-                    Text(activeLabel, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.width(4.dp))
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Sort Options", tint = TextMuted, modifier = Modifier.size(14.dp))
-                }
-
-                DropdownMenu(
-                    expanded = sortMenuExpanded,
-                    onDismissRequest = { sortMenuExpanded = false },
-                    modifier = Modifier.background(BgDark).border(1.dp, BorderSub, RoundedCornerShape(8.dp))
-                ) {
-                    sortLabels.forEach { (key, label) ->
-                        val active = sortBy == key
-                        DropdownMenuItem(
-                            text = { 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        label, 
-                                        color = if (active) AccentRed else TextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                    if (active) {
-                                        Spacer(Modifier.width(16.dp))
-                                        Icon(Icons.Default.Check, contentDescription = null, tint = AccentRed, modifier = Modifier.size(14.dp))
-                                    }
-                                }
-                            },
-                            onClick = {
-                                if (sortBy != key) sortBy = key
-                                sortMenuExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray)
-            }
-        }
-        // Divider
-        Box(Modifier.fillMaxWidth().height(1.dp).background(BorderLine.copy(alpha = 0.5f)))
-
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            // ── Encouraging prompt + comment input ───────────────────────────
-            item {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Encouraging message
-                    Box(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                            .background(BgCard).padding(12.dp)
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(BgCard)
+                            .clickable { sortMenuExpanded = true }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "If you don't mind, please leave a comment and share your thoughts — it will make the website even more lively! Many people are eager to read your comments! 😊",
-                            color = TextSec, fontSize = 12.sp, lineHeight = 17.sp
+                        if (isLoading) {
+                            CircularProgressIndicator(Modifier.size(10.dp), color = Color.White, strokeWidth = 1.5.dp)
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(activeLabel, color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(4.dp))
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Sort Options",
+                            tint = TextMuted,
+                            modifier = Modifier.size(14.dp)
                         )
                     }
 
-                    // Comment count row
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("$totalComments comments", color = TextMuted, fontSize = 12.sp)
-                    }
-
-                    // Input area
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-                        ProfileAvatar(
-                            url = userPfp,
-                            modifier = Modifier.size(32.dp),
-                        )
-
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // Use InteractionSource to reliably detect focus on the TextField
-                            val rootTfInteraction = remember { MutableInteractionSource() }
-                            val rootTfFocused by rootTfInteraction.collectIsFocusedAsState()
-                            LaunchedEffect(rootTfFocused) { if (rootTfFocused) rootFocused = true }
-
-                            // Textarea
-                            Box(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                                    .border(1.dp, BorderSub.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                    .background(BgInput.copy(alpha = 0.5f))
-                                    .padding(horizontal = 12.dp, vertical = 10.dp)
-                            ) {
-                                BasicTextField(
-                                    value = rootText,
-                                    onValueChange = { rootText = it },
-                                    textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp, lineHeight = 18.sp),
-                                    cursorBrush = SolidColor(AccentRed),
-                                    interactionSource = rootTfInteraction,
-                                    modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = if (rootFocused) 80.dp else 38.dp),
-                                    decorationBox = { inner ->
-                                        if (rootText.isEmpty()) Text("Write your comment...", color = TextMuted, fontSize = 13.sp)
-                                        inner()
-                                    }
-                                )
-                            }
-
-                            // Toolbar — only when focused or text is present
-                            AnimatedVisibility(
-                                visible = rootFocused || rootText.isNotBlank() || isPostingRoot,
-                                enter = expandVertically() + fadeIn(),
-                                exit = shrinkVertically() + fadeOut()
-                            ) {
-                                Row(
-                                    Modifier.fillMaxWidth().padding(top = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    // ── Left: formatting icons (B / I / || / Image / Lock / Eye) ──
+                    DropdownMenu(
+                        expanded = sortMenuExpanded,
+                        onDismissRequest = { sortMenuExpanded = false },
+                        modifier = Modifier.background(BgDark).border(1.dp, BorderSub, RoundedCornerShape(8.dp))
+                    ) {
+                        sortLabels.forEach { (key, label) ->
+                            val active = sortBy == key
+                            DropdownMenuItem(
+                                text = {
                                     Row(
-                                        Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        FormatIconButton(Icons.Default.FormatBold, false, Color.Transparent) {
-                                            rootText = applyMarkdown(rootText, "**")
-                                        }
-                                        FormatIconButton(Icons.Default.FormatItalic, false, Color.Transparent) {
-                                            rootText = applyMarkdown(rootText, "_")
-                                        }
-                                        FormatIconButton(Icons.Default.VisibilityOff, false, Color.Transparent) {
-                                            rootText = applyMarkdown(rootText, "||")
-                                        }
-                                        FormatIconButton(Icons.Default.Image, false, Color.Transparent) {
-                                            rootImageDialog = true
-                                        }
-                                        FormatIconButton(
-                                            icon = if (rootIsSpoiler) Icons.Default.Lock else Icons.Default.LockOpen,
-                                            active = rootIsSpoiler, activeColor = AccentRed
-                                        ) { rootIsSpoiler = !rootIsSpoiler }
-                                        FormatIconButton(
-                                            icon = Icons.Default.Visibility,
-                                            active = rootShowPreview, activeColor = AccentBlue
-                                        ) { rootShowPreview = !rootShowPreview }
-                                    }
-
-                                    Spacer(Modifier.width(8.dp))
-
-                                    // Cancel
-                                    Text(
-                                        "Cancel", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false,
-                                        modifier = Modifier.clickable {
-                                            rootFocused = false; rootText = ""; rootIsSpoiler = false; rootShowPreview = false
-                                        }.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Box(
-                                        Modifier.clip(RoundedCornerShape(6.dp))
-                                            .background(if (rootText.isBlank() || isPostingRoot) AccentRed.copy(alpha = 0.4f) else AccentRed)
-                                            .clickable(enabled = rootText.isNotBlank() && !isPostingRoot) { postRoot() }
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        if (isPostingRoot) {
-                                            CircularProgressIndicator(Modifier.size(14.dp), color = Color.White, strokeWidth = 1.5.dp)
-                                        } else {
-                                            Icon(Icons.Default.Send, contentDescription = "Send", tint = Color.White, modifier = Modifier.size(14.dp))
+                                        Text(
+                                            label,
+                                            color = if (active) AccentRed else TextPrimary,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        if (active) {
+                                            Spacer(Modifier.width(16.dp))
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = AccentRed,
+                                                modifier = Modifier.size(14.dp)
+                                            )
                                         }
                                     }
+                                },
+                                onClick = {
+                                    if (sortBy != key) sortBy = key
+                                    sortMenuExpanded = false
                                 }
-                            }
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray)
+                }
+            }
+            // Divider
+            Box(Modifier.fillMaxWidth().height(1.dp).background(BorderLine.copy(alpha = 0.5f)))
 
-                            // Preview pane (shows rendered text when rootShowPreview)
-                            if (rootShowPreview && rootFocused && rootText.isNotBlank()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                // ── Encouraging prompt + comment input ───────────────────────────
+                item {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Encouraging message
+                        Box(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                .background(BgCard).padding(12.dp)
+                        ) {
+                            Text(
+                                "If you don't mind, please leave a comment and share your thoughts — it will make the website even more lively! Many people are eager to read your comments! 😊",
+                                color = TextSec, fontSize = 12.sp, lineHeight = 17.sp
+                            )
+                        }
+
+                        // Comment count row
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("$totalComments comments", color = TextMuted, fontSize = 12.sp)
+                        }
+
+                        // Input area
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+                            ProfileAvatar(
+                                url = userPfp,
+                                modifier = Modifier.size(32.dp),
+                            )
+
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                // Use InteractionSource to reliably detect focus on the TextField
+                                val rootTfInteraction = remember { MutableInteractionSource() }
+                                val rootTfFocused by rootTfInteraction.collectIsFocusedAsState()
+                                LaunchedEffect(rootTfFocused) { if (rootTfFocused) rootFocused = true }
+
+                                // Textarea
                                 Box(
                                     Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                                         .border(1.dp, BorderSub.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                        .background(BgInput.copy(alpha = 0.3f))
-                                        .padding(12.dp)
+                                        .background(BgInput.copy(alpha = 0.5f))
+                                        .padding(horizontal = 12.dp, vertical = 10.dp)
                                 ) {
-                                    CommentContent(content = rootText, isSpoiler = rootIsSpoiler)
+                                    BasicTextField(
+                                        value = rootText,
+                                        onValueChange = { rootText = it },
+                                        textStyle = TextStyle(
+                                            color = TextPrimary,
+                                            fontSize = 13.sp,
+                                            lineHeight = 18.sp
+                                        ),
+                                        cursorBrush = SolidColor(AccentRed),
+                                        interactionSource = rootTfInteraction,
+                                        modifier = Modifier.fillMaxWidth()
+                                            .defaultMinSize(minHeight = if (rootFocused) 80.dp else 38.dp),
+                                        decorationBox = { inner ->
+                                            if (rootText.isEmpty()) Text(
+                                                "Write your comment...",
+                                                color = TextMuted,
+                                                fontSize = 13.sp
+                                            )
+                                            inner()
+                                        }
+                                    )
                                 }
-                            }
-                        }
-                    }
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(BorderLine.copy(alpha = 0.5f)))
-            }
 
-            // ── Loading state ────────────────────────────────────────────────
-            if (isLoading && comments.isEmpty()) {
-                item {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
-                        // High-Performance Dual-Circle Mini Loader
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(36.dp)) {
-                            val infiniteTransition = rememberInfiniteTransition()
-                            
-                            val rotateCW by infiniteTransition.animateFloat(
-                                initialValue = 0f, 
-                                targetValue = 360f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(800, easing = LinearEasing)
-                                ),
-                                label = "OuterRotate"
-                            )
-                            val rotateCCW by infiniteTransition.animateFloat(
-                                initialValue = 360f, 
-                                targetValue = 0f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(600, easing = LinearEasing)
-                                ),
-                                label = "InnerRotate"
-                            )
+                                // Toolbar — only when focused or text is present
+                                AnimatedVisibility(
+                                    visible = rootFocused || rootText.isNotBlank() || isPostingRoot,
+                                    enter = expandVertically() + fadeIn(),
+                                    exit = shrinkVertically() + fadeOut()
+                                ) {
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(top = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // ── Left: formatting icons (B / I / || / Image / Lock / Eye) ──
+                                        Row(
+                                            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            FormatIconButton(Icons.Default.FormatBold, false, Color.Transparent) {
+                                                rootText = applyMarkdown(rootText, "**")
+                                            }
+                                            FormatIconButton(Icons.Default.FormatItalic, false, Color.Transparent) {
+                                                rootText = applyMarkdown(rootText, "_")
+                                            }
+                                            FormatIconButton(Icons.Default.VisibilityOff, false, Color.Transparent) {
+                                                rootText = applyMarkdown(rootText, "||")
+                                            }
+                                            FormatIconButton(Icons.Default.Image, false, Color.Transparent) {
+                                                rootImageDialog = true
+                                            }
+                                            FormatIconButton(
+                                                icon = if (rootIsSpoiler) Icons.Default.Lock else Icons.Default.LockOpen,
+                                                active = rootIsSpoiler, activeColor = AccentRed
+                                            ) { rootIsSpoiler = !rootIsSpoiler }
+                                            FormatIconButton(
+                                                icon = Icons.Default.Visibility,
+                                                active = rootShowPreview, activeColor = AccentBlue
+                                            ) { rootShowPreview = !rootShowPreview }
+                                        }
 
-                            // Outer Circle
-                            CircularProgressIndicator(
-                                progress = { 0.75f },
-                                modifier = Modifier.size(32.dp).graphicsLayer { rotationZ = rotateCW },
-                                color = Color.White,
-                                strokeWidth = 1.5.dp,
-                                trackColor = Color.White.copy(alpha = 0.1f),
-                                strokeCap = StrokeCap.Round
-                            )
+                                        Spacer(Modifier.width(8.dp))
 
-                            // Inner Circle
-                            CircularProgressIndicator(
-                                progress = { 0.6f },
-                                modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = rotateCCW },
-                                color = Color.White.copy(alpha = 0.6f),
-                                strokeWidth = 1.5.dp,
-                                trackColor = Color.White.copy(alpha = 0.05f),
-                                strokeCap = StrokeCap.Round
-                            )
-                        }
-                    }
-                }
-            } else if (comments.isEmpty()) {
-                item {
-                    Box(Modifier.fillMaxWidth().padding(vertical = 32.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
-                        Text("No comments yet. Be the first to comment!", color = TextMuted, fontSize = 13.sp)
-                    }
-                }
-            } else {
-                // ── Comment list with space-y-6 ──────────────────────────────
-                items(comments, key = { it.data.id }) { model ->
-                    Box(Modifier.animateItem().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
-                        CommentItem(
-                            model = model,
-                            userId = userId,
-                            userPfp = userPfp,
-                            depth = 0,
-                            onVote = { m, type -> vote(m, type) },
-                            onReplyToggle = { replyId ->
-                                updateComment(replyId) { c ->
-                                    val isOpening = !c.isReplying
-                                    val targetAuthor = c.data.author
-                                    c.copy(isReplying = isOpening, replyText = if (isOpening && c.data.id != model.data.id) "@$targetAuthor " else "", replyIsSpoiler = false)
-                                }
-                            },
-                            onReplyTextChange = { replyId, text -> updateComment(replyId) { it.copy(replyText = text) } },
-                            onReplySpoilerChange = { replyId, isS -> updateComment(replyId) { it.copy(replyIsSpoiler = isS) } },
-                            onSubmitReply = { replyModel -> postReply(replyModel) },
-                            onToggleReplies = { m ->
-                                if (!m.showReplies && m.replies.isEmpty() && m.data.reply_count > 0) loadReplies(m)
-                                else updateComment(m.data.id) { it.copy(showReplies = !it.showReplies) }
-                            },
-                            onLoadMoreReplies = { m -> loadReplies(m) },
-                            onDelete = { id -> deleteComment(id) },
-                            onDropdownToggle = { id -> updateComment(id) { it.copy(showMoreDropdown = !it.showMoreDropdown) } }
-                        )
-                    }
-                }
-
-                // Load More button
-                if (hasMore) {
-                    item {
-                        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            Box(
-                                Modifier.fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .border(1.dp, BorderSub.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                                    .background(BgCard.copy(alpha = 0.5f))
-                                    .clickable(enabled = !isLoading) { loadComments(currentPage + 1) }
-                                    .padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isLoading) {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        CircularProgressIndicator(Modifier.size(12.dp), color = Color.White, strokeWidth = 1.5.dp)
-                                        Text("Loading...", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+                                        // Cancel
+                                        Text(
+                                            "Cancel",
+                                            color = TextMuted,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            modifier = Modifier.clickable {
+                                                rootFocused = false; rootText = ""; rootIsSpoiler =
+                                                false; rootShowPreview = false
+                                            }.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Box(
+                                            Modifier.clip(RoundedCornerShape(6.dp))
+                                                .background(
+                                                    if (rootText.isBlank() || isPostingRoot) AccentRed.copy(
+                                                        alpha = 0.4f
+                                                    ) else AccentRed
+                                                )
+                                                .clickable(enabled = rootText.isNotBlank() && !isPostingRoot) { postRoot() }
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (isPostingRoot) {
+                                                CircularProgressIndicator(
+                                                    Modifier.size(14.dp),
+                                                    color = Color.White,
+                                                    strokeWidth = 1.5.dp
+                                                )
+                                            } else {
+                                                Icon(
+                                                    Icons.Default.Send,
+                                                    contentDescription = "Send",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        }
                                     }
-                                } else {
-                                    Text("LOAD MORE", color = TextSec, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                                }
+
+                                // Preview pane (shows rendered text when rootShowPreview)
+                                if (rootShowPreview && rootFocused && rootText.isNotBlank()) {
+                                    Box(
+                                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                            .border(1.dp, BorderSub.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                            .background(BgInput.copy(alpha = 0.3f))
+                                            .padding(12.dp)
+                                    ) {
+                                        CommentContent(content = rootText, isSpoiler = rootIsSpoiler)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(BorderLine.copy(alpha = 0.5f)))
+                }
+
+                // ── Loading state ────────────────────────────────────────────────
+                if (isLoading && comments.isEmpty()) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                            // High-Performance Dual-Circle Mini Loader
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(36.dp)) {
+                                val infiniteTransition = rememberInfiniteTransition()
+
+                                val rotateCW by infiniteTransition.animateFloat(
+                                    initialValue = 0f,
+                                    targetValue = 360f,
+                                    animationSpec = infiniteRepeatable(
+                                        animation = tween(800, easing = LinearEasing)
+                                    ),
+                                    label = "OuterRotate"
+                                )
+                                val rotateCCW by infiniteTransition.animateFloat(
+                                    initialValue = 360f,
+                                    targetValue = 0f,
+                                    animationSpec = infiniteRepeatable(
+                                        animation = tween(600, easing = LinearEasing)
+                                    ),
+                                    label = "InnerRotate"
+                                )
+
+                                // Outer Circle
+                                CircularProgressIndicator(
+                                    progress = { 0.75f },
+                                    modifier = Modifier.size(32.dp).graphicsLayer { rotationZ = rotateCW },
+                                    color = Color.White,
+                                    strokeWidth = 1.5.dp,
+                                    trackColor = Color.White.copy(alpha = 0.1f),
+                                    strokeCap = StrokeCap.Round
+                                )
+
+                                // Inner Circle
+                                CircularProgressIndicator(
+                                    progress = { 0.6f },
+                                    modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = rotateCCW },
+                                    color = Color.White.copy(alpha = 0.6f),
+                                    strokeWidth = 1.5.dp,
+                                    trackColor = Color.White.copy(alpha = 0.05f),
+                                    strokeCap = StrokeCap.Round
+                                )
+                            }
+                        }
+                    }
+                } else if (comments.isEmpty()) {
+                    item {
+                        Box(
+                            Modifier.fillMaxWidth().padding(vertical = 32.dp, horizontal = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No comments yet. Be the first to comment!", color = TextMuted, fontSize = 13.sp)
+                        }
+                    }
+                } else {
+                    // ── Comment list with space-y-6 ──────────────────────────────
+                    items(comments, key = { it.data.id }) { model ->
+                        Box(Modifier.animateItem().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+                            CommentItem(
+                                model = model,
+                                userId = userId,
+                                userPfp = userPfp,
+                                depth = 0,
+                                onVote = { m, type -> vote(m, type) },
+                                onReplyToggle = { replyId ->
+                                    updateComment(replyId) { c ->
+                                        val isOpening = !c.isReplying
+                                        val targetAuthor = c.data.author
+                                        c.copy(
+                                            isReplying = isOpening,
+                                            replyText = if (isOpening && c.data.id != model.data.id) "@$targetAuthor " else "",
+                                            replyIsSpoiler = false
+                                        )
+                                    }
+                                },
+                                onReplyTextChange = { replyId, text -> updateComment(replyId) { it.copy(replyText = text) } },
+                                onReplySpoilerChange = { replyId, isS -> updateComment(replyId) { it.copy(replyIsSpoiler = isS) } },
+                                onSubmitReply = { replyModel -> postReply(replyModel) },
+                                onToggleReplies = { m ->
+                                    if (!m.showReplies && m.replies.isEmpty() && m.data.reply_count > 0) loadReplies(m)
+                                    else updateComment(m.data.id) { it.copy(showReplies = !it.showReplies) }
+                                },
+                                onLoadMoreReplies = { m -> loadReplies(m) },
+                                onDelete = { id -> deleteComment(id) },
+                                onDropdownToggle = { id -> updateComment(id) { it.copy(showMoreDropdown = !it.showMoreDropdown) } }
+                            )
+                        }
+                    }
+
+                    // Load More button
+                    if (hasMore) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                Box(
+                                    Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .border(1.dp, BorderSub.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                        .background(BgCard.copy(alpha = 0.5f))
+                                        .clickable(enabled = !isLoading) { loadComments(currentPage + 1) }
+                                        .padding(vertical = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isLoading) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            CircularProgressIndicator(
+                                                Modifier.size(12.dp),
+                                                color = Color.White,
+                                                strokeWidth = 1.5.dp
+                                            )
+                                            Text(
+                                                "Loading...",
+                                                color = TextMuted,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                letterSpacing = 0.8.sp
+                                            )
+                                        }
+                                    } else {
+                                        Text(
+                                            "LOAD MORE",
+                                            color = TextSec,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.5.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Skeleton shimmer while paginating
+                    if (isLoading && comments.isNotEmpty()) {
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .graphicsLayer { alpha = 0.5f },
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(Modifier.size(36.dp).clip(CircleShape).background(BgCard))
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Box(
+                                        Modifier.width(100.dp).height(12.dp).clip(RoundedCornerShape(4.dp))
+                                            .background(BgCard)
+                                    )
+                                    Box(
+                                        Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(4.dp))
+                                            .background(BgCard)
+                                    )
                                 }
                             }
                         }
                     }
                 }
-
-                // Skeleton shimmer while paginating
-                if (isLoading && comments.isNotEmpty()) {
-                    item {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).graphicsLayer { alpha = 0.5f },
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Box(Modifier.size(36.dp).clip(CircleShape).background(BgCard))
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Box(Modifier.width(100.dp).height(12.dp).clip(RoundedCornerShape(4.dp)).background(BgCard))
-                                Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(4.dp)).background(BgCard))
-                            }
-                        }
-                    }
-                }
             }
-        }
-    }
-
-    ComingSoonOverlay(onClose = onClose)
-    }
-}
-
-@Composable
-private fun ComingSoonOverlay(onClose: () -> Unit) {
-    Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)).clickable { })
-        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                "Coming Soon",
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "We're building a better experience!",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 13.sp,
-            )
-        }
-        IconButton(
-            onClick = onClose,
-            modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).size(28.dp),
-        ) {
-            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.LightGray)
         }
     }
 }
@@ -745,9 +826,14 @@ private fun ThreadConnectionLayout(
             val curveY = curveOffsetY.toPx()
             val r = 12.dp.toPx()
             val endY = if (isLast) curveY else size.height + 1f
-            
-            drawLine(color = BorderLine.copy(alpha = 0.8f), start = Offset(0f, 0f), end = Offset(0f, endY), strokeWidth = strokeWidth)
-            
+
+            drawLine(
+                color = BorderLine.copy(alpha = 0.8f),
+                start = Offset(0f, 0f),
+                end = Offset(0f, endY),
+                strokeWidth = strokeWidth
+            )
+
             val path = Path().apply {
                 moveTo(0f, curveY - r)
                 quadraticBezierTo(0f, curveY, r, curveY)
@@ -791,7 +877,12 @@ private fun CommentItem(
                 val strokeWidth = 1.dp.toPx()
                 val lineX = (avatarSize / 2).toPx()
                 val startY = avatarSize.toPx()
-                drawLine(color = BorderLine.copy(alpha = 0.8f), start = Offset(lineX, startY), end = Offset(lineX, size.height + 1f), strokeWidth = strokeWidth)
+                drawLine(
+                    color = BorderLine.copy(alpha = 0.8f),
+                    start = Offset(lineX, startY),
+                    end = Offset(lineX, size.height + 1f),
+                    strokeWidth = strokeWidth
+                )
             }
         }.padding(bottom = 4.dp)) {
             // Left column (Avatar + Thread line)
@@ -813,9 +904,17 @@ private fun CommentItem(
 
             // Right column (Body)
             Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(c.author ?: "Anonymous", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = if (depth == 0) 13.sp else 12.sp, modifier = Modifier.clickable { })
-                    
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        c.author ?: "Anonymous",
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (depth == 0) 13.sp else 12.sp,
+                        modifier = Modifier.clickable { })
+
                     if (c.authorVerified) {
                         Icon(Icons.Filled.CheckCircle, null, tint = TextPrimary, modifier = Modifier.size(12.dp))
                     }
@@ -825,29 +924,62 @@ private fun CommentItem(
                         Icon(ModShieldIcon, "Moderator", tint = Color(0xFF4CAF50), modifier = Modifier.size(13.dp))
                     }
 
-                    if (c.created_at != null) Text(formatRelTime(c.created_at), color = TextMuted, fontSize = if (depth == 0) 11.sp else 10.sp)
+                    if (c.created_at != null) Text(
+                        formatRelTime(c.created_at),
+                        color = TextMuted,
+                        fontSize = if (depth == 0) 11.sp else 10.sp
+                    )
                 }
 
                 Spacer(Modifier.height(4.dp))
                 CommentContent(c.content, c.isSpoiller)
                 Spacer(Modifier.height(6.dp))
 
-                Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    Modifier.padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     // Like
                     val likeScale by animateFloatAsState(if (model.isLiked) 1.15f else 1f, label = "likeScale")
                     Box(Modifier.scale(likeScale).clip(CircleShape).clickable { onVote(model, "like") }.padding(5.dp)) {
-                        Icon(Icons.Outlined.ThumbUp, null, tint = if (model.isLiked) AccentRed else TextMuted, modifier = Modifier.size(13.dp))
+                        Icon(
+                            Icons.Outlined.ThumbUp,
+                            null,
+                            tint = if (model.isLiked) AccentRed else TextMuted,
+                            modifier = Modifier.size(13.dp)
+                        )
                     }
-                    if (model.likes > 0) Text(model.likes.toString(), color = if (model.isLiked) AccentRed else TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    if (model.likes > 0) Text(
+                        model.likes.toString(),
+                        color = if (model.isLiked) AccentRed else TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
 
                     // Dislike
                     val dislikeScale by animateFloatAsState(if (model.isUnliked) 1.15f else 1f, label = "dislikeScale")
-                    Box(Modifier.scale(dislikeScale).clip(CircleShape).clickable { onVote(model, "dislike") }.padding(5.dp)) {
-                        Icon(Icons.Outlined.ThumbDown, null, tint = if (model.isUnliked) AccentBlue else TextMuted, modifier = Modifier.size(13.dp))
+                    Box(Modifier.scale(dislikeScale).clip(CircleShape).clickable { onVote(model, "dislike") }
+                        .padding(5.dp)) {
+                        Icon(
+                            Icons.Outlined.ThumbDown,
+                            null,
+                            tint = if (model.isUnliked) AccentBlue else TextMuted,
+                            modifier = Modifier.size(13.dp)
+                        )
                     }
-                    if (model.dislikes > 0) Text(model.dislikes.toString(), color = if (model.isUnliked) AccentBlue else TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    if (model.dislikes > 0) Text(
+                        model.dislikes.toString(),
+                        color = if (model.isUnliked) AccentBlue else TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
 
-                    Row(Modifier.clickable { onReplyToggle(model.data.id) }.padding(vertical = 4.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(
+                        Modifier.clickable { onReplyToggle(model.data.id) }.padding(vertical = 4.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.Reply, null, tint = TextMuted, modifier = Modifier.size(13.dp))
                         Text("Reply", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
@@ -855,12 +987,58 @@ private fun CommentItem(
                     Spacer(Modifier.weight(1f))
 
                     Box {
-                        Text("••• More", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp, modifier = Modifier.clickable { onDropdownToggle(model.data.id) }.padding(4.dp))
-                        DropdownMenu(expanded = model.showMoreDropdown, onDismissRequest = { onDropdownToggle(model.data.id) }, modifier = Modifier.background(BgDark).border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))) {
+                        Text(
+                            "••• More",
+                            color = TextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = 0.5.sp,
+                            modifier = Modifier.clickable { onDropdownToggle(model.data.id) }.padding(4.dp)
+                        )
+                        DropdownMenu(
+                            expanded = model.showMoreDropdown,
+                            onDismissRequest = { onDropdownToggle(model.data.id) },
+                            modifier = Modifier.background(BgDark)
+                                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                        ) {
                             if (isOwnComment) {
-                                DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Default.Delete, null, tint = AccentRed, modifier = Modifier.size(13.dp)); Text("Delete Comment", color = AccentRed, fontSize = 11.sp, fontWeight = FontWeight.Bold) } }, onClick = { onDropdownToggle(model.data.id); onDelete(model.data.id) })
+                                DropdownMenuItem(text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            null,
+                                            tint = AccentRed,
+                                            modifier = Modifier.size(13.dp)
+                                        ); Text(
+                                        "Delete Comment",
+                                        color = AccentRed,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    }
+                                }, onClick = { onDropdownToggle(model.data.id); onDelete(model.data.id) })
                             } else {
-                                DropdownMenuItem(text = { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Default.Flag, null, tint = TextMuted, modifier = Modifier.size(13.dp)); Text("Report", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold) } }, onClick = { onDropdownToggle(model.data.id) })
+                                DropdownMenuItem(text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Flag,
+                                            null,
+                                            tint = TextMuted,
+                                            modifier = Modifier.size(13.dp)
+                                        ); Text(
+                                        "Report",
+                                        color = TextMuted,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    }
+                                }, onClick = { onDropdownToggle(model.data.id) })
                             }
                         }
                     }
@@ -869,11 +1047,13 @@ private fun CommentItem(
         }
 
         if (hasThread) {
-            Column(Modifier.fillMaxWidth().padding(start = threadOffset).animateContentSize(animationSpec = tween(300))) {
-                
+            Column(
+                Modifier.fillMaxWidth().padding(start = threadOffset).animateContentSize(animationSpec = tween(300))
+            ) {
+
                 val hasViewRepliesBtn = c.reply_count > 0 && !model.showReplies
                 val hasExpandedReplies = model.showReplies && model.replies.isNotEmpty()
-                
+
                 // 1. Reply Editor
                 AnimatedVisibility(
                     visible = model.isReplying,
@@ -906,11 +1086,29 @@ private fun CommentItem(
                         curveOffsetY = 14.dp,
                         contentPadding = PaddingValues(start = 24.dp, top = 4.dp, bottom = 4.dp)
                     ) {
-                        Row(Modifier.height(20.dp).clickable { onToggleReplies(model) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            Modifier.height(20.dp).clickable { onToggleReplies(model) },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             Box(Modifier.width(10.dp).height(1.dp).background(TextMuted.copy(alpha = 0.6f)))
-                            if (model.isLoadingReplies) CircularProgressIndicator(Modifier.size(10.dp), color = Color.White, strokeWidth = 1.5.dp)
-                            else Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSec, modifier = Modifier.size(14.dp))
-                            Text("View ${if (c.reply_count == 1) "1 reply" else "${c.reply_count} replies"}", color = TextSec, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            if (model.isLoadingReplies) CircularProgressIndicator(
+                                Modifier.size(10.dp),
+                                color = Color.White,
+                                strokeWidth = 1.5.dp
+                            )
+                            else Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                null,
+                                tint = TextSec,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                "View ${if (c.reply_count == 1) "1 reply" else "${c.reply_count} replies"}",
+                                color = TextSec,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
@@ -941,7 +1139,7 @@ private fun CommentItem(
                                 )
                             }
                         }
-                        
+
                         // Hide replies / Load more area
                         // Hide replies / Load more area
                         if (c.reply_count > 0) {
@@ -955,15 +1153,47 @@ private fun CommentItem(
                                     Spacer(Modifier.width(6.dp))
 
                                     if (model.hasMoreReplies) {
-                                        Row(Modifier.clickable { onLoadMoreReplies(model) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            if (model.isLoadingReplies) CircularProgressIndicator(Modifier.size(10.dp), color = Color.White, strokeWidth = 1.5.dp)
-                                            else Icon(Icons.Default.KeyboardArrowDown, null, tint = TextSec, modifier = Modifier.size(14.dp))
-                                            Text("Show more replies", color = TextSec, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Row(
+                                            Modifier.clickable { onLoadMoreReplies(model) },
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            if (model.isLoadingReplies) CircularProgressIndicator(
+                                                Modifier.size(10.dp),
+                                                color = Color.White,
+                                                strokeWidth = 1.5.dp
+                                            )
+                                            else Icon(
+                                                Icons.Default.KeyboardArrowDown,
+                                                null,
+                                                tint = TextSec,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                "Show more replies",
+                                                color = TextSec,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
                                         }
                                     } else {
-                                        Row(Modifier.clickable { onToggleReplies(model) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Icon(Icons.Default.KeyboardArrowUp, null, tint = TextSec, modifier = Modifier.size(13.dp))
-                                            Text("Hide replies", color = TextSec, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Row(
+                                            Modifier.clickable { onToggleReplies(model) },
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.KeyboardArrowUp,
+                                                null,
+                                                tint = TextSec,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Text(
+                                                "Hide replies",
+                                                color = TextSec,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
                                         }
                                     }
                                 }
@@ -1037,7 +1267,7 @@ private fun CommentContent(content: String, isSpoiler: Boolean) {
 private fun StyledCommentText(text: String) {
     var inlineSpoilersRevealed by remember { mutableStateOf(false) }
     val annotatedTokenRegex = """(\*\*[^*]+\*\*|__[^_]+__|\|\|[^|]+\|\||_[^_]+_)""".toRegex()
-    
+
     val annotatedString = buildAnnotatedString {
         var lastIndex = 0
         for (match in annotatedTokenRegex.findAll(text)) {
@@ -1049,16 +1279,19 @@ private fun StyledCommentText(text: String) {
                         append(token.drop(2).dropLast(2))
                     }
                 }
+
                 token.startsWith("__") -> {
                     withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                         append(token.drop(2).dropLast(2))
                     }
                 }
+
                 token.startsWith("_") -> {
                     withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                         append(token.drop(1).dropLast(1))
                     }
                 }
+
                 token.startsWith("||") -> {
                     val content = token.drop(2).dropLast(2)
                     withStyle(
@@ -1071,6 +1304,7 @@ private fun StyledCommentText(text: String) {
                         append(content)
                     }
                 }
+
                 else -> append(token)
             }
             lastIndex = match.range.endInclusive + 1
@@ -1114,14 +1348,25 @@ private fun ReplyEditor(
             var showPreview by remember { mutableStateOf(false) }
             var imageDialog by remember { mutableStateOf(false) }
             var imageUrlInput by remember { mutableStateOf("") }
-            
+
             if (imageDialog) {
                 AlertDialog(
                     onDismissRequest = { imageDialog = false; imageUrlInput = "" },
-                    title = { Text("Insert Image", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+                    title = {
+                        Text(
+                            "Insert Image",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    },
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Paste the URL of the image you want to include in your comment.", color = TextSec, fontSize = 13.sp)
+                            Text(
+                                "Paste the URL of the image you want to include in your comment.",
+                                color = TextSec,
+                                fontSize = 13.sp
+                            )
                             BasicTextField(
                                 value = imageUrlInput,
                                 onValueChange = { imageUrlInput = it },
@@ -1133,16 +1378,31 @@ private fun ReplyEditor(
                                     .padding(horizontal = 12.dp, vertical = 10.dp)
                                     .defaultMinSize(minHeight = 44.dp),
                                 decorationBox = { inner ->
-                                    if (imageUrlInput.isEmpty()) Text("https://example.com/image.png", color = TextMuted, fontSize = 13.sp)
+                                    if (imageUrlInput.isEmpty()) Text(
+                                        "https://example.com/image.png",
+                                        color = TextMuted,
+                                        fontSize = 13.sp
+                                    )
                                     inner()
                                 }
                             )
-                            Text("Supports PNG, JPG, GIF, WebP", color = TextMuted, fontSize = 10.sp, letterSpacing = 0.8.sp)
+                            Text(
+                                "Supports PNG, JPG, GIF, WebP",
+                                color = TextMuted,
+                                fontSize = 10.sp,
+                                letterSpacing = 0.8.sp
+                            )
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { imageDialog = false; imageUrlInput = "" }) {
-                            Text("Cancel", color = TextSec, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Text(
+                                "Cancel",
+                                color = TextSec,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
                         }
                     },
                     confirmButton = {
@@ -1214,7 +1474,12 @@ private fun ReplyEditor(
 
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    "Cancel", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false,
+                    "Cancel",
+                    color = TextMuted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    softWrap = false,
                     modifier = Modifier.clickable { onCancel() }.padding(horizontal = 6.dp, vertical = 4.dp)
                 )
                 Box(
@@ -1227,7 +1492,12 @@ private fun ReplyEditor(
                     if (isSubmitting) {
                         CircularProgressIndicator(Modifier.size(13.dp), color = Color.White, strokeWidth = 1.5.dp)
                     } else {
-                        Icon(Icons.Default.Send, contentDescription = "Reply", tint = Color.White, modifier = Modifier.size(13.dp))
+                        Icon(
+                            Icons.Default.Send,
+                            contentDescription = "Reply",
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp)
+                        )
                     }
                 }
             }
@@ -1299,7 +1569,9 @@ fun formatRelTime(isoDate: String): String = try {
     val parts = clean.split("T")
     val dateParts = parts[0].split("-").map { it.toInt() }
     val timeParts = parts.getOrNull(1)?.split(":")?.map { it.toInt() } ?: listOf(0, 0, 0)
-    val year = dateParts[0]; val month = dateParts[1]; val day = dateParts[2]
+    val year = dateParts[0];
+    val month = dateParts[1];
+    val day = dateParts[2]
     val hour = timeParts.getOrElse(0) { 0 }
     val minute = timeParts.getOrElse(1) { 0 }
     val second = timeParts.getOrElse(2) { 0 }
@@ -1309,13 +1581,15 @@ fun formatRelTime(isoDate: String): String = try {
     val nowSec = kotlinx.datetime.Clock.System.now().epochSeconds
     val s = (nowSec - epochSec).coerceAtLeast(0)
     when {
-        s < 60      -> "${s}s ago"
-        s < 3600    -> "${s / 60}m ago"
-        s < 86400   -> "${s / 3600}h ago"
+        s < 60 -> "${s}s ago"
+        s < 3600 -> "${s / 60}m ago"
+        s < 86400 -> "${s / 3600}h ago"
         s < 2592000 -> "${s / 86400}d ago"
-        else        -> "${s / 2592000}mo ago"
+        else -> "${s / 2592000}mo ago"
     }
-} catch (e: Exception) { "" }
+} catch (e: Exception) {
+    ""
+}
 
 // ── Custom SVG Badges ────────────────────────────────────────────────────────
 
