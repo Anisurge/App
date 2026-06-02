@@ -45,12 +45,29 @@ data class W2gJoinResponse(
 )
 
 @Serializable
+data class W2gRoomUpdateRequest(
+    @SerialName("anime_id") val animeId: String? = null,
+    @SerialName("anime_title") val animeTitle: String? = null,
+    @SerialName("anime_poster") val animePoster: String? = null,
+    @SerialName("anilist_id") val anilistId: Int? = null,
+    @SerialName("mal_id") val malId: Int? = null,
+    @SerialName("episode_number") val episodeNumber: Int? = null,
+    val server: String? = null,
+    val language: String? = null,
+    val quality: String? = null,
+)
+
+@Serializable
 data class W2gRoomDetail(
     @SerialName("invite_code") val inviteCode: String,
     @SerialName("room_name") val roomName: String,
     @SerialName("host_user_id") val hostUserId: String,
     @SerialName("host_username") val hostUsername: String? = null,
     @SerialName("anime_id") val animeId: String? = null,
+    @SerialName("anime_title") val animeTitle: String? = null,
+    @SerialName("anime_poster") val animePoster: String? = null,
+    @SerialName("anilist_id") val anilistId: Int? = null,
+    @SerialName("mal_id") val malId: Int? = null,
     @SerialName("episode_number") val episodeNumber: Int? = null,
     val server: String? = null,
     val language: String? = null,

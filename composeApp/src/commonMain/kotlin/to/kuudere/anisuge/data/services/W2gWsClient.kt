@@ -13,9 +13,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import to.kuudere.anisuge.data.models.W2gPlayerState
 import to.kuudere.anisuge.data.models.W2gRoomDetail
 import to.kuudere.anisuge.data.models.W2gWsEnvelope
@@ -32,6 +34,10 @@ class W2gWsClient(
         data class PlayerState(val state: W2gPlayerState) : Event()
         data class EpisodeChange(
             val animeId: String,
+            val animeTitle: String?,
+            val animePoster: String?,
+            val anilistId: Int?,
+            val malId: Int?,
             val episodeNumber: Int,
             val server: String,
             val language: String?,
@@ -140,6 +146,10 @@ class W2gWsClient(
                     val obj = data.jsonObject
                     Event.EpisodeChange(
                         animeId = obj["anime_id"]?.jsonPrimitive?.contentOrNull ?: "",
+                        animeTitle = obj["anime_title"]?.jsonPrimitive?.contentOrNull,
+                        animePoster = obj["anime_poster"]?.jsonPrimitive?.contentOrNull,
+                        anilistId = obj["anilist_id"]?.jsonPrimitive?.contentOrNull?.toIntOrNull(),
+                        malId = obj["mal_id"]?.jsonPrimitive?.contentOrNull?.toIntOrNull(),
                         episodeNumber = obj["episode_number"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1,
                         server = obj["server"]?.jsonPrimitive?.content ?: "suzu",
                         language = obj["language"]?.jsonPrimitive?.contentOrNull,
@@ -197,30 +207,51 @@ class W2gWsClient(
     }
 
     fun sendPlay(currentTime: Double) {
-        sendRaw(json.encodeToString(W2gWsEnvelope("play", json.parseToJsonElement("""{"currentTime":$currentTime}"""))))
+        sendRaw(json.encodeToString(W2gWsEnvelope("play", buildJsonObject {
+            put("currentTime", currentTime)
+        })))
     }
 
     fun sendPause(currentTime: Double) {
-        sendRaw(json.encodeToString(W2gWsEnvelope("pause", json.parseToJsonElement("""{"currentTime":$currentTime}"""))))
+        sendRaw(json.encodeToString(W2gWsEnvelope("pause", buildJsonObject {
+            put("currentTime", currentTime)
+        })))
     }
 
     fun sendSeek(currentTime: Double) {
-        sendRaw(json.encodeToString(W2gWsEnvelope("seek", json.parseToJsonElement("""{"currentTime":$currentTime}"""))))
+        sendRaw(json.encodeToString(W2gWsEnvelope("seek", buildJsonObject {
+            put("currentTime", currentTime)
+        })))
     }
 
-    fun sendChangeEpisode(animeId: String, episodeNumber: Int, server: String, language: String?, quality: String?) {
-        val data = buildString {
-            append("""{"anime_id":"$animeId","episode_number":$episodeNumber,"server":"$server"""")
-            language?.let { append(""","language":"$it""") }
-            quality?.let { append(""","quality":"$it""") }
-            append("}")
-        }
-        sendRaw(json.encodeToString(W2gWsEnvelope("change_episode", json.parseToJsonElement(data))))
+    fun sendChangeEpisode(
+        animeId: String,
+        episodeNumber: Int,
+        server: String,
+        language: String?,
+        quality: String?,
+        animeTitle: String? = null,
+        animePoster: String? = null,
+        anilistId: Int? = null,
+        malId: Int? = null,
+    ) {
+        sendRaw(json.encodeToString(W2gWsEnvelope("change_episode", buildJsonObject {
+            put("anime_id", animeId)
+            animeTitle?.let { put("anime_title", it) }
+            animePoster?.let { put("anime_poster", it) }
+            anilistId?.let { put("anilist_id", it) }
+            malId?.let { put("mal_id", it) }
+            put("episode_number", episodeNumber)
+            put("server", server)
+            language?.let { put("language", it) }
+            quality?.let { put("quality", it) }
+        })))
     }
 
     fun sendChat(body: String) {
-        val escaped = body.replace("\\", "\\\\").replace("\"", "\\\"")
-        sendRaw(json.encodeToString(W2gWsEnvelope("chat", json.parseToJsonElement("""{"body":"$escaped"}"""))))
+        sendRaw(json.encodeToString(W2gWsEnvelope("chat", buildJsonObject {
+            put("body", body)
+        })))
     }
 
     fun sendPing() {

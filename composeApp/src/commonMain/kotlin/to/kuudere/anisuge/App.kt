@@ -178,7 +178,13 @@ fun App(
             LiveChatViewModel(AppComponent.chatService, AppComponent.authService, AppComponent.searchService)
         }
         val w2gVm = remember {
-            W2gViewModel(AppComponent.sessionStore, AppComponent.w2gRoomService)
+            W2gViewModel(
+                AppComponent.sessionStore,
+                AppComponent.w2gRoomService,
+                AppComponent.searchService,
+                AppComponent.serverRepository,
+                AppComponent.infoService,
+            )
         }
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true

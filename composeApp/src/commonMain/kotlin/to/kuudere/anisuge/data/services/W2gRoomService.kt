@@ -3,6 +3,7 @@ package to.kuudere.anisuge.data.services
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.patch
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
@@ -18,7 +19,9 @@ import to.kuudere.anisuge.data.models.W2gRoomCreateResponse
 import to.kuudere.anisuge.data.models.W2gJoinRequest
 import to.kuudere.anisuge.data.models.W2gJoinResponse
 import to.kuudere.anisuge.data.models.W2gRoomListResponse
+import to.kuudere.anisuge.data.models.W2gRoomUpdateRequest
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
+import to.kuudere.anisuge.utils.currentTimeMillis
 
 class W2gRoomService(
     private val sessionStore: SessionStore,
@@ -26,6 +29,10 @@ class W2gRoomService(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val baseUrl = AnisurgeApi.v1Base
+    private var lastErrorMessage: String? = null
+
+    val lastError: String?
+        get() = lastErrorMessage
 
     private suspend fun parseError(response: io.ktor.client.statement.HttpResponse): String {
         return runCatching {
@@ -33,19 +40,26 @@ class W2gRoomService(
         }.getOrElse { "Request failed (${response.status.value})" }
     }
 
-    suspend fun listRooms(page: Int = 1, limit: Int = 20): W2gRoomListResponse? {
+    suspend fun listRooms(page: Int = 1, limit: Int = 20, query: String? = null): W2gRoomListResponse? {
         return try {
+            lastErrorMessage = null
             val response = httpClient.get("$baseUrl/w2g/rooms") {
                 parameter("page", page)
                 parameter("limit", limit)
+                query?.takeIf { it.isNotBlank() }?.let { parameter("q", it) }
+                parameter("_ts", currentTimeMillis())
+                header("Cache-Control", "no-cache")
+                header("Pragma", "no-cache")
             }
             if (response.status.isSuccess()) {
                 response.body()
             } else {
-                println("[W2gRoomService] listRooms HTTP ${response.status.value}: ${parseError(response)}")
+                lastErrorMessage = parseError(response)
+                println("[W2gRoomService] listRooms HTTP ${response.status.value}: $lastErrorMessage")
                 null
             }
         } catch (e: Exception) {
+            lastErrorMessage = e.message
             println("[W2gRoomService] listRooms error: ${e.message}")
             null
         }
@@ -53,6 +67,7 @@ class W2gRoomService(
 
     suspend fun createRoom(request: W2gRoomCreateRequest): W2gRoomCreateResponse? {
         return try {
+            lastErrorMessage = null
             val stored = sessionStore.get() ?: return null
             val response = httpClient.post("$baseUrl/w2g/rooms") {
                 applyAnisurgeAuth(stored)
@@ -62,10 +77,12 @@ class W2gRoomService(
             if (response.status.isSuccess()) {
                 response.body()
             } else {
-                println("[W2gRoomService] createRoom HTTP ${response.status.value}: ${parseError(response)}")
+                lastErrorMessage = parseError(response)
+                println("[W2gRoomService] createRoom HTTP ${response.status.value}: $lastErrorMessage")
                 null
             }
         } catch (e: Exception) {
+            lastErrorMessage = e.message
             println("[W2gRoomService] createRoom error: ${e.message}")
             null
         }
@@ -73,6 +90,7 @@ class W2gRoomService(
 
     suspend fun joinRoom(inviteCode: String, password: String? = null): W2gJoinResponse? {
         return try {
+            lastErrorMessage = null
             val stored = sessionStore.get() ?: return null
             val response = httpClient.post("$baseUrl/w2g/rooms/$inviteCode/join") {
                 applyAnisurgeAuth(stored)
@@ -82,10 +100,12 @@ class W2gRoomService(
             if (response.status.isSuccess()) {
                 response.body()
             } else {
-                println("[W2gRoomService] joinRoom HTTP ${response.status.value}: ${parseError(response)}")
+                lastErrorMessage = parseError(response)
+                println("[W2gRoomService] joinRoom HTTP ${response.status.value}: $lastErrorMessage")
                 null
             }
         } catch (e: Exception) {
+            lastErrorMessage = e.message
             println("[W2gRoomService] joinRoom error: ${e.message}")
             null
         }
@@ -106,13 +126,13 @@ class W2gRoomService(
         }
     }
 
-    suspend fun updateRoom(inviteCode: String, body: Map<String, Any>): Boolean {
+    suspend fun updateRoom(inviteCode: String, request: W2gRoomUpdateRequest): Boolean {
         return try {
             val stored = sessionStore.get() ?: return false
             val response = httpClient.patch("$baseUrl/w2g/rooms/$inviteCode") {
                 applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
-                setBody(body)
+                setBody(request)
             }
             response.status.isSuccess()
         } catch (e: Exception) {

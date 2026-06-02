@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
@@ -30,12 +32,14 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -49,14 +53,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
+import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.models.ServerInfo
+import to.kuudere.anisuge.player.StreamProxy
+import to.kuudere.anisuge.player.VideoPlayerSurface
+import to.kuudere.anisuge.player.rememberVideoPlayerState
 import to.kuudere.anisuge.theme.AppColors
+import to.kuudere.anisuge.ui.ProfileAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,12 +87,7 @@ fun W2gPlayerScreen(
     val chatListState = rememberLazyListState()
 
     LaunchedEffect(inviteCode, userId) {
-        val currentUserId = userId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-        viewModel.setCurrentUserId(currentUserId)
-        viewModel.joinRoom(inviteCode)
-            .onSuccess {
-                viewModel.connect(inviteCode)
-            }
+        viewModel.enterRoom(inviteCode, userId)
     }
 
     LaunchedEffect(state.chatMessages.size) {
@@ -167,59 +176,100 @@ fun W2gPlayerScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 val animeId = state.roomDetail?.animeId
-                if (animeId != null) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "${animeId} \u2014 Ep ${state.roomDetail?.episodeNumber ?: 1}",
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "${state.roomDetail?.server ?: "suzu"} \u00b7 ${state.roomDetail?.language ?: "sub"} \u00b7 ${state.roomDetail?.quality ?: "auto"}",
-                            color = Color.Gray,
-                            fontSize = 14.sp,
-                        )
+                val playback = state.playbackSource
+                if (playback != null) {
+                    val playbackUrl = remember(playback.url, playback.headers) {
+                        StreamProxy.proxyUrl(playback.url, playback.headers)
                     }
-                } else if (state.isHost) {
-                    Button(
-                        onClick = { /* TODO: open anime search dialog */ },
-                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
-                    ) {
-                        Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Search Anime to Watch")
-                    }
-                } else {
-                    Text(
-                        "Waiting for host to pick an anime...",
-                        color = Color.Gray,
-                        fontSize = 16.sp,
+                    val videoState = rememberVideoPlayerState(
+                        url = playbackUrl,
+                        showControls = true,
+                        autoPlay = true,
+                        headers = playback.headers,
                     )
-                }
-                Spacer(Modifier.height(12.dp))
-                if (state.isConnected) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF4CAF50))
+                    DisposableEffect(playbackUrl) {
+                        onDispose { StreamProxy.release(playback.url) }
+                    }
+                    VideoPlayerSurface(
+                        state = videoState,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    videoState.error?.let { err ->
+                        Text(
+                            err,
+                            color = Color(0xFFFFB74D),
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.Black.copy(alpha = 0.75f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
                         )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Connected", color = Color(0xFF4CAF50), fontSize = 12.sp)
                     }
                 } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFFFA500))
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Connecting...", color = Color(0xFFFFA500), fontSize = 12.sp)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    ) {
+                        if (animeId != null) {
+                            Text(
+                                "${state.roomDetail?.animeTitle ?: animeId} \u2014 Ep ${state.roomDetail?.episodeNumber ?: 1}",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                if (state.isLoadingPlayback) "Loading stream..."
+                                else "${state.roomDetail?.server ?: "suzu"} \u00b7 ${state.roomDetail?.language ?: "sub"} \u00b7 auto",
+                                color = Color.Gray,
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        } else if (state.isHost) {
+                            Button(
+                                onClick = { viewModel.openHostPicker() },
+                                colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                            ) {
+                                Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Search Anime to Watch")
+                            }
+                        } else {
+                            Text(
+                                state.error ?: "Waiting for host to pick an anime...",
+                                color = if (state.error != null) Color.Red else Color.Gray,
+                                fontSize = 16.sp,
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        if (state.isConnected) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF4CAF50))
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text("Connected", color = Color(0xFF4CAF50), fontSize = 12.sp)
+                            }
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFFA500))
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(state.loadingMessage ?: "Connecting...", color = Color(0xFFFFA500), fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
             }
@@ -232,6 +282,7 @@ fun W2gPlayerScreen(
                     server = detail.server ?: "suzu",
                     language = detail.language,
                     quality = detail.quality,
+                    onChangeAnime = { viewModel.openHostPicker() },
                     onChangeEpisode = { animeId, ep, server, lang, quality ->
                         viewModel.changeEpisode(animeId, ep, server, lang, quality)
                     },
@@ -260,19 +311,13 @@ fun W2gPlayerScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.width(56.dp),
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White.copy(alpha = 0.1f)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    (member.username ?: "?").take(2).uppercase(),
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                )
-                            }
+                            ProfileAvatar(
+                                url = member.avatarUrl,
+                                avatarSize = 40.dp,
+                                contentDescription = member.username ?: "Member",
+                                backgroundColor = Color.White.copy(alpha = 0.1f),
+                                playVideo = false,
+                            )
                             Text(
                                 member.username ?: "User",
                                 color = Color.Gray,
@@ -377,6 +422,19 @@ fun W2gPlayerScreen(
             }
         }
     }
+
+    if (state.hostPicker.isOpen) {
+        HostEpisodeSheet(
+            picker = state.hostPicker,
+            onDismiss = viewModel::dismissHostPicker,
+            onQueryChange = viewModel::updateHostPickerQuery,
+            onAnimeSelected = viewModel::selectHostAnime,
+            onEpisodeChange = viewModel::setHostEpisode,
+            onLanguageSelected = viewModel::setHostLanguage,
+            onServerSelected = viewModel::setHostServer,
+            onStart = viewModel::applyHostPickerSelection,
+        )
+    }
 }
 
 @Composable
@@ -386,6 +444,7 @@ private fun RoomControls(
     server: String,
     language: String?,
     quality: String?,
+    onChangeAnime: () -> Unit,
     onChangeEpisode: (String, Int, String, String?, String?) -> Unit,
 ) {
     Column(
@@ -403,26 +462,239 @@ private fun RoomControls(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(
-                onClick = { /* Change anime - opens a dialog */ },
+                onClick = onChangeAnime,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f)),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).height(40.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp),
             ) {
-                Text("Change Anime", fontSize = 12.sp, color = Color.White)
+                Text("Change", fontSize = 11.sp, color = Color.White, maxLines = 1)
             }
             Button(
                 onClick = { onChangeEpisode(animeId, episodeNumber + 1, server, language, quality) },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f)),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).height(40.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp),
             ) {
-                Text("Next Ep", fontSize = 12.sp, color = Color.White)
+                Text("Next", fontSize = 11.sp, color = Color.White, maxLines = 1)
             }
             Button(
                 onClick = { onChangeEpisode(animeId, (episodeNumber - 1).coerceAtLeast(1), server, language, quality) },
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f)),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).height(40.dp),
+                contentPadding = PaddingValues(horizontal = 6.dp),
             ) {
-                Text("Prev Ep", fontSize = 12.sp, color = Color.White)
+                Text("Prev", fontSize = 11.sp, color = Color.White, maxLines = 1)
             }
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HostEpisodeSheet(
+    picker: W2gHostPickerState,
+    onDismiss: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onAnimeSelected: (AnimeItem) -> Unit,
+    onEpisodeChange: (String) -> Unit,
+    onLanguageSelected: (String) -> Unit,
+    onServerSelected: (String) -> Unit,
+    onStart: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppColors.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+        ) {
+            Text("Search Anime to Watch", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(14.dp))
+
+            OutlinedTextField(
+                value = picker.query,
+                onValueChange = onQueryChange,
+                label = { Text("Search anime") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                colors = w2gFieldColors(),
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            if (picker.selectedAnime == null) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().height(320.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (picker.isSearching) {
+                        item {
+                            Text("Searching...", color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp))
+                        }
+                    }
+                    items(picker.results, key = { it.animeId }) { anime ->
+                        W2gAnimeSearchRow(anime = anime, onClick = { onAnimeSelected(anime) })
+                    }
+                }
+            } else {
+                W2gSelectedAnimeSummary(anime = picker.selectedAnime)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = picker.episode,
+                    onValueChange = onEpisodeChange,
+                    label = { Text("Episode") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                    colors = w2gFieldColors(),
+                )
+
+                Spacer(Modifier.height(12.dp))
+                Text("Audio", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    W2gChoiceButton("Sub", picker.language == "sub", Modifier.weight(1f)) { onLanguageSelected("sub") }
+                    W2gChoiceButton("Dub", picker.language == "dub", Modifier.weight(1f)) { onLanguageSelected("dub") }
+                }
+
+                if (picker.language != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("Server", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().height(180.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(picker.servers, key = { it.id }) { server ->
+                            W2gServerRow(
+                                server = server,
+                                selected = picker.server == server.id,
+                                onClick = { onServerSelected(server.id) },
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = onStart,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                    enabled = picker.server != null && !picker.isApplying,
+                ) {
+                    Text(if (picker.isApplying) "Starting..." else "Start Streaming", fontSize = 16.sp)
+                }
+            }
+
+            if (picker.error != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(picker.error, color = Color.Red, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun W2gAnimeSearchRow(anime: AnimeItem, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .background(Color.White.copy(alpha = 0.05f))
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsyncImage(
+            model = anime.imageUrl,
+            contentDescription = anime.displayTitle,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(anime.displayTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val meta = listOfNotNull(
+                anime.format.takeIf { it.isNotBlank() },
+                anime.seasonYear?.toString(),
+                anime.epCount?.let { "$it eps" },
+            ).joinToString(" · ")
+            if (meta.isNotBlank()) {
+                Text(meta, color = Color.Gray, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun W2gSelectedAnimeSummary(anime: AnimeItem) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsyncImage(
+            model = anime.imageUrl,
+            contentDescription = anime.displayTitle,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(anime.displayTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("Sub ${anime.subbed} · Dub ${anime.dubbed}", color = Color.Gray, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun W2gChoiceButton(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(42.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (selected) AppColors.accent else Color.White.copy(alpha = 0.1f),
+        ),
+    ) {
+        Text(label, color = Color.White)
+    }
+}
+
+@Composable
+private fun W2gServerRow(server: ServerInfo, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .background(if (selected) AppColors.accent.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.05f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(server.label, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (selected) {
+            Text("Selected", color = AppColors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun w2gFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    focusedLabelColor = AppColors.accent,
+    unfocusedLabelColor = Color.Gray,
+    focusedBorderColor = AppColors.accent,
+    unfocusedBorderColor = Color.Gray,
+    cursorColor = AppColors.accent,
+)
