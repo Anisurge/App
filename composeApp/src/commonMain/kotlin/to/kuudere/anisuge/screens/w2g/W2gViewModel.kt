@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
-import to.kuudere.anisuge.data.models.W2gCreateRoomRequest
+import to.kuudere.anisuge.data.models.W2gRoomCreateRequest
 import to.kuudere.anisuge.data.models.W2gPlayerState
 import to.kuudere.anisuge.data.models.W2gRoomDetail
 import to.kuudere.anisuge.data.models.W2gRoomMember
@@ -62,7 +62,7 @@ class W2gViewModel(
         }
     }
 
-    suspend fun createRoom(request: W2gCreateRoomRequest): String? {
+    suspend fun createRoom(request: W2gRoomCreateRequest): String? {
         _state.value = _state.value.copy(error = null, loadingMessage = "Creating room...")
         val response = roomService.createRoom(request)
         _state.value = _state.value.copy(loadingMessage = null)

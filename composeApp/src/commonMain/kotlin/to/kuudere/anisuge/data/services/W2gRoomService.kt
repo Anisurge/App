@@ -13,8 +13,8 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.data.models.BffErrorResponse
-import to.kuudere.anisuge.data.models.W2gCreateRoomRequest
-import to.kuudere.anisuge.data.models.W2gCreateRoomResponse
+import to.kuudere.anisuge.data.models.W2gRoomCreateRequest
+import to.kuudere.anisuge.data.models.W2gRoomCreateResponse
 import to.kuudere.anisuge.data.models.W2gJoinRequest
 import to.kuudere.anisuge.data.models.W2gJoinResponse
 import to.kuudere.anisuge.data.models.W2gRoomListResponse
@@ -51,7 +51,7 @@ class W2gRoomService(
         }
     }
 
-    suspend fun createRoom(request: W2gCreateRoomRequest): W2gCreateRoomResponse? {
+    suspend fun createRoom(request: W2gRoomCreateRequest): W2gRoomCreateResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
             val response = httpClient.post("$baseUrl/w2g/rooms") {

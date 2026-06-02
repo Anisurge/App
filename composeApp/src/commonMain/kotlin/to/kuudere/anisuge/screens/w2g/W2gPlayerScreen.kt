@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Send
@@ -90,12 +91,12 @@ fun W2gPlayerScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Room ", color = Color.White, fontSize = 16.sp)
                         Text(
-                            inviteCode,
-                            color = AppColors.accent,
-                            fontWeight = FontWeight.Bold,
+                            state.roomDetail?.roomName ?: "Room",
+                            color = Color.White,
                             fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.width(4.dp))
                         IconButton(
@@ -147,22 +148,40 @@ fun W2gPlayerScreen(
                     .background(Color.Black),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val animeId = state.roomDetail?.animeId
+                if (animeId != null) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "${animeId} \u2014 Ep ${state.roomDetail?.episodeNumber ?: 1}",
+                            color = Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "${state.roomDetail?.server ?: "suzu"} \u00b7 ${state.roomDetail?.language ?: "sub"} \u00b7 ${state.roomDetail?.quality ?: "auto"}",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                        )
+                    }
+                } else if (state.isHost) {
+                    Button(
+                        onClick = { /* TODO: open anime search dialog */ },
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                    ) {
+                        Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Search Anime to Watch")
+                    }
+                } else {
                     Text(
-                        state.roomDetail?.let { "${it.animeId} \u2014 Ep ${it.episodeNumber}" } ?: "Loading...",
-                        color = Color.White,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        state.roomDetail?.let { "${it.server} \u00b7 ${it.language ?: "sub"} \u00b7 ${it.quality ?: "auto"}" }
-                            ?: "",
+                        "Waiting for host to pick an anime...",
                         color = Color.Gray,
-                        fontSize = 14.sp,
+                        fontSize = 16.sp,
                     )
-                    Spacer(Modifier.height(12.dp))
-                    if (state.isConnected) {
+                }
+                Spacer(Modifier.height(12.dp))
+                if (state.isConnected) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 Modifier
@@ -185,16 +204,16 @@ fun W2gPlayerScreen(
                             Text("Connecting...", color = Color(0xFFFFA500), fontSize = 12.sp)
                         }
                     }
-                }
             }
 
-            if (state.isHost) {
+            val detail = state.roomDetail
+            if (state.isHost && detail?.animeId != null) {
                 RoomControls(
-                    animeId = state.roomDetail?.animeId ?: "",
-                    episodeNumber = state.roomDetail?.episodeNumber ?: 1,
-                    server = state.roomDetail?.server ?: "suzu",
-                    language = state.roomDetail?.language,
-                    quality = state.roomDetail?.quality,
+                    animeId = detail.animeId ?: "",
+                    episodeNumber = detail.episodeNumber ?: 1,
+                    server = detail.server ?: "suzu",
+                    language = detail.language,
+                    quality = detail.quality,
                     onChangeEpisode = { animeId, ep, server, lang, quality ->
                         viewModel.changeEpisode(animeId, ep, server, lang, quality)
                     },

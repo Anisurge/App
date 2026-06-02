@@ -7,16 +7,12 @@ import kotlinx.serialization.json.JsonElement
 @Serializable
 data class W2gRoomSummary(
     @SerialName("invite_code") val inviteCode: String,
-    @SerialName("anime_title") val animeTitle: String? = null,
-    @SerialName("anime_poster") val animePoster: String? = null,
-    @SerialName("anime_id") val animeId: String,
-    @SerialName("episode_number") val episodeNumber: Int = 1,
-    val server: String = "suzu",
-    val language: String? = null,
+    @SerialName("room_name") val roomName: String,
     @SerialName("has_password") val hasPassword: Boolean = false,
     @SerialName("member_count") val memberCount: Int = 0,
     @SerialName("host_username") val hostUsername: String? = null,
-    @SerialName("host_user_id") val hostUserId: String? = null,
+    @SerialName("anime_title") val animeTitle: String? = null,
+    @SerialName("anime_poster") val animePoster: String? = null,
     @SerialName("last_active_at") val lastActiveAt: String? = null,
 )
 
@@ -27,21 +23,13 @@ data class W2gRoomListResponse(
 )
 
 @Serializable
-data class W2gCreateRoomRequest(
-    @SerialName("anime_id") val animeId: String,
-    @SerialName("episode_number") val episodeNumber: Int,
-    val server: String,
-    val language: String? = null,
-    val quality: String? = null,
+data class W2gRoomCreateRequest(
+    @SerialName("room_name") val roomName: String,
     val password: String? = null,
-    @SerialName("anime_title") val animeTitle: String? = null,
-    @SerialName("anime_poster") val animePoster: String? = null,
-    @SerialName("anilist_id") val anilistId: Int? = null,
-    @SerialName("mal_id") val malId: Int? = null,
 )
 
 @Serializable
-data class W2gCreateRoomResponse(
+data class W2gRoomCreateResponse(
     @SerialName("invite_code") val inviteCode: String,
     val room: W2gRoomDetail? = null,
 )
@@ -59,11 +47,12 @@ data class W2gJoinResponse(
 @Serializable
 data class W2gRoomDetail(
     @SerialName("invite_code") val inviteCode: String,
+    @SerialName("room_name") val roomName: String,
     @SerialName("host_user_id") val hostUserId: String,
     @SerialName("host_username") val hostUsername: String? = null,
-    @SerialName("anime_id") val animeId: String,
-    @SerialName("episode_number") val episodeNumber: Int = 1,
-    val server: String = "suzu",
+    @SerialName("anime_id") val animeId: String? = null,
+    @SerialName("episode_number") val episodeNumber: Int? = null,
+    val server: String? = null,
     val language: String? = null,
     val quality: String? = null,
     @SerialName("member_count") val memberCount: Int = 0,

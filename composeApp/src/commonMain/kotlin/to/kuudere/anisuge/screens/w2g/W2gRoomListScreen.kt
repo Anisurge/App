@@ -163,19 +163,33 @@ private fun RoomCard(
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AsyncImage(
-            model = room.animePoster,
-            contentDescription = room.animeTitle,
+        Box(
             modifier = Modifier
                 .size(64.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color.White.copy(alpha = 0.1f)),
-            contentScale = ContentScale.Crop,
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            if (room.animePoster != null) {
+                AsyncImage(
+                    model = room.animePoster,
+                    contentDescription = room.animeTitle,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Icon(
+                    Icons.Outlined.Group,
+                    null,
+                    tint = AppColors.textMuted,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                text = room.animeTitle ?: "Unknown Anime",
+                text = room.roomName,
                 color = Color.White,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp,
@@ -183,12 +197,16 @@ private fun RoomCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Ep ${room.episodeNumber} \u00b7 ${room.server}",
-                color = AppColors.textMuted,
-                fontSize = 13.sp,
-            )
-            Spacer(Modifier.height(4.dp))
+            if (room.animeTitle != null) {
+                Text(
+                    text = room.animeTitle,
+                    color = AppColors.textMuted,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+            }
             Text(
                 text = "Host: ${room.hostUsername ?: "Unknown"}",
                 color = Color.Gray,

@@ -1,13 +1,10 @@
 package to.kuudere.anisuge.screens.w2g
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -25,11 +22,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-import to.kuudere.anisuge.data.models.W2gCreateRoomRequest
+import to.kuudere.anisuge.data.models.W2gRoomCreateRequest
 import to.kuudere.anisuge.theme.AppColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,13 +39,8 @@ fun W2gCreateRoomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
 
-    var animeId by remember { mutableStateOf("") }
-    var episodeNumber by remember { mutableStateOf("1") }
-    var server by remember { mutableStateOf("suzu") }
-    var language by remember { mutableStateOf("sub") }
-    var quality by remember { mutableStateOf("1080p") }
+    var roomName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var animeTitle by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -62,16 +54,18 @@ fun W2gCreateRoomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text("Create a Room", color = Color.White, fontSize = 20.sp)
 
+            Spacer(Modifier.height(16.dp))
+
             OutlinedTextField(
-                value = animeId,
-                onValueChange = { animeId = it },
-                label = { Text("Anime ID / Slug") },
+                value = roomName,
+                onValueChange = { roomName = it },
+                label = { Text("Room Name") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
@@ -82,90 +76,7 @@ fun W2gCreateRoomSheet(
                 ),
             )
 
-            OutlinedTextField(
-                value = animeTitle,
-                onValueChange = { animeTitle = it },
-                label = { Text("Anime Title (optional)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedLabelColor = AppColors.accent,
-                    unfocusedLabelColor = Color.Gray,
-                    focusedBorderColor = AppColors.accent,
-                    unfocusedBorderColor = Color.Gray,
-                ),
-            )
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = episodeNumber,
-                    onValueChange = { episodeNumber = it.filter { c -> c.isDigit() } },
-                    label = { Text("Episode") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedLabelColor = AppColors.accent,
-                        unfocusedLabelColor = Color.Gray,
-                        focusedBorderColor = AppColors.accent,
-                        unfocusedBorderColor = Color.Gray,
-                    ),
-                )
-
-                OutlinedTextField(
-                    value = server,
-                    onValueChange = { server = it },
-                    label = { Text("Server") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedLabelColor = AppColors.accent,
-                        unfocusedLabelColor = Color.Gray,
-                        focusedBorderColor = AppColors.accent,
-                        unfocusedBorderColor = Color.Gray,
-                    ),
-                )
-            }
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = language,
-                    onValueChange = { language = it },
-                    label = { Text("Lang (sub/dub)") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedLabelColor = AppColors.accent,
-                        unfocusedLabelColor = Color.Gray,
-                        focusedBorderColor = AppColors.accent,
-                        unfocusedBorderColor = Color.Gray,
-                    ),
-                )
-
-                OutlinedTextField(
-                    value = quality,
-                    onValueChange = { quality = it },
-                    label = { Text("Quality") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedLabelColor = AppColors.accent,
-                        unfocusedLabelColor = Color.Gray,
-                        focusedBorderColor = AppColors.accent,
-                        unfocusedBorderColor = Color.Gray,
-                    ),
-                )
-            }
+            Spacer(Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = password,
@@ -184,27 +95,24 @@ fun W2gCreateRoomSheet(
             )
 
             if (error != null) {
+                Spacer(Modifier.height(8.dp))
                 Text(error!!, color = Color.Red, fontSize = 13.sp)
             }
 
+            Spacer(Modifier.height(16.dp))
+
             Button(
                 onClick = {
-                    val ep = episodeNumber.toIntOrNull() ?: 1
-                    if (animeId.isBlank()) {
-                        error = "Anime ID is required"
+                    if (roomName.isBlank()) {
+                        error = "Room name is required"
                         return@Button
                     }
                     isLoading = true
                     error = null
                     scope.launch {
-                        val request = W2gCreateRoomRequest(
-                            animeId = animeId.trim(),
-                            episodeNumber = ep,
-                            server = server.trim(),
-                            language = language.takeIf { it.isNotBlank() },
-                            quality = quality.takeIf { it.isNotBlank() },
+                        val request = W2gRoomCreateRequest(
+                            roomName = roomName.trim(),
                             password = password.takeIf { it.isNotBlank() },
-                            animeTitle = animeTitle.takeIf { it.isNotBlank() },
                         )
                         val code = viewModel.createRoom(request)
                         isLoading = false
