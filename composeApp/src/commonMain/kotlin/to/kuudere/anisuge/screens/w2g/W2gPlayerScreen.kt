@@ -1,13 +1,16 @@
 package to.kuudere.anisuge.screens.w2g
 
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,9 +22,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Group
@@ -36,6 +43,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -53,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -64,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.player.StreamProxy
@@ -85,6 +96,7 @@ fun W2gPlayerScreen(
     val scope = rememberCoroutineScope()
     var chatInput by remember { mutableStateOf("") }
     val chatListState = rememberLazyListState()
+    var isFullscreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(inviteCode, userId) {
         viewModel.enterRoom(inviteCode, userId)
@@ -104,151 +116,46 @@ fun W2gPlayerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            state.roomDetail?.roomName ?: "Room",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        IconButton(
-                            onClick = {
-                                clipboard.setText(AnnotatedString(inviteCode))
-                            },
-                            modifier = Modifier.size(24.dp),
-                        ) {
-                            Icon(
-                                Icons.Outlined.ContentCopy,
-                                "Copy invite code",
-                                tint = Color.Gray,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            viewModel.leaveRoom(inviteCode)
-                            onBack()
-                        }
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                },
-                actions = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (state.isConnected) {
-                            Box(
-                                Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF4CAF50))
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text("Live", color = Color(0xFF4CAF50), fontSize = 12.sp)
-                            Spacer(Modifier.width(12.dp))
-                        }
-                        Icon(Icons.Outlined.Group, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("${state.members.size}", color = Color.Gray, fontSize = 14.sp)
-                        Spacer(Modifier.width(12.dp))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = AppColors.background,
-                ),
-            )
-        },
-        containerColor = AppColors.background,
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            // Player placeholder area
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(250.dp)
-                    .background(Color.Black),
-                contentAlignment = Alignment.Center,
-            ) {
-                val animeId = state.roomDetail?.animeId
-                val playback = state.playbackSource
-                if (playback != null) {
-                    val playbackUrl = remember(playback.url, playback.headers) {
-                        StreamProxy.proxyUrl(playback.url, playback.headers)
-                    }
-                    val videoState = rememberVideoPlayerState(
-                        url = playbackUrl,
-                        showControls = true,
-                        autoPlay = true,
-                        headers = playback.headers,
-                    )
-                    DisposableEffect(playbackUrl) {
-                        onDispose { StreamProxy.release(playback.url) }
-                    }
-                    VideoPlayerSurface(
-                        state = videoState,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    videoState.error?.let { err ->
-                        Text(
-                            err,
-                            color = Color(0xFFFFB74D),
-                            fontSize = 12.sp,
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(8.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.Black.copy(alpha = 0.75f))
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        )
-                    }
-                } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    ) {
-                        if (animeId != null) {
+            if (!isFullscreen) {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "${state.roomDetail?.animeTitle ?: animeId} \u2014 Ep ${state.roomDetail?.episodeNumber ?: 1}",
+                                state.roomDetail?.roomName ?: "Room",
                                 color = Color.White,
                                 fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                if (state.isLoadingPlayback) "Loading stream..."
-                                else "${state.roomDetail?.server ?: "suzu"} \u00b7 ${state.roomDetail?.language ?: "sub"} \u00b7 auto",
-                                color = Color.Gray,
-                                fontSize = 14.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                        } else if (state.isHost) {
-                            Button(
-                                onClick = { viewModel.openHostPicker() },
-                                colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                            Spacer(Modifier.width(4.dp))
+                            IconButton(
+                                onClick = {
+                                    clipboard.setText(AnnotatedString(inviteCode))
+                                },
+                                modifier = Modifier.size(24.dp),
                             ) {
-                                Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Search Anime to Watch")
+                                Icon(
+                                    Icons.Outlined.ContentCopy,
+                                    "Copy invite code",
+                                    tint = Color.Gray,
+                                    modifier = Modifier.size(16.dp),
+                                )
                             }
-                        } else {
-                            Text(
-                                state.error ?: "Waiting for host to pick an anime...",
-                                color = if (state.error != null) Color.Red else Color.Gray,
-                                fontSize = 16.sp,
-                            )
                         }
-                        Spacer(Modifier.height(12.dp))
-                        if (state.isConnected) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            scope.launch {
+                                viewModel.leaveRoom(inviteCode)
+                                onBack()
+                            }
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        }
+                    },
+                    actions = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (state.isConnected) {
                                 Box(
                                     Modifier
                                         .size(8.dp)
@@ -256,168 +163,343 @@ fun W2gPlayerScreen(
                                         .background(Color(0xFF4CAF50))
                                 )
                                 Spacer(Modifier.width(6.dp))
-                                Text("Connected", color = Color(0xFF4CAF50), fontSize = 12.sp)
+                                Text("Live", color = Color(0xFF4CAF50), fontSize = 12.sp)
+                                Spacer(Modifier.width(12.dp))
                             }
-                        } else {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFFFA500))
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(state.loadingMessage ?: "Connecting...", color = Color(0xFFFFA500), fontSize = 12.sp)
-                            }
+                            Icon(Icons.Outlined.Group, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("${state.members.size}", color = Color.Gray, fontSize = 14.sp)
+                            Spacer(Modifier.width(12.dp))
                         }
-                    }
-                }
-            }
-
-            val detail = state.roomDetail
-            if (state.isHost && detail?.animeId != null) {
-                RoomControls(
-                    animeId = detail.animeId ?: "",
-                    episodeNumber = detail.episodeNumber ?: 1,
-                    server = detail.server ?: "suzu",
-                    language = detail.language,
-                    quality = detail.quality,
-                    onChangeAnime = { viewModel.openHostPicker() },
-                    onChangeEpisode = { animeId, ep, server, lang, quality ->
-                        viewModel.changeEpisode(animeId, ep, server, lang, quality)
                     },
-                )
-            }
-
-            // Members row
-            if (state.members.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Members (${state.members.size})",
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    state.members.forEach { member ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.width(56.dp),
-                        ) {
-                            ProfileAvatar(
-                                url = member.avatarUrl,
-                                avatarSize = 40.dp,
-                                contentDescription = member.username ?: "Member",
-                                backgroundColor = Color.White.copy(alpha = 0.1f),
-                                playVideo = false,
-                            )
-                            Text(
-                                member.username ?: "User",
-                                color = Color.Gray,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Chat section
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "Room Chat",
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-            Spacer(Modifier.height(4.dp))
-
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                state = chatListState,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(state.chatMessages, key = { it.id }) { msg ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.White.copy(alpha = 0.03f))
-                            .padding(8.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                msg.username ?: "User",
-                                color = AppColors.accent,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            if (msg.userId == state.roomDetail?.hostUserId) {
-                                Spacer(Modifier.width(4.dp))
-                                Icon(
-                                    Icons.Outlined.Verified,
-                                    null,
-                                    tint = AppColors.accent,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                            }
-                        }
-                        Text(
-                            msg.body,
-                            color = Color.White,
-                            fontSize = 14.sp,
-                        )
-                    }
-                }
-            }
-
-            // Chat input
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = chatInput,
-                    onValueChange = { chatInput = it },
-                    placeholder = { Text("Type a message...", color = Color.Gray) },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = AppColors.accent,
-                        unfocusedBorderColor = Color.Gray,
-                        cursorColor = AppColors.accent,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = AppColors.background,
                     ),
                 )
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick = {
-                        if (chatInput.isNotBlank()) {
-                            viewModel.sendMessage(chatInput.trim())
-                            chatInput = ""
-                        }
-                    },
+            }
+        },
+        containerColor = AppColors.background,
+    ) { padding ->
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                // Player area
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (isFullscreen) Modifier.weight(1f)
+                            else Modifier.height(250.dp)
+                        )
+                        .background(Color.Black),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        Icons.Outlined.Send,
-                        "Send",
-                        tint = AppColors.accent,
+                    val animeId = state.roomDetail?.animeId
+                    val playback = state.playbackSource
+                    if (playback != null) {
+                        val playbackUrl = remember(playback.url, playback.headers) {
+                            StreamProxy.proxyUrl(playback.url, playback.headers)
+                        }
+                        val videoState = rememberVideoPlayerState(
+                            url = playbackUrl,
+                            showControls = false,
+                            autoPlay = true,
+                            headers = playback.headers,
+                        )
+                        DisposableEffect(playbackUrl) {
+                            onDispose { StreamProxy.release(playback.url) }
+                        }
+                        VideoPlayerSurface(
+                            state = videoState,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        videoState.error?.let { err ->
+                            Text(
+                                err,
+                                color = Color(0xFFFFB74D),
+                                fontSize = 12.sp,
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(8.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.Black.copy(alpha = 0.75f))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                            )
+                        }
+
+                        // Host overlay controls
+                        if (state.isHost) {
+                            HostW2gOverlay(
+                                isPlaying = videoState.isPlaying,
+                                isPaused = videoState.isPaused,
+                                position = videoState.position,
+                                duration = videoState.duration,
+                                isFullscreen = isFullscreen,
+                                onPlayPause = {
+                                    if (videoState.isPlaying) {
+                                        videoState.pauseRequested = true
+                                        viewModel.pause(videoState.position)
+                                    } else {
+                                        videoState.pauseRequested = false
+                                        viewModel.play(videoState.position)
+                                    }
+                                },
+                                onSeek = { pos ->
+                                    videoState.seekTarget = pos
+                                    viewModel.seek(pos)
+                                },
+                                onFullscreenToggle = { isFullscreen = !isFullscreen },
+                            )
+                        } else {
+                            // Non-host: minimal overlay (fullscreen only)
+                            NonHostW2gOverlay(
+                                isFullscreen = isFullscreen,
+                                onFullscreenToggle = { isFullscreen = !isFullscreen },
+                            )
+                        }
+
+                        // Remote sync for non-host (host's own actions already applied locally)
+                        if (!state.isHost) {
+                            LaunchedEffect(state.playerState) {
+                                val ps = state.playerState
+                                if (ps.currentTime > 0) {
+                                    val diff = abs(videoState.position - ps.currentTime)
+                                    if (diff > 3.0) {
+                                        videoState.seekTarget = ps.currentTime
+                                    }
+                                }
+                                if (ps.playing && videoState.isPaused) {
+                                    videoState.pauseRequested = false
+                                } else if (!ps.playing && videoState.isPlaying) {
+                                    videoState.pauseRequested = true
+                                }
+                            }
+                        }
+                    } else {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        ) {
+                            if (animeId != null) {
+                                Text(
+                                    "${state.roomDetail?.animeTitle ?: animeId} \u2014 Ep ${state.roomDetail?.episodeNumber ?: 1}",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    if (state.isLoadingPlayback) "Loading stream..."
+                                    else "${state.roomDetail?.server ?: "suzu"} \u00b7 ${state.roomDetail?.language ?: "sub"} \u00b7 auto",
+                                    color = Color.Gray,
+                                    fontSize = 14.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            } else if (state.isHost) {
+                                Button(
+                                    onClick = { viewModel.openHostPicker() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Search Anime to Watch")
+                                }
+                            } else {
+                                Text(
+                                    state.error ?: "Waiting for host to pick an anime...",
+                                    color = if (state.error != null) Color.Red else Color.Gray,
+                                    fontSize = 16.sp,
+                                )
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            if (state.isConnected) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF4CAF50))
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Connected", color = Color(0xFF4CAF50), fontSize = 12.sp)
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFFFA500))
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(state.loadingMessage ?: "Connecting...", color = Color(0xFFFFA500), fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Host controls & members & chat (only when not fullscreen)
+                if (!isFullscreen) {
+                    val detail = state.roomDetail
+                    if (state.isHost && detail?.animeId != null) {
+                        RoomControls(
+                            animeId = detail.animeId ?: "",
+                            episodeNumber = detail.episodeNumber ?: 1,
+                            server = detail.server ?: "suzu",
+                            language = detail.language,
+                            quality = detail.quality,
+                            onChangeAnime = { viewModel.openHostPicker() },
+                            onChangeEpisode = { animeId, ep, server, lang, quality ->
+                                viewModel.changeEpisode(animeId, ep, server, lang, quality)
+                            },
+                        )
+                    }
+
+                    // Members row
+                    if (state.members.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Members (${state.members.size})",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            state.members.forEach { member ->
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.width(56.dp),
+                                ) {
+                                    ProfileAvatar(
+                                        url = member.avatarUrl,
+                                        avatarSize = 40.dp,
+                                        contentDescription = member.username ?: "Member",
+                                        backgroundColor = Color.White.copy(alpha = 0.1f),
+                                        playVideo = false,
+                                    )
+                                    Text(
+                                        member.username ?: "User",
+                                        color = Color.Gray,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Chat section (always visible, below members)
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Room Chat",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp),
                     )
+                    Spacer(Modifier.height(4.dp))
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        state = chatListState,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        items(state.chatMessages, key = { it.id }) { msg ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.White.copy(alpha = 0.03f))
+                                    .padding(8.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        msg.username ?: "User",
+                                        color = AppColors.accent,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    if (msg.userId == state.roomDetail?.hostUserId) {
+                                        Spacer(Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.Outlined.Verified,
+                                            null,
+                                            tint = AppColors.accent,
+                                            modifier = Modifier.size(12.dp),
+                                        )
+                                    }
+                                }
+                                Text(
+                                    msg.body,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                )
+                            }
+                        }
+                    }
+
+                    // Chat input
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = chatInput,
+                            onValueChange = { chatInput = it },
+                            placeholder = { Text("Type a message...", color = Color.Gray) },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            keyboardActions = KeyboardActions(onSend = {
+                                if (chatInput.isNotBlank()) {
+                                    viewModel.sendMessage(chatInput.trim())
+                                    chatInput = ""
+                                }
+                            }),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = AppColors.accent,
+                                unfocusedBorderColor = Color.Gray,
+                                cursorColor = AppColors.accent,
+                            ),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(
+                            onClick = {
+                                if (chatInput.isNotBlank()) {
+                                    viewModel.sendMessage(chatInput.trim())
+                                    chatInput = ""
+                                }
+                            },
+                        ) {
+                            Icon(
+                                Icons.Outlined.Send,
+                                "Send",
+                                tint = AppColors.accent,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -433,6 +515,131 @@ fun W2gPlayerScreen(
             onLanguageSelected = viewModel::setHostLanguage,
             onServerSelected = viewModel::setHostServer,
             onStart = viewModel::applyHostPickerSelection,
+        )
+    }
+}
+
+@Composable
+private fun HostW2gOverlay(
+    isPlaying: Boolean,
+    isPaused: Boolean,
+    position: Double,
+    duration: Double,
+    isFullscreen: Boolean,
+    onPlayPause: () -> Unit,
+    onSeek: (Double) -> Unit,
+    onFullscreenToggle: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize()) {
+        // Top-right buttons
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp),
+        ) {
+            IconButton(onClick = onFullscreenToggle, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                    "Fullscreen",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+
+        // Center play/pause button
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable(onClick = onPlayPause),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                if (isPlaying) "Pause" else "Play",
+                tint = Color.White,
+                modifier = Modifier.size(28.dp),
+            )
+        }
+
+        // Seek bar at bottom
+        if (duration > 0) {
+            var sliderValue by remember(position, duration) { mutableStateOf((position / duration).toFloat().coerceIn(0f, 1f)) }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            val fraction = (offset.x / size.width).coerceIn(0f, 1f)
+                            sliderValue = fraction
+                            onSeek(fraction * duration)
+                        }
+                    }
+            ) {
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    onValueChangeFinished = {
+                        onSeek(sliderValue * duration)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = AppColors.accent,
+                        activeTrackColor = AppColors.accent,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.3f),
+                    ),
+                )
+            }
+            Text(
+                "${formatDuration(position.toLong())} / ${formatDuration(duration.toLong())}",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 28.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun NonHostW2gOverlay(
+    isFullscreen: Boolean,
+    onFullscreenToggle: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize()) {
+        // Top-right buttons
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp),
+        ) {
+            IconButton(onClick = onFullscreenToggle, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                    "Fullscreen",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+
+        // "Watching with host" indicator
+        Text(
+            "Synced with host",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 12.sp,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(Color.Black.copy(alpha = 0.5f))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
 }
@@ -698,3 +905,9 @@ private fun w2gFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedBorderColor = Color.Gray,
     cursorColor = AppColors.accent,
 )
+
+private fun formatDuration(seconds: Long): String {
+    val m = (seconds / 60).coerceAtLeast(0)
+    val s = (seconds % 60).coerceAtLeast(0)
+    return "%d:%02d".format(m, s)
+}

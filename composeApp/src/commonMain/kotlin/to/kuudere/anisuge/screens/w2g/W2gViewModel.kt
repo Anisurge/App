@@ -6,6 +6,7 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -111,6 +112,9 @@ class W2gViewModel(
     private var roomSearchJob: Job? = null
     private var playbackLoadJob: Job? = null
     private var currentUserId: String? = null
+    private var shouldReconnect = false
+    private var reconnectAttempt = 0
+    private var reconnectInviteCode: String? = null
 
     private fun isCurrentUserHost(hostUserId: String?): Boolean {
         val userId = currentUserId?.takeIf { it.isNotBlank() } ?: return false
@@ -589,94 +593,114 @@ class W2gViewModel(
         }
     }
 
+
+
     private fun doConnect(inviteCode: String, token: String) {
+        shouldReconnect = true
+        reconnectInviteCode = inviteCode
+        reconnectAttempt = 0
 
-        wsClient = W2gWsClient(inviteCode, sessionStore, AppComponent.httpClient)
         wsJob = viewModelScope.launch {
-            wsClient?.connect()?.collect { event ->
-                when (event) {
-                    is W2gWsClient.Event.Connected -> {
-                        _state.value = _state.value.copy(isConnected = true, error = null)
-                    }
-
-                    is W2gWsClient.Event.Disconnected -> {
-                        _state.value = _state.value.copy(isConnected = false)
-                    }
-
-                    is W2gWsClient.Event.RoomInfo -> {
-                        _state.value = _state.value.copy(
-                            roomDetail = event.room,
-                            members = event.room.members,
-                            playerState = event.room.playerState ?: W2gPlayerState(),
-                            isHost = isCurrentUserHost(event.room.hostUserId),
-                        )
-                        loadPlaybackFor(event.room)
-                    }
-
-                    is W2gWsClient.Event.PlayerState -> {
-                        _state.value = _state.value.copy(playerState = event.state)
-                    }
-
-                    is W2gWsClient.Event.EpisodeChange -> {
-                        val current = _state.value.roomDetail
-                        _state.value = _state.value.copy(
-                            roomDetail = current?.copy(
-                                animeId = event.animeId,
-                                animeTitle = event.animeTitle,
-                                animePoster = event.animePoster,
-                                anilistId = event.anilistId,
-                                malId = event.malId,
-                                episodeNumber = event.episodeNumber,
-                                server = event.server,
-                                language = event.language,
-                                quality = event.quality,
-                            ),
-                            playerState = W2gPlayerState(),
-                        )
-                        loadPlaybackFor(_state.value.roomDetail)
-                    }
-
-                    is W2gWsClient.Event.MemberJoined -> {
-                        val newMember = W2gRoomMember(
-                            userId = event.userId,
-                            username = event.username,
-                            avatarUrl = event.avatarUrl,
-                        )
-                        val updated = _state.value.members.toMutableList()
-                        if (updated.none { it.userId == event.userId }) {
-                            updated.add(newMember)
+            while (shouldReconnect && isActive) {
+                wsClient = W2gWsClient(inviteCode, sessionStore, AppComponent.httpClient)
+                wsClient?.connect()?.collect { event ->
+                    when (event) {
+                        is W2gWsClient.Event.Connected -> {
+                            reconnectAttempt = 0
+                            _state.value = _state.value.copy(isConnected = true, error = null)
                         }
-                        _state.value = _state.value.copy(members = updated)
-                    }
 
-                    is W2gWsClient.Event.MemberLeft -> {
-                        _state.value = _state.value.copy(
-                            members = _state.value.members.filter { it.userId != event.userId }
-                        )
-                    }
+                        is W2gWsClient.Event.Disconnected -> {
+                            _state.value = _state.value.copy(isConnected = false)
+                        }
 
-                    is W2gWsClient.Event.HostChanged -> {
-                        _state.value = _state.value.copy(
-                            isHost = isCurrentUserHost(event.userId)
-                        )
-                    }
+                        is W2gWsClient.Event.RoomInfo -> {
+                            _state.value = _state.value.copy(
+                                roomDetail = event.room,
+                                members = event.room.members,
+                                playerState = event.room.playerState ?: W2gPlayerState(),
+                                isHost = isCurrentUserHost(event.room.hostUserId),
+                            )
+                            loadPlaybackFor(event.room)
+                        }
 
-                    is W2gWsClient.Event.ChatMessage -> {
-                        val msg = W2gChatMessage(
-                            id = event.id,
-                            userId = event.userId,
-                            username = event.username,
-                            avatarUrl = event.avatarUrl,
-                            body = event.body,
-                            createdAt = event.createdAt,
-                        )
-                        _state.value = _state.value.copy(
-                            chatMessages = _state.value.chatMessages + msg
-                        )
-                    }
+                        is W2gWsClient.Event.PlayerState -> {
+                            _state.value = _state.value.copy(playerState = event.state)
+                        }
 
-                    is W2gWsClient.Event.Error -> {
-                        _state.value = _state.value.copy(error = event.message)
+                        is W2gWsClient.Event.EpisodeChange -> {
+                            val current = _state.value.roomDetail
+                            _state.value = _state.value.copy(
+                                roomDetail = current?.copy(
+                                    animeId = event.animeId,
+                                    animeTitle = event.animeTitle,
+                                    animePoster = event.animePoster,
+                                    anilistId = event.anilistId,
+                                    malId = event.malId,
+                                    episodeNumber = event.episodeNumber,
+                                    server = event.server,
+                                    language = event.language,
+                                    quality = event.quality,
+                                ),
+                                playerState = W2gPlayerState(),
+                            )
+                            loadPlaybackFor(_state.value.roomDetail)
+                        }
+
+                        is W2gWsClient.Event.MemberJoined -> {
+                            val newMember = W2gRoomMember(
+                                userId = event.userId,
+                                username = event.username,
+                                avatarUrl = event.avatarUrl,
+                            )
+                            val updated = _state.value.members.toMutableList()
+                            if (updated.none { it.userId == event.userId }) {
+                                updated.add(newMember)
+                            }
+                            _state.value = _state.value.copy(members = updated)
+                        }
+
+                        is W2gWsClient.Event.MemberLeft -> {
+                            _state.value = _state.value.copy(
+                                members = _state.value.members.filter { it.userId != event.userId }
+                            )
+                        }
+
+                        is W2gWsClient.Event.HostChanged -> {
+                            _state.value = _state.value.copy(
+                                isHost = isCurrentUserHost(event.userId)
+                            )
+                        }
+
+                        is W2gWsClient.Event.ChatMessage -> {
+                            val msg = W2gChatMessage(
+                                id = event.id,
+                                userId = event.userId,
+                                username = event.username,
+                                avatarUrl = event.avatarUrl,
+                                body = event.body,
+                                createdAt = event.createdAt,
+                            )
+                            _state.value = _state.value.copy(
+                                chatMessages = _state.value.chatMessages + msg
+                            )
+                        }
+
+                        is W2gWsClient.Event.Error -> {
+                            _state.value = _state.value.copy(error = event.message)
+                        }
+                    }
+                }
+
+                if (shouldReconnect && isActive) {
+                    reconnectAttempt++
+                    val delayMs = (1_000L * (1 shl minOf(reconnectAttempt - 1, 5))).coerceAtMost(30_000L)
+                    _state.value = _state.value.copy(loadingMessage = "Reconnecting in ${delayMs / 1000}s...")
+                    delay(delayMs)
+                    val stored = sessionStore.get()
+                    if (stored?.anisurgeToken.isNullOrBlank()) {
+                        _state.value = _state.value.copy(error = "Session expired, reconnection failed")
+                        break
                     }
                 }
             }
@@ -684,11 +708,13 @@ class W2gViewModel(
     }
 
     fun disconnect() {
+        shouldReconnect = false
+        reconnectInviteCode = null
         wsJob?.cancel()
         wsJob = null
         wsClient?.disconnect()
         wsClient = null
-        _state.value = _state.value.copy(isConnected = false)
+        _state.value = _state.value.copy(isConnected = false, loadingMessage = null)
     }
 
     fun play(currentTime: Double) = wsClient?.sendPlay(currentTime)
@@ -740,6 +766,8 @@ class W2gViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        shouldReconnect = false
+        reconnectInviteCode = null
         roomSearchJob?.cancel()
         stopRoomAutoRefresh()
         disconnect()
