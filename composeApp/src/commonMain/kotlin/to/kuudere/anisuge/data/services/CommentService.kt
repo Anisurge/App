@@ -41,7 +41,10 @@ class CommentService(
                 nid?.let { parameter("nid", it) }
                 if (stored?.anisurgeToken?.isNotBlank() == true) applyAnisurgeAuth(stored)
             }
-            response.body()
+            println("[CommentService] getComments status=${response.status} url=$baseUrl/comments/$slug/$episodeNumber?page=$page&sort=$sort")
+            val body: CommentsResponse = response.body()
+            println("[CommentService] getComments body: ${body.comments.size} comments, total=${body.total_comments}")
+            body
         } catch (e: Exception) {
             println("[CommentService] getComments error: ${e.message}")
             null

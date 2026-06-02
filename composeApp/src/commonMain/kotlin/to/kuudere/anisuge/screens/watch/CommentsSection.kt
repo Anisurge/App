@@ -162,9 +162,15 @@ fun CommentsSection(
     fun loadComments(page: Int = 1) {
         scope.launch {
             isLoading = true
+            println("[CommentsSection] loadComments: animeId=$animeId ep=$episodeNumber page=$page sort=${sortParam()}")
             val res = commentService.getComments(animeId, episodeNumber, page, sortParam())
+            println("[CommentsSection] loadComments response: ${res?.comments?.size} comments, hasMore=${res?.has_more}")
             if (res != null) {
                 val incoming = res.comments.map { it.toUi() }
+                println("[CommentsSection] loadComments incoming=${incoming.size} comments, page=$page")
+                if (incoming.isEmpty() && page == 1) {
+                    println("[CommentsSection] WARNING: API returned 0 comments on page 1!")
+                }
                 comments = if (page == 1) incoming else {
                     val ids = comments.map { it.data.id }.toSet()
                     comments + incoming.filter { it.data.id !in ids }
