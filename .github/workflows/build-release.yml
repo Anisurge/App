@@ -3,25 +3,25 @@ name: Build and Release Anisurge-KMP
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
       # Semver without v prefix (e.g. 0.10.0, 0.9.25)
-      - '*.*.*'
+      - "*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'App version (empty = app-version from gradle/libs.versions.toml)'
+        description: "App version (empty = app-version from gradle/libs.versions.toml)"
         required: false
-        default: ''
+        default: ""
       build_number:
-        description: 'Android versionCode / build suffix (empty = max(toml build, 15+run#))'
+        description: "Android versionCode / build suffix (empty = max(toml build, 15+run#))"
         required: false
-        default: ''
+        default: ""
       create_release:
-        description: 'Upload artifacts to a GitHub Release (tag pushes always release)'
+        description: "Upload artifacts to a GitHub Release (tag pushes always release)"
         type: boolean
         default: false
       build_ios:
-        description: 'Build unsigned iOS IPA (off by default — iOS KMP targets are not enabled in Gradle yet)'
+        description: "Build unsigned iOS IPA (off by default — iOS KMP targets are not enabled in Gradle yet)"
         type: boolean
         default: false
 
@@ -77,8 +77,8 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: "21"
+          distribution: "temurin"
 
       - name: Decode Keystore
         run: |
@@ -166,8 +166,8 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: "21"
+          distribution: "temurin"
 
       - name: Install Build Dependencies
         run: |
@@ -219,8 +219,8 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: "21"
+          distribution: "temurin"
 
       - name: Download and Bundle MPV Library
         shell: pwsh
@@ -248,6 +248,25 @@ jobs:
           }
           if (-not (Test-Path $mpv2)) { throw "mpv-2.dll was not found after bundling MPV dependencies" }
           Write-Host "Bundled MPV DLLs:"; Get-ChildItem $nativeDir -Filter "*.dll" | ForEach-Object { $_.Name }
+
+      - name: Download and Bundle FFmpeg
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $nativeDir = "composeApp\src\desktopMain\resources\native"
+          New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
+          $headers = @{ "User-Agent" = "Mozilla/5.0"; "Authorization" = "Bearer $env:GH_TOKEN" }
+          Write-Host "Downloading FFmpeg static build..."
+          $ffRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest" -Headers $headers
+          $ffAsset = $ffRelease.assets | Where-Object { $_.name -like "*win64-gpl*" -and $_.name -like "*.zip" } | Select-Object -First 1
+          if (-not $ffAsset) { throw "Could not find a win64-gpl FFmpeg release asset" }
+          Invoke-WebRequest -Uri $ffAsset.browser_download_url -OutFile "ffmpeg.zip" -Headers $headers
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg-extracted" -Force
+          $ffmpegExe = Get-ChildItem -Path "ffmpeg-extracted" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+          if (-not $ffmpegExe) { throw "ffmpeg.exe not found in extracted archive" }
+          Copy-Item $ffmpegExe.FullName (Join-Path $nativeDir "ffmpeg.exe") -Force
+          Write-Host "FFmpeg bundled: $((Get-Item (Join-Path $nativeDir "ffmpeg.exe")).Length / 1MB) MB"
 
       - name: Build Windows Distributions
         shell: pwsh
@@ -318,8 +337,8 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: "21"
+          distribution: "temurin"
 
       - name: Install MPV (playback on desktop)
         run: brew install mpv
@@ -375,8 +394,8 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          java-version: "21"
+          distribution: "temurin"
 
       - name: Build iOS Framework
         env:

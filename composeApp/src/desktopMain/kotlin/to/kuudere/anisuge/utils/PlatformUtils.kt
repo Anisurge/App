@@ -75,7 +75,7 @@ actual suspend fun muxToMkv(
     preferLocalTsRemux: Boolean,
 ): Boolean = withContext(Dispatchers.IO) {
     try {
-        val ffmpegPath = try {
+        val ffmpegPath = findBundledFfmpeg() ?: try {
             ws.schild.jave.process.ffmpeg.DefaultFFMPEGLocator().executablePath
         } catch (e: Exception) {
             "ffmpeg" // Fallback to system path if locator fails
@@ -89,7 +89,7 @@ actual suspend fun muxToMkv(
             if (referer != null) {
                 args.add("-referer"); args.add(referer)
             }
-            
+
             val userAgent = headers["User-Agent"] ?: headers["user-agent"]
             if (userAgent != null) {
                 args.add("-user_agent"); args.add(userAgent)
@@ -103,9 +103,9 @@ actual suspend fun muxToMkv(
         }
 
         val localTsVideo = videoPath.endsWith(".ts", ignoreCase = true) &&
-            !videoPath.startsWith("http", ignoreCase = true)
+                !videoPath.startsWith("http", ignoreCase = true)
         val localTsAudio = audioPath?.endsWith(".ts", ignoreCase = true) == true &&
-            !audioPath.startsWith("http", ignoreCase = true)
+                !audioPath.startsWith("http", ignoreCase = true)
 
         if (localTsVideo) {
             args.add("-f"); args.add("mpegts")
@@ -120,7 +120,7 @@ actual suspend fun muxToMkv(
         subtitles.forEach { (path, _) ->
             args.add("-i"); args.add(path)
         }
-        
+
         val metadataIndex = if (metadataPath != null) {
             val index = 1 + (if (audioPath != null) 1 else 0) + subtitles.size
             args.add("-i"); args.add(metadataPath)
@@ -184,6 +184,40 @@ actual suspend fun muxToMkv(
     } catch (e: Exception) {
         println("[FFmpeg] Process failed: ${e.message}")
         return@withContext false
+    }
+}
+
+private fun findBundledFfmpeg(): String? {
+    return try {
+        val osName = System.getProperty("os.name").lowercase()
+        val isWindows = "win" in osName
+        val resourceName = if (isWindows) "/native/ffmpeg.exe" else "/native/ffmpeg"
+
+        // Extract bundled ffmpeg from resources to a cache directory
+        val cacheDir = java.io.File(getCacheDirectory(), "bin")
+        cacheDir.mkdirs()
+        val cachedFile = java.io.File(cacheDir, if (isWindows) "ffmpeg.exe" else "ffmpeg")
+
+        // Only extract once (cache hit)
+        if (cachedFile.isFile && cachedFile.length() > 0) {
+            return cachedFile.absolutePath
+        }
+
+        // Extract from classpath resource
+        val resourceStream = this::class.java.getResourceAsStream(resourceName)
+        if (resourceStream != null) {
+            cachedFile.outputStream().use { out ->
+                resourceStream.use { `in` -> `in`.copyTo(out) }
+            }
+            cachedFile.setExecutable(true)
+            println("[FFmpeg] Extracted bundled binary to ${cachedFile.absolutePath}")
+            return cachedFile.absolutePath
+        }
+
+        null
+    } catch (e: Exception) {
+        println("[FFmpeg] Failed to extract bundled binary: ${e.message}")
+        null
     }
 }
 
