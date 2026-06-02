@@ -78,7 +78,7 @@ class W2gViewModel(
                 roomDetail = room,
                 members = room.members,
                 playerState = room.playerState ?: W2gPlayerState(),
-                isHost = false,
+                isHost = room.hostUserId == currentUserId,
             )
             return Result.success(room)
         }
@@ -112,9 +112,11 @@ class W2gViewModel(
                     is W2gWsClient.Event.Connected -> {
                         _state.value = _state.value.copy(isConnected = true, error = null)
                     }
+
                     is W2gWsClient.Event.Disconnected -> {
                         _state.value = _state.value.copy(isConnected = false)
                     }
+
                     is W2gWsClient.Event.RoomInfo -> {
                         _state.value = _state.value.copy(
                             roomDetail = event.room,
@@ -123,9 +125,11 @@ class W2gViewModel(
                             isHost = event.room.hostUserId == currentUserId,
                         )
                     }
+
                     is W2gWsClient.Event.PlayerState -> {
                         _state.value = _state.value.copy(playerState = event.state)
                     }
+
                     is W2gWsClient.Event.EpisodeChange -> {
                         val current = _state.value.roomDetail
                         _state.value = _state.value.copy(
@@ -139,6 +143,7 @@ class W2gViewModel(
                             playerState = W2gPlayerState(),
                         )
                     }
+
                     is W2gWsClient.Event.MemberJoined -> {
                         val newMember = W2gRoomMember(
                             userId = event.userId,
@@ -151,16 +156,19 @@ class W2gViewModel(
                         }
                         _state.value = _state.value.copy(members = updated)
                     }
+
                     is W2gWsClient.Event.MemberLeft -> {
                         _state.value = _state.value.copy(
                             members = _state.value.members.filter { it.userId != event.userId }
                         )
                     }
+
                     is W2gWsClient.Event.HostChanged -> {
                         _state.value = _state.value.copy(
                             isHost = event.userId == currentUserId
                         )
                     }
+
                     is W2gWsClient.Event.ChatMessage -> {
                         val msg = W2gChatMessage(
                             id = event.id,
@@ -174,6 +182,7 @@ class W2gViewModel(
                             chatMessages = _state.value.chatMessages + msg
                         )
                     }
+
                     is W2gWsClient.Event.Error -> {
                         _state.value = _state.value.copy(error = event.message)
                     }
@@ -195,6 +204,7 @@ class W2gViewModel(
     fun seek(currentTime: Double) = wsClient?.sendSeek(currentTime)
     fun changeEpisode(animeId: String, episodeNumber: Int, server: String, language: String?, quality: String?) =
         wsClient?.sendChangeEpisode(animeId, episodeNumber, server, language, quality)
+
     fun sendMessage(body: String) = wsClient?.sendChat(body)
 
     val amIHost: Boolean get() = _state.value.isHost

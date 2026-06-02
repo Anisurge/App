@@ -126,6 +126,17 @@ fun W2gPlayerScreen(
                 },
                 actions = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (state.isConnected) {
+                            Box(
+                                Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF4CAF50))
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("Live", color = Color(0xFF4CAF50), fontSize = 12.sp)
+                            Spacer(Modifier.width(12.dp))
+                        }
                         Icon(Icons.Outlined.Group, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("${state.members.size}", color = Color.Gray, fontSize = 14.sp)
@@ -182,28 +193,28 @@ fun W2gPlayerScreen(
                 }
                 Spacer(Modifier.height(12.dp))
                 if (state.isConnected) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF4CAF50))
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text("Connected", color = Color(0xFF4CAF50), fontSize = 12.sp)
-                        }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFFFA500))
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text("Connecting...", color = Color(0xFFFFA500), fontSize = 12.sp)
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF4CAF50))
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Connected", color = Color(0xFF4CAF50), fontSize = 12.sp)
                     }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFFA500))
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Connecting...", color = Color(0xFFFFA500), fontSize = 12.sp)
+                    }
+                }
             }
 
             val detail = state.roomDetail
