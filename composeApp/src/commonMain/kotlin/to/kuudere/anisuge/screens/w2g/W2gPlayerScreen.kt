@@ -197,12 +197,14 @@ fun W2gPlayerScreen(
         },
         containerColor = AppColors.background,
     ) { padding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            Column(Modifier.fillMaxSize()) {
+        val showSideChat = isFullscreen && state.chatSheetOpen
+
+        Row(Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .then(if (showSideChat) Modifier.weight(0.7f) else Modifier.weight(1f)),
+            ) {
                 // Player area
                 Box(
                     modifier = Modifier
@@ -552,6 +554,111 @@ fun W2gPlayerScreen(
                     }
                 }
             }
+
+            if (showSideChat) {
+                Box(
+                    modifier = Modifier
+                        .weight(0.3f)
+                        .fillMaxHeight()
+                        .background(AppColors.background)
+                ) {
+                    Column(Modifier.fillMaxSize()) {
+                        Text(
+                            "Room Chat",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp),
+                            state = chatListState,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            items(state.chatMessages, key = { it.id }) { msg ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color.White.copy(alpha = 0.03f))
+                                        .padding(8.dp),
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            msg.username ?: "User",
+                                            color = AppColors.accent,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        if (msg.userId == state.roomDetail?.hostUserId) {
+                                            Spacer(Modifier.width(4.dp))
+                                            Icon(
+                                                Icons.Outlined.Verified,
+                                                null,
+                                                tint = AppColors.accent,
+                                                modifier = Modifier.size(12.dp),
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        msg.body,
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = chatInput,
+                                onValueChange = { chatInput = it },
+                                placeholder = { Text("Type a message...", color = Color.Gray) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                keyboardActions = KeyboardActions(onSend = {
+                                    if (chatInput.isNotBlank()) {
+                                        viewModel.sendMessage(chatInput.trim())
+                                        chatInput = ""
+                                    }
+                                }),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = AppColors.accent,
+                                    unfocusedBorderColor = Color.Gray,
+                                    cursorColor = AppColors.accent,
+                                ),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            IconButton(
+                                onClick = {
+                                    if (chatInput.isNotBlank()) {
+                                        viewModel.sendMessage(chatInput.trim())
+                                        chatInput = ""
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Send,
+                                    "Send",
+                                    tint = AppColors.accent,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -568,7 +675,7 @@ fun W2gPlayerScreen(
         )
     }
 
-    if (state.chatSheetOpen) {
+    if (state.chatSheetOpen && !isFullscreen) {
         ChatSheet(
             chatMessages = state.chatMessages,
             chatListState = chatListState,
