@@ -153,6 +153,16 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[AUTO_SKIP_OUTRO_KEY] = enabled }
     }
 
+    suspend fun hasPlaybackPreferenceValues(): Boolean {
+        val preferences = dataStore.data.first()
+        return preferences[AUTO_PLAY_KEY] != null ||
+                preferences[AUTO_NEXT_KEY] != null ||
+                preferences[AUTO_SKIP_INTRO_KEY] != null ||
+                preferences[AUTO_SKIP_OUTRO_KEY] != null ||
+                preferences[DEFAULT_LANG_KEY] != null ||
+                preferences[SYNC_PERCENTAGE_KEY] != null
+    }
+
     suspend fun setDefaultLang(enabled: Boolean) {
         dataStore.edit { it[DEFAULT_LANG_KEY] = enabled }
     }

@@ -1136,10 +1136,11 @@ class SettingsViewModel(
     }
 
     private suspend fun applySettingsFromServer(loaded: UserSettings) {
-        // If a playback preference sync is in-flight, don't overwrite local playback values
-        // with potentially stale server data. Use local DataStore as source of truth for
-        // playback prefs and only take non-playback fields from server.
-        val effective = if (playbackSettingsSyncJob?.isActive == true) {
+        // Once playback prefs exist locally, don't overwrite them with potentially stale
+        // server data. Use local DataStore as source of truth for playback prefs and
+        // only take non-playback fields from server.
+        val hasLocalPlaybackPrefs = settingsStore.hasPlaybackPreferenceValues()
+        val effective = if (playbackSettingsSyncJob?.isActive == true || hasLocalPlaybackPrefs) {
             val local = readLocalPlaybackSettings()
             loaded.copy(
                 autoPlay = local.autoPlay,
@@ -1155,6 +1156,18 @@ class SettingsViewModel(
         originalSettings = effective
         _uiState.update { it.copy(settings = effective, isLoading = false, hasSettingsChanges = false, isOffline = false) }
         pushPlaybackPrefsToLocalStore(effective)
+        if (hasLocalPlaybackPrefs && playbackSettingsDiffer(loaded, effective)) {
+            settingsService.updateSettings(effective)
+        }
+    }
+
+    private fun playbackSettingsDiffer(left: UserSettings, right: UserSettings): Boolean {
+        return left.autoPlay != right.autoPlay ||
+                left.autoNext != right.autoNext ||
+                left.skipIntro != right.skipIntro ||
+                left.skipOutro != right.skipOutro ||
+                left.defaultLang != right.defaultLang ||
+                left.syncPercentage != right.syncPercentage
     }
 
     private suspend fun applyLocalPlaybackSettingsFallback(
