@@ -2,6 +2,8 @@ package to.kuudere.anisuge.data.models
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.JsonNames
 import kotlinx.serialization.json.JsonElement
 
 @Serializable
@@ -89,9 +91,10 @@ data class W2gRoomMember(
 )
 
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 data class W2gPlayerState(
     val playing: Boolean = false,
-    @SerialName("current_time") val currentTime: Double = 0.0,
+    @SerialName("current_time") @JsonNames("currentTime") val currentTime: Double = 0.0,
     val timestamp: Long = 0,
 )
 

@@ -58,6 +58,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -82,6 +83,10 @@ import to.kuudere.anisuge.player.VideoPlayerSurface
 import to.kuudere.anisuge.player.rememberVideoPlayerState
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ProfileAvatar
+import to.kuudere.anisuge.platform.LockScreenOrientation
+import to.kuudere.anisuge.platform.SyncFullscreen
+import to.kuudere.anisuge.platform.isAndroidPlatform
+import to.kuudere.anisuge.utils.currentTimeMillis
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,6 +103,8 @@ fun W2gPlayerScreen(
     var chatInput by remember { mutableStateOf("") }
     val chatListState = rememberLazyListState()
     var isFullscreen by remember { mutableStateOf(false) }
+    var hostShouldPlay by remember { mutableStateOf(true) }
+    var lastRemoteSeekAtMs by remember { mutableStateOf(0L) }
 
     LaunchedEffect(inviteCode, userId) {
         viewModel.enterRoom(inviteCode, userId)
@@ -109,11 +116,20 @@ fun W2gPlayerScreen(
         }
     }
 
+    LaunchedEffect(state.playerState.timestamp, state.playerState.playing) {
+        if (state.isHost && state.playerState.timestamp > 0) {
+            hostShouldPlay = state.playerState.playing
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             viewModel.disconnect()
         }
     }
+
+    LockScreenOrientation(to.kuudere.anisuge.platform.isAndroidPlatform && isFullscreen)
+    SyncFullscreen(isFullscreen)
 
     Scaffold(
         topBar = {
@@ -201,86 +217,114 @@ fun W2gPlayerScreen(
                     val animeId = state.roomDetail?.animeId
                     val playback = state.playbackSource
                     if (playback != null) {
-                        val playbackUrl = remember(playback.url, playback.headers) {
-                            StreamProxy.proxyUrl(playback.url, playback.headers)
-                        }
-                        val videoState = rememberVideoPlayerState(
-                            url = playbackUrl,
-                            showControls = false,
-                            autoPlay = true,
-                            headers = playback.headers,
-                        )
-                        DisposableEffect(playbackUrl) {
-                            onDispose { StreamProxy.release(playback.url) }
-                        }
-                        VideoPlayerSurface(
-                            state = videoState,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                        videoState.error?.let { err ->
-                            Text(
-                                err,
-                                color = Color(0xFFFFB74D),
-                                fontSize = 12.sp,
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(8.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color.Black.copy(alpha = 0.75f))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                        val room = state.roomDetail
+                        val playbackIdentity = listOf(
+                            room?.animeId.orEmpty(),
+                            room?.anilistId?.toString().orEmpty(),
+                            room?.episodeNumber?.toString().orEmpty(),
+                            room?.server.orEmpty(),
+                            room?.language.orEmpty(),
+                            playback.url,
+                        ).joinToString("|")
+                        key(playbackIdentity) {
+                            val playbackUrl = remember(playback.url, playback.headers) {
+                                StreamProxy.proxyUrl(playback.url, playback.headers)
+                            }
+                            val videoState = rememberVideoPlayerState(
+                                url = playbackUrl,
+                                showControls = false,
+                                autoPlay = true,
+                                headers = playback.headers,
                             )
-                        }
+                            DisposableEffect(playbackUrl) {
+                                onDispose { StreamProxy.release(playback.url) }
+                            }
+                            VideoPlayerSurface(
+                                state = videoState,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            videoState.error?.let { err ->
+                                Text(
+                                    err,
+                                    color = Color(0xFFFFB74D),
+                                    fontSize = 12.sp,
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .padding(8.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color.Black.copy(alpha = 0.75f))
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                )
+                            }
 
-                        // W2GPlayerControls overlay (reusable from WatchScreen)
-                        W2gPlayerControls(
-                            playerState = videoState,
-                            streamingData = null,
-                            title = state.roomDetail?.animeTitle ?: "",
-                            isFullscreen = isFullscreen,
-                            showMediaControls = state.isHost,
-                            showFullscreenButton = true,
-                            onFullscreenToggle = { isFullscreen = !isFullscreen },
-                            onBack = {
-                                scope.launch {
-                                    viewModel.leaveRoom(inviteCode)
-                                    onBack()
-                                }
-                            },
-                            onChatClick = {
-                                // Scroll chat list to bottom
-                                scope.launch {
-                                    if (state.chatMessages.isNotEmpty()) {
-                                        chatListState.animateScrollToItem(state.chatMessages.size - 1)
+                            // W2GPlayerControls overlay
+                            W2gPlayerControls(
+                                playerState = videoState,
+                                streamingData = null,
+                                title = state.roomDetail?.animeTitle ?: "",
+                                isFullscreen = isFullscreen,
+                                showMediaControls = state.isHost,
+                                showFullscreenButton = true,
+                                showLibraryActions = false,
+                                onFullscreenToggle = { isFullscreen = !isFullscreen },
+                                onBack = {},
+                                onChatClick = {
+                                    viewModel.setChatSheetOpen(true)
+                                },
+                                onSettingsClick = {},
+                                onPlayPause = if (state.isHost) { shouldPlay ->
+                                    hostShouldPlay = shouldPlay
+                                    if (shouldPlay) viewModel.play(videoState.position)
+                                    else viewModel.pause(videoState.position)
+                                } else null,
+                                onSeek = if (state.isHost) { pos ->
+                                    viewModel.seek(pos, playing = hostShouldPlay)
+                                } else null,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            // Host: periodic position broadcast so non-hosts can correct drift
+                            if (state.isHost) {
+                                LaunchedEffect(playbackIdentity) {
+                                    hostShouldPlay = true
+                                    while (true) {
+                                        delay(3_000)
+                                        val syncPosition = if (hostShouldPlay) {
+                                            val ledPosition = videoState.position + 2.0
+                                            if (videoState.duration > 0) ledPosition.coerceAtMost(videoState.duration) else ledPosition
+                                        } else {
+                                            videoState.position
+                                        }
+                                        viewModel.syncPosition(syncPosition, playing = hostShouldPlay)
                                     }
                                 }
-                            },
-                            onSettingsClick = {
-                                // TODO: show minimal settings sheet with screen mode only
-                            },
-                            onPlayPause = if (state.isHost) { isPlaying ->
-                                if (!isPlaying) viewModel.play(videoState.position)
-                                else viewModel.pause(videoState.position)
-                            } else null,
-                            onSeek = if (state.isHost) { pos ->
-                                viewModel.seek(pos)
-                            } else null,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                            }
 
-                        // Remote sync for non-host (host's own actions already applied locally)
-                        if (!state.isHost) {
-                            LaunchedEffect(state.playerState) {
-                                val ps = state.playerState
-                                if (ps.currentTime > 0) {
-                                    val diff = abs(videoState.position - ps.currentTime)
-                                    if (diff > 3.0) {
-                                        videoState.seekTarget = ps.currentTime
+                            // Non-host remote sync
+                            if (!state.isHost) {
+                                LaunchedEffect(state.playerState, playbackIdentity) {
+                                    val ps = state.playerState
+                                    if (ps.timestamp > 0) {
+                                        val target = estimateW2gHostPosition(ps, videoState.duration)
+                                        if (target > 0) {
+                                            val diff = abs(videoState.position - target)
+                                            val threshold = if (ps.playing) 5.0 else 0.75
+                                            val now = currentTimeMillis()
+                                            val cooldownElapsed = now - lastRemoteSeekAtMs >= 2_000
+                                            val isLargeJump = diff > 12.0
+                                            if (diff > threshold && (!ps.playing || cooldownElapsed || isLargeJump)) {
+                                                videoState.seekTarget = target
+                                                lastRemoteSeekAtMs = now
+                                            }
+                                        }
+                                        if (ps.playing && videoState.isPaused) {
+                                            videoState.pauseRequested = false
+                                        } else if (!ps.playing && videoState.isPlaying) {
+                                            videoState.pauseRequested = true
+                                        }
+                                    } else if (videoState.isPaused) {
+                                        videoState.pauseRequested = false
                                     }
-                                }
-                                if (ps.playing && videoState.isPaused) {
-                                    videoState.pauseRequested = false
-                                } else if (!ps.playing && videoState.isPlaying) {
-                                    videoState.pauseRequested = true
                                 }
                             }
                         }
@@ -523,6 +567,19 @@ fun W2gPlayerScreen(
             onStart = viewModel::applyHostPickerSelection,
         )
     }
+
+    if (state.chatSheetOpen) {
+        ChatSheet(
+            chatMessages = state.chatMessages,
+            chatListState = chatListState,
+            onDismiss = { viewModel.setChatSheetOpen(false) },
+            onSend = { body ->
+                if (body.isNotBlank()) {
+                    viewModel.sendMessage(body.trim())
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -721,6 +778,20 @@ private fun W2gAnimeSearchRow(anime: AnimeItem, onClick: () -> Unit) {
     }
 }
 
+private fun estimateW2gHostPosition(
+    playerState: to.kuudere.anisuge.data.models.W2gPlayerState,
+    duration: Double,
+): Double {
+    if (playerState.currentTime <= 0) return 0.0
+    val elapsedSeconds = if (playerState.playing && playerState.timestamp > 0) {
+        ((currentTimeMillis() - playerState.timestamp).coerceAtLeast(0L) / 1000.0)
+    } else {
+        0.0
+    }
+    val target = playerState.currentTime + elapsedSeconds
+    return if (duration > 0) target.coerceIn(0.0, duration) else target.coerceAtLeast(0.0)
+}
+
 @Composable
 private fun W2gSelectedAnimeSummary(anime: AnimeItem) {
     Row(
@@ -741,6 +812,94 @@ private fun W2gSelectedAnimeSummary(anime: AnimeItem) {
         Column(Modifier.weight(1f)) {
             Text(anime.displayTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text("Sub ${anime.subbed} · Dub ${anime.dubbed}", color = Color.Gray, fontSize = 12.sp)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChatSheet(
+    chatMessages: List<W2gChatMessage>,
+    chatListState: androidx.compose.foundation.lazy.LazyListState,
+    onDismiss: () -> Unit,
+    onSend: (String) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var chatInput by remember { mutableStateOf("") }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppColors.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(400.dp)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 28.dp),
+        ) {
+            Text("Room Chat", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                state = chatListState,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(chatMessages, key = { it.id }) { msg ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.03f))
+                            .padding(8.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                msg.username ?: "User",
+                                color = AppColors.accent,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        Text(msg.body, color = Color.White, fontSize = 14.sp)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = chatInput,
+                    onValueChange = { chatInput = it },
+                    placeholder = { Text("Type a message...", color = Color.Gray) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = {
+                        onSend(chatInput)
+                        chatInput = ""
+                    }),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = AppColors.accent,
+                        unfocusedBorderColor = Color.Gray,
+                        cursorColor = AppColors.accent,
+                    ),
+                )
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = {
+                    onSend(chatInput)
+                    chatInput = ""
+                }) {
+                    Icon(Icons.Outlined.Send, "Send", tint = AppColors.accent)
+                }
+            }
         }
     }
 }

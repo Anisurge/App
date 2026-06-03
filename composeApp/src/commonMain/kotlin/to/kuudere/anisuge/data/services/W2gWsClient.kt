@@ -229,9 +229,10 @@ class W2gWsClient(
         })))
     }
 
-    fun sendSeek(currentTime: Double) {
+    fun sendSeek(currentTime: Double, playing: Boolean = true) {
         sendRaw(json.encodeToString(W2gWsEnvelope("seek", buildJsonObject {
             put("currentTime", currentTime)
+            put("playing", playing)
         })))
     }
 

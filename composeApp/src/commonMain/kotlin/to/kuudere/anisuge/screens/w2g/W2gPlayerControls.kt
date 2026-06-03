@@ -69,7 +69,7 @@ fun W2gPlayerControls(
     onSettingsClick: () -> Unit = {},
     onChatClick: () -> Unit = {},
     onBoostSpeedChange: (Boolean) -> Unit = {},
-    onPlayPause: ((isPlaying: Boolean) -> Unit)? = null,
+    onPlayPause: ((shouldPlay: Boolean) -> Unit)? = null,
     onSeek: ((position: Double) -> Unit)? = null,
     isOffline: Boolean = false,
     onExit: () -> Unit = {},
@@ -253,6 +253,7 @@ fun W2gPlayerControls(
                             val newPos = (playerState.position - 10.0).coerceAtLeast(0.0)
                             playerState.seekTarget = newPos
                             expectedPosition = newPos
+                            onSeek?.invoke(newPos)
 
                             doubleTapResetJob?.cancel()
                             doubleTapResetJob = scope.launch {
@@ -267,6 +268,7 @@ fun W2gPlayerControls(
                             val newPos = (playerState.position + 10.0).coerceAtMost(playerState.duration)
                             playerState.seekTarget = newPos
                             expectedPosition = newPos
+                            onSeek?.invoke(newPos)
 
                             doubleTapResetJob?.cancel()
                             doubleTapResetJob = scope.launch {
@@ -278,7 +280,8 @@ fun W2gPlayerControls(
                             // Center double tap toggles play/pause
                             val wasPaused = playerState.isPaused
                             playerState.pauseRequested = !wasPaused
-                            onPlayPause?.invoke(wasPaused)
+                            val shouldPlay = wasPaused
+                            onPlayPause?.invoke(shouldPlay)
                         }
 
                         controlsVisible = true
@@ -407,14 +410,6 @@ fun W2gPlayerControls(
                                     .padding(horizontal = 8.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(onClick = onBack) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "Back",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                }
                                 if (title.isNotEmpty()) {
                                     Text(
                                         text = title,
@@ -427,14 +422,6 @@ fun W2gPlayerControls(
                                     )
                                 } else {
                                     Spacer(Modifier.weight(1f))
-                                }
-                                IconButton(onClick = onSettingsClick) {
-                                    Icon(
-                                        Icons.Default.Settings,
-                                        contentDescription = "Settings",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(26.dp)
-                                    )
                                 }
 
                                 to.kuudere.anisuge.platform.WindowManagementButtons(
@@ -729,7 +716,8 @@ fun W2gPlayerControls(
                                                 .clickable {
                                                     val wasPaused = playerState.isPaused
                                                     playerState.pauseRequested = !wasPaused
-                                                    onPlayPause?.invoke(wasPaused)
+                                                    val shouldPlay = wasPaused
+                                                    onPlayPause?.invoke(shouldPlay)
                                                     recordInteraction(forceShow = false)
                                                 },
                                             contentAlignment = Alignment.Center
@@ -777,17 +765,15 @@ fun W2gPlayerControls(
 
                                 // Right actions: Chat, Fullscreen/PiP.
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (showLibraryActions) {
-                                        IconButton(onClick = {
-                                            onChatClick(); recordInteraction(forceShow = false)
-                                        }, modifier = Modifier.size(40.dp)) {
-                                            Icon(
-                                                Icons.Default.Chat,
-                                                null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                        }
+                                    IconButton(onClick = {
+                                        onChatClick(); recordInteraction(forceShow = false)
+                                    }, modifier = Modifier.size(40.dp)) {
+                                        Icon(
+                                            Icons.Default.Chat,
+                                            null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(22.dp)
+                                        )
                                     }
                                     // MAL Sync button
                                     if (onSyncMALClick != null) {
@@ -998,5 +984,4 @@ private fun getPictureInPictureIcon(): ImageVector {
         }
     }.build()
 }
-
 

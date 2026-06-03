@@ -76,6 +76,7 @@ data class W2gUiState(
     val hostPicker: W2gHostPickerState = W2gHostPickerState(),
     val error: String? = null,
     val loadingMessage: String? = null,
+    val chatSheetOpen: Boolean = false,
 ) {
     val filteredRooms: List<W2gRoomSummary>
         get() = if (searchQuery.isBlank()) rooms
@@ -648,6 +649,7 @@ class W2gViewModel(
                         }
 
                     is W2gWsClient.Event.EpisodeChange -> {
+                        playbackLoadJob?.cancel()
                         val current = _state.value.roomDetail
                         _state.value = _state.value.copy(
                             roomDetail = current?.copy(
@@ -664,8 +666,12 @@ class W2gViewModel(
                                 streamHeaders = event.streamHeaders,
                             ),
                             playerState = W2gPlayerState(),
+                            playbackSource = null,
+                            isLoadingPlayback = true,
                         )
-                        loadPlaybackFor(_state.value.roomDetail)
+                        playbackLoadJob = viewModelScope.launch {
+                            loadPlaybackFor(_state.value.roomDetail)
+                        }
                     }
 
                     is W2gWsClient.Event.RoomClosed -> {
@@ -748,7 +754,8 @@ class W2gViewModel(
 
     fun play(currentTime: Double) = wsClient?.sendPlay(currentTime)
     fun pause(currentTime: Double) = wsClient?.sendPause(currentTime)
-    fun seek(currentTime: Double) = wsClient?.sendSeek(currentTime)
+    fun seek(currentTime: Double, playing: Boolean = true) = wsClient?.sendSeek(currentTime, playing)
+    fun syncPosition(currentTime: Double, playing: Boolean) = wsClient?.sendSeek(currentTime, playing)
     fun changeEpisode(
         animeId: String,
         episodeNumber: Int,
@@ -772,8 +779,12 @@ class W2gViewModel(
                 server = server,
                 language = language,
                 quality = quality,
+                streamUrl = null,
+                streamHeaders = null,
             ),
             playerState = W2gPlayerState(),
+            playbackSource = null,
+            isLoadingPlayback = true,
         )
         playbackLoadJob?.cancel()
         playbackLoadJob = viewModelScope.launch {
@@ -797,6 +808,10 @@ class W2gViewModel(
     }
 
     fun sendMessage(body: String) = wsClient?.sendChat(body)
+
+    fun setChatSheetOpen(open: Boolean) {
+        _state.value = _state.value.copy(chatSheetOpen = open)
+    }
 
     val amIHost: Boolean get() = _state.value.isHost
 
