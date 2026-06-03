@@ -111,16 +111,24 @@ class W2gRoomService(
         }
     }
 
-    suspend fun leaveRoom(inviteCode: String): Boolean {
+    suspend fun leaveRoom(inviteCode: String, action: String? = null): Boolean {
         return try {
             val stored = sessionStore.get() ?: return false
             val response = httpClient.post("$baseUrl/w2g/rooms/$inviteCode/leave") {
                 applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
-                setBody(emptyMap<String, String>())
+                setBody(action?.let { mapOf("action" to it) } ?: emptyMap<String, String>())
             }
-            response.status.isSuccess()
+            if (response.status.isSuccess()) {
+                lastErrorMessage = null
+                true
+            } else {
+                lastErrorMessage = parseError(response)
+                println("[W2gRoomService] leaveRoom HTTP ${response.status.value}: $lastErrorMessage")
+                false
+            }
         } catch (e: Exception) {
+            lastErrorMessage = e.message
             println("[W2gRoomService] leaveRoom error: ${e.message}")
             false
         }

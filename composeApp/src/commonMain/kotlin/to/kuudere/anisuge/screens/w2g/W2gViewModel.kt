@@ -199,11 +199,12 @@ class W2gViewModel(
             _state.value = _state.value.copy(
                 isLoadingPlayback = false,
                 playbackSource = W2gPlaybackSource(roomStreamUrl, room?.streamHeaders ?: emptyMap()),
+                error = null,
             )
             return
         }
 
-        _state.value = _state.value.copy(isLoadingPlayback = true, playbackSource = null)
+        _state.value = _state.value.copy(isLoadingPlayback = true, playbackSource = null, error = null)
         val resolvedIds = resolveStreamingIds(animeId, initialAnilistId, initialMalId)
         val anilistId = resolvedIds.anilistId
         if (anilistId == null) {
@@ -276,7 +277,7 @@ class W2gViewModel(
         _state.value = _state.value.copy(
             isLoadingPlayback = false,
             playbackSource = resolvedUrl?.let { W2gPlaybackSource(it, resolvedHeaders) },
-            error = if (stream == null) "No stream found for this episode/server" else _state.value.error,
+            error = if (stream == null) "No stream found for this episode/server" else null,
         )
 
         // Host: store resolved stream URL on the room so late joiners can use it
@@ -608,9 +609,13 @@ class W2gViewModel(
         return result
     }
 
-    suspend fun leaveRoom(inviteCode: String): Boolean {
+    suspend fun leaveRoom(inviteCode: String, closeRoom: Boolean = false): Boolean {
+        val left = roomService.leaveRoom(inviteCode, action = if (closeRoom) "close" else "transfer")
+        if (!left) {
+            _state.value = _state.value.copy(error = roomService.lastError ?: "Failed to leave room")
+            return false
+        }
         disconnect()
-        val left = roomService.leaveRoom(inviteCode)
         clearActiveRoom()
         loadRooms()
         return left
@@ -685,6 +690,7 @@ class W2gViewModel(
                             playerState = W2gPlayerState(),
                             playbackSource = null,
                             isLoadingPlayback = true,
+                            error = null,
                         )
                         playbackLoadJob = viewModelScope.launch {
                             loadPlaybackFor(_state.value.roomDetail)
@@ -719,8 +725,13 @@ class W2gViewModel(
                         }
 
                         is W2gWsClient.Event.HostChanged -> {
+                            val current = _state.value.roomDetail
                             _state.value = _state.value.copy(
-                                isHost = isCurrentUserHost(event.userId)
+                                roomDetail = current?.copy(
+                                    hostUserId = event.userId,
+                                    hostUsername = event.username,
+                                ),
+                                isHost = isCurrentUserHost(event.userId),
                             )
                         }
 
@@ -802,6 +813,7 @@ class W2gViewModel(
             playerState = W2gPlayerState(),
             playbackSource = null,
             isLoadingPlayback = true,
+            error = null,
         )
         playbackLoadJob?.cancel()
         playbackLoadJob = viewModelScope.launch {
