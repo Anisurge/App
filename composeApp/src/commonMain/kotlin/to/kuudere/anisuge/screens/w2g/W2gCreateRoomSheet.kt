@@ -5,10 +5,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -21,8 +31,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -41,13 +54,14 @@ fun W2gCreateRoomSheet(
 
     var roomName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = AppColors.background,
+        containerColor = AppColors.surface,
     ) {
         Column(
             modifier = Modifier
@@ -55,48 +69,71 @@ fun W2gCreateRoomSheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
         ) {
-            Text("Create a Room", color = Color.White, fontSize = 20.sp)
+            Text(
+                "Create a room",
+                color = AppColors.text,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "You will join as host and can pick the anime after the room opens.",
+                color = AppColors.textMuted,
+                fontSize = 13.sp,
+            )
 
             Spacer(Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = roomName,
-                onValueChange = { roomName = it },
+                onValueChange = {
+                    roomName = it
+                    error = null
+                },
                 label = { Text("Room Name") },
+                leadingIcon = {
+                    Icon(Icons.Outlined.Group, null, tint = AppColors.textMuted)
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedLabelColor = AppColors.accent,
-                    unfocusedLabelColor = Color.Gray,
-                    focusedBorderColor = AppColors.accent,
-                    unfocusedBorderColor = Color.Gray,
-                ),
+                colors = createRoomFieldColors(),
             )
 
             Spacer(Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
-                label = { Text("Password (optional, leave blank for public)") },
+                onValueChange = {
+                    password = it
+                    error = null
+                },
+                label = { Text("Password (optional)") },
+                supportingText = { Text("Leave blank for a public room.") },
+                leadingIcon = {
+                    Icon(Icons.Outlined.Lock, null, tint = AppColors.textMuted)
+                },
+                trailingIcon = {
+                    if (password.isNotEmpty()) {
+                        IconButton(onClick = { showPassword = !showPassword }) {
+                            Icon(
+                                if (showPassword) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                contentDescription = if (showPassword) "Hide password" else "Show password",
+                                tint = AppColors.textMuted,
+                            )
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedLabelColor = AppColors.accent,
-                    unfocusedLabelColor = Color.Gray,
-                    focusedBorderColor = AppColors.accent,
-                    unfocusedBorderColor = Color.Gray,
-                ),
+                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                colors = createRoomFieldColors(),
             )
 
             if (error != null) {
                 Spacer(Modifier.height(8.dp))
-                Text(error!!, color = Color.Red, fontSize = 13.sp)
+                Text(error!!, color = AppColors.error, fontSize = 13.sp)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -124,11 +161,37 @@ fun W2gCreateRoomSheet(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AppColors.accent,
+                    contentColor = AppColors.onAccent,
+                    disabledContainerColor = AppColors.accent.copy(alpha = 0.45f),
+                    disabledContentColor = AppColors.onAccent.copy(alpha = 0.72f),
+                ),
                 enabled = !isLoading,
             ) {
-                Text(if (isLoading) "Creating..." else "Create Room", fontSize = 16.sp)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = AppColors.onAccent,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (isLoading) "Creating..." else "Create room", fontSize = 16.sp, maxLines = 1)
             }
         }
     }
 }
+
+@Composable
+private fun createRoomFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = AppColors.text,
+    unfocusedTextColor = AppColors.text,
+    focusedLabelColor = AppColors.accent,
+    unfocusedLabelColor = AppColors.textMuted,
+    focusedBorderColor = AppColors.accent,
+    unfocusedBorderColor = AppColors.border,
+    focusedSupportingTextColor = AppColors.textDim,
+    unfocusedSupportingTextColor = AppColors.textDim,
+    cursorColor = AppColors.accent,
+)

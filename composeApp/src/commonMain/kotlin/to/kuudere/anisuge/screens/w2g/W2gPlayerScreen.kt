@@ -46,6 +46,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -668,6 +669,7 @@ fun W2gPlayerScreen(
             onDismiss = viewModel::dismissHostPicker,
             onQueryChange = viewModel::updateHostPickerQuery,
             onAnimeSelected = viewModel::selectHostAnime,
+            onChangeAnime = viewModel::clearHostAnimeSelection,
             onEpisodeChange = viewModel::setHostEpisode,
             onLanguageSelected = viewModel::setHostLanguage,
             onServerSelected = viewModel::setHostServer,
@@ -748,6 +750,7 @@ private fun HostEpisodeSheet(
     onDismiss: () -> Unit,
     onQueryChange: (String) -> Unit,
     onAnimeSelected: (AnimeItem) -> Unit,
+    onChangeAnime: () -> Unit,
     onEpisodeChange: (String) -> Unit,
     onLanguageSelected: (String) -> Unit,
     onServerSelected: (String) -> Unit,
@@ -758,7 +761,7 @@ private fun HostEpisodeSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = AppColors.background,
+        containerColor = AppColors.surface,
     ) {
         Column(
             modifier = Modifier
@@ -766,7 +769,7 @@ private fun HostEpisodeSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
         ) {
-            Text("Search Anime to Watch", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+            Text("Search Anime to Watch", color = AppColors.text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(14.dp))
 
             OutlinedTextField(
@@ -788,7 +791,25 @@ private fun HostEpisodeSheet(
                 ) {
                     if (picker.isSearching) {
                         item {
-                            Text("Searching...", color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp))
+                            Text("Searching...", color = AppColors.textMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp))
+                        }
+                    } else if (picker.results.isEmpty()) {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(AppColors.surfaceVariant.copy(alpha = 0.7f))
+                                    .padding(14.dp),
+                            ) {
+                                Text("No anime found", color = AppColors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Try a shorter title or search by the English name.",
+                                    color = AppColors.textMuted,
+                                    fontSize = 12.sp,
+                                )
+                            }
                         }
                     }
                     items(picker.results, key = { it.animeId }) { anime ->
@@ -796,7 +817,7 @@ private fun HostEpisodeSheet(
                     }
                 }
             } else {
-                W2gSelectedAnimeSummary(anime = picker.selectedAnime)
+                W2gSelectedAnimeSummary(anime = picker.selectedAnime, onChangeAnime = onChangeAnime)
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = picker.episode,
@@ -824,6 +845,16 @@ private fun HostEpisodeSheet(
                         modifier = Modifier.fillMaxWidth().height(180.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        if (picker.servers.isEmpty()) {
+                            item {
+                                Text(
+                                    "No active servers for ${picker.language.orEmpty().uppercase()}.",
+                                    color = AppColors.textMuted,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                )
+                            }
+                        }
                         items(picker.servers, key = { it.id }) { server ->
                             W2gServerRow(
                                 server = server,
@@ -847,7 +878,7 @@ private fun HostEpisodeSheet(
 
             if (picker.error != null) {
                 Spacer(Modifier.height(8.dp))
-                Text(picker.error, color = Color.Red, fontSize = 13.sp)
+                Text(picker.error, color = AppColors.error, fontSize = 13.sp)
             }
         }
     }
@@ -872,7 +903,7 @@ private fun W2gAnimeSearchRow(anime: AnimeItem, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(anime.displayTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(anime.displayTitle, color = AppColors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val meta = listOfNotNull(
                 anime.format.takeIf { it.isNotBlank() },
                 anime.seasonYear?.toString(),
@@ -900,12 +931,12 @@ private fun estimateW2gHostPosition(
 }
 
 @Composable
-private fun W2gSelectedAnimeSummary(anime: AnimeItem) {
+private fun W2gSelectedAnimeSummary(anime: AnimeItem, onChangeAnime: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color.White.copy(alpha = 0.05f))
+            .background(AppColors.surfaceVariant.copy(alpha = 0.72f))
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -917,8 +948,11 @@ private fun W2gSelectedAnimeSummary(anime: AnimeItem) {
         )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(anime.displayTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text("Sub ${anime.subbed} · Dub ${anime.dubbed}", color = Color.Gray, fontSize = 12.sp)
+            Text(anime.displayTitle, color = AppColors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("Sub ${anime.subbed} · Dub ${anime.dubbed}", color = AppColors.textMuted, fontSize = 12.sp)
+        }
+        TextButton(onClick = onChangeAnime) {
+            Text("Change", color = AppColors.accent, fontSize = 12.sp, maxLines = 1)
         }
     }
 }

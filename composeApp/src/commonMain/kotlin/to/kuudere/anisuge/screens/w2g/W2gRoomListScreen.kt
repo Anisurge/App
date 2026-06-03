@@ -1,6 +1,7 @@
 package to.kuudere.anisuge.screens.w2g
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -134,7 +136,7 @@ fun W2gRoomListScreen(
                     ) {
                         Icon(Icons.Outlined.PlayArrow, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Create Room", fontSize = 14.sp)
+                        Text("Create", fontSize = 14.sp, maxLines = 1)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -174,6 +176,14 @@ fun W2gRoomListScreen(
                 ),
             )
 
+            if (!state.isLoadingRooms && state.filteredRooms.isNotEmpty()) {
+                RoomListSummary(
+                    roomCount = state.filteredRooms.size,
+                    isFiltered = state.searchQuery.isNotBlank(),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
+
             when {
                 state.isLoadingRooms -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -181,22 +191,11 @@ fun W2gRoomListScreen(
                     }
                 }
                 state.filteredRooms.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                if (state.searchQuery.isNotBlank()) "No rooms matching \"${state.searchQuery}\""
-                                else "No active rooms found",
-                                color = AppColors.textMuted,
-                                fontSize = 16.sp,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                "Create one or check back later!",
-                                color = Color.Gray,
-                                fontSize = 14.sp,
-                            )
-                        }
-                    }
+                    EmptyRoomsState(
+                        isSearching = state.searchQuery.isNotBlank(),
+                        query = state.searchQuery,
+                        onCreateRoom = { showCreateSheet = true },
+                    )
                 }
                 else -> {
                     LazyColumn(
@@ -305,6 +304,103 @@ fun W2gRoomListScreen(
 }
 
 @Composable
+private fun RoomListSummary(
+    roomCount: Int,
+    isFiltered: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = if (isFiltered) "Search results" else "Active rooms",
+                color = AppColors.text,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "$roomCount ${if (roomCount == 1) "room" else "rooms"} available",
+                color = AppColors.textDim,
+                fontSize = 12.sp,
+            )
+        }
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color(0xFF4CAF50).copy(alpha = 0.12f))
+                .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.24f), RoundedCornerShape(999.dp))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF4CAF50)),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("Live", color = Color(0xFF75D37A), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun EmptyRoomsState(
+    isSearching: Boolean,
+    query: String,
+    onCreateRoom: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(AppColors.surfaceVariant.copy(alpha = 0.68f))
+                .border(1.dp, AppColors.border, RoundedCornerShape(16.dp))
+                .padding(horizontal = 20.dp, vertical = 28.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(AppColors.accent.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.Group, null, tint = AppColors.accent, modifier = Modifier.size(28.dp))
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(
+                if (isSearching) "No rooms matching \"$query\"" else "No active rooms yet",
+                color = AppColors.text,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                if (isSearching) "Try another room name, host, or invite code."
+                else "Start a watch room and invite friends from the player.",
+                color = AppColors.textMuted,
+                fontSize = 13.sp,
+            )
+            Spacer(Modifier.height(18.dp))
+            Button(
+                onClick = onCreateRoom,
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+            ) {
+                Icon(Icons.Outlined.PlayArrow, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Create room", maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
 private fun RoomCard(
     room: W2gRoomSummary,
     onClick: () -> Unit,
@@ -313,7 +409,8 @@ private fun RoomCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.05f))
+            .background(AppColors.surfaceVariant.copy(alpha = 0.74f))
+            .border(1.dp, AppColors.border, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -345,7 +442,7 @@ private fun RoomCard(
         Column(Modifier.weight(1f)) {
             Text(
                 text = room.roomName,
-                color = Color.White,
+                color = AppColors.text,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 15.sp,
                 maxLines = 1,
@@ -362,11 +459,17 @@ private fun RoomCard(
                 )
                 Spacer(Modifier.height(2.dp))
             }
-            Text(
-                text = "Host: ${room.hostUsername ?: "Unknown"}",
-                color = Color.Gray,
-                fontSize = 12.sp,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                W2gMetaChip("Host: ${room.hostUsername ?: "Unknown"}", modifier = Modifier.weight(1f, fill = false))
+                if (room.hasPassword) {
+                    W2gMetaChip("Locked", icon = { Icon(Icons.Outlined.Lock, null, tint = Color(0xFFFFB74D), modifier = Modifier.size(13.dp)) })
+                } else {
+                    W2gMetaChip("Public")
+                }
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -383,15 +486,41 @@ private fun RoomCard(
                     fontSize = 13.sp,
                 )
             }
-            if (room.hasPassword) {
-                Spacer(Modifier.height(6.dp))
-                Icon(
-                    Icons.Outlined.Lock,
-                    contentDescription = "Password protected",
-                    modifier = Modifier.size(16.dp),
-                    tint = Color(0xFFFFA500),
-                )
-            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = if (room.animeTitle != null) "Watching" else "Waiting",
+                color = if (room.animeTitle != null) Color(0xFF75D37A) else AppColors.textDim,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
         }
+    }
+}
+
+@Composable
+private fun W2gMetaChip(
+    text: String,
+    modifier: Modifier = Modifier,
+    icon: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(AppColors.background.copy(alpha = 0.48f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            icon()
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(
+            text = text,
+            color = AppColors.textDim,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }

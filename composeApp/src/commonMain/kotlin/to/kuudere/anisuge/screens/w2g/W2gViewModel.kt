@@ -397,6 +397,23 @@ class W2gViewModel(
         )
     }
 
+    fun clearHostAnimeSelection() {
+        val picker = _state.value.hostPicker
+        _state.value = _state.value.copy(
+            hostPicker = picker.copy(
+                selectedAnime = null,
+                episode = "1",
+                language = null,
+                server = null,
+                servers = emptyList(),
+                error = null,
+            ),
+        )
+        if (picker.results.isEmpty()) {
+            searchHostAnime(picker.query)
+        }
+    }
+
     fun setHostEpisode(value: String) {
         _state.value = _state.value.copy(
             hostPicker = _state.value.hostPicker.copy(
