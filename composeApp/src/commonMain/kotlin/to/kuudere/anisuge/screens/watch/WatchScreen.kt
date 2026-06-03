@@ -284,8 +284,12 @@ fun WatchScreen(
                 )
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    val isPanelActive = uiState.activeSidePanel != null
-                    val useFullscreenSplit = uiState.isFullscreen && uiState.activeSidePanel == "comments"
+                    var fullscreenCommentsOpen by remember { mutableStateOf(false) }
+                    LaunchedEffect(uiState.isFullscreen) {
+                        if (!uiState.isFullscreen) fullscreenCommentsOpen = false
+                    }
+                    val useFullscreenSplit = uiState.isFullscreen && fullscreenCommentsOpen
+                    val isPanelActive = uiState.activeSidePanel != null && !useFullscreenSplit
                     val sidePanelWidth = 350.dp
 
                     Row(Modifier.fillMaxSize()) {
@@ -305,7 +309,23 @@ fun WatchScreen(
                                     isPremiumUser = isPremiumUser,
                                     onFullscreenToggle = { viewModel.setFullscreen(!uiState.isFullscreen) },
                                     onBack = handleBack,
-                                    onExit = onExit
+                                    onExit = onExit,
+                                    onInfoClick = {
+                                        fullscreenCommentsOpen = false
+                                        viewModel.toggleSidePanel("info")
+                                    },
+                                    onEpisodesClick = {
+                                        fullscreenCommentsOpen = false
+                                        viewModel.toggleSidePanel("episodes")
+                                    },
+                                    onCommentsClick = {
+                                        if (uiState.isFullscreen) {
+                                            fullscreenCommentsOpen = true
+                                            viewModel.toggleSidePanel(null)
+                                        } else {
+                                            viewModel.toggleSidePanel("comments")
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -316,7 +336,11 @@ fun WatchScreen(
                                     .weight(0.3f)
                                     .fillMaxHeight()
                             ) {
-                                SidePanelContent(uiState, viewModel, animeId)
+                                WatchCommentsContent(
+                                    animeId = animeId,
+                                    uiState = uiState,
+                                    onClose = { fullscreenCommentsOpen = false },
+                                )
                             }
                         } else {
                             AnimatedVisibility(

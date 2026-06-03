@@ -308,7 +308,7 @@ fun W2gPlayerScreen(
                                         val target = estimateW2gHostPosition(ps, videoState.duration)
                                         if (target > 0) {
                                             val diff = abs(videoState.position - target)
-                                            val threshold = if (ps.playing) 5.0 else 0.75
+                                            val threshold = if (ps.playing) 1.25 else 0.75
                                             val now = currentTimeMillis()
                                             val cooldownElapsed = now - lastRemoteSeekAtMs >= 2_000
                                             val isLargeJump = diff > 12.0
