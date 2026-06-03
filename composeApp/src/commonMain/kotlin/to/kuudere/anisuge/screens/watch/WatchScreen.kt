@@ -285,10 +285,15 @@ fun WatchScreen(
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
                     val isPanelActive = uiState.activeSidePanel != null
+                    val useFullscreenSplit = uiState.isFullscreen && uiState.activeSidePanel == "comments"
                     val sidePanelWidth = 350.dp
 
                     Row(Modifier.fillMaxSize()) {
-                        Box(Modifier.weight(1f).fillMaxHeight()) {
+                        Box(
+                            Modifier
+                                .weight(if (useFullscreenSplit) 0.7f else 1f)
+                                .fillMaxHeight()
+                        ) {
                             // Use unique key so player FULLY resets when video changes
                             // This prevents old video from persisting when switching online->offline
                             val playerKey = "$animeId-${uiState.currentEpisodeNumber}-${offlinePath ?: "online"}"
@@ -305,19 +310,29 @@ fun WatchScreen(
                             }
                         }
 
-                        AnimatedVisibility(
-                            visible = isPanelActive,
-                            enter = slideInHorizontally(animationSpec = tween(300)) { it } + expandHorizontally(
-                                animationSpec = tween(300),
-                                expandFrom = Alignment.Start
-                            ) + fadeIn(animationSpec = tween(300)),
-                            exit = slideOutHorizontally(animationSpec = tween(300)) { it } + shrinkHorizontally(
-                                animationSpec = tween(300),
-                                shrinkTowards = Alignment.Start
-                            ) + fadeOut(animationSpec = tween(300))
-                        ) {
-                            Box(Modifier.width(sidePanelWidth).fillMaxHeight()) {
+                        if (useFullscreenSplit) {
+                            Box(
+                                Modifier
+                                    .weight(0.3f)
+                                    .fillMaxHeight()
+                            ) {
                                 SidePanelContent(uiState, viewModel, animeId)
+                            }
+                        } else {
+                            AnimatedVisibility(
+                                visible = isPanelActive,
+                                enter = slideInHorizontally(animationSpec = tween(300)) { it } + expandHorizontally(
+                                    animationSpec = tween(300),
+                                    expandFrom = Alignment.Start
+                                ) + fadeIn(animationSpec = tween(300)),
+                                exit = slideOutHorizontally(animationSpec = tween(300)) { it } + shrinkHorizontally(
+                                    animationSpec = tween(300),
+                                    shrinkTowards = Alignment.Start
+                                ) + fadeOut(animationSpec = tween(300))
+                            ) {
+                                Box(Modifier.width(sidePanelWidth).fillMaxHeight()) {
+                                    SidePanelContent(uiState, viewModel, animeId)
+                                }
                             }
                         }
                     }
@@ -1087,40 +1102,85 @@ private fun AndroidWatchPageLayout(
         // (both emitted by WatchVideoPlayer) share an overlay parent. Without this wrapper, the
         // overlay competes with the player for vertical space inside the Column and stays
         // invisible in fullscreen.
-        Box(
-            modifier = if (uiState.isFullscreen) {
-                Modifier
+        if (uiState.isFullscreen) {
+            Row(
+                modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black)
-            } else {
-                Modifier
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(if (selectedTab == WatchPageTab.Comments) 0.7f else 1f)
+                        .fillMaxHeight()
+                        .background(Color.Black)
+                ) {
+                    key(playerKey) {
+                        WatchVideoPlayer(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize(),
+                            isPremiumUser = isPremiumUser,
+                            onFullscreenToggle = onFullscreenToggle,
+                            onBack = onBack,
+                            onExit = onExit,
+                            onInfoClick = {},
+                            onEpisodesClick = {
+                                selectedTab = WatchPageTab.Episodes
+                                viewModel.setFullscreen(false)
+                            },
+                            onCommentsClick = {
+                                selectedTab = WatchPageTab.Comments
+                            },
+                            showPlayerLibraryActions = true,
+                            showFullscreenButton = true,
+                            compactControls = false,
+                        )
+                    }
+                }
+
+                if (selectedTab == WatchPageTab.Comments) {
+                    Box(
+                        modifier = Modifier
+                            .weight(0.3f)
+                            .fillMaxHeight()
+                            .background(AppColors.background)
+                    ) {
+                        WatchCommentsContent(
+                            animeId = animeId,
+                            uiState = uiState,
+                            onClose = { selectedTab = WatchPageTab.Episodes },
+                        )
+                    }
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
                     .background(Color.Black)
-            }
-        ) {
-            key(playerKey) {
-                WatchVideoPlayer(
-                    uiState = uiState,
-                    viewModel = viewModel,
-                    modifier = Modifier.fillMaxSize(),
-                    isPremiumUser = isPremiumUser,
-                    onFullscreenToggle = onFullscreenToggle,
-                    onBack = onBack,
-                    onExit = onExit,
-                    onInfoClick = {},
-                    onEpisodesClick = {
-                        selectedTab = WatchPageTab.Episodes
-                        if (uiState.isFullscreen) viewModel.setFullscreen(false)
-                    },
-                    onCommentsClick = {
-                        selectedTab = WatchPageTab.Comments
-                        if (uiState.isFullscreen) viewModel.setFullscreen(false)
-                    },
-                    showPlayerLibraryActions = uiState.isFullscreen,
-                    showFullscreenButton = true,
-                    compactControls = !uiState.isFullscreen,
-                )
+            ) {
+                key(playerKey) {
+                    WatchVideoPlayer(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        modifier = Modifier.fillMaxSize(),
+                        isPremiumUser = isPremiumUser,
+                        onFullscreenToggle = onFullscreenToggle,
+                        onBack = onBack,
+                        onExit = onExit,
+                        onInfoClick = {},
+                        onEpisodesClick = {
+                            selectedTab = WatchPageTab.Episodes
+                        },
+                        onCommentsClick = {
+                            selectedTab = WatchPageTab.Comments
+                        },
+                        showPlayerLibraryActions = false,
+                        showFullscreenButton = true,
+                        compactControls = true,
+                    )
+                }
             }
         }
 
