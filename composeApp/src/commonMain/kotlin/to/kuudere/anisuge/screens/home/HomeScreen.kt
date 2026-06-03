@@ -3098,10 +3098,10 @@ private fun DownloadTaskCard(
                 Box(Modifier.weight(1f))
             }
             Box(Modifier.width(1.dp).fillMaxSize().background(AppColors.border))
-            // Remove button — always last
+            // Remove unfinished tasks; delete files for completed downloads.
             CardActionCell(
                 icon = Icons.Default.Close,
-                label = "Remove",
+                label = if (isTaskFinishedStatus(task.status)) "Delete files" else "Remove",
                 isDanger = true,
                 modifier = Modifier.weight(1f),
                 onClick = { showConfirmRemove = true },
@@ -3109,11 +3109,23 @@ private fun DownloadTaskCard(
         }
 
         if (showConfirmRemove) {
+            val isFinished = isTaskFinishedStatus(task.status)
             ConfirmDialog(
-                title = "Remove download?",
-                message = "\"${task.title}\" Episode ${task.episodeNumber} will be removed from your downloads list.",
-                confirmLabel = "Remove",
-                onConfirm = { manager.removeTask(task.id); showConfirmRemove = false },
+                title = if (isFinished) "Delete downloaded files?" else "Remove download?",
+                message = if (isFinished) {
+                    "\"${task.title}\" Episode ${task.episodeNumber} will be deleted from device storage and removed from your downloads list."
+                } else {
+                    "\"${task.title}\" Episode ${task.episodeNumber} will be removed from your downloads list."
+                },
+                confirmLabel = if (isFinished) "Delete files" else "Remove",
+                onConfirm = {
+                    if (isFinished) {
+                        manager.deleteTaskFiles(task.id)
+                    } else {
+                        manager.removeTask(task.id)
+                    }
+                    showConfirmRemove = false
+                },
                 onDismiss = { showConfirmRemove = false },
             )
         }
