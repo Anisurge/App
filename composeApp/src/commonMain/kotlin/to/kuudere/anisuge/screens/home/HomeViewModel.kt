@@ -1,6 +1,7 @@
 package to.kuudere.anisuge.screens.home
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -137,28 +138,36 @@ class HomeViewModel(
      */
     private fun loadDiscoveryRows() {
         scope.launch {
-            val top = async { homeService.fetchTopAnime(period = "week", limit = 20) }
+            val top = async {
+                discoveryRequest("trending anime") {
+                    homeService.fetchTopAnime(period = "week", limit = 20)?.data
+                }.orEmpty()
+            }
             val (season, year) = currentSeasonAndYear()
             val seasons = async {
-                searchService.search(
-                    season = season,
-                    year = year,
-                    sort = "popularity_desc",
-                    limit = 24,
-                )
+                discoveryRequest("new seasons") {
+                    searchService.search(
+                        season = season,
+                        year = year,
+                        sort = "popularity_desc",
+                        limit = 24,
+                    )?.results
+                }.orEmpty()
             }
             val gems = async {
-                searchService.search(
-                    sort = "score_desc",
-                    status = "Finished",
-                    limit = 40,
-                )
+                discoveryRequest("hidden gems") {
+                    searchService.search(
+                        sort = "score_desc",
+                        status = "Finished",
+                        limit = 40,
+                    )?.results
+                }.orEmpty()
             }
 
-            val topItems = runCatching { top.await()?.data }.getOrNull().orEmpty()
-            val seasonItems = runCatching { seasons.await()?.results }.getOrNull().orEmpty()
+            val topItems = top.await()
+            val seasonItems = seasons.await()
             // Hidden gems = highly rated but under a popularity threshold (underrated).
-            val gemItems = runCatching { gems.await()?.results }.getOrNull().orEmpty()
+            val gemItems = gems.await()
                 .filter { (it.popularity ?: Int.MAX_VALUE) < HIDDEN_GEM_MAX_POPULARITY }
                 .take(20)
 
@@ -169,6 +178,17 @@ class HomeViewModel(
                     hiddenGems = if (gemItems.isNotEmpty()) gemItems else it.hiddenGems,
                 )
             }
+        }
+    }
+
+    private suspend fun <T> discoveryRequest(label: String, block: suspend () -> T): T? {
+        return try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("[HomeVM] Failed to fetch $label: ${e.message}")
+            null
         }
     }
 
