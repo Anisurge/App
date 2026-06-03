@@ -41,7 +41,9 @@ actual fun VideoPlayerSurface(
     val resolvedUrl = remember(state.config.url) {
         val url = state.config.url
         when {
-            url.startsWith("http://") || url.startsWith("https://") || url.startsWith("file://") || url.startsWith("/") -> url
+            url.startsWith("http://") || url.startsWith("https://") ||
+                    url.startsWith("file://") || url.startsWith("content://") ||
+                    url.startsWith("/") -> url
             else -> {
                 // Copy composeResources to temp file
                 try {

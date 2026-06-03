@@ -1,9 +1,7 @@
 package to.kuudere.anisuge.screens.info
 
-import io.github.vinceglb.filekit.dialogs.compose.rememberDirectoryPickerLauncher
-import io.github.vinceglb.filekit.absolutePath
-
 import to.kuudere.anisuge.utils.formatFloat
+import to.kuudere.anisuge.utils.rememberDownloadDirectoryPicker
 import to.kuudere.anisuge.utils.urlHost
 import to.kuudere.anisuge.utils.urlSchemeHost
 import androidx.compose.foundation.background
@@ -45,6 +43,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import to.kuudere.anisuge.i18n.LocalAppStrings
+import to.kuudere.anisuge.platform.PlatformName
 import to.kuudere.anisuge.theme.AppColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,20 +103,20 @@ fun DownloadEpisodeDialog(
 
     val settingsStore = to.kuudere.anisuge.AppComponent.settingsStore
 
-    val directoryPickerLauncher = rememberDirectoryPickerLauncher { dir ->
-        dir?.let {
-            val path = it.absolutePath()
-            to.kuudere.anisuge.platform.persistFolderPermission(path)
-            scope.launch {
-                settingsStore.setDownloadPath(path)
-            }
+    val launchDirectoryPicker = rememberDownloadDirectoryPicker { path ->
+        if (path == null) {
+            pendingDownloadParams = null
+            return@rememberDownloadDirectoryPicker
         }
-        // After picker, continue with any pending download
-        pendingDownloadParams?.let { _ ->
-            if (!to.kuudere.anisuge.utils.hasStoragePermission()) {
-                shouldRequestStoragePermission = true
-            } else if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
-                shouldRequestNotificationPermission = true
+        to.kuudere.anisuge.platform.persistFolderPermission(path)
+        scope.launch {
+            settingsStore.setDownloadPath(path)
+            // After picker, continue with any pending download
+            pendingDownloadParams?.let { _ ->
+                if (!to.kuudere.anisuge.utils.hasStoragePermission()) {
+                    shouldRequestStoragePermission = true
+                } else if (!to.kuudere.anisuge.utils.hasNotificationPermission()) {
+                    shouldRequestNotificationPermission = true
                 } else {
                     onStartDownload(
                         selectedServer,
@@ -130,12 +129,14 @@ fun DownloadEpisodeDialog(
                     )
                     pendingDownloadParams = null
                 }
+            }
         }
     }
 
     val downloadPath by settingsStore.downloadPathFlow.collectAsState("")
+    val fixedAndroidDownloadPath = PlatformName == "Android"
     val isPathValid = remember(downloadPath) {
-        if (downloadPath.isBlank()) true
+        if (fixedAndroidDownloadPath || downloadPath.isBlank()) true
         else to.kuudere.anisuge.platform.isFolderWritable(downloadPath)
     }
 
@@ -794,13 +795,19 @@ fun DownloadEpisodeDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isPathValid) to.kuudere.anisuge.platform.formatDisplayPath(downloadPath) else strings.locationUnavailable,
-                            color = if (downloadPath.isBlank() || !isPathValid) Color.Gray else Color.White,
+                            text = if (fixedAndroidDownloadPath) {
+                                "Downloads/Anisurge"
+                            } else if (isPathValid) {
+                                to.kuudere.anisuge.platform.formatDisplayPath(downloadPath)
+                            } else {
+                                strings.locationUnavailable
+                            },
+                            color = if (fixedAndroidDownloadPath || downloadPath.isBlank() || !isPathValid) Color.Gray else Color.White,
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (!isPathValid) {
+                        if (!fixedAndroidDownloadPath && !isPathValid) {
                             Text(
                                 strings.chooseWritableFolder,
                                 color = Color.Red.copy(alpha = 0.8f),
@@ -811,21 +818,23 @@ fun DownloadEpisodeDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    if (!fixedAndroidDownloadPath) {
+                        Spacer(modifier = Modifier.width(12.dp))
 
-                    Text(
-                        text = strings.change,
-                        color = Color.Black,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.White)
-                            .clickable {
-                                directoryPickerLauncher.launch()
-                            }
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    )
+                        Text(
+                            text = strings.change,
+                            color = Color.Black,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White)
+                                .clickable {
+                                    launchDirectoryPicker()
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
                 }
             }
 
@@ -873,17 +882,17 @@ fun DownloadEpisodeDialog(
                 if (deleteWeight > 0.01f) {
                     Box(Modifier.weight(deleteWeight).padding(end = buttonSpacing)) {
                         Button(
-                            onClick = {
-                                if (currentTask != null) {
-                                    to.kuudere.anisuge.utils.DownloadManager.removeTask(currentTask.id)
-                                }
-                            },
+	                            onClick = {
+	                                if (currentTask != null) {
+	                                    to.kuudere.anisuge.utils.DownloadManager.deleteTaskFiles(currentTask.id)
+	                                }
+	                            },
                             modifier = Modifier.fillMaxWidth().height(50.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = AppColors.surface),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text(
-                                strings.delete,
+	                                "Delete files",
                                 color = AppColors.accent,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
@@ -898,12 +907,13 @@ fun DownloadEpisodeDialog(
                         onClick = {
                             println("[DownloadDialog] button clicked! subDub=$selectedSubDub server=$selectedServer canDownload=$canDownload")
                             if (currentTask == null) {
-                                val needsSaf = to.kuudere.anisuge.utils.downloadPathRequiresSafPicker(downloadPath)
+                                val needsSaf = !fixedAndroidDownloadPath &&
+                                        to.kuudere.anisuge.utils.downloadPathRequiresSafPicker(downloadPath)
                                 println("[DownloadDialog] needsSaf=$needsSaf downloadPath=$downloadPath")
                                 if (needsSaf) {
                                     println("[DownloadDialog] → launching SAF folder picker")
                                     pendingDownloadParams = selectedServer to currentHeaders
-                                    directoryPickerLauncher.launch()
+                                    launchDirectoryPicker()
                                 } else {
                                     val storageOk = to.kuudere.anisuge.utils.hasStoragePermission()
                                     println("[DownloadDialog] storageOk=$storageOk")

@@ -1,6 +1,7 @@
 package to.kuudere.anisuge.utils
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSDocumentDirectory
@@ -39,6 +40,66 @@ actual fun publishTempDownloadOutput(tempPath: String, outputPath: String): Bool
     true
 } catch (_: Exception) {
     false
+}
+
+actual fun getDownloadWorkDirectory(taskId: String): String {
+    val safeId = taskId.replace("[^A-Za-z0-9_.-]".toRegex(), "_")
+    val dir = "${getCacheDirectory()}/download_work/$safeId"
+    NSFileManager.defaultManager.createDirectoryAtPath(
+        dir,
+        withIntermediateDirectories = true,
+        attributes = null,
+        error = null,
+    )
+    return dir
+}
+
+actual fun publishCompletedDownloadFile(
+    tempPath: String,
+    fileName: String,
+    mimeType: String,
+    animeId: String,
+    episodeNumber: Int,
+    downloadRoot: String,
+): String? {
+    val safeId = animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
+    val root = downloadRoot.ifBlank { getDownloadsDirectory() }
+    val dir = "$root/$safeId/ep_$episodeNumber"
+    val dest = "$dir/$fileName"
+    return try {
+        NSFileManager.defaultManager.createDirectoryAtPath(
+            dir,
+            withIntermediateDirectories = true,
+            attributes = null,
+            error = null,
+        )
+        if (publishTempDownloadOutput(tempPath, dest)) dest else null
+    } catch (_: Exception) {
+        null
+    }
+}
+
+actual fun deleteDownloadedFile(path: String): Boolean = try {
+    NSFileManager.defaultManager.removeItemAtPath(path, error = null)
+    true
+} catch (_: Exception) {
+    false
+}
+
+actual fun deleteDownloadWorkDirectory(path: String): Boolean = deleteDownloadedFile(path)
+
+actual fun fileSize(path: String): Long {
+    return try {
+        val attrs = NSFileManager.defaultManager.attributesOfItemAtPath(path, error = null)
+        (attrs?.get(platform.Foundation.NSFileSize) as? Number)?.toLong() ?: 0L
+    } catch (_: Exception) {
+        0L
+    }
+}
+
+@Composable
+actual fun rememberDownloadDirectoryPicker(onPicked: (String?) -> Unit): () -> Unit {
+    return remember { { onPicked(null) } }
 }
 
 @Composable

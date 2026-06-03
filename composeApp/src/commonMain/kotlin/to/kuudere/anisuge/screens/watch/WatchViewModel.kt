@@ -26,6 +26,7 @@ import to.kuudere.anisuge.data.services.TrackingService
 import to.kuudere.anisuge.data.services.WatchlistService
 import okio.Path.Companion.toPath
 import to.kuudere.anisuge.platform.KmpFileSystem
+import to.kuudere.anisuge.utils.DownloadManager
 import to.kuudere.anisuge.player.VideoPlayerConfig
 import to.kuudere.anisuge.player.VideoPlayerState
 
@@ -244,6 +245,29 @@ class WatchViewModel(
         // Check for local subs/fonts in same dir
         val dir = normalizedPath.substringBeforeLast('/', "")
         val subs = mutableListOf<to.kuudere.anisuge.data.models.SubtitleData>()
+        val seenSubtitleUrls = mutableSetOf<String>()
+
+        fun addSidecar(path: String) {
+            val normalized = to.kuudere.anisuge.utils.MediaPaths.normalizeSeparators(path)
+            val ext = normalized.substringAfterLast(".", "").substringBefore("?")
+            if (ext !in setOf("ass", "vtt", "srt")) return
+            val url = offlineSubtitleUrl(normalized)
+            if (!seenSubtitleUrls.add(url)) return
+            val name = normalized.substringAfterLast("/")
+            val label = name.substringAfter("subtitle_", name).substringBeforeLast(".").ifEmpty { "Default" }
+            subs.add(
+                to.kuudere.anisuge.data.models.SubtitleData(
+                    languageName = label,
+                    url = url,
+                    format = ext,
+                )
+            )
+        }
+
+        DownloadManager.tasks.value
+            .firstOrNull { it.localPath == path || it.localPath == normalizedPath }
+            ?.sidecarPaths
+            ?.forEach(::addSidecar)
 
         if (dir.isNotBlank()) {
             try {
@@ -254,14 +278,16 @@ class WatchViewModel(
                         ))
                     ) {
                         val label = name.substringAfter("subtitle_", "").substringBeforeLast(".").ifEmpty { "Default" }
-                        val fileUrl = to.kuudere.anisuge.utils.MediaPaths.toFileUri("$dir/$name")
-                        subs.add(
-                            to.kuudere.anisuge.data.models.SubtitleData(
-                                languageName = label,
-                                url = fileUrl,
-                                format = name.substringAfterLast(".")
+                        val fileUrl = offlineSubtitleUrl("$dir/$name")
+                        if (seenSubtitleUrls.add(fileUrl)) {
+                            subs.add(
+                                to.kuudere.anisuge.data.models.SubtitleData(
+                                    languageName = label,
+                                    url = fileUrl,
+                                    format = name.substringAfterLast(".")
+                                )
                             )
-                        )
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -285,6 +311,13 @@ class WatchViewModel(
                 streamingData = null,
                 currentServer = "offline"
             )
+        }
+    }
+
+    private fun offlineSubtitleUrl(path: String): String {
+        return when {
+            path.startsWith("content://") || path.startsWith("file://") -> path
+            else -> to.kuudere.anisuge.utils.MediaPaths.toFileUri(path)
         }
     }
 

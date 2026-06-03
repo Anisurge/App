@@ -1,12 +1,16 @@
 package to.kuudere.anisuge.utils
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import io.github.vinceglb.filekit.absolutePath
+import io.github.vinceglb.filekit.dialogs.compose.rememberDirectoryPickerLauncher
 import java.io.File
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 
 actual fun getDownloadsDirectory(): String {
     val home = System.getProperty("user.home")
-    val dir = File(home, "Downloads/Anisug")
+    val dir = File(home, "Downloads/Anisurge")
     if (!dir.exists()) dir.mkdirs()
     return dir.absolutePath
 }
@@ -34,14 +38,72 @@ actual fun publishTempDownloadOutput(tempPath: String, outputPath: String): Bool
     }
 }
 
-@androidx.compose.runtime.Composable
+actual fun getDownloadWorkDirectory(taskId: String): String {
+    val safeId = taskId.replace("[^A-Za-z0-9_.-]".toRegex(), "_")
+    val dir = File(getCacheDirectory(), "download_work/$safeId")
+    if (!dir.exists()) dir.mkdirs()
+    return dir.absolutePath
+}
+
+actual fun publishCompletedDownloadFile(
+    tempPath: String,
+    fileName: String,
+    mimeType: String,
+    animeId: String,
+    episodeNumber: Int,
+    downloadRoot: String,
+): String? {
+    return try {
+        val safeId = animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
+        val root = downloadRoot.ifBlank { getDownloadsDirectory() }
+        val dest = File(root, "$safeId/ep_$episodeNumber/$fileName")
+        dest.parentFile?.mkdirs()
+        File(tempPath).copyTo(dest, overwrite = true)
+        dest.takeIf { it.exists() && it.length() > 0L }?.absolutePath
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
+actual fun deleteDownloadedFile(path: String): Boolean = try {
+    val file = File(path)
+    !file.exists() || file.delete()
+} catch (_: Exception) {
+    false
+}
+
+actual fun deleteDownloadWorkDirectory(path: String): Boolean = try {
+    val file = File(path)
+    !file.exists() || file.deleteRecursively()
+} catch (_: Exception) {
+    false
+}
+
+actual fun fileSize(path: String): Long = try {
+    File(path).length()
+} catch (_: Exception) {
+    0L
+}
+
+@Composable
+actual fun rememberDownloadDirectoryPicker(onPicked: (String?) -> Unit): () -> Unit {
+    val launcher = rememberDirectoryPickerLauncher { dir ->
+        onPicked(dir?.absolutePath())
+    }
+    return remember(launcher) {
+        { launcher.launch() }
+    }
+}
+
+@Composable
 actual fun RequestStoragePermission(onResult: (Boolean) -> Unit) {
     onResult(true)
 }
 
 actual fun hasNotificationPermission(): Boolean = true
 
-@androidx.compose.runtime.Composable
+@Composable
 actual fun RequestNotificationPermission(onResult: (Boolean) -> Unit) {
     onResult(true)
 }

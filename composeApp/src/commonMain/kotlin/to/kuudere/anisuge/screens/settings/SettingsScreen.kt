@@ -1,8 +1,5 @@
 package to.kuudere.anisuge.screens.settings
 
-import io.github.vinceglb.filekit.dialogs.compose.rememberDirectoryPickerLauncher
-import io.github.vinceglb.filekit.absolutePath
-
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -150,6 +147,7 @@ import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.screens.settings.SettingsTab
 import to.kuudere.anisuge.platform.openUrl
+import to.kuudere.anisuge.utils.rememberDownloadDirectoryPicker
 import to.kuudere.anisuge.theme.AppThemeId
 import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.text.style.TextAlign
@@ -2228,9 +2226,8 @@ private fun PreferencesTab(
     onSave: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
-    val directoryPickerLauncher = rememberDirectoryPickerLauncher {
-        it?.let { dir ->
-            val path = dir.absolutePath()
+    val launchDirectoryPicker = rememberDownloadDirectoryPicker { path ->
+        path?.let {
             to.kuudere.anisuge.platform.persistFolderPermission(path)
             onDownloadPathChange(path)
         }
@@ -2411,19 +2408,26 @@ private fun PreferencesTab(
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val fixedAndroidDownloadPath = PlatformName == "Android"
                 val isPathValid = remember(uiState.downloadPath) {
-                    if (uiState.downloadPath.isBlank()) true
+                    if (fixedAndroidDownloadPath || uiState.downloadPath.isBlank()) true
                     else to.kuudere.anisuge.platform.isFolderWritable(uiState.downloadPath)
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isPathValid) to.kuudere.anisuge.platform.formatDisplayPath(uiState.downloadPath) else strings.locationUnavailable,
-                        color = if (uiState.downloadPath.isBlank() || !isPathValid) MUTED else TEXT,
+                        text = if (fixedAndroidDownloadPath) {
+                            "Downloads/Anisurge"
+                        } else if (isPathValid) {
+                            to.kuudere.anisuge.platform.formatDisplayPath(uiState.downloadPath)
+                        } else {
+                            strings.locationUnavailable
+                        },
+                        color = if (fixedAndroidDownloadPath || uiState.downloadPath.isBlank() || !isPathValid) MUTED else TEXT,
                         fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    if (!isPathValid) {
+                    if (!fixedAndroidDownloadPath && !isPathValid) {
                         Text(
                             strings.chooseWritableFolder,
                             color = Color.Red.copy(alpha = 0.8f),
@@ -2434,19 +2438,21 @@ private fun PreferencesTab(
                     }
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                if (!fixedAndroidDownloadPath) {
+                    Spacer(modifier = Modifier.width(16.dp))
 
-                Text(
-                    text = strings.change,
-                    color = AppColors.onAccent,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(AppColors.accent)
-                        .clickable { directoryPickerLauncher.launch() }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                )
+                    Text(
+                        text = strings.change,
+                        color = AppColors.onAccent,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(AppColors.accent)
+                            .clickable { launchDirectoryPicker() }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
             }
         }
 
@@ -2715,9 +2721,8 @@ private fun MobilePreferencesContent(
     onSave: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
-    val directoryPickerLauncher = rememberDirectoryPickerLauncher {
-        it?.let { dir ->
-            val path = dir.absolutePath()
+    val launchDirectoryPicker = rememberDownloadDirectoryPicker { path ->
+        path?.let {
             to.kuudere.anisuge.platform.persistFolderPermission(path)
             onDownloadPathChange(path)
         }
@@ -2872,19 +2877,26 @@ private fun MobilePreferencesContent(
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val fixedAndroidDownloadPath = PlatformName == "Android"
             val isPathValid = remember(uiState.downloadPath) {
-                if (uiState.downloadPath.isBlank()) true
+                if (fixedAndroidDownloadPath || uiState.downloadPath.isBlank()) true
                 else to.kuudere.anisuge.platform.isFolderWritable(uiState.downloadPath)
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (isPathValid) to.kuudere.anisuge.platform.formatDisplayPath(uiState.downloadPath) else "Location Restricted",
-                    color = if (uiState.downloadPath.isBlank() || !isPathValid) MUTED else TEXT,
+                    text = if (fixedAndroidDownloadPath) {
+                        "Downloads/Anisurge"
+                    } else if (isPathValid) {
+                        to.kuudere.anisuge.platform.formatDisplayPath(uiState.downloadPath)
+                    } else {
+                        "Location Restricted"
+                    },
+                    color = if (fixedAndroidDownloadPath || uiState.downloadPath.isBlank() || !isPathValid) MUTED else TEXT,
                     fontSize = 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (!isPathValid) {
+                if (!fixedAndroidDownloadPath && !isPathValid) {
                     Text(
                         "Choose a folder with write access.",
                         color = Color.Red.copy(alpha = 0.8f),
@@ -2895,19 +2907,21 @@ private fun MobilePreferencesContent(
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            if (!fixedAndroidDownloadPath) {
+                Spacer(modifier = Modifier.width(12.dp))
 
-            Text(
-                text = "Change",
-                color = AppColors.onAccent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(AppColors.accent)
-                    .clickable { directoryPickerLauncher.launch() }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            )
+                Text(
+                    text = "Change",
+                    color = AppColors.onAccent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(AppColors.accent)
+                        .clickable { launchDirectoryPicker() }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
         }
 
         if (uiState.hasSettingsChanges) {

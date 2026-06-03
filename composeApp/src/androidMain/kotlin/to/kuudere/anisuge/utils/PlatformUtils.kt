@@ -16,16 +16,16 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
 import androidx.core.content.ContextCompat
 import okio.buffer
 import okio.source
 import to.kuudere.anisuge.platform.KmpFileSystem
-import android.os.storage.StorageManager
 import android.provider.MediaStore
 
 actual fun getDownloadsDirectory(): String {
-    val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Anisug")
+    val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Anisurge")
     if (!dir.exists()) {
         try {
             dir.mkdirs()
@@ -57,10 +57,7 @@ actual fun hasStoragePermission(): Boolean {
 }
 
 actual fun downloadPathRequiresSafPicker(path: String): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
-    if (path.isBlank()) return true
-    if (path.startsWith("content://")) return false
-    return isSharedExternalStoragePath(path)
+    return false
 }
 
 actual fun isSharedExternalStoragePath(path: String): Boolean {
@@ -127,6 +124,145 @@ actual fun publishTempDownloadOutput(tempPath: String, outputPath: String): Bool
     }
 }
 
+actual fun getDownloadWorkDirectory(taskId: String): String {
+    val safeId = taskId.replace("[^A-Za-z0-9_.-]".toRegex(), "_")
+    val dir = File(androidAppContext.filesDir, "download_work/$safeId")
+    if (!dir.exists()) dir.mkdirs()
+    return dir.absolutePath
+}
+
+actual fun publishCompletedDownloadFile(
+    tempPath: String,
+    fileName: String,
+    mimeType: String,
+    animeId: String,
+    episodeNumber: Int,
+    downloadRoot: String,
+): String? {
+    val tempFile = File(tempPath)
+    if (!tempFile.exists() || tempFile.length() == 0L) return null
+    val safeId = animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
+    val relativeDir = "$safeId/ep_$episodeNumber"
+
+    return try {
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> {
+                publishToMediaStoreDownloads(tempFile, fileName, mimeType, safeId, episodeNumber)
+            }
+
+            downloadRoot.startsWith("content://") -> {
+                null
+            }
+
+            downloadRoot.isBlank() || isSharedExternalStoragePath(downloadRoot) -> {
+                val destFile = File(getDownloadsDirectory(), "$relativeDir/$fileName")
+                destFile.parentFile?.mkdirs()
+                tempFile.copyTo(destFile, overwrite = true)
+                destFile.takeIf { it.exists() && it.length() > 0L }?.absolutePath
+            }
+
+            else -> {
+                val root = downloadRoot.ifBlank { getDownloadsDirectory() }
+                val destFile = File(root, "$relativeDir/$fileName")
+                destFile.parentFile?.mkdirs()
+                tempFile.copyTo(destFile, overwrite = true)
+                destFile.takeIf { it.exists() && it.length() > 0L }?.absolutePath
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
+private fun publishToMediaStoreDownloads(
+    tempFile: File,
+    fileName: String,
+    mimeType: String,
+    safeAnimeId: String,
+    episodeNumber: Int,
+): String? {
+    val relativePath = "${Environment.DIRECTORY_DOWNLOADS}/Anisurge/$safeAnimeId/ep_$episodeNumber"
+    val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    val values = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+        put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+        put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+        put(MediaStore.MediaColumns.IS_PENDING, 1)
+    }
+    val uri = androidAppContext.contentResolver.insert(collection, values) ?: return null
+    return try {
+        androidAppContext.contentResolver.openOutputStream(uri)?.use { out ->
+            tempFile.inputStream().use { input -> input.copyTo(out) }
+        } ?: run {
+            androidAppContext.contentResolver.delete(uri, null, null)
+            return null
+        }
+        values.clear()
+        values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+        androidAppContext.contentResolver.update(uri, values, null, null)
+        uri.toString()
+    } catch (e: Exception) {
+        runCatching { androidAppContext.contentResolver.delete(uri, null, null) }
+        e.printStackTrace()
+        null
+    }
+}
+
+actual fun deleteDownloadedFile(path: String): Boolean {
+    if (path.isBlank()) return true
+    return try {
+        if (path.startsWith("content://")) {
+            val uri = Uri.parse(path)
+            val deleted = if (DocumentsContract.isTreeUri(uri)) {
+                KmpFileSystem.delete(path, mustExist = false)
+                true
+            } else {
+                androidAppContext.contentResolver.delete(uri, null, null) >= 0
+            }
+            deleted
+        } else {
+            val file = File(path)
+            !file.exists() || file.delete()
+        }
+    } catch (e: Exception) {
+        println("[Download] delete failed for $path: ${e.message}")
+        false
+    }
+}
+
+actual fun deleteDownloadWorkDirectory(path: String): Boolean {
+    if (path.isBlank() || path.startsWith("content://")) return true
+    return try {
+        val root = File(path)
+        if (!root.exists()) return true
+        root.deleteRecursively()
+    } catch (e: Exception) {
+        println("[Download] work cleanup failed for $path: ${e.message}")
+        false
+    }
+}
+
+actual fun fileSize(path: String): Long {
+    if (path.isBlank()) return 0L
+    return try {
+        if (path.startsWith("content://")) {
+            androidAppContext.contentResolver.openFileDescriptor(Uri.parse(path), "r")?.use {
+                it.statSize.takeIf { size -> size >= 0L } ?: 0L
+            } ?: 0L
+        } else {
+            File(path).length()
+        }
+    } catch (_: Exception) {
+        0L
+    }
+}
+
+@Composable
+actual fun rememberDownloadDirectoryPicker(onPicked: (String?) -> Unit): () -> Unit {
+    return remember { { onPicked("") } }
+}
+
 @Composable
 actual fun RequestStoragePermission(onResult: (Boolean) -> Unit) {
     if (hasStoragePermission()) {
@@ -189,6 +325,20 @@ actual fun RequestNotificationPermission(onResult: (Boolean) -> Unit) {
 
 actual fun openDirectory(path: String) {
     try {
+        if (path.startsWith("content://")) {
+            val persistedRoot = androidAppContext.contentResolver.persistedUriPermissions
+                .map { it.uri.toString() }
+                .filter { path.startsWith(it) }
+                .maxByOrNull { it.length }
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                data = Uri.parse(persistedRoot ?: path)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            androidAppContext.startActivity(intent)
+            return
+        }
+
         val file = File(path)
         val dir = if (file.isDirectory) file else file.parentFile ?: file
 
@@ -204,7 +354,7 @@ actual fun openDirectory(path: String) {
         androidAppContext.startActivity(intent)
     } catch (e: Exception) {
         try {
-            val uri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload%2FAnisug")
+            val uri = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload%2FAnisurge")
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, DocumentsContract.Document.MIME_TYPE_DIR)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -224,8 +374,8 @@ actual fun buildDownloadOutputPath(epDir: String, title: String, episodeNumber: 
 private fun deriveRelativePath(outputPath: String): String {
     val extStorage = Environment.getExternalStorageDirectory().absolutePath
     val relative = outputPath.removePrefix(extStorage).trimStart('/')
-    val dir = relative.substringBeforeLast('/', "Download/Anisug")
-    return if (dir.isBlank()) "Download/Anisug" else dir
+    val dir = relative.substringBeforeLast('/', "Download/Anisurge")
+    return if (dir.isBlank()) "Download/Anisurge" else dir
 }
 
 actual suspend fun muxToMkv(

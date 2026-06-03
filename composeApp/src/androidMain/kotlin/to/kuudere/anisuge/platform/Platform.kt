@@ -162,37 +162,10 @@ actual fun isFolderWritable(path: String): Boolean {
             // createNewFile returned false without the file existing
             println("[isFolderWritable] test-write blocked: $path")
             
-            // On Android 11+, if this is an external storage path but write failed,
-            // it might still be writable via SAF. The file picker returns such paths
-            // but direct File API access is blocked by scoped storage.
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                if (path.startsWith("/storage/")) {
-                    // External storage path where File API write failed
-                    // Check if we have ANY write permissions via SAF - if so, assume accessible
-                    val hasPersistedSafPermission = androidAppContext.contentResolver.persistedUriPermissions
-                        .any { it.isWritePermission }
-                    
-                    if (hasPersistedSafPermission) {
-                        println("[isFolderWritable] SAF permissions exist; treating $path as writable")
-                        return true
-                    }
-                }
-            }
             false
         }
     } catch (e: Exception) {
         println("[isFolderWritable] exception for $path: ${e.message}")
-        // If we get an exception, it might be due to scoped storage blocking
-        // Check if this looks like an external storage path on Android 11+
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
-            path.startsWith("/storage/")) {
-            val hasPersistedSafPermission = androidAppContext.contentResolver.persistedUriPermissions
-                .any { it.isWritePermission }
-            if (hasPersistedSafPermission) {
-                println("[isFolderWritable] exception but SAF permissions exist; treating $path as writable")
-                return true
-            }
-        }
         false
     }
 }
@@ -323,11 +296,25 @@ actual object KmpFileSystem {
 
     private fun getDocumentFromPath(path: String): DocumentFile? {
         val uri = Uri.parse(path)
+        if (uri.pathSegments.contains("document")) {
+            return DocumentFile.fromSingleUri(androidAppContext, uri)
+        }
+        val persisted = androidAppContext.contentResolver.persistedUriPermissions
+            .map { it.uri.toString() }
+            .filter { path.startsWith(it) }
+            .maxByOrNull { it.length }
+        if (persisted != null) {
+            var currentDoc = DocumentFile.fromTreeUri(androidAppContext, Uri.parse(persisted)) ?: return null
+            val relative = path.removePrefix(persisted).trim('/')
+            if (relative.isBlank()) return currentDoc
+            relative.split('/').filter { it.isNotBlank() }.forEach { segment ->
+                currentDoc = currentDoc.findFile(segment) ?: return null
+            }
+            return currentDoc
+        }
         return if (DocumentsContract.isTreeUri(uri)) {
             DocumentFile.fromTreeUri(androidAppContext, uri)
-        } else {
-            DocumentFile.fromSingleUri(androidAppContext, uri)
-        }
+        } else DocumentFile.fromSingleUri(androidAppContext, uri)
     }
 
     // This is a naive implementation: it assumes the path string for URIs was constructed
@@ -339,7 +326,8 @@ actual object KmpFileSystem {
         val persisted = androidAppContext.contentResolver.persistedUriPermissions
             .filter { it.isWritePermission }
             .map { it.uri.toString() }
-            .find { path.startsWith(it) } ?: return null
+            .filter { path.startsWith(it) }
+            .maxByOrNull { it.length } ?: return null
 
         var currentDoc = DocumentFile.fromTreeUri(androidAppContext, Uri.parse(persisted)) ?: return null
 

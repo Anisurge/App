@@ -1,5 +1,8 @@
 package to.kuudere.anisuge.utils
 
+import okio.buffer
+import to.kuudere.anisuge.platform.KmpFileSystem
+
 /**
  * Port of Flutter's SubtitleUtils.dart.
  * Downloads, detects format (ASS/VTT/SRT), converts to styled ASS, and writes to a temp file.
@@ -16,6 +19,10 @@ object SubtitleUtils {
                 tmp.deleteOnExit()
                 if (url.startsWith("file://")) {
                     java.io.File(java.net.URI(url)).copyTo(tmp, overwrite = true)
+                } else if (url.startsWith("content://")) {
+                    KmpFileSystem.source(url).buffer().use { source ->
+                        tmp.outputStream().use { output -> output.write(source.readByteArray()) }
+                    }
                 } else {
                     openUrlConnection(url, headers).getInputStream().use { it.copyTo(tmp.outputStream()) }
                 }
@@ -25,6 +32,8 @@ object SubtitleUtils {
 
             val content = if (url.startsWith("file://")) {
                 java.io.File(java.net.URI(url)).readText()
+            } else if (url.startsWith("content://")) {
+                KmpFileSystem.source(url).buffer().use { it.readUtf8() }
             } else {
                 openUrlConnection(url, headers).getInputStream().bufferedReader().readText()
             }

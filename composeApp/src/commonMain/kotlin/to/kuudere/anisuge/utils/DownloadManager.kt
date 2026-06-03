@@ -45,6 +45,9 @@ data class DownloadTask(
     val downloadSpeed: String = "",
     val eta: String = "",
     val localPath: String? = null,
+    val localSizeBytes: Long = 0L,
+    val sidecarPaths: List<String> = emptyList(),
+    val workDir: String? = null,
     val isPaused: Boolean = false,
     val headers: Map<String, String>? = null,
     /** Persisted so Resume can restart the coroutine after pause or process death. */
@@ -124,7 +127,7 @@ object DownloadManager {
                             scope.launch { cleanupPartialDownloadFiles(task) }
                             return@mapNotNull null
                         }
-                        if (normalizedStatus != "Finished") {
+                        if (!isDownloadFinished(normalizedStatus)) {
                             val almostDone = task.progress >= 0.92f ||
                                     normalizedStatus.contains("Finaliz", ignoreCase = true) ||
                                     normalizedStatus.contains("Mux", ignoreCase = true)
@@ -184,8 +187,12 @@ object DownloadManager {
                 return
             }
 
-            existing != null && (existing.status.startsWith("Failed") || isDownloadFinished(existing.status)) -> {
-                // Allow retrying failed or finished downloads
+            existing != null && isDownloadFinished(existing.status) -> {
+                // Preserve completed files by default. Replacement can be added as an explicit flow later.
+                return
+            }
+
+            existing != null && existing.status.startsWith("Failed") -> {
                 scope.launch {
                     removeFailedTaskSync(existing)
                     enqueueDownload(
@@ -361,8 +368,12 @@ object DownloadManager {
                 return
             }
 
-            existing != null && (existing.status.startsWith("Failed") || isDownloadFinished(existing.status)) -> {
-                // Allow retrying failed or finished downloads
+            existing != null && isDownloadFinished(existing.status) -> {
+                // Preserve completed files by default. Replacement can be added as an explicit flow later.
+                return
+            }
+
+            existing != null && existing.status.startsWith("Failed") -> {
                 scope.launch {
                     removeFailedTaskSync(existing)
                     enqueueMp4Download(taskId, animeId, episodeNumber, title, coverImage, mp4Url, headers)
@@ -403,10 +414,8 @@ object DownloadManager {
         val hdrs = task.headers ?: emptyMap()
         val job = scope.launch {
             try {
-                val currentPath = AppComponent.settingsStore.downloadPathFlow.first()
-                val baseDir = if (currentPath.isNotBlank()) currentPath else getDownloadsDirectory()
-                KmpFileSystem.createDirectories(baseDir)
-                val outputPath = "$baseDir/$taskId.mp4"
+                val workDir = prepareTaskWorkDir(taskId, task.workDir)
+                val outputPath = "$workDir/${buildCompletedFileName(task.title, task.episodeNumber, "mp4")}"
                 val probe = probeDirectMp4(mp4Url, hdrs)
                 if (!probe.isDirectMp4) {
                     abortDownload(taskId, "not a direct MP4 stream")
@@ -414,6 +423,12 @@ object DownloadManager {
                 }
                 val downloaded = downloadDirectMp4(taskId, mp4Url, hdrs, outputPath, probe.contentLength)
                 if (!downloaded) return@launch
+                completeDownloadedFile(
+                    taskId = taskId,
+                    videoPath = outputPath,
+                    videoMimeType = "video/mp4",
+                    sidecarPaths = emptyList(),
+                )
             } catch (e: Exception) {
                 if (e !is kotlinx.coroutines.CancellationException) {
                     abortDownload(taskId, e.message ?: "unknown error")
@@ -590,12 +605,9 @@ object DownloadManager {
                     }",
                 )
 
-                // Create folder
-                val currentPath = AppComponent.settingsStore.downloadPathFlow.first()
-                val baseDir = if (currentPath.isNotBlank()) currentPath else getDownloadsDirectory()
-                val animeSafe = task.animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
-                val epDir = "$baseDir/$animeSafe/ep_${task.episodeNumber}"
-                KmpFileSystem.createDirectories(epDir)
+                // All partial files stay in app-owned work storage until the final publish succeeds.
+                val workDir = prepareTaskWorkDir(taskId, task.workDir)
+                val epDir = workDir
 
                 if (m3u8Url.contains(".mpd", ignoreCase = true)) {
                     abortDownload(taskId, "DASH (.mpd) download not supported yet")
@@ -605,9 +617,15 @@ object DownloadManager {
                 // Some providers return a direct video file (MP4) instead of an HLS playlist.
                 val probe = probeDirectMp4(m3u8Url, currentHeaders)
                 if (probe.isDirectMp4) {
-                    val outputPath = "$baseDir/$taskId.mp4"
+                    val outputPath = "$workDir/${buildCompletedFileName(task.title, task.episodeNumber, "mp4")}"
                     val downloaded = downloadDirectMp4(taskId, m3u8Url, currentHeaders, outputPath, probe.contentLength)
                     if (!downloaded) return@launch
+                    completeDownloadedFile(
+                        taskId = taskId,
+                        videoPath = outputPath,
+                        videoMimeType = "video/mp4",
+                        sidecarPaths = emptyList(),
+                    )
                     return@launch
                 }
 
@@ -777,33 +795,15 @@ object DownloadManager {
 
                 if (muxSuccess) {
                     downloadLog(taskId, "finalising ok output=$finalOutputPath")
-                    // Cleanup — keep subtitle files alongside the MKV for offline playback
-                    try {
-                        if (!isEncrypted && !useHlsUrlRemux) {
-                            KmpFileSystem.delete(rawVideoPath)
-                            if (audioSegments.isNotEmpty()) KmpFileSystem.delete(rawAudioPath)
-                        }
-                    } catch (e: Exception) {
-                    }
-
-                    updateTask(taskId) {
-                        it.copy(
-                            status = "Finished",
-                            progress = 1f,
-                            localPath = finalOutputPath,
-                            isPaused = false,
-                        )
-                    }
+                    completeDownloadedFile(
+                        taskId = taskId,
+                        videoPath = finalOutputPath,
+                        videoMimeType = "video/x-matroska",
+                        sidecarPaths = subsToDownload.map { it.first },
+                    )
                 } else {
                     downloadLog(taskId, "finalising failed output=$finalOutputPath")
-                    updateTask(taskId) {
-                        it.copy(
-                            status = "Finished (Mux Failed)",
-                            progress = 1f,
-                            localPath = if (!isEncrypted && !useHlsUrlRemux) rawVideoPath else null,
-                            isPaused = false,
-                        )
-                    }
+                    abortDownload(taskId, "finalizing failed")
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) {
@@ -823,6 +823,89 @@ object DownloadManager {
             }
         }
         updateTask(taskId) { it.copy(job = job) }
+    }
+
+    private fun prepareTaskWorkDir(taskId: String, existingWorkDir: String?): String {
+        val workDir = existingWorkDir?.takeIf { it.isNotBlank() } ?: getDownloadWorkDirectory(taskId)
+        KmpFileSystem.createDirectories(workDir)
+        updateTask(taskId) {
+            it.copy(
+                workDir = workDir,
+                localPath = null,
+                localSizeBytes = 0L,
+                sidecarPaths = emptyList(),
+            )
+        }
+        return workDir
+    }
+
+    private suspend fun completeDownloadedFile(
+        taskId: String,
+        videoPath: String,
+        videoMimeType: String,
+        sidecarPaths: List<String>,
+    ) {
+        val task = tasks.value.find { it.id == taskId } ?: return
+        val downloadRoot = AppComponent.settingsStore.downloadPathFlow.first()
+        val videoFileName = videoPath.substringAfterLast('/').ifBlank {
+            buildCompletedFileName(task.title, task.episodeNumber, videoPath.substringAfterLast('.', "mkv"))
+        }
+        val sizeBytes = fileSize(videoPath)
+        val publishedVideo = publishCompletedDownloadFile(
+            tempPath = videoPath,
+            fileName = videoFileName,
+            mimeType = videoMimeType,
+            animeId = task.animeId,
+            episodeNumber = task.episodeNumber,
+            downloadRoot = downloadRoot,
+        )
+        if (publishedVideo == null) {
+            abortDownload(taskId, "failed to publish final file")
+            return
+        }
+
+        val publishedSidecars = sidecarPaths.mapNotNull { sidecar ->
+            val name = sidecar.substringAfterLast('/').ifBlank { "subtitle.vtt" }
+            publishCompletedDownloadFile(
+                tempPath = sidecar,
+                fileName = name,
+                mimeType = subtitleMimeType(name),
+                animeId = task.animeId,
+                episodeNumber = task.episodeNumber,
+                downloadRoot = downloadRoot,
+            )
+        }
+
+        task.workDir?.let { deleteDownloadWorkDirectory(it) }
+
+        updateTask(taskId) {
+            it.copy(
+                status = "Finished",
+                progress = 1f,
+                localPath = publishedVideo,
+                localSizeBytes = sizeBytes,
+                sidecarPaths = publishedSidecars,
+                isPaused = false,
+                downloadSpeed = "",
+                eta = "",
+                job = null,
+            )
+        }
+    }
+
+    private fun buildCompletedFileName(title: String, episodeNumber: Int, extension: String): String {
+        val safeTitle = title.replace("[^A-Za-z0-9 ]".toRegex(), "").trim().ifBlank { "Episode" }
+        val ext = extension.trimStart('.').ifBlank { "mkv" }
+        return "${safeTitle}_Ep_$episodeNumber.$ext"
+    }
+
+    private fun subtitleMimeType(fileName: String): String {
+        return when (fileName.substringAfterLast('.', "").lowercase()) {
+            "vtt" -> "text/vtt"
+            "srt" -> "application/x-subrip"
+            "ass", "ssa" -> "text/plain"
+            else -> "application/octet-stream"
+        }
     }
 
     private data class DirectMp4Probe(
@@ -927,16 +1010,7 @@ object DownloadManager {
 
             if (!httpOk) return false
 
-            updateTask(taskId) {
-                it.copy(
-                    progress = 1f,
-                    status = "Finished",
-                    localPath = outputPath,
-                    downloadSpeed = "",
-                    eta = "",
-                    isPaused = false,
-                )
-            }
+            updateTask(taskId) { it.copy(progress = 0.99f, status = "Finalizing download...") }
             true
         } catch (e: Exception) {
             abortDownload(taskId, e.message ?: "unknown error")
@@ -1241,7 +1315,24 @@ object DownloadManager {
         task.job?.cancel()
         tasks.update { it.filterNot { t -> t.id == id } }
         saveTasks()
-        scope.launch { cleanupPartialDownloadFiles(task) }
+        if (!isDownloadFinished(task.status)) {
+            scope.launch { cleanupPartialDownloadFiles(task) }
+        }
+    }
+
+    fun deleteTaskFiles(id: String) {
+        scope.launch { deleteTaskFilesSync(id) }
+    }
+
+    suspend fun deleteTaskFilesSync(id: String): Boolean {
+        val task = tasks.value.find { it.id == id } ?: return true
+        task.job?.cancel()
+        cleanupPartialDownloadFiles(task)
+        val targets = listOfNotNull(task.localPath) + task.sidecarPaths
+        val deleted = targets.fold(true) { ok, path -> deleteDownloadedFile(path) && ok }
+        tasks.update { it.filterNot { t -> t.id == id } }
+        saveTasks()
+        return deleted
     }
 
     fun isDownloadFinished(status: String): Boolean =
@@ -1312,44 +1403,11 @@ object DownloadManager {
 
     private suspend fun cleanupPartialDownloadFiles(task: DownloadTask) {
         try {
-            val currentPath = AppComponent.settingsStore.downloadPathFlow.first()
-            val baseDir = if (currentPath.isNotBlank()) currentPath else getDownloadsDirectory()
-            val taskId = task.id
-            val mp4Path = "$baseDir/$taskId.mp4"
-            if (KmpFileSystem.exists(mp4Path)) {
-                KmpFileSystem.delete(mp4Path)
-            }
-            val animeSafe = task.animeId.replace("[^A-Za-z0-9]".toRegex(), "_")
-            val epDir = "$baseDir/$animeSafe/ep_${task.episodeNumber}"
-            deleteDirectoryContentsRecursively(epDir)
-            task.localPath?.let { path ->
-                if (path != mp4Path && KmpFileSystem.exists(path)) {
-                    KmpFileSystem.delete(path)
-                }
-            }
+            task.workDir?.takeIf { it.isNotBlank() }?.let { deleteDownloadWorkDirectory(it) }
         } catch (e: Exception) {
             println("[Download] cleanup partial files: ${e.message}")
         }
     }
-
-    private fun deleteDirectoryContentsRecursively(dir: String) {
-        if (!KmpFileSystem.exists(dir)) return
-        try {
-            KmpFileSystem.listDir(dir).forEach { name ->
-                val child = "$dir/$name"
-                try {
-                    deleteDirectoryContentsRecursively(child)
-                } catch (_: Exception) {
-                    try {
-                        KmpFileSystem.delete(child)
-                    } catch (_: Exception) {
-                    }
-                }
-            }
-        } catch (_: Exception) {
-        }
-    }
-
 
     private fun updateTask(
         id: String,

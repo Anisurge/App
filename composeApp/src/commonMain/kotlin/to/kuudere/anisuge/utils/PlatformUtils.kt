@@ -13,6 +13,26 @@ expect fun downloadPathRequiresSafPicker(path: String): Boolean
 
 expect fun publishTempDownloadOutput(tempPath: String, outputPath: String): Boolean
 
+expect fun getDownloadWorkDirectory(taskId: String): String
+
+expect fun publishCompletedDownloadFile(
+    tempPath: String,
+    fileName: String,
+    mimeType: String,
+    animeId: String,
+    episodeNumber: Int,
+    downloadRoot: String,
+): String?
+
+expect fun deleteDownloadedFile(path: String): Boolean
+
+expect fun deleteDownloadWorkDirectory(path: String): Boolean
+
+expect fun fileSize(path: String): Long
+
+@androidx.compose.runtime.Composable
+expect fun rememberDownloadDirectoryPicker(onPicked: (String?) -> Unit): () -> Unit
+
 @androidx.compose.runtime.Composable
 expect fun RequestStoragePermission(onResult: (Boolean) -> Unit)
 
