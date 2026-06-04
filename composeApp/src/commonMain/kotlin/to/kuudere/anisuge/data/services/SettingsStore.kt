@@ -37,6 +37,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val FLOATING_BOTTOM_NAV_KEY = booleanPreferencesKey("floating_bottom_nav")
         val LIQUID_GLASS_BOTTOM_NAV_KEY = booleanPreferencesKey("liquid_glass_bottom_nav")
         val EXPANDED_HERO_CAROUSEL_KEY = booleanPreferencesKey("expanded_hero_carousel")
+        val QUICK_ACTION_MENU_KEY = booleanPreferencesKey("quick_action_menu")
         val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
         val PREFER_ROMAJI_ANIME_TITLES_KEY = booleanPreferencesKey("prefer_romaji_anime_titles")
         val VIDEO_SCALE_MODE_KEY = stringPreferencesKey("video_scale_mode")
@@ -79,6 +80,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val floatingBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[FLOATING_BOTTOM_NAV_KEY] ?: true }
     val liquidGlassBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[LIQUID_GLASS_BOTTOM_NAV_KEY] ?: false }
     val expandedHeroCarouselFlow: Flow<Boolean> = dataStore.data.map { it[EXPANDED_HERO_CAROUSEL_KEY] ?: false }
+    val quickActionMenuFlow: Flow<Boolean> = dataStore.data.map { it[QUICK_ACTION_MENU_KEY] ?: true }
     val appLocaleFlow: Flow<String> = dataStore.data.map { it[APP_LOCALE_KEY] ?: "en" }
     val preferRomajiAnimeTitlesFlow: Flow<Boolean> = dataStore.data.map { it[PREFER_ROMAJI_ANIME_TITLES_KEY] ?: false }
     val videoScaleModeFlow: Flow<String> = dataStore.data.map { preferences ->
@@ -201,6 +203,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setExpandedHeroCarousel(enabled: Boolean) {
         dataStore.edit { it[EXPANDED_HERO_CAROUSEL_KEY] = enabled }
+    }
+
+    suspend fun setQuickActionMenu(enabled: Boolean) {
+        dataStore.edit { it[QUICK_ACTION_MENU_KEY] = enabled }
     }
 
     suspend fun setAppLocale(localeCode: String) {

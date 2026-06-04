@@ -89,6 +89,7 @@ data class SettingsUiState(
     val floatingBottomNav: Boolean = true,
     val liquidGlassBottomNav: Boolean = false,
     val expandedHeroCarousel: Boolean = false,
+    val quickActionMenu: Boolean = true,
     val appLocale: AppLocale = AppLocale.default,
     val preferRomajiAnimeTitles: Boolean = false,
     val themeId: AppThemeId = AppThemeId.Default,
@@ -355,6 +356,15 @@ class SettingsViewModel(
             }
         }
         viewModelScope.launch {
+            settingsStore.quickActionMenuFlow.collect { v ->
+                _uiState.update {
+                    it.copy(
+                        quickActionMenu = v
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
             settingsStore.appLocaleFlow.collect { code ->
                 _uiState.update {
                     it.copy(
@@ -515,6 +525,10 @@ class SettingsViewModel(
 
     fun setExpandedHeroCarousel(enabled: Boolean) {
         viewModelScope.launch { settingsStore.setExpandedHeroCarousel(enabled) }
+    }
+
+    fun setQuickActionMenu(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setQuickActionMenu(enabled) }
     }
 
     fun setAppLocale(locale: AppLocale) {

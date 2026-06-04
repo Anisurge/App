@@ -16,6 +16,7 @@ import android.app.UiModeManager
 import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
 import android.app.PendingIntent
@@ -81,13 +82,13 @@ actual val AppBuildNumber: Int by lazy {
 @Composable
 actual fun LockScreenOrientation(landscape: Boolean) {
     val context = LocalContext.current
-    DisposableEffect(landscape) {
-        val activity = context.findActivity() ?: return@DisposableEffect onDispose {}
-        val window = activity.window
+    val activity = context.findActivity()
+    SideEffect {
+        val currentActivity = activity ?: return@SideEffect
+        val window = currentActivity.window
         val insetsController = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
 
-        val originalOrientation = activity.requestedOrientation
-        activity.requestedOrientation = if (landscape) {
+        currentActivity.requestedOrientation = if (landscape) {
             insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             insetsController.systemBarsBehavior =
                 androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -96,8 +97,13 @@ actual fun LockScreenOrientation(landscape: Boolean) {
             insetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
         }
+    }
+    DisposableEffect(activity) {
+        val activity = context.findActivity() ?: return@DisposableEffect onDispose {}
+        val window = activity.window
+        val insetsController = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+
         onDispose {
-            activity.requestedOrientation = originalOrientation
             insetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
         }
     }

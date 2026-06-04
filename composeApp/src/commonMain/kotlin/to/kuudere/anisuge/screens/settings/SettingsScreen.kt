@@ -1036,6 +1036,7 @@ private fun MobileSettingsDetail(
                     onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                     onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
                     onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
+                    onQuickActionMenuChange = viewModel::setQuickActionMenu,
                     onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
                     onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                     onThemeSelected = viewModel::setThemeId,
@@ -1191,6 +1192,7 @@ private fun SettingsContent(
                 onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                 onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
                 onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
+                onQuickActionMenuChange = viewModel::setQuickActionMenu,
                 onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
                 onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                 onThemeSelected = viewModel::setThemeId,
@@ -1283,6 +1285,7 @@ private fun AppearanceTab(
     onFloatingBottomNavChange: (Boolean) -> Unit,
     onLiquidGlassBottomNavChange: (Boolean) -> Unit,
     onExpandedHeroCarouselChange: (Boolean) -> Unit,
+    onQuickActionMenuChange: (Boolean) -> Unit,
     onPreferRomajiAnimeTitlesChange: (Boolean) -> Unit,
     onLegacyScheduleUiChange: (Boolean) -> Unit,
     onThemeSelected: (AppThemeId) -> Unit,
@@ -1343,6 +1346,17 @@ private fun AppearanceTab(
                     checked = uiState.expandedHeroCarousel,
                     onCheckedChange = onExpandedHeroCarouselChange,
                     label = strings.expandedHeroCarousel
+                )
+                SettingToggle(
+                    checked = uiState.quickActionMenu,
+                    onCheckedChange = onQuickActionMenuChange,
+                    label = "Use quick action menu"
+                )
+                Text(
+                    text = if (uiState.quickActionMenu) "Top bar uses the compact menu for Watch2gether, downloads, and notifications." else "Top bar uses the old separate Watch2gether and downloads buttons.",
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
                 )
                 Button(
                     onClick = onOpenHomeLayout,

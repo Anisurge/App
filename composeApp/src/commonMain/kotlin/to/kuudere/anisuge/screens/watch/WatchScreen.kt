@@ -138,8 +138,12 @@ fun WatchScreen(
     to.kuudere.anisuge.platform.SyncFullscreen(uiState.isFullscreen)
 
     val handleBack = {
-        viewModel.flushLatestWatchProgress()
-        onBack()
+        if (uiState.isFullscreen) {
+            viewModel.setFullscreen(false)
+        } else {
+            viewModel.flushLatestWatchProgress()
+            onBack()
+        }
     }
 
     to.kuudere.anisuge.platform.PlatformBackHandler {
@@ -2604,7 +2608,7 @@ fun WatchVideoPlayer(
 
                                 Key.Escape, Key.Back -> {
                                     if (uiState.isFullscreen) {
-                                        onFullscreenToggle()
+                                        onBack()
                                         true
                                     } else if (isAndroidTvPlatform) {
                                         onBack()

@@ -84,6 +84,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.outlined.Bookmarks
@@ -113,6 +115,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -154,6 +157,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.max
@@ -197,6 +201,7 @@ import dev.chrisbanes.haze.haze
 import dev.chrisbanes.haze.hazeChild
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 
 enum class AnisugTab { Home, Search, Calendar, Bookmarks, Downloads, Settings }
 
@@ -471,6 +476,7 @@ fun HomeScreen(
                         onLiveChatClick = onLiveChatClick,
                         onW2gClick = onW2gClick,
                         chatUnreadCount = chatUnreadCount,
+                        useQuickActionMenu = settingsState.quickActionMenu,
                         hazeState = hazeState,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
@@ -2179,9 +2185,11 @@ private fun MobileTopBar(
     onLiveChatClick: () -> Unit,
     onW2gClick: () -> Unit = {},
     chatUnreadCount: Int = 0,
+    useQuickActionMenu: Boolean = true,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
+    var quickMenuExpanded by remember { mutableStateOf(false) }
     val downloadTasks by DownloadManager.tasks.collectAsState()
     val finishedDownloadCount = remember(downloadTasks) {
         DownloadManager.countFinishedDownloads(downloadTasks)
@@ -2216,6 +2224,98 @@ private fun MobileTopBar(
             )
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (useQuickActionMenu) {
+                    Box(modifier = Modifier.size(36.dp).zIndex(2f)) {
+                        IconButton(
+                            onClick = { quickMenuExpanded = !quickMenuExpanded },
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            Icon(
+                                imageVector = if (quickMenuExpanded) Icons.Default.Close else Icons.Default.Menu,
+                                contentDescription = if (quickMenuExpanded) "Close quick menu" else "Open quick menu",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = quickMenuExpanded,
+                            onDismissRequest = { quickMenuExpanded = false },
+                            offset = DpOffset(x = (-144).dp, y = 6.dp),
+                            modifier = Modifier
+                                .width(180.dp)
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.Black.copy(alpha = 0.42f))
+                                .hazeChild(
+                                    state = hazeState,
+                                    style = HazeStyle(
+                                        tints = listOf(HazeTint(Color.White.copy(alpha = 0.10f))),
+                                        blurRadius = 32.dp,
+                                        noiseFactor = 0.08f,
+                                    )
+                                ),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(0.dp),
+                            ) {
+                                QuickMenuItem(
+                                    text = "watch2gether",
+                                    icon = Icons.Outlined.Group,
+                                    onClick = {
+                                        quickMenuExpanded = false
+                                        onW2gClick()
+                                    },
+                                )
+                                QuickMenuItem(
+                                    text = "downloads",
+                                    icon = Icons.Outlined.Download,
+                                    badgeCount = finishedDownloadCount,
+                                    onClick = {
+                                        quickMenuExpanded = false
+                                        onDownloadClick()
+                                    },
+                                )
+                                QuickMenuItem(
+                                    text = "notifications",
+                                    icon = Icons.Default.Notifications,
+                                    onClick = { quickMenuExpanded = false },
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Box(modifier = Modifier.size(36.dp)) {
+                        IconButton(
+                            onClick = onW2gClick,
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Group,
+                                contentDescription = "Watch Together",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                    }
+                    Box(modifier = Modifier.size(36.dp)) {
+                        IconButton(
+                            onClick = onDownloadClick,
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Download,
+                                contentDescription = "Downloads",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                        DownloadCountBadge(
+                            count = finishedDownloadCount,
+                            modifier = Modifier.align(Alignment.TopEnd).offset(x = (-1).dp, y = (-1).dp),
+                        )
+                    }
+                }
                 Box(modifier = Modifier.size(36.dp)) {
                     IconButton(
                         onClick = onLiveChatClick,
@@ -2231,36 +2331,6 @@ private fun MobileTopBar(
                     DownloadCountBadge(
                         count = chatUnreadCount,
                         badgeColor = Color(0xFFE50914),
-                        modifier = Modifier.align(Alignment.TopEnd).offset(x = (-1).dp, y = (-1).dp),
-                    )
-                }
-                Box(modifier = Modifier.size(36.dp)) {
-                    IconButton(
-                        onClick = onW2gClick,
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Group,
-                            contentDescription = "Watch Together",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                }
-                Box(modifier = Modifier.size(36.dp)) {
-                    IconButton(
-                        onClick = onDownloadClick,
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Download,
-                            contentDescription = "Downloads",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                    DownloadCountBadge(
-                        count = finishedDownloadCount,
                         modifier = Modifier.align(Alignment.TopEnd).offset(x = (-1).dp, y = (-1).dp),
                     )
                 }
@@ -2286,6 +2356,45 @@ private fun MobileTopBar(
                     1f to Color.Transparent
                 )
             )
+        )
+    }
+}
+
+@Composable
+private fun QuickMenuItem(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    badgeCount: Int = 0,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(42.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(modifier = Modifier.size(20.dp)) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(18.dp).align(Alignment.Center),
+            )
+            DownloadCountBadge(
+                count = badgeCount,
+                modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp),
+            )
+        }
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 16.sp,
+            lineHeight = 18.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
