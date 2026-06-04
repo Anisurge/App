@@ -817,6 +817,7 @@ class SettingsViewModel(
                 stickerService.fetchCatalog(
                     catalogLimit = SHOP_PAGE_SIZE,
                     catalogOffset = 0,
+                    sellOnly = true,
                 )
             } else {
                 bffShopService.fetchShopMe(
@@ -860,6 +861,7 @@ class SettingsViewModel(
                 stickerService.fetchCatalog(
                     catalogLimit = SHOP_PAGE_SIZE,
                     catalogOffset = state.shopCatalog.size,
+                    sellOnly = true,
                 )
             } else {
                 bffShopService.fetchShopMe(

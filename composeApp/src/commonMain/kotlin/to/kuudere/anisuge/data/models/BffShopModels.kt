@@ -29,6 +29,7 @@ data class BffShopItemsResponse(
 @Serializable
 data class BffShopMeResponse(
     val coins: Int = 0,
+    val isPremium: Boolean = false,
     val owned: List<BffShopItem> = emptyList(),
     val catalog: List<BffShopItem> = emptyList(),
     val catalogTotal: Int = 0,

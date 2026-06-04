@@ -14,6 +14,8 @@ import to.kuudere.anisuge.data.models.BffErrorResponse
 import to.kuudere.anisuge.data.models.BffShopMeResponse
 import to.kuudere.anisuge.data.models.BffShopPurchaseRequest
 import to.kuudere.anisuge.data.models.BffShopPurchaseResponse
+import to.kuudere.anisuge.data.models.BffShopItem
+import to.kuudere.anisuge.data.models.Sticker
 import to.kuudere.anisuge.data.models.StickerMeResponse
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 
@@ -42,11 +44,12 @@ class StickerService(
     suspend fun fetchCatalog(
         catalogLimit: Int = 25,
         catalogOffset: Int = 0,
+        sellOnly: Boolean = false,
     ): Result<BffShopMeResponse> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
         return try {
             val response = httpClient.get(
-                "${AnisurgeApi.v1Base}/stickers/catalog?catalogLimit=$catalogLimit&catalogOffset=$catalogOffset",
+                "${AnisurgeApi.v1Base}/stickers/catalog?catalogLimit=$catalogLimit&catalogOffset=$catalogOffset&sellOnly=$sellOnly",
             ) {
                 applyAnisurgeAuth(stored)
             }
@@ -82,3 +85,15 @@ class StickerService(
         json.decodeFromString<BffErrorResponse>(raw).displayMessage()
     }.getOrElse { "Request failed" }
 }
+
+fun BffShopItem.toSticker(): Sticker = Sticker(
+    id = id,
+    name = name,
+    description = description,
+    mediaType = mediaType,
+    assetUrl = assetUrl,
+    thumbnailUrl = thumbnailUrl,
+    accessMode = accessMode,
+    priceCoins = priceCoins,
+    owned = owned,
+)

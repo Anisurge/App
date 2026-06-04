@@ -53,6 +53,7 @@ import to.kuudere.anisuge.ui.resolveProfileMediaUrl
 import to.kuudere.anisuge.ui.StickerInline
 import to.kuudere.anisuge.ui.StickerPickerDialog
 import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
+import to.kuudere.anisuge.data.services.toSticker
 import to.kuudere.anisuge.data.models.Comment
 import to.kuudere.anisuge.data.models.Sticker
 
@@ -132,8 +133,11 @@ fun CommentsSection(
     var rootShowPreview by remember { mutableStateOf(false) }
     var rootFocused by remember { mutableStateOf(false) }
     var stickers by remember { mutableStateOf<List<Sticker>>(emptyList()) }
+    var stickerCoins by remember { mutableIntStateOf(0) }
+    var isPremiumForStickers by remember { mutableStateOf(false) }
     var isLoadingStickers by remember { mutableStateOf(false) }
     var stickerError by remember { mutableStateOf<String?>(null) }
+    var purchasingStickerId by remember { mutableStateOf<String?>(null) }
     var rootStickerPickerOpen by remember { mutableStateOf(false) }
     var replyStickerTargetId by remember { mutableStateOf<String?>(null) }
 
@@ -171,15 +175,37 @@ fun CommentsSection(
         scope.launch {
             isLoadingStickers = true
             stickerError = null
-            stickerService.fetchMine().fold(
+            stickerService.fetchCatalog(catalogLimit = 100).fold(
                 onSuccess = { res ->
-                    stickers = res.stickers
+                    stickers = res.catalog.map { it.toSticker() }
+                    stickerCoins = res.coins
+                    isPremiumForStickers = res.isPremium
                     isLoadingStickers = false
                 },
                 onFailure = { e ->
                     stickerError = e.message ?: "Failed to load stickers"
                     isLoadingStickers = false
                 }
+            )
+        }
+    }
+
+    fun purchaseSticker(sticker: Sticker) {
+        if (sticker.accessMode != "sell" || sticker.owned || purchasingStickerId != null) return
+        scope.launch {
+            purchasingStickerId = sticker.id
+            stickerError = null
+            stickerService.purchase(sticker.id).fold(
+                onSuccess = { res ->
+                    val purchased = res.item.toSticker()
+                    stickerCoins = res.coins
+                    stickers = stickers.map { if (it.id == purchased.id) purchased else it }
+                    purchasingStickerId = null
+                },
+                onFailure = { e ->
+                    stickerError = e.message ?: "Failed to buy sticker"
+                    purchasingStickerId = null
+                },
             )
         }
     }
@@ -368,11 +394,15 @@ fun CommentsSection(
             stickers = stickers,
             isLoading = isLoadingStickers,
             error = stickerError,
+            coins = stickerCoins,
+            isPremium = isPremiumForStickers,
+            purchasingStickerId = purchasingStickerId,
             onRefresh = { loadStickers(force = true) },
             onDismiss = {
                 rootStickerPickerOpen = false
                 replyStickerTargetId = null
             },
+            onPurchase = ::purchaseSticker,
             onSelect = { sticker ->
                 val targetId = replyStickerTargetId
                 rootStickerPickerOpen = false

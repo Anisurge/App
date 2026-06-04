@@ -22,6 +22,7 @@ import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.ChatService
 import to.kuudere.anisuge.data.services.SearchService
 import to.kuudere.anisuge.data.services.StickerService
+import to.kuudere.anisuge.data.services.toSticker
 import to.kuudere.anisuge.navigation.Screen
 import to.kuudere.anisuge.ui.ChatFramePrefetch
 
@@ -60,8 +61,11 @@ data class LiveChatUiState(
     val unreadCount: Int = 0,
     val isCurrentUserStaff: Boolean = false,
     val stickers: List<Sticker> = emptyList(),
+    val stickerCoins: Int = 0,
+    val isPremium: Boolean = false,
     val isLoadingStickers: Boolean = false,
     val stickerError: String? = null,
+    val purchasingStickerId: String? = null,
 )
 
 class LiveChatViewModel(
@@ -100,6 +104,7 @@ class LiveChatViewModel(
                 currentUserFrameUrl = profile?.equippedFrameUrl,
                 currentUserOuterFrameUrl = profile?.equippedOuterFrameUrl,
                 currentUsername = profile?.displayName ?: profile?.username,
+                isPremium = profile?.isPremium == true,
             )
             next.copy(messages = next.messages.map { enrichOwnMessage(it, next) })
         }
@@ -387,11 +392,13 @@ class LiveChatViewModel(
         if (!force && (state.stickers.isNotEmpty() || state.isLoadingStickers)) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingStickers = true, stickerError = null) }
-            stickerService.fetchMine().fold(
+            stickerService.fetchCatalog(catalogLimit = 100).fold(
                 onSuccess = { res ->
                     _uiState.update {
                         it.copy(
-                            stickers = res.stickers,
+                            stickers = res.catalog.map { item -> item.toSticker() },
+                            stickerCoins = res.coins,
+                            isPremium = res.isPremium,
                             isLoadingStickers = false,
                             stickerError = null,
                         )
@@ -402,6 +409,35 @@ class LiveChatViewModel(
                         it.copy(
                             isLoadingStickers = false,
                             stickerError = e.message ?: "Failed to load stickers",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun purchaseSticker(sticker: Sticker) {
+        if (sticker.accessMode != "sell" || sticker.owned || _uiState.value.purchasingStickerId != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(purchasingStickerId = sticker.id, stickerError = null) }
+            stickerService.purchase(sticker.id).fold(
+                onSuccess = { res ->
+                    val purchased = res.item.toSticker()
+                    _uiState.update {
+                        it.copy(
+                            purchasingStickerId = null,
+                            stickerCoins = res.coins,
+                            stickers = it.stickers.map { current ->
+                                if (current.id == purchased.id) purchased else current
+                            },
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            purchasingStickerId = null,
+                            stickerError = e.message ?: "Failed to buy sticker",
                         )
                     }
                 },

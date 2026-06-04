@@ -199,8 +199,12 @@ fun LiveChatScreen(
             stickers = state.stickers,
             isLoading = state.isLoadingStickers,
             error = state.stickerError,
+            coins = state.stickerCoins,
+            isPremium = state.isPremium,
+            purchasingStickerId = state.purchasingStickerId,
             onRefresh = { viewModel.loadStickers(force = true) },
             onDismiss = { stickerPickerOpen = false },
+            onPurchase = viewModel::purchaseSticker,
             onSelect = { sticker ->
                 stickerPickerOpen = false
                 viewModel.sendSticker(sticker)

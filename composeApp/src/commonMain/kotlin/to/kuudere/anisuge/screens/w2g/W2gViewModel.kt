@@ -35,6 +35,7 @@ import to.kuudere.anisuge.data.services.SessionStore
 import to.kuudere.anisuge.data.services.StickerService
 import to.kuudere.anisuge.data.services.W2gRoomService
 import to.kuudere.anisuge.data.services.W2gWsClient
+import to.kuudere.anisuge.data.services.toSticker
 
 data class W2gChatMessage(
     val id: String,
@@ -82,8 +83,11 @@ data class W2gUiState(
     val loadingMessage: String? = null,
     val chatSheetOpen: Boolean = false,
     val stickers: List<Sticker> = emptyList(),
+    val stickerCoins: Int = 0,
+    val isPremium: Boolean = false,
     val isLoadingStickers: Boolean = false,
     val stickerError: String? = null,
+    val purchasingStickerId: String? = null,
 ) {
     val filteredRooms: List<W2gRoomSummary>
         get() = if (searchQuery.isBlank()) rooms
@@ -856,10 +860,12 @@ class W2gViewModel(
         if (!force && (current.stickers.isNotEmpty() || current.isLoadingStickers)) return
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoadingStickers = true, stickerError = null)
-            stickerService.fetchMine().fold(
+            stickerService.fetchCatalog(catalogLimit = 100).fold(
                 onSuccess = { res ->
                     _state.value = _state.value.copy(
-                        stickers = res.stickers,
+                        stickers = res.catalog.map { it.toSticker() },
+                        stickerCoins = res.coins,
+                        isPremium = res.isPremium,
                         isLoadingStickers = false,
                         stickerError = null,
                     )
@@ -868,6 +874,31 @@ class W2gViewModel(
                     _state.value = _state.value.copy(
                         isLoadingStickers = false,
                         stickerError = e.message ?: "Failed to load stickers",
+                    )
+                },
+            )
+        }
+    }
+
+    fun purchaseSticker(sticker: Sticker) {
+        if (sticker.accessMode != "sell" || sticker.owned || _state.value.purchasingStickerId != null) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(purchasingStickerId = sticker.id, stickerError = null)
+            stickerService.purchase(sticker.id).fold(
+                onSuccess = { res ->
+                    val purchased = res.item.toSticker()
+                    _state.value = _state.value.copy(
+                        purchasingStickerId = null,
+                        stickerCoins = res.coins,
+                        stickers = _state.value.stickers.map {
+                            if (it.id == purchased.id) purchased else it
+                        },
+                    )
+                },
+                onFailure = { e ->
+                    _state.value = _state.value.copy(
+                        purchasingStickerId = null,
+                        stickerError = e.message ?: "Failed to buy sticker",
                     )
                 },
             )

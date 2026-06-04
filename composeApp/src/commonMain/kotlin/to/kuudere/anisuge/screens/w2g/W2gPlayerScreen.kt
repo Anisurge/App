@@ -676,9 +676,13 @@ fun W2gPlayerScreen(
             stickers = state.stickers,
             isLoadingStickers = state.isLoadingStickers,
             stickerError = state.stickerError,
+            stickerCoins = state.stickerCoins,
+            isPremium = state.isPremium,
+            purchasingStickerId = state.purchasingStickerId,
             onDismiss = { viewModel.setChatSheetOpen(false) },
             onLoadStickers = { viewModel.loadStickers() },
             onRefreshStickers = { viewModel.loadStickers(force = true) },
+            onPurchaseSticker = viewModel::purchaseSticker,
             onSticker = { sticker, body -> viewModel.sendSticker(sticker, body) },
             onSend = { body ->
                 if (body.isNotBlank()) {
@@ -693,8 +697,12 @@ fun W2gPlayerScreen(
             stickers = state.stickers,
             isLoading = state.isLoadingStickers,
             error = state.stickerError,
+            coins = state.stickerCoins,
+            isPremium = state.isPremium,
+            purchasingStickerId = state.purchasingStickerId,
             onRefresh = { viewModel.loadStickers(force = true) },
             onDismiss = { sideStickerPickerOpen = false },
+            onPurchase = viewModel::purchaseSticker,
             onSelect = { sticker ->
                 sideStickerPickerOpen = false
                 viewModel.sendSticker(sticker, chatInput)
@@ -1192,9 +1200,13 @@ private fun ChatSheet(
     stickers: List<Sticker>,
     isLoadingStickers: Boolean,
     stickerError: String?,
+    stickerCoins: Int,
+    isPremium: Boolean,
+    purchasingStickerId: String?,
     onDismiss: () -> Unit,
     onLoadStickers: () -> Unit,
     onRefreshStickers: () -> Unit,
+    onPurchaseSticker: (Sticker) -> Unit,
     onSticker: (Sticker, String) -> Unit,
     onSend: (String) -> Unit,
 ) {
@@ -1207,8 +1219,12 @@ private fun ChatSheet(
             stickers = stickers,
             isLoading = isLoadingStickers,
             error = stickerError,
+            coins = stickerCoins,
+            isPremium = isPremium,
+            purchasingStickerId = purchasingStickerId,
             onRefresh = onRefreshStickers,
             onDismiss = { stickerPickerOpen = false },
+            onPurchase = onPurchaseSticker,
             onSelect = { sticker ->
                 stickerPickerOpen = false
                 onSticker(sticker, chatInput)

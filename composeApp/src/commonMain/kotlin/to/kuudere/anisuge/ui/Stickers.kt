@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -102,8 +104,12 @@ fun StickerPickerDialog(
     stickers: List<Sticker>,
     isLoading: Boolean,
     error: String?,
+    coins: Int = 0,
+    isPremium: Boolean = false,
+    purchasingStickerId: String? = null,
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
+    onPurchase: (Sticker) -> Unit = {},
     onSelect: (Sticker) -> Unit,
 ) {
     AlertDialog(
@@ -143,14 +149,44 @@ fun StickerPickerDialog(
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
                             items(stickers, key = { it.id }) { sticker ->
+                                val canUse = sticker.canUseSticker(isPremium)
+                                val canBuy = sticker.accessMode == "sell" && !sticker.owned
+                                val label = when {
+                                    canUse -> null
+                                    sticker.accessMode == "pro" -> "Needs Pro"
+                                    canBuy -> "${sticker.priceCoins} Berries"
+                                    else -> "Locked"
+                                }
                                 Column(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(10.dp))
-                                        .clickable { onSelect(sticker) }
+                                        .then(if (canUse) Modifier.clickable { onSelect(sticker) } else Modifier)
+                                        .background(
+                                            if (canUse) Color.Transparent
+                                            else Color.Black.copy(alpha = 0.22f),
+                                        )
                                         .padding(4.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                 ) {
-                                    StickerMedia(sticker.toMessage(), size = 76.dp)
+                                    Box(contentAlignment = Alignment.BottomCenter) {
+                                        StickerMedia(sticker.toMessage(), size = 76.dp)
+                                        label?.let {
+                                            Text(
+                                                it,
+                                                color = Color.White,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp))
+                                                    .background(Color.Black.copy(alpha = 0.72f))
+                                                    .padding(horizontal = 3.dp, vertical = 2.dp),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
                                     Text(
                                         sticker.name,
                                         color = AppColors.text,
@@ -160,11 +196,40 @@ fun StickerPickerDialog(
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                                     )
+                                    if (canBuy) {
+                                        Button(
+                                            onClick = { onPurchase(sticker) },
+                                            enabled = !isLoading && purchasingStickerId == null && coins >= sticker.priceCoins,
+                                            modifier = Modifier.fillMaxWidth().height(28.dp).padding(top = 4.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = AppColors.accent,
+                                                disabledContainerColor = AppColors.surfaceVariant,
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                        ) {
+                                            Text(
+                                                when {
+                                                    purchasingStickerId == sticker.id -> "Buying"
+                                                    coins < sticker.priceCoins -> "Need"
+                                                    else -> "Buy"
+                                                },
+                                                fontSize = 10.sp,
+                                                maxLines = 1,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                Text(
+                    "Balance: $coins Berries",
+                    color = AppColors.textMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                )
             }
         },
         confirmButton = {
@@ -179,4 +244,11 @@ fun StickerPickerDialog(
         },
         containerColor = AppColors.surface,
     )
+}
+
+fun Sticker.canUseSticker(isPremium: Boolean): Boolean = when (accessMode) {
+    "free" -> true
+    "pro" -> isPremium
+    "sell" -> owned
+    else -> owned
 }

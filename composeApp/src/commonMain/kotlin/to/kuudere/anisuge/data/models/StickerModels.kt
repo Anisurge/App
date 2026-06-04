@@ -21,6 +21,7 @@ data class Sticker(
     @SerialName("assetUrl") val assetUrl: String = "",
     @SerialName("thumbnailUrl") val thumbnailUrl: String? = null,
     @SerialName("accessMode") val accessMode: String = "free",
+    @SerialName("priceCoins") val priceCoins: Int = 0,
     val owned: Boolean = false,
 ) {
     fun toMessage(): StickerMessage = StickerMessage(
