@@ -12,6 +12,7 @@
 - Playback preferences (auto-play, auto-next, skip intro/outro, default lang, sync %) must apply immediately via `SettingsStore` and account sync—not only after tapping Save in Settings; show intro/outro skip ranges on the player progress bar only (no Intro/Outro text labels beside timestamps); use source/batch captions only—**no in-app BFF AI subtitle translation** (reverted); planned: external VTT API + notify when translated subs are ready
 - When a download fails, remove the failed queue entry and offer a fresh download—avoid resume/retry UX that stalls mid-job
 - Berries and shop cosmetics are **cosmetic-only**—never gate streaming, server choice, or downloads
+- Planned monetization idea: add an option to buy Berries later, while keeping Berries/shop items cosmetic-only
 - **anisurge.lol releases:** one stable release per platform in admin (edit the current row, bump build); keep `GET /api/app/updates` JSON compatible with the shipped KMP client (`success`, `version`, `build`, `changelog`, `downloadUrl`, `updateAvailable`)
 
 ## Learned Workspace Facts

@@ -87,6 +87,7 @@ fun W2gPlayerControls(
 ) {
     val hideDelayMillis = 1500L
     val pointerMoveThrottleMillis = 250L
+    val controlsPinned = !isFullscreen
     var controlsVisible by remember { mutableStateOf(true) }
     var isSeeking by remember { mutableStateOf(false) }
     var seekValue by remember { mutableStateOf(0f) }
@@ -98,7 +99,7 @@ fun W2gPlayerControls(
     val isLoading =
         playerState.isBuffering || (!playerState.isPlaying && playerState.duration <= 0.0) || expectedPosition != null
 
-    fun shouldKeepControlsVisible(): Boolean = isSeeking || isLoading
+    fun shouldKeepControlsVisible(): Boolean = controlsPinned || isSeeking || isLoading
     fun recordInteraction(forceShow: Boolean = true) {
         lastInteractionAt = Clock.System.now().toEpochMilliseconds()
         if (forceShow) controlsVisible = true
@@ -121,7 +122,7 @@ fun W2gPlayerControls(
     }
 
     // Show controls initially, then let idle timer handle auto-hide.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(controlsPinned) {
         controlsVisible = true
         recordInteraction(forceShow = false)
     }
@@ -161,8 +162,13 @@ fun W2gPlayerControls(
                 controlsVisible = true
                 recordInteraction(forceShow = false)
             } else {
-                controlsVisible = !controlsVisible
-                if (controlsVisible) recordInteraction(forceShow = false)
+                if (controlsPinned) {
+                    controlsVisible = true
+                    recordInteraction(forceShow = false)
+                } else {
+                    controlsVisible = !controlsVisible
+                    if (controlsVisible) recordInteraction(forceShow = false)
+                }
             }
         }
     }
@@ -218,7 +224,7 @@ fun W2gPlayerControls(
                     },
                     onTap = {
                         if (playerState.isLocked) {
-                            controlsVisible = !controlsVisible
+                            controlsVisible = if (controlsPinned) true else !controlsVisible
                             if (controlsVisible) recordInteraction(forceShow = false)
                             return@detectTapGestures
                         }
@@ -235,8 +241,13 @@ fun W2gPlayerControls(
                             controlsVisible = true
                             recordInteraction(forceShow = false)
                         } else {
-                            controlsVisible = !controlsVisible
-                            if (controlsVisible) recordInteraction(forceShow = false)
+                            if (controlsPinned) {
+                                controlsVisible = true
+                                recordInteraction(forceShow = false)
+                            } else {
+                                controlsVisible = !controlsVisible
+                                if (controlsVisible) recordInteraction(forceShow = false)
+                            }
                         }
                     },
                     onDoubleTap = { offset ->
@@ -350,7 +361,7 @@ fun W2gPlayerControls(
     ) {
         // Desktop-only: hide the OS cursor when controls are hidden.
         to.kuudere.anisuge.platform.SyncCursorHidden(
-            hidden = to.kuudere.anisuge.platform.isDesktopPlatform && !controlsVisible
+            hidden = to.kuudere.anisuge.platform.isDesktopPlatform && !controlsPinned && !controlsVisible
         )
 
         // Double Tap Seek Animation Overlay
@@ -380,7 +391,7 @@ fun W2gPlayerControls(
         }
 
         AnimatedVisibility(
-            visible = controlsVisible,
+            visible = controlsPinned || controlsVisible,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()
@@ -984,4 +995,3 @@ private fun getPictureInPictureIcon(): ImageVector {
         }
     }.build()
 }
-

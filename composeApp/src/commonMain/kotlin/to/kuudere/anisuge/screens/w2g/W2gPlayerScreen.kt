@@ -321,6 +321,7 @@ fun W2gPlayerScreen(
                                 showMediaControls = state.isHost,
                                 showFullscreenButton = true,
                                 showLibraryActions = false,
+                                compactControls = !isFullscreen,
                                 onFullscreenToggle = { isFullscreen = !isFullscreen },
                                 onBack = {},
                                 onChatClick = {
