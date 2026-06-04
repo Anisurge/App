@@ -1,10 +1,11 @@
 package to.kuudere.anisuge.screens.chat
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,7 +61,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -101,6 +101,13 @@ fun LiveChatScreen(
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val isUserScrolling by remember { derivedStateOf { listState.isScrollInProgress } }
+    val visibleMessageIds by remember {
+        derivedStateOf {
+            listState.layoutInfo.visibleItemsInfo
+                .mapNotNull { it.key as? String }
+                .toSet()
+        }
+    }
     var didInitialScroll by remember { mutableStateOf(false) }
     var messageCountBeforeOlder by remember { mutableIntStateOf(0) }
     var stickerPickerOpen by remember { mutableStateOf(false) }
@@ -370,6 +377,7 @@ fun LiveChatScreen(
                                     showHeader = isFirstInGroup,
                                     showAvatar = isLastInGroup,
                                     isScrolling = isUserScrolling,
+                                    isStickerVisible = visibleMessageIds.contains(message.id),
                                     onProfileClick = { viewModel.showMemberProfile(message) },
                                     onActionClick = onAction,
                                     onDelete = if (state.isCurrentUserStaff) { { viewModel.deleteMessage(message.id) } } else null,
@@ -488,6 +496,7 @@ private fun LiveChatBackground() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatMessageRow(
     message: ChatMessage,
@@ -495,6 +504,7 @@ private fun ChatMessageRow(
     showHeader: Boolean,
     showAvatar: Boolean,
     isScrolling: Boolean,
+    isStickerVisible: Boolean,
     onProfileClick: () -> Unit,
     onActionClick: (String) -> Unit,
     onDelete: (() -> Unit)? = null,
@@ -505,12 +515,13 @@ private fun ChatMessageRow(
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    val rowModifier = Modifier.pointerInput(onDelete, onProfileClick) {
-        detectTapGestures(
-            onTap = { onProfileClick() },
-            onLongPress = { if (onDelete != null) showDeleteDialog = true },
-        )
-    }
+    val rowInteraction = remember { MutableInteractionSource() }
+    val rowModifier = Modifier.combinedClickable(
+        interactionSource = rowInteraction,
+        indication = null,
+        onClick = onProfileClick,
+        onLongClick = { if (onDelete != null) showDeleteDialog = true },
+    )
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -609,7 +620,7 @@ private fun ChatMessageRow(
                     ) {
                         StickerInline(
                             sticker = message.metadata.sticker,
-                            playAnimation = true,
+                            playAnimation = isStickerVisible,
                         )
                         Text(
                             text = formatChatTimestamp(message.createdAt),
@@ -664,7 +675,7 @@ private fun ChatMessageRow(
                                 )
                             }
                             message.metadata.sticker?.let { sticker ->
-                                StickerInline(sticker = sticker, playAnimation = true)
+                                StickerInline(sticker = sticker, playAnimation = isStickerVisible)
                             }
                             Text(
                                 text = formatChatTimestamp(message.createdAt),
