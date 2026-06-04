@@ -2,6 +2,7 @@ package to.kuudere.anisuge.screens.chat
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,6 +48,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -90,7 +92,7 @@ import to.kuudere.anisuge.ui.StickerPickerDialog
 import to.kuudere.anisuge.ui.chatAccentColor
 import to.kuudere.anisuge.platform.copyToClipboard
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LiveChatScreen(
     viewModel: LiveChatViewModel,
@@ -311,17 +313,18 @@ fun LiveChatScreen(
                         )
                     }
 
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 12.dp,
-                            vertical = 8.dp,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
+                    CompositionLocalProvider(LocalOverscrollFactory provides null) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                horizontal = 12.dp,
+                                vertical = 8.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
                         if (state.isLoadingOlder || state.hasMoreOlder) {
                             item(key = "load-older-header") {
                                 Box(
@@ -384,6 +387,7 @@ fun LiveChatScreen(
                                 )
                             }
                         }
+                    }
                     }
 
                     Row(
