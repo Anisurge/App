@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -168,6 +170,7 @@ fun W2gPlayerScreen(
         when {
             showHostLeaveDialog -> showHostLeaveDialog = false
             state.hostPicker.isOpen -> viewModel.dismissHostPicker()
+            isFullscreen -> isFullscreen = false
             state.chatSheetOpen -> viewModel.setChatSheetOpen(false)
             else -> requestLeaveRoom()
         }
@@ -238,11 +241,22 @@ fun W2gPlayerScreen(
     ) { padding ->
         val showSideChat = isFullscreen && state.chatSheetOpen
 
-        Row(Modifier.fillMaxSize()) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(if (isFullscreen) PaddingValues(0.dp) else padding),
+        ) {
+            val sideChatWidth = when {
+                maxWidth < 560.dp -> maxWidth * 0.46f
+                maxWidth < 840.dp -> maxWidth * 0.40f
+                else -> 340.dp
+            }
+
+            Row(Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .then(if (showSideChat) Modifier.weight(0.7f) else Modifier.weight(1f)),
+                    .weight(1f),
             ) {
                 // Player area
                 Box(
@@ -509,7 +523,7 @@ fun W2gPlayerScreen(
             if (showSideChat) {
                 Box(
                     modifier = Modifier
-                        .weight(0.3f)
+                        .width(sideChatWidth)
                         .fillMaxHeight()
                         .background(AppColors.background)
                 ) {
@@ -627,6 +641,7 @@ fun W2gPlayerScreen(
                     }
                 }
             }
+        }
         }
     }
 
@@ -1207,13 +1222,20 @@ private fun ChatSheet(
         sheetState = sheetState,
         containerColor = AppColors.background,
     ) {
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(400.dp)
+                .heightIn(max = 420.dp)
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 28.dp),
         ) {
+            val sheetHeight = (maxHeight * 0.86f).coerceAtMost(400.dp)
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(sheetHeight),
+            ) {
             Text("Room Chat", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
 
@@ -1287,6 +1309,7 @@ private fun ChatSheet(
                 }) {
                     Icon(Icons.Outlined.Send, "Send", tint = AppColors.accent)
                 }
+            }
             }
         }
     }
