@@ -105,17 +105,18 @@ class ChatService(
         body: String,
         roomSlug: String = GLOBAL_ROOM_SLUG,
         metadata: ChatMessageMetadata? = null,
+        stickerId: String? = null,
     ): Result<ChatMessage> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
         val trimmed = body.trim()
-        if (trimmed.isEmpty()) {
+        if (trimmed.isEmpty() && stickerId.isNullOrBlank()) {
             return Result.failure(IllegalArgumentException("Message cannot be empty"))
         }
         return try {
             val response = httpClient.post("${AnisurgeApi.v1Base}/chat/rooms/$roomSlug/messages") {
                 applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
-                setBody(ChatPostMessageRequest(trimmed, metadata))
+                setBody(ChatPostMessageRequest(trimmed, metadata, stickerId))
             }
             if (response.status.isSuccess()) {
                 Result.success(response.body())

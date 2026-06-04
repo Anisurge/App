@@ -71,6 +71,10 @@ object AppComponent {
         to.kuudere.anisuge.data.services.BffShopService(sessionStore, httpClient)
     }
 
+    val stickerService: to.kuudere.anisuge.data.services.StickerService by lazy {
+        to.kuudere.anisuge.data.services.StickerService(sessionStore, httpClient)
+    }
+
     val bffRewardsService: to.kuudere.anisuge.data.services.BffRewardsService by lazy {
         to.kuudere.anisuge.data.services.BffRewardsService(sessionStore, httpClient)
     }

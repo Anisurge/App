@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -84,6 +85,8 @@ import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ChatUsernameLabel
 import to.kuudere.anisuge.ui.ChatDecoratedAvatar
+import to.kuudere.anisuge.ui.StickerInline
+import to.kuudere.anisuge.ui.StickerPickerDialog
 import to.kuudere.anisuge.ui.chatAccentColor
 import to.kuudere.anisuge.platform.copyToClipboard
 
@@ -100,6 +103,7 @@ fun LiveChatScreen(
     val isUserScrolling by remember { derivedStateOf { listState.isScrollInProgress } }
     var didInitialScroll by remember { mutableStateOf(false) }
     var messageCountBeforeOlder by remember { mutableIntStateOf(0) }
+    var stickerPickerOpen by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         didInitialScroll = false
@@ -178,6 +182,20 @@ fun LiveChatScreen(
             onQueryChange = viewModel::onAnimePickerQueryChange,
             onSelect = viewModel::sendAnimeCard,
             onDismiss = viewModel::dismissAnimePicker,
+        )
+    }
+
+    if (stickerPickerOpen) {
+        StickerPickerDialog(
+            stickers = state.stickers,
+            isLoading = state.isLoadingStickers,
+            error = state.stickerError,
+            onRefresh = { viewModel.loadStickers(force = true) },
+            onDismiss = { stickerPickerOpen = false },
+            onSelect = { sticker ->
+                stickerPickerOpen = false
+                viewModel.sendSticker(sticker)
+            },
         )
     }
 
@@ -401,6 +419,23 @@ fun LiveChatScreen(
                             )
                         }
                         IconButton(
+                            onClick = {
+                                stickerPickerOpen = true
+                                viewModel.loadStickers()
+                            },
+                            enabled = !state.isSending && state.cooldownSecondsLeft == 0,
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(AppColors.surfaceVariant.copy(alpha = 0.9f)),
+                        ) {
+                            Icon(
+                                Icons.Default.EmojiEmotions,
+                                contentDescription = "Stickers",
+                                tint = AppColors.accent,
+                            )
+                        }
+                        IconButton(
                             onClick = { viewModel.sendMessage() },
                             enabled = state.draft.isNotBlank() && !state.isSending && state.cooldownSecondsLeft == 0,
                             modifier = Modifier
@@ -541,6 +576,10 @@ private fun ChatMessageRow(
                 modifier = Modifier.widthIn(max = 280.dp),
                 horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
             ) {
+                val stickerOnly = message.body.isBlank() &&
+                    message.metadata.sticker != null &&
+                    message.metadata.anime == null &&
+                    message.metadata.actions.isEmpty()
                 if (showHeader) {
                     Row(
                         modifier = Modifier.widthIn(max = 240.dp),
@@ -563,58 +602,77 @@ private fun ChatMessageRow(
                     }
                     Spacer(Modifier.height(4.dp))
                 }
-                Box(
-                    Modifier
-                        .clip(
-                            RoundedCornerShape(
-                                topStart = 12.dp,
-                                topEnd = 12.dp,
-                                bottomStart = if (isMine) 12.dp else 4.dp,
-                                bottomEnd = if (isMine) 4.dp else 12.dp,
-                            ),
+                if (stickerOnly) {
+                    Column(
+                        horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        StickerInline(
+                            sticker = message.metadata.sticker,
+                            playAnimation = !isScrolling,
                         )
-                        .background(bubbleColor)
-                        .then(
-                            if (!isMine) {
-                                Modifier.border(
-                                    1.dp,
-                                    accent.copy(alpha = 0.55f),
-                                    RoundedCornerShape(12.dp),
-                                )
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (message.body.isNotBlank()) {
-                            Text(
-                                markdownText(message.body),
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
-                            )
-                        }
-                        message.metadata.anime?.let { anime ->
-                            ChatAnimeCardView(
-                                anime = anime,
-                                onClick = { onActionClick("anisurge://anime/${anime.animeId}") },
-                            )
-                        }
-                        if (message.metadata.actions.isNotEmpty()) {
-                            ChatActionButtons(
-                                actions = message.metadata.actions,
-                                onActionClick = onActionClick,
-                            )
-                        }
-                        // Timestamp inside bubble (bottom-right)
                         Text(
                             text = formatChatTimestamp(message.createdAt),
-                            color = Color.White.copy(alpha = 0.4f),
+                            color = Color.White.copy(alpha = 0.42f),
                             fontSize = 10.sp,
-                            modifier = Modifier.align(Alignment.End),
                         )
+                    }
+                } else {
+                    Box(
+                        Modifier
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 12.dp,
+                                    topEnd = 12.dp,
+                                    bottomStart = if (isMine) 12.dp else 4.dp,
+                                    bottomEnd = if (isMine) 4.dp else 12.dp,
+                                ),
+                            )
+                            .background(bubbleColor)
+                            .then(
+                                if (!isMine) {
+                                    Modifier.border(
+                                        1.dp,
+                                        accent.copy(alpha = 0.55f),
+                                        RoundedCornerShape(12.dp),
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (message.body.isNotBlank()) {
+                                Text(
+                                    markdownText(message.body),
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp,
+                                )
+                            }
+                            message.metadata.anime?.let { anime ->
+                                ChatAnimeCardView(
+                                    anime = anime,
+                                    onClick = { onActionClick("anisurge://anime/${anime.animeId}") },
+                                )
+                            }
+                            if (message.metadata.actions.isNotEmpty()) {
+                                ChatActionButtons(
+                                    actions = message.metadata.actions,
+                                    onActionClick = onActionClick,
+                                )
+                            }
+                            message.metadata.sticker?.let { sticker ->
+                                StickerInline(sticker = sticker, playAnimation = !isScrolling)
+                            }
+                            Text(
+                                text = formatChatTimestamp(message.createdAt),
+                                color = Color.White.copy(alpha = 0.4f),
+                                fontSize = 10.sp,
+                                modifier = Modifier.align(Alignment.End),
+                            )
+                        }
                     }
                 }
             }

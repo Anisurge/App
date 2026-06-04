@@ -1006,6 +1006,7 @@ private fun MobileSettingsDetail(
                     uiState = uiState,
                     onRefresh = viewModel::loadShop,
                     onLoadMore = viewModel::loadMoreShop,
+                    onKindChange = viewModel::setShopKind,
                     onPurchase = viewModel::purchaseShopItem,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1162,6 +1163,7 @@ private fun SettingsContent(
                 uiState = uiState,
                 onRefresh = viewModel::loadShop,
                 onLoadMore = viewModel::loadMoreShop,
+                onKindChange = viewModel::setShopKind,
                 onPurchase = viewModel::purchaseShopItem,
                 modifier = modifier.fillMaxSize(),
             )

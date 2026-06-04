@@ -50,8 +50,11 @@ import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.ui.ProfileAvatar
 import to.kuudere.anisuge.ui.resolveProfileMediaUrl
+import to.kuudere.anisuge.ui.StickerInline
+import to.kuudere.anisuge.ui.StickerPickerDialog
 import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 import to.kuudere.anisuge.data.models.Comment
+import to.kuudere.anisuge.data.models.Sticker
 
 // ── Colour palette — theme-driven (see theme/AppColors.kt) ───────────────────
 private val BgBlack: Color get() = AppColors.background
@@ -113,6 +116,7 @@ fun CommentsSection(
 ) {
     val scope = rememberCoroutineScope()
     val commentService = remember { AppComponent.commentService }
+    val stickerService = remember { AppComponent.stickerService }
     val isAuthenticated = userId != null
 
     var comments by remember { mutableStateOf<List<CommentUiModel>>(emptyList()) }
@@ -127,8 +131,11 @@ fun CommentsSection(
     var rootIsSpoiler by remember { mutableStateOf(false) }
     var rootShowPreview by remember { mutableStateOf(false) }
     var rootFocused by remember { mutableStateOf(false) }
-    var rootImageDialog by remember { mutableStateOf(false) }
-    var imageUrlInput by remember { mutableStateOf("") }
+    var stickers by remember { mutableStateOf<List<Sticker>>(emptyList()) }
+    var isLoadingStickers by remember { mutableStateOf(false) }
+    var stickerError by remember { mutableStateOf<String?>(null) }
+    var rootStickerPickerOpen by remember { mutableStateOf(false) }
+    var replyStickerTargetId by remember { mutableStateOf<String?>(null) }
 
     val listState = rememberLazyListState()
 
@@ -157,6 +164,33 @@ fun CommentsSection(
                 AnimatedFrameBytesCache.prefetchEntries(entries.values.toList(), concurrency = 12)
             }
         }
+    }
+
+    fun loadStickers(force: Boolean = false) {
+        if (!force && (stickers.isNotEmpty() || isLoadingStickers)) return
+        scope.launch {
+            isLoadingStickers = true
+            stickerError = null
+            stickerService.fetchMine().fold(
+                onSuccess = { res ->
+                    stickers = res.stickers
+                    isLoadingStickers = false
+                },
+                onFailure = { e ->
+                    stickerError = e.message ?: "Failed to load stickers"
+                    isLoadingStickers = false
+                }
+            )
+        }
+    }
+
+    fun findComment(id: String, nodes: List<CommentUiModel> = comments): CommentUiModel? {
+        for (node in nodes) {
+            if (node.data.id == id) return node
+            val nested = findComment(id, node.replies)
+            if (nested != null) return nested
+        }
+        return null
     }
 
     fun loadComments(page: Int = 1) {
@@ -221,12 +255,18 @@ fun CommentsSection(
         scope.launch { commentService.toggleLike(model.data.id, type) }
     }
 
-    fun postRoot() {
+    fun postRoot(sticker: Sticker? = null) {
         println("[CommentsSection] postRoot called: isAuthenticated=$isAuthenticated, rootText.length=${rootText.length}")
-        if (!isAuthenticated || rootText.isBlank()) return
+        if (!isAuthenticated || (rootText.isBlank() && sticker == null)) return
         scope.launch {
             isPostingRoot = true
-            val res = commentService.postComment(animeId, episodeNumber, rootText, spoiler = rootIsSpoiler)
+            val res = commentService.postComment(
+                animeId,
+                episodeNumber,
+                rootText,
+                spoiler = rootIsSpoiler,
+                stickerId = sticker?.id,
+            )
             println("[CommentsSection] postRoot response: $res")
             if (res?.success == true) {
                 val id = res.data?.commentId ?: res.data?.id ?: to.kuudere.anisuge.utils.currentTimeMillis().toString()
@@ -236,7 +276,8 @@ fun CommentsSection(
                         data = Comment(
                             id = id, author = username, authorId = userId, authorPfp = userPfp,
                             authorFrameUrl = userFrameUrl, authorOuterUrl = userOuterFrameUrl,
-                            content = rootText, isSpoiller = rootIsSpoiler, likes = 0, dislikes = 0
+                            content = rootText, sticker = sticker?.toMessage(),
+                            isSpoiller = rootIsSpoiler, likes = 0, dislikes = 0
                         )
                     )
                 ) + comments
@@ -270,8 +311,8 @@ fun CommentsSection(
         }
     }
 
-    fun postReply(parent: CommentUiModel) {
-        if (!isAuthenticated || parent.replyText.isBlank()) return
+    fun postReply(parent: CommentUiModel, sticker: Sticker? = null) {
+        if (!isAuthenticated || (parent.replyText.isBlank() && sticker == null)) return
         updateComment(parent.data.id) { it.copy(isSubmitting = true) }
         scope.launch {
             val res = commentService.postComment(
@@ -279,7 +320,8 @@ fun CommentsSection(
                 episodeNumber,
                 parent.replyText,
                 parent.data.id,
-                spoiler = parent.replyIsSpoiler
+                spoiler = parent.replyIsSpoiler,
+                stickerId = sticker?.id,
             )
             if (res?.success == true) {
                 val id = res.data?.commentId ?: res.data?.id ?: to.kuudere.anisuge.utils.currentTimeMillis().toString()
@@ -289,7 +331,8 @@ fun CommentsSection(
                             data = Comment(
                                 id = id, author = username, authorId = userId, authorPfp = userPfp,
                                 authorFrameUrl = userFrameUrl, authorOuterUrl = userOuterFrameUrl,
-                                content = parent.replyText, isSpoiller = parent.replyIsSpoiler, likes = 0, dislikes = 0
+                                content = parent.replyText, sticker = sticker?.toMessage(),
+                                isSpoiller = parent.replyIsSpoiler, likes = 0, dislikes = 0
                             )
                         ),
                         replyText = "",
@@ -320,71 +363,30 @@ fun CommentsSection(
         scope.launch { commentService.deleteComment(id) }
     }
 
-    // ── UI ───────────────────────────────────────────────────────────────────
-    // Image insert dialog (matches Kuudere's AlertDialog)
-    if (rootImageDialog) {
-        AlertDialog(
-            onDismissRequest = { rootImageDialog = false; imageUrlInput = "" },
-            title = { Text("Insert Image", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Paste the URL of the image you want to include in your comment.",
-                        color = TextSec,
-                        fontSize = 13.sp
-                    )
-                    BasicTextField(
-                        value = imageUrlInput,
-                        onValueChange = { imageUrlInput = it },
-                        textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
-                        cursorBrush = SolidColor(AccentRed),
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, BorderSub.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                            .background(BgInput.copy(alpha = 0.5f))
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
-                            .defaultMinSize(minHeight = 44.dp),
-                        decorationBox = { inner ->
-                            if (imageUrlInput.isEmpty()) Text(
-                                "https://example.com/image.png",
-                                color = TextMuted,
-                                fontSize = 13.sp
-                            )
-                            inner()
-                        }
-                    )
-                    Text("Supports PNG, JPG, GIF, WebP", color = TextMuted, fontSize = 10.sp, letterSpacing = 0.8.sp)
-                }
+    if (rootStickerPickerOpen || replyStickerTargetId != null) {
+        StickerPickerDialog(
+            stickers = stickers,
+            isLoading = isLoadingStickers,
+            error = stickerError,
+            onRefresh = { loadStickers(force = true) },
+            onDismiss = {
+                rootStickerPickerOpen = false
+                replyStickerTargetId = null
             },
-            dismissButton = {
-                TextButton(onClick = { rootImageDialog = false; imageUrlInput = "" }) {
-                    Text(
-                        "Cancel",
-                        color = TextSec,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
+            onSelect = { sticker ->
+                val targetId = replyStickerTargetId
+                rootStickerPickerOpen = false
+                replyStickerTargetId = null
+                if (targetId != null) {
+                    findComment(targetId)?.let { postReply(it, sticker) }
+                } else {
+                    postRoot(sticker)
                 }
-            },
-            confirmButton = {
-                Box(
-                    Modifier.clip(RoundedCornerShape(6.dp))
-                        .background(AccentRed)
-                        .clickable {
-                            if (imageUrlInput.isNotBlank()) {
-                                rootText += "![image](${imageUrlInput.trim()})"
-                            }
-                            rootImageDialog = false; imageUrlInput = ""
-                        }.padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text("Insert Image", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-            },
-            containerColor = BgDark,
-            tonalElevation = 0.dp
+            }
         )
     }
 
+    // ── UI ───────────────────────────────────────────────────────────────────
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(BgBlack)) {
             // ── Header with sort tabs ────────────────────────────────────────────
@@ -556,7 +558,7 @@ fun CommentsSection(
                                         Modifier.fillMaxWidth().padding(top = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // ── Left: formatting icons (B / I / || / Image / Lock / Eye) ──
+                                        // ── Left: formatting icons (B / I / || / Sticker / Lock / Eye) ──
                                         Row(
                                             Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -571,8 +573,9 @@ fun CommentsSection(
                                             FormatIconButton(Icons.Default.VisibilityOff, false, Color.Transparent) {
                                                 rootText = applyMarkdown(rootText, "||")
                                             }
-                                            FormatIconButton(Icons.Default.Image, false, Color.Transparent) {
-                                                rootImageDialog = true
+                                            FormatIconButton(Icons.Default.EmojiEmotions, false, Color.Transparent) {
+                                                rootStickerPickerOpen = true
+                                                loadStickers()
                                             }
                                             FormatIconButton(
                                                 icon = if (rootIsSpoiler) Icons.Default.Lock else Icons.Default.LockOpen,
@@ -726,6 +729,10 @@ fun CommentsSection(
                                 onReplyTextChange = { replyId, text -> updateComment(replyId) { it.copy(replyText = text) } },
                                 onReplySpoilerChange = { replyId, isS -> updateComment(replyId) { it.copy(replyIsSpoiler = isS) } },
                                 onSubmitReply = { replyModel -> postReply(replyModel) },
+                                onReplyStickerClick = { replyModel ->
+                                    replyStickerTargetId = replyModel.data.id
+                                    loadStickers()
+                                },
                                 onToggleReplies = { m ->
                                     if (!m.showReplies && m.replies.isEmpty() && m.data.reply_count > 0) loadReplies(m)
                                     else updateComment(m.data.id) { it.copy(showReplies = !it.showReplies) }
@@ -858,6 +865,7 @@ private fun CommentItem(
     onReplyTextChange: (String, String) -> Unit,
     onReplySpoilerChange: (String, Boolean) -> Unit,
     onSubmitReply: (CommentUiModel) -> Unit,
+    onReplyStickerClick: (CommentUiModel) -> Unit,
     onToggleReplies: (CommentUiModel) -> Unit,
     onLoadMoreReplies: (CommentUiModel) -> Unit,
     onDelete: (String) -> Unit,
@@ -931,7 +939,13 @@ private fun CommentItem(
                 }
 
                 Spacer(Modifier.height(4.dp))
-                CommentContent(c.content, c.isSpoiller)
+                if (c.content.isNotBlank()) {
+                    CommentContent(c.content, c.isSpoiller)
+                }
+                c.sticker?.let { sticker ->
+                    Spacer(Modifier.height(4.dp))
+                    StickerInline(sticker = sticker)
+                }
                 Spacer(Modifier.height(6.dp))
 
                 Row(
@@ -1069,6 +1083,7 @@ private fun CommentItem(
                             onTextChange = { onReplyTextChange(model.data.id, it) },
                             onSpoilerChange = { onReplySpoilerChange(model.data.id, it) },
                             onSubmit = { onSubmitReply(model) },
+                            onSticker = { onReplyStickerClick(model) },
                             onCancel = { onReplyToggle(model.data.id) }
                         )
                     }
@@ -1131,6 +1146,7 @@ private fun CommentItem(
                                     onReplyTextChange = onReplyTextChange,
                                     onReplySpoilerChange = onReplySpoilerChange,
                                     onSubmitReply = onSubmitReply,
+                                    onReplyStickerClick = onReplyStickerClick,
                                     onToggleReplies = onToggleReplies,
                                     onLoadMoreReplies = onLoadMoreReplies,
                                     onDelete = onDelete,
@@ -1336,6 +1352,7 @@ private fun ReplyEditor(
     onTextChange: (String) -> Unit,
     onSpoilerChange: (Boolean) -> Unit,
     onSubmit: () -> Unit,
+    onSticker: () -> Unit,
     onCancel: () -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
@@ -1345,81 +1362,6 @@ private fun ReplyEditor(
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             var showPreview by remember { mutableStateOf(false) }
-            var imageDialog by remember { mutableStateOf(false) }
-            var imageUrlInput by remember { mutableStateOf("") }
-
-            if (imageDialog) {
-                AlertDialog(
-                    onDismissRequest = { imageDialog = false; imageUrlInput = "" },
-                    title = {
-                        Text(
-                            "Insert Image",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-                    },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                "Paste the URL of the image you want to include in your comment.",
-                                color = TextSec,
-                                fontSize = 13.sp
-                            )
-                            BasicTextField(
-                                value = imageUrlInput,
-                                onValueChange = { imageUrlInput = it },
-                                textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
-                                cursorBrush = SolidColor(AccentRed),
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                                    .border(1.dp, BorderSub.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                    .background(BgInput.copy(alpha = 0.5f))
-                                    .padding(horizontal = 12.dp, vertical = 10.dp)
-                                    .defaultMinSize(minHeight = 44.dp),
-                                decorationBox = { inner ->
-                                    if (imageUrlInput.isEmpty()) Text(
-                                        "https://example.com/image.png",
-                                        color = TextMuted,
-                                        fontSize = 13.sp
-                                    )
-                                    inner()
-                                }
-                            )
-                            Text(
-                                "Supports PNG, JPG, GIF, WebP",
-                                color = TextMuted,
-                                fontSize = 10.sp,
-                                letterSpacing = 0.8.sp
-                            )
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { imageDialog = false; imageUrlInput = "" }) {
-                            Text(
-                                "Cancel",
-                                color = TextSec,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        Box(
-                            Modifier.clip(RoundedCornerShape(6.dp))
-                                .background(AccentRed)
-                                .clickable {
-                                    if (imageUrlInput.isNotBlank()) onTextChange(text + "![image](${imageUrlInput.trim()})")
-                                    imageDialog = false; imageUrlInput = ""
-                                }.padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Text("Insert Image", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    containerColor = BgDark,
-                    tonalElevation = 0.dp
-                )
-            }
 
             Box(
                 Modifier.fillMaxWidth()
@@ -1458,8 +1400,8 @@ private fun ReplyEditor(
                     FormatIconButton(Icons.Default.VisibilityOff, false, Color.Transparent) {
                         onTextChange(applyMarkdown(text, "||"))
                     }
-                    FormatIconButton(Icons.Default.Image, false, Color.Transparent) {
-                        imageDialog = true
+                    FormatIconButton(Icons.Default.EmojiEmotions, false, Color.Transparent) {
+                        onSticker()
                     }
                     FormatIconButton(
                         icon = if (isSpoiler) Icons.Default.Lock else Icons.Default.LockOpen,

@@ -74,6 +74,7 @@ class CommentService(
         content: String,
         parentCommentId: String? = null,
         spoiler: Boolean = false,
+        stickerId: String? = null,
     ): PostCommentResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
@@ -90,6 +91,7 @@ class CommentService(
                         content = content,
                         parentCommentId = parentCommentId,
                         spoiler = spoiler,
+                        stickerId = stickerId,
                     ),
                 )
             }

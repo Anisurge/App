@@ -66,6 +66,7 @@ data class ChatMessageMetadata(
     val kind: String? = null,
     val actions: List<ChatAction> = emptyList(),
     val anime: ChatAnimeCard? = null,
+    val sticker: StickerMessage? = null,
 )
 
 @Serializable
@@ -173,6 +174,7 @@ data class ChatMessagesResponse(
 data class ChatPostMessageRequest(
     val body: String,
     val metadata: ChatMessageMetadata? = null,
+    val stickerId: String? = null,
 )
 
 @Serializable

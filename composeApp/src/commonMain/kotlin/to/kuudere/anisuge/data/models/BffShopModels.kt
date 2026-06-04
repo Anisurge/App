@@ -6,12 +6,16 @@ import kotlinx.serialization.Serializable
 data class BffShopItem(
     val id: String,
     val slug: String,
+    val kind: String = "avatar_frame",
+    val accessMode: String = "sell",
     val name: String,
     val description: String = "",
     val priceCoins: Int,
     val priceCoinsOriginal: Int? = null,
     val premiumDiscountPercent: Int? = null,
+    val mediaType: String = "image",
     val assetUrl: String,
+    val thumbnailUrl: String? = null,
     val previewVideoUrl: String? = null,
     val owned: Boolean = false,
 )

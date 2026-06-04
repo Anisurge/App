@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -80,12 +81,15 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ServerInfo
+import to.kuudere.anisuge.data.models.Sticker
 import to.kuudere.anisuge.data.models.W2gRoomDetail
 import to.kuudere.anisuge.player.StreamProxy
 import to.kuudere.anisuge.player.VideoPlayerSurface
 import to.kuudere.anisuge.player.rememberVideoPlayerState
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ProfileAvatar
+import to.kuudere.anisuge.ui.StickerInline
+import to.kuudere.anisuge.ui.StickerPickerDialog
 import to.kuudere.anisuge.platform.LockScreenOrientation
 import to.kuudere.anisuge.platform.PlatformBackHandler
 import to.kuudere.anisuge.platform.SyncFullscreen
@@ -111,6 +115,7 @@ fun W2gPlayerScreen(
     var lastRemoteSeekAtMs by remember { mutableStateOf(0L) }
     var showHostLeaveDialog by remember { mutableStateOf(false) }
     var isLeavingRoom by remember { mutableStateOf(false) }
+    var sideStickerPickerOpen by remember { mutableStateOf(false) }
 
     val hasOtherMembers = state.members.any { it.userId != state.roomDetail?.hostUserId }
 
@@ -555,6 +560,10 @@ fun W2gPlayerScreen(
                                         color = Color.White,
                                         fontSize = 14.sp,
                                     )
+                                    msg.sticker?.let { sticker ->
+                                        Spacer(Modifier.height(6.dp))
+                                        StickerInline(sticker = sticker)
+                                    }
                                 }
                             }
                         }
@@ -587,6 +596,19 @@ fun W2gPlayerScreen(
                                 ),
                             )
                             Spacer(Modifier.width(8.dp))
+                            IconButton(
+                                onClick = {
+                                    sideStickerPickerOpen = true
+                                    viewModel.loadStickers()
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Default.EmojiEmotions,
+                                    "Stickers",
+                                    tint = AppColors.accent,
+                                )
+                            }
+                            Spacer(Modifier.width(4.dp))
                             IconButton(
                                 onClick = {
                                     if (chatInput.isNotBlank()) {
@@ -636,11 +658,32 @@ fun W2gPlayerScreen(
         ChatSheet(
             chatMessages = state.chatMessages,
             chatListState = chatListState,
+            stickers = state.stickers,
+            isLoadingStickers = state.isLoadingStickers,
+            stickerError = state.stickerError,
             onDismiss = { viewModel.setChatSheetOpen(false) },
+            onLoadStickers = { viewModel.loadStickers() },
+            onRefreshStickers = { viewModel.loadStickers(force = true) },
+            onSticker = { sticker, body -> viewModel.sendSticker(sticker, body) },
             onSend = { body ->
                 if (body.isNotBlank()) {
                     viewModel.sendMessage(body.trim())
                 }
+            },
+        )
+    }
+
+    if (sideStickerPickerOpen) {
+        StickerPickerDialog(
+            stickers = state.stickers,
+            isLoading = state.isLoadingStickers,
+            error = state.stickerError,
+            onRefresh = { viewModel.loadStickers(force = true) },
+            onDismiss = { sideStickerPickerOpen = false },
+            onSelect = { sticker ->
+                sideStickerPickerOpen = false
+                viewModel.sendSticker(sticker, chatInput)
+                chatInput = ""
             },
         )
     }
@@ -1131,11 +1174,33 @@ private fun W2gSelectedAnimeSummary(anime: AnimeItem, onChangeAnime: () -> Unit)
 private fun ChatSheet(
     chatMessages: List<W2gChatMessage>,
     chatListState: androidx.compose.foundation.lazy.LazyListState,
+    stickers: List<Sticker>,
+    isLoadingStickers: Boolean,
+    stickerError: String?,
     onDismiss: () -> Unit,
+    onLoadStickers: () -> Unit,
+    onRefreshStickers: () -> Unit,
+    onSticker: (Sticker, String) -> Unit,
     onSend: (String) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var chatInput by remember { mutableStateOf("") }
+    var stickerPickerOpen by remember { mutableStateOf(false) }
+
+    if (stickerPickerOpen) {
+        StickerPickerDialog(
+            stickers = stickers,
+            isLoading = isLoadingStickers,
+            error = stickerError,
+            onRefresh = onRefreshStickers,
+            onDismiss = { stickerPickerOpen = false },
+            onSelect = { sticker ->
+                stickerPickerOpen = false
+                onSticker(sticker, chatInput)
+                chatInput = ""
+            },
+        )
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1173,7 +1238,13 @@ private fun ChatSheet(
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
-                        Text(msg.body, color = Color.White, fontSize = 14.sp)
+                        if (msg.body.isNotBlank()) {
+                            Text(msg.body, color = Color.White, fontSize = 14.sp)
+                        }
+                        msg.sticker?.let { sticker ->
+                            Spacer(Modifier.height(6.dp))
+                            StickerInline(sticker = sticker)
+                        }
                     }
                 }
             }
@@ -1203,6 +1274,13 @@ private fun ChatSheet(
                     ),
                 )
                 Spacer(Modifier.width(8.dp))
+                IconButton(onClick = {
+                    stickerPickerOpen = true
+                    onLoadStickers()
+                }) {
+                    Icon(Icons.Default.EmojiEmotions, "Stickers", tint = AppColors.accent)
+                }
+                Spacer(Modifier.width(4.dp))
                 IconButton(onClick = {
                     onSend(chatInput)
                     chatInput = ""

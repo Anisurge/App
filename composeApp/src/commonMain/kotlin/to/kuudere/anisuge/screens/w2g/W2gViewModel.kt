@@ -18,6 +18,8 @@ import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.FALLBACK_SERVERS
 import to.kuudere.anisuge.data.models.ServerInfo
+import to.kuudere.anisuge.data.models.Sticker
+import to.kuudere.anisuge.data.models.StickerMessage
 import to.kuudere.anisuge.data.models.StreamHeaders
 import to.kuudere.anisuge.data.models.W2gRoomCreateRequest
 import to.kuudere.anisuge.data.models.W2gPlayerState
@@ -30,6 +32,7 @@ import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.services.SearchService
 import to.kuudere.anisuge.data.services.SessionStore
+import to.kuudere.anisuge.data.services.StickerService
 import to.kuudere.anisuge.data.services.W2gRoomService
 import to.kuudere.anisuge.data.services.W2gWsClient
 
@@ -39,6 +42,7 @@ data class W2gChatMessage(
     val username: String?,
     val avatarUrl: String?,
     val body: String,
+    val sticker: StickerMessage? = null,
     val createdAt: String,
 )
 
@@ -77,6 +81,9 @@ data class W2gUiState(
     val error: String? = null,
     val loadingMessage: String? = null,
     val chatSheetOpen: Boolean = false,
+    val stickers: List<Sticker> = emptyList(),
+    val isLoadingStickers: Boolean = false,
+    val stickerError: String? = null,
 ) {
     val filteredRooms: List<W2gRoomSummary>
         get() = if (searchQuery.isBlank()) rooms
@@ -101,6 +108,7 @@ class W2gViewModel(
     private val searchService: SearchService,
     private val serverRepository: ServerRepository,
     private val infoService: InfoService,
+    private val stickerService: StickerService,
 ) : ViewModel() {
     private val _state = MutableStateFlow(W2gUiState())
     val state: StateFlow<W2gUiState> = _state.asStateFlow()
@@ -742,6 +750,7 @@ class W2gViewModel(
                                 username = event.username,
                                 avatarUrl = event.avatarUrl,
                                 body = event.body,
+                                sticker = event.sticker,
                                 createdAt = event.createdAt,
                             )
                             _state.value = _state.value.copy(
@@ -837,6 +846,33 @@ class W2gViewModel(
     }
 
     fun sendMessage(body: String) = wsClient?.sendChat(body)
+
+    fun sendSticker(sticker: Sticker, body: String = "") {
+        wsClient?.sendChat(body.trim(), sticker.id)
+    }
+
+    fun loadStickers(force: Boolean = false) {
+        val current = _state.value
+        if (!force && (current.stickers.isNotEmpty() || current.isLoadingStickers)) return
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoadingStickers = true, stickerError = null)
+            stickerService.fetchMine().fold(
+                onSuccess = { res ->
+                    _state.value = _state.value.copy(
+                        stickers = res.stickers,
+                        isLoadingStickers = false,
+                        stickerError = null,
+                    )
+                },
+                onFailure = { e ->
+                    _state.value = _state.value.copy(
+                        isLoadingStickers = false,
+                        stickerError = e.message ?: "Failed to load stickers",
+                    )
+                },
+            )
+        }
+    }
 
     fun setChatSheetOpen(open: Boolean) {
         _state.value = _state.value.copy(chatSheetOpen = open)

@@ -18,6 +18,7 @@ data class Comment(
     val authorLabels: List<String> = emptyList(),
     val isPremium: Boolean = false,
     val content: String,
+    val sticker: StickerMessage? = null,
     val isSpoiller: Boolean = false,
     val created_at: String? = null,
     val likes: Int = 0,
@@ -73,6 +74,7 @@ data class CreateCommentRequest(
     val content: String,
     val parentCommentId: String? = null,
     val spoiler: Boolean = false,
+    val stickerId: String? = null,
 )
 
 @Serializable

@@ -177,6 +177,7 @@ data class SettingsUiState(
     val shopCoins: Int = 0,
     val shopCatalog: List<to.kuudere.anisuge.data.models.BffShopItem> = emptyList(),
     val shopOwned: List<to.kuudere.anisuge.data.models.BffShopItem> = emptyList(),
+    val shopKind: String = "avatar_frame",
     val isLoadingOwnedFrames: Boolean = false,
     val isLoadingShop: Boolean = false,
     val isLoadingMoreShop: Boolean = false,
@@ -226,6 +227,7 @@ class SettingsViewModel(
     private val integrationsSyncService: to.kuudere.anisuge.data.services.IntegrationsSyncService,
     private val bffMeService: to.kuudere.anisuge.data.services.BffMeService,
     private val bffShopService: to.kuudere.anisuge.data.services.BffShopService,
+    private val stickerService: to.kuudere.anisuge.data.services.StickerService,
     private val bffRewardsService: to.kuudere.anisuge.data.services.BffRewardsService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
@@ -809,15 +811,28 @@ class SettingsViewModel(
 
     fun loadShop() {
         viewModelScope.launch {
+            val kind = _uiState.value.shopKind
             _uiState.update { it.copy(isLoadingShop = true) }
-            bffShopService.fetchShopMe(catalogLimit = SHOP_PAGE_SIZE, catalogOffset = 0).fold(
+            val result = if (kind == "sticker") {
+                stickerService.fetchCatalog(
+                    catalogLimit = SHOP_PAGE_SIZE,
+                    catalogOffset = 0,
+                )
+            } else {
+                bffShopService.fetchShopMe(
+                    catalogLimit = SHOP_PAGE_SIZE,
+                    catalogOffset = 0,
+                    kind = kind,
+                )
+            }
+            result.fold(
                 onSuccess = { body ->
                     _uiState.update {
                         it.copy(
                             isLoadingShop = false,
                             shopCoins = body.coins,
                             shopCatalog = body.catalog,
-                            shopOwned = body.owned,
+                            shopOwned = if (kind == "avatar_frame") body.owned else it.shopOwned,
                             shopCatalogHasMore = body.catalogHasMore,
                             shopCatalogTotal = body.catalogTotal,
                         )
@@ -841,10 +856,19 @@ class SettingsViewModel(
         if (state.isLoadingShop || state.isLoadingMoreShop || !state.shopCatalogHasMore) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMoreShop = true) }
-            bffShopService.fetchShopMe(
-                catalogLimit = SHOP_PAGE_SIZE,
-                catalogOffset = state.shopCatalog.size,
-            ).fold(
+            val result = if (state.shopKind == "sticker") {
+                stickerService.fetchCatalog(
+                    catalogLimit = SHOP_PAGE_SIZE,
+                    catalogOffset = state.shopCatalog.size,
+                )
+            } else {
+                bffShopService.fetchShopMe(
+                    catalogLimit = SHOP_PAGE_SIZE,
+                    catalogOffset = state.shopCatalog.size,
+                    kind = state.shopKind,
+                )
+            }
+            result.fold(
                 onSuccess = { body ->
                     val merged = (state.shopCatalog + body.catalog).distinctBy { it.id }
                     _uiState.update { current ->
@@ -852,7 +876,7 @@ class SettingsViewModel(
                             isLoadingMoreShop = false,
                             shopCoins = body.coins,
                             shopCatalog = merged,
-                            shopOwned = body.owned,
+                            shopOwned = if (state.shopKind == "avatar_frame") body.owned else current.shopOwned,
                             shopCatalogHasMore = body.catalogHasMore,
                             shopCatalogTotal = body.catalogTotal,
                         )
@@ -874,7 +898,7 @@ class SettingsViewModel(
     /** Store tab only — catalog page bytes; does not block UI (owned frames prefetched via [loadShopInventory]). */
     private fun prefetchShopCatalogFrames(catalog: List<to.kuudere.anisuge.data.models.BffShopItem>) {
         if (catalog.isEmpty()) return
-        val entries = catalog.mapNotNull { item ->
+        val entries = catalog.filter { it.kind == "avatar_frame" }.mapNotNull { item ->
             val url = resolveProfileMediaUrl(item.assetUrl) ?: return@mapNotNull null
             url to item.id
         }
@@ -930,6 +954,21 @@ class SettingsViewModel(
         }
     }
 
+    fun setShopKind(kind: String) {
+        val normalized = if (kind == "sticker") "sticker" else "avatar_frame"
+        if (_uiState.value.shopKind == normalized) return
+        _uiState.update {
+            it.copy(
+                shopKind = normalized,
+                shopCatalog = emptyList(),
+                shopCatalogTotal = 0,
+                shopCatalogHasMore = false,
+                shopPurchasingId = null,
+            )
+        }
+        loadShop()
+    }
+
     fun setRedeemCodeDraft(value: String) {
         _uiState.update { it.copy(redeemCodeDraft = value) }
     }
@@ -971,7 +1010,13 @@ class SettingsViewModel(
     fun purchaseShopItem(itemId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(shopPurchasingId = itemId) }
-            bffShopService.purchase(itemId).fold(
+            val kind = _uiState.value.shopKind
+            val result = if (kind == "sticker") {
+                stickerService.purchase(itemId)
+            } else {
+                bffShopService.purchase(itemId)
+            }
+            result.fold(
                 onSuccess = { body ->
                     val profile = body.user?.toUserProfile()
                     _uiState.update {
@@ -981,7 +1026,9 @@ class SettingsViewModel(
                             shopCatalog = it.shopCatalog.map { item ->
                                 if (item.id == body.item.id) body.item else item
                             },
-                            shopOwned = if (it.shopOwned.any { o -> o.id == body.item.id }) {
+                            shopOwned = if (body.item.kind != "avatar_frame") {
+                                it.shopOwned
+                            } else if (it.shopOwned.any { o -> o.id == body.item.id }) {
                                 it.shopOwned
                             } else {
                                 it.shopOwned + body.item

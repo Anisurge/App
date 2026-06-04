@@ -17,9 +17,11 @@ import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.data.models.ChatMessageMetadata
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.SessionCheckResult
+import to.kuudere.anisuge.data.models.Sticker
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.ChatService
 import to.kuudere.anisuge.data.services.SearchService
+import to.kuudere.anisuge.data.services.StickerService
 import to.kuudere.anisuge.navigation.Screen
 import to.kuudere.anisuge.ui.ChatFramePrefetch
 
@@ -57,12 +59,16 @@ data class LiveChatUiState(
     /** Messages from other users received while the chat screen was not open. */
     val unreadCount: Int = 0,
     val isCurrentUserStaff: Boolean = false,
+    val stickers: List<Sticker> = emptyList(),
+    val isLoadingStickers: Boolean = false,
+    val stickerError: String? = null,
 )
 
 class LiveChatViewModel(
     private val chatService: ChatService,
     private val authService: AuthService,
     private val searchService: SearchService,
+    private val stickerService: StickerService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LiveChatUiState())
@@ -376,6 +382,62 @@ class LiveChatViewModel(
         }
     }
 
+    fun loadStickers(force: Boolean = false) {
+        val state = _uiState.value
+        if (!force && (state.stickers.isNotEmpty() || state.isLoadingStickers)) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingStickers = true, stickerError = null) }
+            stickerService.fetchMine().fold(
+                onSuccess = { res ->
+                    _uiState.update {
+                        it.copy(
+                            stickers = res.stickers,
+                            isLoadingStickers = false,
+                            stickerError = null,
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingStickers = false,
+                            stickerError = e.message ?: "Failed to load stickers",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun sendSticker(sticker: Sticker) {
+        if (_uiState.value.isSending) return
+        if (!isCurrentUserPremium) {
+            val now = Clock.System.now().toEpochMilliseconds()
+            val elapsed = now - lastSentAtMs
+            if (elapsed < COOLDOWN_MS) {
+                val remainingSec = ((COOLDOWN_MS - elapsed) / 1000).toInt() + 1
+                _uiState.update {
+                    it.copy(
+                        error = "Wait ${remainingSec}s before sending again",
+                        cooldownSecondsLeft = remainingSec,
+                    )
+                }
+                startCooldownTimer(COOLDOWN_MS - elapsed)
+                return
+            }
+        }
+
+        val text = _uiState.value.draft.trim()
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSending = true, error = null, cooldownSecondsLeft = 0) }
+            postChatMessage(text, stickerId = sticker.id)
+            lastSentAtMs = Clock.System.now().toEpochMilliseconds()
+            if (!isCurrentUserPremium) {
+                startCooldownTimer(COOLDOWN_MS)
+            }
+        }
+    }
+
     fun openAnimePicker(initialQuery: String = "") {
         _uiState.update {
             it.copy(
@@ -473,8 +535,9 @@ class LiveChatViewModel(
     private suspend fun postChatMessage(
         text: String,
         metadata: ChatMessageMetadata? = null,
+        stickerId: String? = null,
     ) {
-        val result = chatService.postMessage(text, metadata = metadata)
+        val result = chatService.postMessage(text, metadata = metadata, stickerId = stickerId)
         result.fold(
             onSuccess = { message ->
                 val snapshot = _uiState.value

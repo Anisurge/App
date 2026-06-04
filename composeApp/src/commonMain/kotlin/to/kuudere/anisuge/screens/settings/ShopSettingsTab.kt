@@ -39,7 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import to.kuudere.anisuge.data.models.BffShopItem
+import to.kuudere.anisuge.data.models.StickerMessage
 import to.kuudere.anisuge.ui.ProfileAvatar
+import to.kuudere.anisuge.ui.StickerMedia
 
 private val BG_CARD: Color get() = AppColors.surfaceVariant
 private val TEXT: Color get() = AppColors.text
@@ -51,6 +53,7 @@ fun ShopSettingsTab(
     uiState: SettingsUiState,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
+    onKindChange: (String) -> Unit,
     onPurchase: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -95,6 +98,8 @@ fun ShopSettingsTab(
         item(span = { GridItemSpan(maxLineSpan) }) {
             ShopHeader(
                 balance = uiState.shopCoins,
+                kind = uiState.shopKind,
+                onKindChange = onKindChange,
                 onRefresh = onRefresh,
                 isRefreshing = uiState.isLoadingShop,
             )
@@ -116,7 +121,11 @@ fun ShopSettingsTab(
             uiState.shopCatalog.isEmpty() -> {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        "No frames in the store yet.",
+                        if (uiState.shopKind == "sticker") {
+                            "No stickers in the store yet."
+                        } else {
+                            "No frames in the store yet."
+                        },
                         color = MUTED,
                         modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
                     )
@@ -130,6 +139,7 @@ fun ShopSettingsTab(
                     ShopItemCard(
                         item = item,
                         pfpUrl = uiState.userProfile?.effectiveAvatar,
+                        kind = uiState.shopKind,
                         balance = uiState.shopCoins,
                         isPurchasing = uiState.shopPurchasingId == item.id,
                         onPurchase = { onPurchase(item.id) },
@@ -154,18 +164,25 @@ fun ShopSettingsTab(
 @Composable
 private fun ShopHeader(
     balance: Int,
+    kind: String,
+    onKindChange: (String) -> Unit,
     onRefresh: () -> Unit,
     isRefreshing: Boolean,
 ) {
+    val isStickers = kind == "sticker"
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            "Store",
+            if (isStickers) "Sticker Store" else "Store",
             color = TEXT,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Animated profile frames — spend Berries from Settings → Berries tab.",
+            if (isStickers) {
+                "Buy stickers for Community Chat, episode comments, and Watch2gether."
+            } else {
+                "Animated profile frames — spend Berries from Settings → Berries tab."
+            },
             color = MUTED,
             fontSize = 12.sp,
             lineHeight = 17.sp,
@@ -183,6 +200,38 @@ private fun ShopHeader(
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
             )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val frameSelected = !isStickers
+            val frameColors = ButtonDefaults.buttonColors(
+                containerColor = if (frameSelected) ACCENT else BG_CARD,
+                contentColor = TEXT,
+                disabledContainerColor = ACCENT,
+                disabledContentColor = TEXT,
+            )
+            val stickerColors = ButtonDefaults.buttonColors(
+                containerColor = if (isStickers) ACCENT else BG_CARD,
+                contentColor = TEXT,
+                disabledContainerColor = ACCENT,
+                disabledContentColor = TEXT,
+            )
+            Button(
+                onClick = { onKindChange("avatar_frame") },
+                modifier = Modifier.weight(1f),
+                colors = frameColors,
+            ) {
+                Text("Frames", maxLines = 1)
+            }
+            Button(
+                onClick = { onKindChange("sticker") },
+                modifier = Modifier.weight(1f),
+                colors = stickerColors,
+            ) {
+                Text("Stickers", maxLines = 1)
+            }
         }
         OutlinedButton(
             onClick = onRefresh,
@@ -243,6 +292,7 @@ private fun berryLabel(amount: Int): String {
 private fun ShopItemCard(
     item: BffShopItem,
     pfpUrl: String?,
+    kind: String,
     balance: Int,
     isPurchasing: Boolean,
     onPurchase: () -> Unit,
@@ -260,15 +310,29 @@ private fun ShopItemCard(
             .padding(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        ProfileAvatar(
-            url = pfpUrl,
-            avatarSize = 52.dp,
-            frameUrl = item.assetUrl,
-            frameCacheKey = item.id,
-            showBundledTestFrame = false,
-            contentDescription = item.name,
-            modifier = Modifier.padding(4.dp),
-        )
+        if (kind == "sticker" || item.kind == "sticker") {
+            StickerMedia(
+                sticker = StickerMessage(
+                    id = item.id,
+                    name = item.name,
+                    mediaType = item.mediaType,
+                    assetUrl = item.assetUrl,
+                    thumbnailUrl = item.thumbnailUrl,
+                ),
+                size = 72.dp,
+                modifier = Modifier.padding(4.dp),
+            )
+        } else {
+            ProfileAvatar(
+                url = pfpUrl,
+                avatarSize = 52.dp,
+                frameUrl = item.assetUrl,
+                frameCacheKey = item.id,
+                showBundledTestFrame = false,
+                contentDescription = item.name,
+                modifier = Modifier.padding(4.dp),
+            )
+        }
         Spacer(Modifier.height(8.dp))
         Text(
             item.name,

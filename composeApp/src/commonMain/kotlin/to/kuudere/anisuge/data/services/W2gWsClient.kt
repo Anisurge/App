@@ -18,6 +18,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import to.kuudere.anisuge.data.models.StickerMessage
 import to.kuudere.anisuge.data.models.W2gPlayerState
 import to.kuudere.anisuge.data.models.W2gRoomDetail
 import to.kuudere.anisuge.data.models.W2gWsEnvelope
@@ -57,6 +58,7 @@ class W2gWsClient(
             val username: String?,
             val avatarUrl: String?,
             val body: String,
+            val sticker: StickerMessage?,
             val createdAt: String,
         ) : Event()
 
@@ -197,6 +199,11 @@ class W2gWsClient(
                         username = obj["username"]?.jsonPrimitive?.contentOrNull,
                         avatarUrl = obj["avatar_url"]?.jsonPrimitive?.contentOrNull,
                         body = obj["body"]?.jsonPrimitive?.content ?: "",
+                        sticker = obj["sticker"]?.let {
+                            runCatching {
+                                json.decodeFromJsonElement(StickerMessage.serializer(), it)
+                            }.getOrNull()
+                        },
                         createdAt = obj["created_at"]?.jsonPrimitive?.content ?: "",
                     )
                 }
@@ -268,9 +275,10 @@ class W2gWsClient(
         })))
     }
 
-    fun sendChat(body: String) {
+    fun sendChat(body: String, stickerId: String? = null) {
         sendRaw(json.encodeToString(W2gWsEnvelope("chat", buildJsonObject {
             put("body", body)
+            stickerId?.let { put("sticker_id", it) }
         })))
     }
 

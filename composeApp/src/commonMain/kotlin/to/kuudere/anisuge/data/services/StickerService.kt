@@ -11,43 +11,44 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.data.models.BffErrorResponse
-import to.kuudere.anisuge.data.models.BffShopDownloadAllResponse
 import to.kuudere.anisuge.data.models.BffShopMeResponse
 import to.kuudere.anisuge.data.models.BffShopPurchaseRequest
 import to.kuudere.anisuge.data.models.BffShopPurchaseResponse
-import to.kuudere.anisuge.data.models.BffShopRedeemRequest
-import to.kuudere.anisuge.data.models.BffShopRedeemResponse
-import to.kuudere.anisuge.data.models.UserProfile
-import to.kuudere.anisuge.data.models.toUserProfile
+import to.kuudere.anisuge.data.models.StickerMeResponse
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 
-class BffShopService(
+class StickerService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun fetchShopMe(
-        catalogLimit: Int = 25,
-        catalogOffset: Int = 0,
-        kind: String = "avatar_frame",
-    ): Result<BffShopMeResponse> = authedGet(
-        "/shop/me?catalogLimit=$catalogLimit&catalogOffset=$catalogOffset&kind=$kind",
-    ) { it.body() }
-
-    /** Owned frames only — fast path for profile picker after install / login. */
-    suspend fun fetchOwned(
-        kind: String = "avatar_frame",
-    ): Result<to.kuudere.anisuge.data.models.BffShopOwnedResponse> =
-        authedGet("/shop/owned?kind=$kind") { it.body() }
-
-    suspend fun redeem(code: String): Result<BffShopRedeemResponse> {
+    suspend fun fetchMine(): Result<StickerMeResponse> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
         return try {
-            val response = httpClient.post("${AnisurgeApi.v1Base}/shop/redeem") {
+            val response = httpClient.get("${AnisurgeApi.v1Base}/stickers/me") {
                 applyAnisurgeAuth(stored)
-                contentType(ContentType.Application.Json)
-                setBody(BffShopRedeemRequest(code.trim()))
+            }
+            if (response.status.isSuccess()) {
+                Result.success(response.body())
+            } else {
+                Result.failure(Exception(errorMessage(response.bodyAsText())))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchCatalog(
+        catalogLimit: Int = 25,
+        catalogOffset: Int = 0,
+    ): Result<BffShopMeResponse> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.get(
+                "${AnisurgeApi.v1Base}/stickers/catalog?catalogLimit=$catalogLimit&catalogOffset=$catalogOffset",
+            ) {
+                applyAnisurgeAuth(stored)
             }
             if (response.status.isSuccess()) {
                 Result.success(response.body())
@@ -62,50 +63,13 @@ class BffShopService(
     suspend fun purchase(itemId: String): Result<BffShopPurchaseResponse> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
         return try {
-            val response = httpClient.post("${AnisurgeApi.v1Base}/shop/purchase") {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/stickers/purchase") {
                 applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
                 setBody(BffShopPurchaseRequest(itemId))
             }
             if (response.status.isSuccess()) {
                 Result.success(response.body())
-            } else {
-                Result.failure(Exception(errorMessage(response.bodyAsText())))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun fetchDownloadManifest(
-        kind: String = "avatar_frame",
-    ): Result<BffShopDownloadAllResponse> =
-        authedGet("/shop/owned/download-all?kind=$kind") { it.body() }
-
-    suspend fun downloadFrameBytes(url: String): Result<ByteArray> {
-        return try {
-            val response = httpClient.get(url)
-            if (response.status.isSuccess()) {
-                Result.success(response.body())
-            } else {
-                Result.failure(Exception("Download failed (${response.status.value})"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    private suspend inline fun <T> authedGet(
-        path: String,
-        parse: (io.ktor.client.statement.HttpResponse) -> T,
-    ): Result<T> {
-        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
-        return try {
-            val response = httpClient.get("${AnisurgeApi.v1Base}$path") {
-                applyAnisurgeAuth(stored)
-            }
-            if (response.status.isSuccess()) {
-                Result.success(parse(response))
             } else {
                 Result.failure(Exception(errorMessage(response.bodyAsText())))
             }

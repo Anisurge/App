@@ -169,13 +169,19 @@ fun App(
                 AppComponent.integrationsSyncService,
                 AppComponent.bffMeService,
                 AppComponent.bffShopService,
+                AppComponent.stickerService,
                 AppComponent.bffRewardsService,
             )
         }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }
         val updateVm = remember { UpdateViewModel(AppComponent.updateService) }
         val liveChatVm = remember {
-            LiveChatViewModel(AppComponent.chatService, AppComponent.authService, AppComponent.searchService)
+            LiveChatViewModel(
+                AppComponent.chatService,
+                AppComponent.authService,
+                AppComponent.searchService,
+                AppComponent.stickerService,
+            )
         }
         val w2gVm = remember {
             W2gViewModel(
@@ -184,6 +190,7 @@ fun App(
                 AppComponent.searchService,
                 AppComponent.serverRepository,
                 AppComponent.infoService,
+                AppComponent.stickerService,
             )
         }
         val navBackStackEntry by navController.currentBackStackEntryAsState()
