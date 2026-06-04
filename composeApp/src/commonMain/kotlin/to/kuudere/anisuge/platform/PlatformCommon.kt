@@ -19,9 +19,18 @@ expect fun randomInstallUuid(): String
 /** Short OS descriptor for optional analytics ping body (max 128 chars on server). */
 expect fun analyticsPingOs(): String?
 
-/** Requests landscape on Android, ignored/different on desktop */
+enum class ScreenOrientationMode {
+    Portrait,
+    Landscape,
+    User,
+}
+
+/** Requests orientation on Android, ignored/different on desktop */
 @Composable
 expect fun LockScreenOrientation(landscape: Boolean)
+
+@Composable
+expect fun LockScreenOrientation(mode: ScreenOrientationMode)
 
 /** Intercepts hardware back button on Android, no-op on desktop */
 @Composable

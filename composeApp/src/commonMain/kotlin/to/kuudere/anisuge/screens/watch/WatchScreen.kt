@@ -47,6 +47,7 @@ import kotlinx.datetime.Clock
 import to.kuudere.anisuge.platform.DiscordPresenceActivity
 import to.kuudere.anisuge.platform.DiscordRichPresenceManager
 import to.kuudere.anisuge.platform.LockScreenOrientation
+import to.kuudere.anisuge.platform.ScreenOrientationMode
 import to.kuudere.anisuge.platform.isAndroidPlatform
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.platform.isDesktopPlatform
@@ -126,20 +127,35 @@ fun WatchScreen(
             !isAndroidTvPlatform &&
             uiState.offlinePath == null &&
             !isStateStale
+    var forcePortraitAfterFullscreenExit by remember(animeId, offlinePath) { mutableStateOf(false) }
 
-    val shouldUseLandscape = when {
+    val orientationMode = when {
         // Offline (downloaded) playback uses the full-bleed player with no episode list below it,
         // so it should be landscape like online fullscreen — otherwise a 16:9 video is locked in
         // portrait and renders tiny.
-        isAndroidPlatform && !isAndroidTvPlatform -> uiState.isFullscreen || uiState.offlinePath != null
-        else -> true
+        isAndroidPlatform && !isAndroidTvPlatform && (uiState.isFullscreen || uiState.offlinePath != null) ->
+            ScreenOrientationMode.Landscape
+
+        isAndroidPlatform && !isAndroidTvPlatform && forcePortraitAfterFullscreenExit -> ScreenOrientationMode.Portrait
+        isAndroidPlatform && !isAndroidTvPlatform -> ScreenOrientationMode.User
+        else -> ScreenOrientationMode.Landscape
     }
-    LockScreenOrientation(shouldUseLandscape)
+    LockScreenOrientation(orientationMode)
     to.kuudere.anisuge.platform.SyncFullscreen(uiState.isFullscreen)
+
+    val setFullscreenMode: (Boolean) -> Unit = { fullscreen ->
+        if (isAndroidPlatform && !isAndroidTvPlatform && uiState.offlinePath == null) {
+            forcePortraitAfterFullscreenExit = uiState.isFullscreen && !fullscreen
+        }
+        if (fullscreen) {
+            forcePortraitAfterFullscreenExit = false
+        }
+        viewModel.setFullscreen(fullscreen)
+    }
 
     val handleBack = {
         if (uiState.isFullscreen) {
-            viewModel.setFullscreen(false)
+            setFullscreenMode(false)
         } else {
             viewModel.flushLatestWatchProgress()
             onBack()
@@ -282,7 +298,8 @@ fun WatchScreen(
                     animeId = animeId,
                     offlinePath = offlinePath,
                     isPremiumUser = isPremiumUser,
-                    onFullscreenToggle = { viewModel.setFullscreen(!uiState.isFullscreen) },
+                    allowLandscapeTabs = !forcePortraitAfterFullscreenExit,
+                    onFullscreenToggle = { setFullscreenMode(!uiState.isFullscreen) },
                     onBack = handleBack,
                     onExit = onExit
                 )
@@ -311,7 +328,7 @@ fun WatchScreen(
                                     viewModel = viewModel,
                                     modifier = Modifier.fillMaxSize(),
                                     isPremiumUser = isPremiumUser,
-                                    onFullscreenToggle = { viewModel.setFullscreen(!uiState.isFullscreen) },
+                                    onFullscreenToggle = { setFullscreenMode(!uiState.isFullscreen) },
                                     onBack = handleBack,
                                     onExit = onExit,
                                     onInfoClick = {
@@ -1114,6 +1131,7 @@ private fun AndroidWatchPageLayout(
     animeId: String,
     offlinePath: String?,
     isPremiumUser: Boolean,
+    allowLandscapeTabs: Boolean,
     onFullscreenToggle: () -> Unit,
     onBack: () -> Unit,
     onExit: () -> Unit,
@@ -1121,11 +1139,16 @@ private fun AndroidWatchPageLayout(
     var selectedTab by remember { mutableStateOf(WatchPageTab.Episodes) }
     val playerKey = "$animeId-${uiState.currentEpisodeNumber}-${offlinePath ?: "online"}"
 
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        val useLandscapeTabs = !uiState.isFullscreen &&
+                uiState.offlinePath == null &&
+                allowLandscapeTabs &&
+                maxWidth > maxHeight
+
         // Wrap the player call in a Box so the player surface and the SettingsOverlay sibling
         // (both emitted by WatchVideoPlayer) share an overlay parent. Without this wrapper, the
         // overlay competes with the player for vertical space inside the Column and stays
@@ -1181,68 +1204,160 @@ private fun AndroidWatchPageLayout(
                     }
                 }
             }
-        } else {
-            Box(
+        } else if (useLandscapeTabs) {
+            Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
                     .background(Color.Black)
             ) {
-                key(playerKey) {
-                    WatchVideoPlayer(
+                Box(
+                    modifier = Modifier
+                        .weight(0.62f)
+                        .fillMaxHeight()
+                        .background(Color.Black)
+                ) {
+                    key(playerKey) {
+                        WatchVideoPlayer(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize(),
+                            isPremiumUser = isPremiumUser,
+                            onFullscreenToggle = onFullscreenToggle,
+                            onBack = onBack,
+                            onExit = onExit,
+                            onInfoClick = {},
+                            onEpisodesClick = {
+                                selectedTab = WatchPageTab.Episodes
+                            },
+                            onCommentsClick = {
+                                selectedTab = WatchPageTab.Comments
+                            },
+                            showPlayerLibraryActions = false,
+                            showFullscreenButton = true,
+                            compactControls = true,
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(0.38f)
+                        .fillMaxHeight()
+                        .background(AppColors.background)
+                ) {
+                    if (uiState.servers.isNotEmpty()) {
+                        InlineServerSelector(
+                            servers = uiState.servers,
+                            currentServerId = uiState.currentServer,
+                            onServerSelected = { serverId -> viewModel.switchServer(serverId) },
+                        )
+                    }
+
+                    WatchPageTabs(
+                        selectedTab = selectedTab,
+                        onSelectTab = { selectedTab = it },
+                        compact = true,
+                    )
+
+                    WatchPageTabContent(
+                        selectedTab = selectedTab,
                         uiState = uiState,
                         viewModel = viewModel,
-                        modifier = Modifier.fillMaxSize(),
-                        isPremiumUser = isPremiumUser,
-                        onFullscreenToggle = onFullscreenToggle,
-                        onBack = onBack,
-                        onExit = onExit,
-                        onInfoClick = {},
-                        onEpisodesClick = {
-                            selectedTab = WatchPageTab.Episodes
-                        },
-                        onCommentsClick = {
-                            selectedTab = WatchPageTab.Comments
-                        },
-                        showPlayerLibraryActions = false,
-                        showFullscreenButton = true,
-                        compactControls = true,
+                        animeId = animeId,
+                        onClose = { selectedTab = WatchPageTab.Episodes },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    )
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .background(Color.Black)
+                ) {
+                    key(playerKey) {
+                        WatchVideoPlayer(
+                            uiState = uiState,
+                            viewModel = viewModel,
+                            modifier = Modifier.fillMaxSize(),
+                            isPremiumUser = isPremiumUser,
+                            onFullscreenToggle = onFullscreenToggle,
+                            onBack = onBack,
+                            onExit = onExit,
+                            onInfoClick = {},
+                            onEpisodesClick = {
+                                selectedTab = WatchPageTab.Episodes
+                            },
+                            onCommentsClick = {
+                                selectedTab = WatchPageTab.Comments
+                            },
+                            showPlayerLibraryActions = false,
+                            showFullscreenButton = true,
+                            compactControls = true,
+                        )
+                    }
+                }
+
+                if (uiState.offlinePath == null && uiState.servers.isNotEmpty()) {
+                    InlineServerSelector(
+                        servers = uiState.servers,
+                        currentServerId = uiState.currentServer,
+                        onServerSelected = { serverId -> viewModel.switchServer(serverId) },
+                    )
+
+                    WatchPageTabContent(
+                        selectedTab = selectedTab,
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        animeId = animeId,
+                        onClose = { selectedTab = WatchPageTab.Episodes },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    )
+
+                    WatchPageTabs(
+                        selectedTab = selectedTab,
+                        onSelectTab = { selectedTab = it },
                     )
                 }
             }
         }
+    }
+}
 
-        if (!uiState.isFullscreen && uiState.offlinePath == null && uiState.servers.isNotEmpty()) {
-            InlineServerSelector(
-                servers = uiState.servers,
-                currentServerId = uiState.currentServer,
-                onServerSelected = { serverId -> viewModel.switchServer(serverId) },
+@Composable
+private fun WatchPageTabContent(
+    selectedTab: WatchPageTab,
+    uiState: WatchUiState,
+    viewModel: WatchViewModel,
+    animeId: String,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier.background(Color.Black)
+    ) {
+        when (selectedTab) {
+            WatchPageTab.Episodes -> EpisodeListContent(
+                uiState = uiState,
+                viewModel = viewModel,
+                modifier = Modifier.fillMaxSize(),
             )
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(Color.Black)
-            ) {
-                when (selectedTab) {
-                    WatchPageTab.Episodes -> EpisodeListContent(
-                        uiState = uiState,
-                        viewModel = viewModel,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                    WatchPageTab.Comments -> WatchCommentsContent(
-                        animeId = animeId,
-                        uiState = uiState,
-                        onClose = { selectedTab = WatchPageTab.Episodes },
-                    )
-                }
-            }
-
-            WatchPageTabs(
-                selectedTab = selectedTab,
-                onSelectTab = { selectedTab = it },
+            WatchPageTab.Comments -> WatchCommentsContent(
+                animeId = animeId,
+                uiState = uiState,
+                onClose = onClose,
             )
         }
     }
@@ -1352,6 +1467,7 @@ private fun ServerChipRow(
 private fun WatchPageTabs(
     selectedTab: WatchPageTab,
     onSelectTab: (WatchPageTab) -> Unit,
+    compact: Boolean = false,
 ) {
     Column(
         modifier = Modifier
@@ -1372,7 +1488,7 @@ private fun WatchPageTabs(
             divider = {
                 HorizontalDivider(color = AppColors.border)
             },
-            modifier = Modifier.height(88.dp),
+            modifier = Modifier.height(if (compact) 56.dp else 88.dp),
         ) {
             WatchPageTab.entries.forEach { tab ->
                 Tab(
@@ -1381,15 +1497,16 @@ private fun WatchPageTabs(
                     text = {
                         Text(
                             text = tab.label,
-                            fontSize = 14.sp,
+                            fontSize = if (compact) 12.sp else 14.sp,
                             fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.SemiBold,
+                            maxLines = 1,
                         )
                     },
                     icon = {
                         Icon(
                             imageVector = tab.icon,
                             contentDescription = tab.label,
-                            modifier = Modifier.size(21.dp),
+                            modifier = Modifier.size(if (compact) 18.dp else 21.dp),
                         )
                     },
                     selectedContentColor = Color.White,

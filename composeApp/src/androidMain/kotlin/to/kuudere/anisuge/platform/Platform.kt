@@ -81,6 +81,11 @@ actual val AppBuildNumber: Int by lazy {
 
 @Composable
 actual fun LockScreenOrientation(landscape: Boolean) {
+    LockScreenOrientation(if (landscape) ScreenOrientationMode.Landscape else ScreenOrientationMode.Portrait)
+}
+
+@Composable
+actual fun LockScreenOrientation(mode: ScreenOrientationMode) {
     val context = LocalContext.current
     val activity = context.findActivity()
     SideEffect {
@@ -88,14 +93,23 @@ actual fun LockScreenOrientation(landscape: Boolean) {
         val window = currentActivity.window
         val insetsController = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
 
-        currentActivity.requestedOrientation = if (landscape) {
-            insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            insetsController.systemBarsBehavior =
-                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            insetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+        currentActivity.requestedOrientation = when (mode) {
+            ScreenOrientationMode.Landscape -> {
+                insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                insetsController.systemBarsBehavior =
+                    androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+
+            ScreenOrientationMode.Portrait -> {
+                insetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+            }
+
+            ScreenOrientationMode.User -> {
+                insetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                ActivityInfo.SCREEN_ORIENTATION_USER
+            }
         }
     }
     DisposableEffect(activity) {

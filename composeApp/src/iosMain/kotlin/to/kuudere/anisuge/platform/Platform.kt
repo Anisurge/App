@@ -40,6 +40,11 @@ actual fun LockScreenOrientation(landscape: Boolean) {
 }
 
 @Composable
+actual fun LockScreenOrientation(mode: ScreenOrientationMode) {
+    // iOS orientation handled via Info.plist / AppDelegate
+}
+
+@Composable
 actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
     // iOS back gesture handled by system
 }
