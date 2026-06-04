@@ -197,7 +197,6 @@ data class SettingsUiState(
     val isClaimingDailyReward: Boolean = false,
     val berryPacks: List<BffBerryPack> = emptyList(),
     val isLoadingBerryPacks: Boolean = false,
-    val berryCheckoutPackId: String? = null,
     val isConnectingReanime: Boolean = false,
     val isDisconnectingReanime: Boolean = false,
     val isImportingReanime: Boolean = false,
@@ -788,46 +787,30 @@ class SettingsViewModel(
     fun loadBerryPacks() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingBerryPacks = true) }
-            bffRewardsService.fetchBerryPacks().fold(
-                onSuccess = { body ->
-                    _uiState.update {
-                        it.copy(
-                            berryPacks = body.packs,
-                            isLoadingBerryPacks = false,
-                        )
-                    }
-                },
-                onFailure = { e ->
-                    _uiState.update {
-                        it.copy(
-                            isLoadingBerryPacks = false,
-                            errorMessage = e.message ?: "Failed to load Berry packs",
-                        )
-                    }
-                },
-            )
+            // Gracefully handle BFF returning {"packs":{}} or any malformed response
+            try {
+                val body = bffRewardsService.fetchBerryPacks().getOrNull()
+                val packs = body?.packs.orEmpty()
+                _uiState.update {
+                    it.copy(
+                        berryPacks = packs,
+                        isLoadingBerryPacks = false,
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingBerryPacks = false,
+                        errorMessage = e.message ?: "Failed to load Berry packs",
+                    )
+                }
+            }
         }
     }
 
-    fun startBerryCheckout(packId: String, openUrl: (String) -> Unit) {
-        if (_uiState.value.berryCheckoutPackId != null) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(berryCheckoutPackId = packId, errorMessage = null) }
-            bffRewardsService.createBerryCheckoutSession(packId).fold(
-                onSuccess = { session ->
-                    openUrl(session.checkoutUrl)
-                    delay(1200)
-                    loadUserProfile()
-                    loadRewardsStatus()
-                },
-                onFailure = { e ->
-                    _uiState.update {
-                        it.copy(errorMessage = e.message ?: "Failed to start Berry checkout")
-                    }
-                },
-            )
-            _uiState.update { it.copy(berryCheckoutPackId = null) }
-        }
+    fun startBerryPurchase(openUrl: (String) -> Unit) {
+        // Use the same premium checkout session flow — xibecode-donate handles both types
+        startPremiumCheckout(openUrl)
     }
 
     fun claimDailyReward() {
@@ -1267,7 +1250,14 @@ class SettingsViewModel(
             loaded
         }
         originalSettings = effective
-        _uiState.update { it.copy(settings = effective, isLoading = false, hasSettingsChanges = false, isOffline = false) }
+        _uiState.update {
+            it.copy(
+                settings = effective,
+                isLoading = false,
+                hasSettingsChanges = false,
+                isOffline = false
+            )
+        }
         pushPlaybackPrefsToLocalStore(effective)
         if (hasLocalPlaybackPrefs && playbackSettingsDiffer(loaded, effective)) {
             settingsService.updateSettings(effective)
@@ -1744,7 +1734,8 @@ class SettingsViewModel(
                             val match = resolveImportedTrackerAnime(entry, fromAnilist)
                                 ?: return@async TrackerImportResult(
                                     imported = false,
-                                    detail = entry.title?.let { "Skipped $it" } ?: "Skipped tracker id ${entry.externalId}",
+                                    detail = entry.title?.let { "Skipped $it" }
+                                        ?: "Skipped tracker id ${entry.externalId}",
                                 )
                             val ok = watchlistService.updateStatus(
                                 animeId = match.animeId,
@@ -1832,10 +1823,10 @@ class SettingsViewModel(
         val normalizedTitle = normalizeImportedTitle(title)
         return results.firstOrNull { anime ->
             normalizeImportedTitle(anime.displayTitle) == normalizedTitle ||
-                normalizeImportedTitle(anime.english) == normalizedTitle ||
-                normalizeImportedTitle(anime.romaji) == normalizedTitle
+                    normalizeImportedTitle(anime.english) == normalizedTitle ||
+                    normalizeImportedTitle(anime.romaji) == normalizedTitle
         } ?: results.firstOrNull { it.canWatch && it.animeId.isNotBlank() }
-            ?: results.firstOrNull { it.animeId.isNotBlank() }
+        ?: results.firstOrNull { it.animeId.isNotBlank() }
     }
 
     private fun normalizeImportedTitle(value: String): String =
@@ -2057,8 +2048,8 @@ class SettingsViewModel(
         val isVideo = pick.mimeType == "video/mp4"
         val profile = _uiState.value.userProfile
         val canUseVideoPfp = profile?.isPremium == true ||
-            profile?.mp4PfpUnlocked == true ||
-            profile?.animatedPfpUnlocked == true
+                profile?.mp4PfpUnlocked == true ||
+                profile?.animatedPfpUnlocked == true
         if (isVideo && !canUseVideoPfp) {
             _uiState.update { it.copy(errorMessage = "MP4 profile pictures unlock with Premium") }
             return
@@ -2894,11 +2885,13 @@ class SettingsViewModel(
                         errorMessage = null,
                         successMessage = null,
                     )
+
                     LibrarySyncDirection.Export -> it.copy(
                         isExportingReanime = true,
                         errorMessage = null,
                         successMessage = null,
                     )
+
                     LibrarySyncDirection.Merge -> it.copy(isLoading = true, errorMessage = null, successMessage = null)
                 }
             }
