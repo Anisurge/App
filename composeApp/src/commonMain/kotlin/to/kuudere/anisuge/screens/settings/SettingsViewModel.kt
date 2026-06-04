@@ -44,6 +44,7 @@ import to.kuudere.anisuge.platform.clearSyncProgressNotification
 import to.kuudere.anisuge.platform.updateSyncProgressNotification
 import to.kuudere.anisuge.utils.isNetworkError
 import to.kuudere.anisuge.data.models.BffShopItem
+import to.kuudere.anisuge.data.models.BffBerryPack
 import to.kuudere.anisuge.data.models.UserProfile
 import to.kuudere.anisuge.data.models.toUserProfile
 import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
@@ -194,6 +195,9 @@ data class SettingsUiState(
     val rewardsTodayWatch: Int = 0,
     val rewardsTodayWatchCap: Int = 12,
     val isClaimingDailyReward: Boolean = false,
+    val berryPacks: List<BffBerryPack> = emptyList(),
+    val isLoadingBerryPacks: Boolean = false,
+    val berryCheckoutPackId: String? = null,
     val isConnectingReanime: Boolean = false,
     val isDisconnectingReanime: Boolean = false,
     val isImportingReanime: Boolean = false,
@@ -495,6 +499,7 @@ class SettingsViewModel(
                 loadUserProfile()
                 loadShopInventory()
                 loadRewardsStatus()
+                loadBerryPacks()
             }
 
             is SettingsTab.Sync -> {
@@ -777,6 +782,51 @@ class SettingsViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun loadBerryPacks() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingBerryPacks = true) }
+            bffRewardsService.fetchBerryPacks().fold(
+                onSuccess = { body ->
+                    _uiState.update {
+                        it.copy(
+                            berryPacks = body.packs,
+                            isLoadingBerryPacks = false,
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isLoadingBerryPacks = false,
+                            errorMessage = e.message ?: "Failed to load Berry packs",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun startBerryCheckout(packId: String, openUrl: (String) -> Unit) {
+        if (_uiState.value.berryCheckoutPackId != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(berryCheckoutPackId = packId, errorMessage = null) }
+            bffRewardsService.createBerryCheckoutSession(packId).fold(
+                onSuccess = { session ->
+                    openUrl(session.checkoutUrl)
+                    delay(1200)
+                    loadUserProfile()
+                    loadRewardsStatus()
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(errorMessage = e.message ?: "Failed to start Berry checkout")
+                    }
+                },
+            )
+            _uiState.update { it.copy(berryCheckoutPackId = null) }
         }
     }
 

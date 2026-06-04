@@ -33,6 +33,7 @@
 
     <application
         android:name=".AnisurgeApplication"
+        android:hardwareAccelerated="true"
         android:largeHeap="true"
         android:label="${appLabel}"
         android:icon="@mipmap/ic_launcher"

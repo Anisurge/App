@@ -1016,6 +1016,7 @@ private fun MobileSettingsDetail(
                     onCodeChange = viewModel::setRedeemCodeDraft,
                     onRedeem = viewModel::redeemShopCode,
                     onClaimDaily = viewModel::claimDailyReward,
+                    onBuyBerryPack = { packId -> viewModel.startBerryCheckout(packId, uriHandler::openUri) },
                 )
 
                 is SettingsTab.Preferences -> MobilePreferencesContent(
@@ -1173,6 +1174,7 @@ private fun SettingsContent(
                 onCodeChange = viewModel::setRedeemCodeDraft,
                 onRedeem = viewModel::redeemShopCode,
                 onClaimDaily = viewModel::claimDailyReward,
+                onBuyBerryPack = { packId -> viewModel.startBerryCheckout(packId, uriHandler::openUri) },
             )
 
             is SettingsTab.Preferences -> PreferencesTab(

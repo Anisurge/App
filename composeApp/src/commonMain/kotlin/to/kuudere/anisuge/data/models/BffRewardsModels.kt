@@ -21,6 +21,32 @@ data class BffRewardsStatusResponse(
 )
 
 @Serializable
+data class BffBerryPackPrice(
+    val INR: Int = 0,
+)
+
+@Serializable
+data class BffBerryPack(
+    val id: String = "",
+    val label: String = "",
+    val coins: Int = 0,
+    val prices: BffBerryPackPrice = BffBerryPackPrice(),
+)
+
+@Serializable
+data class BffBerryPacksResponse(
+    val packs: List<BffBerryPack> = emptyList(),
+)
+
+@Serializable
+data class BffBerryCheckoutSessionResponse(
+    val id: String = "",
+    val packId: String = "",
+    val checkoutUrl: String = "",
+    val expiresAt: String = "",
+)
+
+@Serializable
 data class BffDailyClaimResponse(
     val granted: Boolean = false,
     val amount: Int = 0,
