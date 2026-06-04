@@ -609,7 +609,7 @@ private fun ChatMessageRow(
                     ) {
                         StickerInline(
                             sticker = message.metadata.sticker,
-                            playAnimation = !isScrolling,
+                            playAnimation = true,
                         )
                         Text(
                             text = formatChatTimestamp(message.createdAt),
@@ -664,7 +664,7 @@ private fun ChatMessageRow(
                                 )
                             }
                             message.metadata.sticker?.let { sticker ->
-                                StickerInline(sticker = sticker, playAnimation = !isScrolling)
+                                StickerInline(sticker = sticker, playAnimation = true)
                             }
                             Text(
                                 text = formatChatTimestamp(message.createdAt),
