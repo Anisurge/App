@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -264,7 +265,7 @@ fun W2gPlayerScreen(
                             .fillMaxWidth()
                             .then(
                                 if (isFullscreen) Modifier.weight(1f)
-                                else Modifier.height(250.dp)
+                                else Modifier.aspectRatio(16f / 9f)
                             )
                             .background(Color.Black),
                         contentAlignment = Alignment.Center,
