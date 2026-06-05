@@ -1,7 +1,6 @@
 package to.kuudere.anisuge.screens.games
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -9,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,60 +26,80 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import kotlinx.coroutines.delay
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import to.kuudere.anisuge.data.models.BffAnimeGameItem
+import to.kuudere.anisuge.data.models.BffCoinFlipResponse
 import to.kuudere.anisuge.screens.settings.BELI_SYMBOL
 import to.kuudere.anisuge.theme.AppColors
-import to.kuudere.anisuge.utils.formatFloat
 import kotlin.math.min
 
-private data class WheelSegment(
-    val label: String,
-    val prize: Int,
-    val color: Color,
+private enum class GameKind(
+    val title: String,
+    val subtitle: String,
+    val accent: Color,
+) {
+    Wheel("Berry Wheel", "Daily free spin and paid prize spins", Color(0xFFFFC107)),
+    Coin("Coin Flip", "Pick a side, wager Berries", Color(0xFFE57373)),
+    HigherLower("Anime Higher/Lower", "Compare catalog scores", Color(0xFF64B5F6)),
+    Guess("Anime Guess", "Blurred, pixel, and silhouette poster rounds", Color(0xFFBA68C8)),
+    Mines("Mines", "Reveal safe tiles and cash out", Color(0xFF4DB6AC)),
+    Crash("Crash", "Cash out before the multiplier breaks", Color(0xFFFF8A65)),
+    Trivia("Anime Trivia", "Catalog questions with rewards", Color(0xFFAED581)),
+}
+
+private data class WheelSegmentUi(val label: String, val prize: Int, val color: Color)
+
+private val fallbackWheelSegments = listOf(
+    WheelSegmentUi("Try Again", 0, Color(0xFFE53935)),
+    WheelSegmentUi("1 Berry", 1, Color(0xFF1E88E5)),
+    WheelSegmentUi("3 Berries", 3, Color(0xFF43A047)),
+    WheelSegmentUi("5 Berries", 5, Color(0xFFFB8C00)),
+    WheelSegmentUi("10 Berries", 10, Color(0xFF8E24AA)),
+    WheelSegmentUi("25 Berries", 25, Color(0xFF00ACC1)),
+    WheelSegmentUi("50 Berries", 50, Color(0xFFF4511E)),
+    WheelSegmentUi("Jackpot", 100, Color(0xFFD81B60)),
 )
-
-private val SEGMENTS = listOf(
-    WheelSegment("Try Again", 0, Color(0xFFE74C3C)),
-    WheelSegment("1 Berry", 1, Color(0xFF3498DB)),
-    WheelSegment("3 Berries", 3, Color(0xFF2ECC71)),
-    WheelSegment("5 Berries", 5, Color(0xFFF39C12)),
-    WheelSegment("10 Berries", 10, Color(0xFF9B59B6)),
-    WheelSegment("25 Berries", 25, Color(0xFF1ABC9C)),
-    WheelSegment("50 Berries", 50, Color(0xFFE67E22)),
-    WheelSegment("JACKPOT", 100, Color(0xFFE91E63)),
-)
-
-private val SEGMENT_ANGLE = 360f / SEGMENTS.size
-private val SEGMENT_HALF = SEGMENT_ANGLE / 2f
-
-enum class GamesTab { Wheel, CoinFlip, Mines }
 
 @Composable
 fun GamesScreen(
@@ -87,870 +107,986 @@ fun GamesScreen(
     onBack: () -> Unit,
 ) {
     val state = viewModel.state
-    var selectedTab by remember { mutableStateOf(GamesTab.Wheel) }
+    var selectedGame by remember { mutableStateOf<GameKind?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(AppColors.background),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
-            }
-            Text("Games", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(1f))
-            state.status?.let { s ->
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0x22FFFFFF))
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        "$BELI_SYMBOL${formatInt(s.coins)}",
-                        color = Color(0xFFFFD700),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
+        GamesHeader(
+            state = state,
+            selectedGame = selectedGame,
+            onBack = {
+                if (selectedGame == null) onBack() else selectedGame = null
+            },
+            onRefresh = { viewModel.loadStatus() },
+        )
+
+        state.error?.let { error ->
+            MessageBand(
+                text = error,
+                color = Color(0xFFFF6B6B),
+                onDismiss = viewModel::clearError,
+            )
+        }
+        state.toast?.let { toast ->
+            MessageBand(
+                text = toast,
+                color = Color(0xFFFFD166),
+                onDismiss = viewModel::clearToast,
+            )
         }
 
-        Spacer(Modifier.height(4.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-        ) {
-            GamesTab.entries.forEach { tab ->
-                val isSelected = selectedTab == tab
-                val bg = if (isSelected) Color(0xFFFFD700) else Color(0x18FFFFFF)
-                val tc = if (isSelected) Color.Black else Color.White.copy(alpha = 0.7f)
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(bg)
-                        .clickable { selectedTab = tab }
-                        .padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        when (tab) {
-                            GamesTab.Wheel -> "Wheel"
-                            GamesTab.CoinFlip -> "Coin"
-                            GamesTab.Mines -> "Mines"
-                        },
-                        color = tc,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
-                    )
-                }
-                if (tab != GamesTab.entries.last()) Spacer(Modifier.width(6.dp))
+        if (state.loading && state.status == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFFFFC107))
             }
+            return@Column
         }
 
-        Spacer(Modifier.height(8.dp))
-        when (selectedTab) {
-            GamesTab.Wheel -> WheelContent(viewModel, state)
-            GamesTab.CoinFlip -> CoinFlipContent(viewModel, state)
-            GamesTab.Mines -> MinesContent(viewModel, state)
+        if (selectedGame == null) {
+            GamesLobby(
+                state = state,
+                onSelect = { selectedGame = it },
+            )
+        } else {
+            GameDetail(
+                game = selectedGame!!,
+                viewModel = viewModel,
+                state = state,
+            )
         }
     }
 }
 
 @Composable
-private fun WheelContent(
-    viewModel: GamesViewModel,
+private fun GamesHeader(
     state: GamesUiState,
+    selectedGame: GameKind?,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
-    val scrollState = rememberScrollState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+        }
+        Column {
+            Text(
+                selectedGame?.title ?: "Games",
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                selectedGame?.subtitle ?: "Win and wager cosmetic Berries",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        BalancePill(state.status?.coins ?: 0)
+        IconButton(onClick = onRefresh) {
+            Icon(Icons.Default.PlayArrow, "Refresh", tint = Color.White.copy(alpha = 0.8f))
+        }
+    }
+}
+
+@Composable
+private fun BalancePill(coins: Int) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0x22FFFFFF))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        Text(
+            "$BELI_SYMBOL${formatBerries(coins)}",
+            color = Color(0xFFFFD166),
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+        )
+    }
+}
+
+@Composable
+private fun MessageBand(
+    text: String,
+    color: Color,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text, color = color, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        TextButton(onClick = onDismiss) { Text("OK", color = color) }
+    }
+}
+
+@Composable
+private fun GamesLobby(
+    state: GamesUiState,
+    onSelect: (GameKind) -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Spacer(Modifier.height(8.dp))
+        StatsStrip(state)
+        ActiveSessionsStrip(state)
+        ResponsiveGameGrid(onSelect)
+        Spacer(Modifier.height(20.dp))
+    }
+}
 
-        val winningIndex = if (state.wheelResult != null) {
-            SEGMENTS.indexOfFirst { it.prize == state.wheelResult!!.prize && it.label == state.wheelResult!!.prizeLabel }
-        } else -1
+@Composable
+private fun StatsStrip(state: GamesUiState) {
+    val status = state.status
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        StatTile("Earned", "${BELI_SYMBOL}${formatBerries(status?.totalEarned ?: 0)}", Color(0xFF81C784), Modifier.weight(1f))
+        StatTile("Lost", "${BELI_SYMBOL}${formatBerries(status?.totalLost ?: 0)}", Color(0xFFE57373), Modifier.weight(1f))
+        StatTile("Best", "${status?.bestStreak ?: 0}", Color(0xFFFFD166), Modifier.weight(1f))
+    }
+}
 
-        val targetAngle = if (winningIndex >= 0) {
-            val segCenter = winningIndex * SEGMENT_ANGLE + SEGMENT_HALF
-            5 * 360f + (360f - segCenter % 360f) % 360f
-        } else 0f
-
-        val spinAngle by animateFloatAsState(
-            targetValue = if (state.spinning) targetAngle else 0f,
-            animationSpec = tween(durationMillis = 2500),
-            label = "spin",
-        )
-
-        Box(
-            modifier = Modifier.size(290.dp),
-            contentAlignment = Alignment.Center,
+@Composable
+private fun StatTile(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.height(72.dp),
+        color = Color(0x14FFFFFF),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.Center,
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val w = size.width
-                val h = size.height
-                val cx = w / 2f
-                val cy = h / 2f
-                val r = minOf(cx, cy) - 4f
-                val segSweep = SEGMENT_ANGLE
-                val arcSize = Size(r * 2f, r * 2f)
-                val arcTopLeft = Offset(cx - r, cy - r)
+            Text(label, color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp)
+            Text(value, color = color, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+    }
+}
 
-                drawCircle(
-                    Color(0x33FFD700),
-                    r + 6f,
-                    Offset(cx, cy),
-                    style = Stroke(3f),
-                )
+@Composable
+private fun ActiveSessionsStrip(state: GamesUiState) {
+    val active = state.status?.activeSessions.orEmpty()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color(0x10FFFFFF),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                if (active.isEmpty()) "No active rounds" else "${active.size} active server round${if (active.size == 1) "" else "s"}",
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+            )
+            Text(
+                if (state.status?.canFreeWheel == true) "Free Berry Wheel spin is ready."
+                else "Free Berry Wheel spin is used for today.",
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 12.sp,
+            )
+        }
+    }
+}
 
-                rotate(spinAngle, Offset(cx, cy)) {
-                    SEGMENTS.forEachIndexed { i, seg ->
-                        val startAngle = i * segSweep - 90f
-                        drawArc(
-                            color = seg.color,
-                            startAngle = startAngle,
-                            sweepAngle = segSweep,
-                            useCenter = true,
-                            topLeft = arcTopLeft,
-                            size = arcSize,
-                            style = Fill,
-                        )
-                        drawArc(
-                            color = Color.White.copy(alpha = 0.3f),
-                            startAngle = startAngle,
-                            sweepAngle = segSweep,
-                            useCenter = true,
-                            topLeft = arcTopLeft,
-                            size = arcSize,
-                            style = Stroke(1.5f),
-                        )
+@Composable
+private fun ResponsiveGameGrid(onSelect: (GameKind) -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth < 620.dp) 2 else 3
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            GameKind.entries.chunked(columns).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    row.forEach { game ->
+                        GameCard(game = game, modifier = Modifier.weight(1f), onClick = { onSelect(game) })
                     }
+                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                 }
-
-                drawCircle(Color(0xFFFFD700), r * 0.14f, Offset(cx, cy))
-                drawCircle(Color.Black, r * 0.11f, Offset(cx, cy))
-
-                val pointerPath = Path().apply {
-                    moveTo(cx - 14f, cy - r + 14f)
-                    lineTo(cx + 14f, cy - r + 14f)
-                    lineTo(cx, cy - r - 16f)
-                    close()
-                }
-                drawPath(pointerPath, Color(0xFFFFD700))
-                drawPath(
-                    pointerPath,
-                    Color.White.copy(alpha = 0.4f),
-                    style = Stroke(2f),
-                )
-            }
-
-            if (state.spinning) {
-                CircularProgressIndicator(
-                    color = Color(0xFFFFD700),
-                    modifier = Modifier.size(36.dp),
-                    strokeWidth = 3.dp,
-                )
             }
         }
+    }
+}
 
-        Spacer(Modifier.height(12.dp))
-
-        state.wheelResult?.let { result ->
-            val bgCard = if (result.prize > 0) Color(0x1A2ECC71) else Color(0x1AE74C3C)
+@Composable
+private fun GameCard(game: GameKind, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Surface(
+        modifier = modifier
+            .height(142.dp)
+            .clickable(onClick = onClick),
+        color = Color(0x14FFFFFF),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .border(1.dp, game.accent.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                .padding(12.dp),
+        ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(bgCard)
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(game.accent.copy(alpha = 0.22f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        result.prizeLabel,
-                        color = if (result.prize > 0) Color(0xFF2ECC71) else Color(0xFFE74C3C),
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (result.prize > 0) {
-                        Text(
-                            "+$BELI_SYMBOL${result.prize}",
-                            color = Color(0xFFFFD700),
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    Text(
-                        if (result.freeSpin) "Free spin!" else "Cost: ${BELI_SYMBOL}${result.cost}",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 13.sp,
-                    )
-                }
+                Text(game.title.take(1), color = game.accent, fontWeight = FontWeight.Black)
             }
-            Spacer(Modifier.height(12.dp))
-        }
-
-        state.error?.let { err ->
-            Text(err, color = Color(0xFFE74C3C), fontSize = 14.sp)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        state.status?.let { s ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            Column(
+                modifier = Modifier.align(Alignment.BottomStart),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Button(
-                    onClick = { viewModel.spinWheel(true) },
-                    enabled = !state.spinning && s.canFreeWheel,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFFFD700),
-                        disabledContainerColor = Color(0x18FFFFFF),
-                    ),
-                ) {
-                    Text(
-                        if (s.canFreeWheel) "FREE SPIN" else "USED TODAY",
-                        color = if (s.canFreeWheel) Color.Black else Color.Gray,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                    )
-                }
-                Button(
-                    onClick = { viewModel.spinWheel(false) },
-                    enabled = !state.spinning && s.coins >= 5,
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF9B59B6),
-                        disabledContainerColor = Color(0x18FFFFFF),
-                    ),
-                ) {
-                    Text(
-                        "SPIN ${BELI_SYMBOL}5",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                    )
-                }
+                Text(game.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2)
+                Text(game.subtitle, color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp, maxLines = 2)
             }
         }
+    }
+}
 
-        Spacer(Modifier.height(16.dp))
-
-        state.status?.let { s ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                StatBox("Earned", "${BELI_SYMBOL}${formatInt(s.totalEarned)}", Color(0xFF2ECC71))
-                StatBox("Lost", "${BELI_SYMBOL}${formatInt(s.totalLost)}", Color(0xFFE74C3C))
-                StatBox("Best", "${s.bestStreak}", Color(0xFFFFD700))
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-
-        Spacer(Modifier.height(16.dp))
-        SEGMENTS.forEach { seg ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(seg.color),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(seg.label, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
-                }
-                Text(
-                    if (seg.prize > 0) "${BELI_SYMBOL}${seg.prize}" else "-",
-                    color = if (seg.prize > 0) Color(0xFFFFD700) else Color.Gray,
-                    fontSize = 13.sp,
-                    fontWeight = if (seg.prize > 0) FontWeight.Bold else FontWeight.Normal,
-                )
-            }
+@Composable
+private fun GameDetail(
+    game: GameKind,
+    viewModel: GamesViewModel,
+    state: GamesUiState,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+    ) {
+        when (game) {
+            GameKind.Wheel -> WheelGame(viewModel, state)
+            GameKind.Coin -> CoinFlipGame(viewModel, state)
+            GameKind.HigherLower -> HigherLowerGame(viewModel, state)
+            GameKind.Guess -> AnimeGuessGame(viewModel, state)
+            GameKind.Mines -> MinesGame(viewModel, state)
+            GameKind.Crash -> CrashGame(viewModel, state)
+            GameKind.Trivia -> TriviaGame(viewModel, state)
         }
         Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun CoinFlipContent(
-    viewModel: GamesViewModel,
-    state: GamesUiState,
-) {
-    var betText by remember { mutableStateOf("10") }
-    var selectedChoice by remember { mutableStateOf<String?>(null) }
-    var previousResult by remember { mutableStateOf<String?>(null) }
-
-    val bet = betText.toIntOrNull() ?: 0
-    val coins = state.status?.coins ?: 0
-    val canAfford = bet in 1..coins
-
-    val isFlipping = state.flipping
-    val hasResult = state.coinFlipResult != null
-
-    val flipRotation by animateFloatAsState(
-        targetValue = if (isFlipping) 720f else if (hasResult && previousResult != null) 720f else 0f,
-        animationSpec = spring(dampingRatio = 0.5f, stiffness = 200f),
-        label = "flip",
+private fun WheelGame(viewModel: GamesViewModel, state: GamesUiState) {
+    val status = state.status
+    val segments = status?.config?.wheel?.segments
+        ?.takeIf { it.isNotEmpty() }
+        ?.mapIndexed { index, segment ->
+            fallbackWheelSegments[index % fallbackWheelSegments.size].copy(label = segment.label, prize = segment.prize)
+        }
+        ?: fallbackWheelSegments
+    val busy = state.busyAction == "wheel"
+    val rotation by animateFloatAsState(
+        targetValue = if (busy) 1440f else if (state.wheelResult != null) 180f else 0f,
+        animationSpec = tween(1600),
+        label = "wheel",
     )
 
-    LaunchedEffect(state.coinFlipResult) {
-        if (state.coinFlipResult != null) {
-            previousResult = state.coinFlipResult!!.result
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Box(Modifier.size(286.dp), contentAlignment = Alignment.Center) {
+            Canvas(Modifier.fillMaxSize()) {
+                val r = min(size.width, size.height) / 2f - 8f
+                val c = Offset(size.width / 2f, size.height / 2f)
+                val sweep = 360f / segments.size
+                rotate(rotation, c) {
+                    segments.forEachIndexed { index, segment ->
+                        drawArc(
+                            color = segment.color,
+                            startAngle = -90f + index * sweep,
+                            sweepAngle = sweep,
+                            useCenter = true,
+                            topLeft = Offset(c.x - r, c.y - r),
+                            size = Size(r * 2, r * 2),
+                            style = Fill,
+                        )
+                        drawArc(
+                            color = Color.White.copy(alpha = 0.2f),
+                            startAngle = -90f + index * sweep,
+                            sweepAngle = sweep,
+                            useCenter = true,
+                            topLeft = Offset(c.x - r, c.y - r),
+                            size = Size(r * 2, r * 2),
+                            style = Stroke(1.5f),
+                        )
+                    }
+                }
+                drawCircle(Color(0xFFFFD166), r * 0.14f, c)
+                val pointer = Path().apply {
+                    moveTo(c.x - 15f, c.y - r + 18f)
+                    lineTo(c.x + 15f, c.y - r + 18f)
+                    lineTo(c.x, c.y - r - 18f)
+                    close()
+                }
+                drawPath(pointer, Color.White)
+            }
+            if (busy) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(38.dp), strokeWidth = 3.dp)
+        }
+
+        state.wheelResult?.let {
+            ResultPanel(
+                title = it.prizeLabel,
+                body = if (it.prize > 0) "+$BELI_SYMBOL${it.prize}" else "Spin again tomorrow or spend Berries.",
+                positive = it.prize > 0,
+            )
+        }
+
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = { viewModel.spinWheel(true) },
+                enabled = !busy && status?.canFreeWheel == true,
+                modifier = Modifier.weight(1f).height(50.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD166)),
+            ) {
+                Text(if (status?.canFreeWheel == true) "Free Spin" else "Used Today", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+            Button(
+                onClick = { viewModel.spinWheel(false) },
+                enabled = !busy && (status?.coins ?: 0) >= (status?.config?.wheel?.paidSpinCost ?: 5),
+                modifier = Modifier.weight(1f).height(50.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBA68C8)),
+            ) {
+                Text("Spin ${BELI_SYMBOL}${status?.config?.wheel?.paidSpinCost ?: 5}", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        segments.forEach { segment ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(segment.color))
+                    Spacer(Modifier.width(8.dp))
+                    Text(segment.label, color = Color.White.copy(alpha = 0.72f), fontSize = 13.sp)
+                }
+                Text(if (segment.prize > 0) "$BELI_SYMBOL${segment.prize}" else "-", color = Color(0xFFFFD166), fontSize = 13.sp)
+            }
         }
     }
+}
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(16.dp))
+@Composable
+private fun CoinFlipGame(viewModel: GamesViewModel, state: GamesUiState) {
+    var bet by remember { mutableStateOf(10) }
+    var choice by remember { mutableStateOf("heads") }
+    val coins = state.status?.coins ?: 0
+    val maxBet = min(coins, state.status?.config?.coinFlip?.maxBet ?: 5000).coerceAtLeast(1)
+    val busy = state.busyAction == "coin"
+    bet = bet.coerceIn(1, maxBet)
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            listOf("heads" to "H", "tails" to "T").forEach { (value, label) ->
-                val isSelected = selectedChoice == value
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(100.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0x22FFFFFF))
-                        .border(
-                            width = if (isSelected) 2.dp else 0.dp,
-                            color = Color(0xFFFFD700),
-                            shape = RoundedCornerShape(16.dp),
-                        )
-                        .clickable(enabled = !hasResult) { selectedChoice = value },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isSelected) Color(0xFFFFD700)
-                                    else Color(0x44FFFFFF)
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                label,
-                                color = if (isSelected) Color.Black else Color.White,
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            value.uppercase(),
-                            color = if (isSelected) Color(0xFFFFD700) else Color.White.copy(alpha = 0.6f),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                        )
-                    }
-                }
-            }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ChoiceButton("Heads", choice == "heads", Modifier.weight(1f)) { choice = "heads" }
+            ChoiceButton("Tails", choice == "tails", Modifier.weight(1f)) { choice = "tails" }
         }
 
-        Spacer(Modifier.height(20.dp))
-
-        // 3D coin
-        val showResult = hasResult && !isFlipping
-        val isWin = state.coinFlipResult?.won == true
-        val resultText = previousResult?.takeIf { hasResult } ?: ""
-
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .graphicsLayer { rotationY = flipRotation },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            showResult && isWin -> Color(0xFF2ECC71)
-                            showResult && !isWin -> Color(0xFFE74C3C)
-                            else -> Color(0xFFFFD700)
-                        }
-                    )
-                    .border(3.dp, Color.White.copy(alpha = 0.3f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (showResult) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            if (resultText == "heads") "H" else "T",
-                            color = Color.White,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            if (isWin) "WIN" else "LOSE",
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                } else {
-                    Text(
-                        if (selectedChoice == "heads") "H" else if (selectedChoice == "tails") "T" else "?",
-                        color = Color.Black,
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        state.coinFlipResult?.let { result ->
-            Text(
-                if (result.won) "WON ${BELI_SYMBOL}${result.payout}" else "LOST ${BELI_SYMBOL}${result.bet}",
-                color = if (result.won) Color(0xFF2ECC71) else Color(0xFFE74C3C),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = {
-                    viewModel.clearCoinFlipResult()
-                    selectedChoice = null
-                    previousResult = null
-                },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth().height(44.dp),
-            ) {
-                Text("PLAY AGAIN", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Balance: ${BELI_SYMBOL}${formatInt(result.coins)}",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 14.sp,
-            )
-            return
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = { betText = (bet - 5).coerceAtLeast(1).toString() },
-                enabled = bet > 1,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(0x22FFFFFF)),
-                    contentAlignment = Alignment.Center,
-                ) { Text("-", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
-            }
-            Spacer(Modifier.width(12.dp))
-            Box(
-                modifier = Modifier
-                    .width(100.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0x15FFFFFF))
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("${BELI_SYMBOL}$bet", color = Color(0xFFFFD700), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(12.dp))
-            IconButton(
-                onClick = { betText = (bet + 5).coerceAtMost(coins).toString() },
-                enabled = bet + 5 <= coins,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(0x22FFFFFF)),
-                    contentAlignment = Alignment.Center,
-                ) { Text("+", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
+        CoinFace(result = state.coinFlipResult, choice = choice, busy = busy)
+        BetStepper(bet = bet, maxBet = maxBet, onChange = { bet = it })
 
         Text(
-            "Win pays 1.7x (${BELI_SYMBOL}${(bet * 1.7).toInt()})",
-            color = Color.White.copy(alpha = 0.5f),
+            "Win pays x${state.status?.config?.coinFlip?.payoutMultiplier ?: 1.7} (${BELI_SYMBOL}${(bet * (state.status?.config?.coinFlip?.payoutMultiplier ?: 1.7)).toInt()})",
+            color = Color.White.copy(alpha = 0.55f),
             fontSize = 13.sp,
         )
 
-        Spacer(Modifier.height(12.dp))
-
-        state.error?.let { err ->
-            Text(err, color = Color(0xFFE74C3C), fontSize = 14.sp)
-            Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = { viewModel.flipCoin(bet, choice) },
+            enabled = !busy && coins >= bet,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE57373)),
+        ) {
+            if (busy) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            else Text("Flip Coin", fontWeight = FontWeight.Bold)
         }
 
-        Button(
-            onClick = {
-                viewModel.flipCoin(bet, selectedChoice ?: return@Button)
-            },
-            enabled = !isFlipping && selectedChoice != null && canAfford,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFE74C3C),
-                disabledContainerColor = Color(0x18FFFFFF),
-            ),
-        ) {
-            if (isFlipping) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(
-                if (isFlipping) "FLIPPING..." else "FLIP COIN",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+        state.coinFlipResult?.let {
+            ResultPanel(
+                title = if (it.won) "You won" else "You lost",
+                body = "Result: ${it.result.uppercase()}  Payout: ${BELI_SYMBOL}${it.payout}",
+                positive = it.won,
             )
         }
     }
 }
 
 @Composable
-private fun MinesContent(
-    viewModel: GamesViewModel,
-    state: GamesUiState,
-) {
-    val mines = state.minesState
-    var betText by remember { mutableStateOf("10") }
-    var mineCountText by remember { mutableStateOf("3") }
-
-    val bet = betText.toIntOrNull() ?: 0
-    val mineCount = mineCountText.toIntOrNull() ?: 3
-    val coins = state.status?.coins ?: 0
-    val canStart = bet in 1..min(coins, 5000) && mineCount in 1..10 && !state.creatingMines
-
-    Column(
+private fun CoinFace(result: BffCoinFlipResponse?, choice: String, busy: Boolean) {
+    val rotation by animateFloatAsState(
+        targetValue = if (busy) 720f else 0f,
+        animationSpec = tween(900),
+        label = "coin",
+    )
+    Box(
         modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .size(132.dp)
+            .graphicsLayer { rotationY = rotation }
+            .clip(CircleShape)
+            .background(if (result?.won == true) Color(0xFF66BB6A) else if (result != null) Color(0xFFE57373) else Color(0xFFFFD166))
+            .border(4.dp, Color.White.copy(alpha = 0.22f), CircleShape),
+        contentAlignment = Alignment.Center,
     ) {
-        Spacer(Modifier.height(12.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                when (result?.result ?: choice) {
+                    "heads" -> "H"
+                    "tails" -> "T"
+                    else -> "?"
+                },
+                color = if (result == null) Color.Black else Color.White,
+                fontWeight = FontWeight.Black,
+                fontSize = 42.sp,
+            )
+            Text(
+                result?.let { if (it.won) "WIN" else "LOSE" } ?: choice.uppercase(),
+                color = if (result == null) Color.Black.copy(alpha = 0.65f) else Color.White.copy(alpha = 0.8f),
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+            )
+        }
+    }
+}
 
-        if (mines == null || mines.state == "won" || mines.state == "lost" || mines.state == "cashed_out") {
-            if (mines != null) {
-                val resultColor = when (mines.state) {
-                    "won" -> Color(0xFF2ECC71)
-                    "cashed_out" -> Color(0xFF2ECC71)
-                    else -> Color(0xFFE74C3C)
+@Composable
+private fun MinesGame(viewModel: GamesViewModel, state: GamesUiState) {
+    var bet by remember { mutableStateOf(10) }
+    var mineCount by remember { mutableStateOf(3) }
+    val coins = state.status?.coins ?: 0
+    val maxBet = min(coins, state.status?.config?.mines?.maxBet ?: 5000).coerceAtLeast(1)
+    val game = state.minesState
+    val busy = state.busyAction?.startsWith("mines") == true
+    bet = bet.coerceIn(1, maxBet)
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (game == null || game.state != "playing") {
+            if (game != null) {
+                ResultPanel(
+                    title = when (game.state) {
+                        "lost" -> "Mine hit"
+                        "won" -> "Board cleared"
+                        "cashed_out" -> "Cashed out"
+                        else -> "Round ended"
+                    },
+                    body = state.minesCashoutResult?.let { "Won ${BELI_SYMBOL}${it.winAmount} at x${formatMultiplier(it.multiplier)}" }
+                        ?: state.minesRevealResult?.let { "Payout ${BELI_SYMBOL}${it.winAmount}" }
+                        ?: "Start a fresh board.",
+                    positive = game.state != "lost",
+                )
+                OutlinedButton(onClick = viewModel::resetMines, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+                    Text("New Mines Round", color = Color.White)
                 }
-                val resultText = when (mines.state) {
-                    "won" -> "HIT A MINE!"
-                    "cashed_out" -> "CASHED OUT!"
-                    "lost" -> "GAME OVER"
-                    else -> ""
+            }
+            BetStepper(bet = bet, maxBet = maxBet, onChange = { bet = it })
+            MineCountStepper(count = mineCount, onChange = { mineCount = it.coerceIn(1, 10) })
+            Button(
+                onClick = { viewModel.createMines(bet, mineCount) },
+                enabled = !busy && coins >= bet,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GameKind.Mines.accent),
+            ) {
+                Text("Start Mines", fontWeight = FontWeight.Bold, color = Color.Black)
+            }
+        } else {
+            RoundInfoRow(
+                left = "Bet ${BELI_SYMBOL}${game.bet}",
+                center = "x${formatMultiplier(game.currentMultiplier)}",
+                right = "Next x${formatMultiplier(game.nextMultiplier)}",
+            )
+            MinesBoard(game = game, busy = busy, onReveal = viewModel::revealMinesTile)
+            Button(
+                onClick = viewModel::cashoutMines,
+                enabled = !busy && game.revealedTiles.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD166)),
+            ) {
+                Text("Cash Out ${BELI_SYMBOL}${(game.bet * game.currentMultiplier).toInt()}", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MinesBoard(game: MinesGameState, busy: Boolean, onReveal: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
+        repeat(game.gridSize) { y ->
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxWidth()) {
+                repeat(game.gridSize) { x ->
+                    val index = y * game.gridSize + x
+                    val revealed = index in game.revealedTiles
+                    val mine = index in game.mineTiles
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                when {
+                                    mine -> Color(0xFFE57373)
+                                    revealed -> Color(0xFF4DB6AC)
+                                    else -> Color(0x18FFFFFF)
+                                },
+                            )
+                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                            .clickable(enabled = !busy && game.state == "playing" && !revealed) { onReveal(index) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            when {
+                                mine -> "X"
+                                revealed -> "+"
+                                else -> ""
+                            },
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 18.sp,
+                        )
+                    }
                 }
-                Box(
+            }
+        }
+    }
+}
+
+@Composable
+private fun CrashGame(viewModel: GamesViewModel, state: GamesUiState) {
+    var bet by remember { mutableStateOf(10) }
+    val coins = state.status?.coins ?: 0
+    val maxBet = min(coins, state.status?.config?.crash?.maxBet ?: 5000).coerceAtLeast(1)
+    val game = state.crashState
+    val busy = state.busyAction?.startsWith("crash") == true
+    bet = bet.coerceIn(1, maxBet)
+
+    if (game == null || game.state != "playing") {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            state.crashResult?.let {
+                ResultPanel(
+                    title = if (it.crashed) "Crashed" else "Cashed out",
+                    body = if (it.crashed) "Crash point x${formatMultiplier(it.crashPoint)}" else "Payout ${BELI_SYMBOL}${it.payout} at x${formatMultiplier(it.multiplier)}",
+                    positive = !it.crashed,
+                )
+                OutlinedButton(onClick = viewModel::resetCrash, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+                    Text("New Crash Round", color = Color.White)
+                }
+            }
+            BetStepper(bet = bet, maxBet = maxBet, onChange = { bet = it })
+            Button(
+                onClick = { viewModel.startCrash(bet) },
+                enabled = !busy && coins >= bet,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GameKind.Crash.accent),
+            ) {
+                Text("Start Crash", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+    } else {
+        var now by remember(game.gameId) { mutableLongStateOf(Clock.System.now().toEpochMilliseconds()) }
+        LaunchedEffect(game.gameId, game.state) {
+            while (game.state == "playing") {
+                now = Clock.System.now().toEpochMilliseconds()
+                delay(80)
+            }
+        }
+        val multiplier = crashMultiplier(game.startedAt, game.growthPerSecond, now)
+        val progress = ((multiplier - 1.0) / 10.0).toFloat().coerceIn(0f, 1f)
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0x12FFFFFF))
+                    .border(1.dp, GameKind.Crash.accent.copy(alpha = 0.35f), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("x${formatMultiplier(multiplier)}", color = GameKind.Crash.accent, fontSize = 50.sp, fontWeight = FontWeight.Black)
+                    Text("Server decides the crash point", color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
+                }
+            }
+            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth(), color = GameKind.Crash.accent, trackColor = Color.White.copy(alpha = 0.12f))
+            Button(
+                onClick = viewModel::cashoutCrash,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD166)),
+            ) {
+                Text("Cash Out ${BELI_SYMBOL}${(game.bet * multiplier).toInt()}", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HigherLowerGame(viewModel: GamesViewModel, state: GamesUiState) {
+    val game = state.higherLowerState
+    val busy = state.busyAction?.startsWith("higher") == true
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (game == null || game.state != "playing") {
+            state.higherLowerResult?.let {
+                ResultPanel(
+                    title = if (it.correct) "Correct" else "Wrong",
+                    body = "Streak ${it.streak}. Reward ${BELI_SYMBOL}${it.reward}.",
+                    positive = it.correct,
+                )
+                OutlinedButton(onClick = viewModel::resetHigherLower, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+                    Text("New Higher/Lower Round", color = Color.White)
+                }
+            }
+            Button(
+                onClick = viewModel::startHigherLower,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GameKind.HigherLower.accent),
+            ) {
+                Text("Start Round (${BELI_SYMBOL}${state.status?.config?.skillGames?.higherLowerEntryCost ?: 2})", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                AnimeScoreCard(game.current, showScore = true, modifier = Modifier.weight(1f))
+                AnimeScoreCard(game.next, showScore = state.higherLowerResult?.correct == false, modifier = Modifier.weight(1f))
+            }
+            Text("Is the next anime rated higher or lower?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            RoundInfoRow("Streak ${game.streak}", "Entry ${BELI_SYMBOL}${state.status?.config?.skillGames?.higherLowerEntryCost ?: 2}", "Reward scales")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = { viewModel.answerHigherLower("higher") },
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF81C784)),
+                ) { Text("Higher", color = Color.Black, fontWeight = FontWeight.Bold) }
+                Button(
+                    onClick = { viewModel.answerHigherLower("lower") },
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF8A65)),
+                ) { Text("Lower", color = Color.Black, fontWeight = FontWeight.Bold) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnimeScoreCard(anime: BffAnimeGameItem, showScore: Boolean, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier.height(258.dp), color = Color(0x14FFFFFF), shape = RoundedCornerShape(8.dp)) {
+        Column {
+            AsyncImage(
+                model = anime.imageUrl,
+                contentDescription = anime.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().height(180.dp),
+            )
+            Column(Modifier.padding(9.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(anime.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(if (showScore) "Score ${anime.score}%" else "Score ??", color = Color(0xFFFFD166), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnimeGuessGame(viewModel: GamesViewModel, state: GamesUiState) {
+    val game = state.animeGuessState
+    val result = state.animeGuessResult
+    val busy = state.busyAction?.startsWith("guess") == true
+    var typedAnswer by remember(game?.gameId) { mutableStateOf("") }
+    var mode by remember { mutableStateOf("blur") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (game == null || game.state != "playing") {
+            result?.let {
+                ResultPanel(
+                    title = if (it.correct) "Correct" else "Revealed",
+                    body = "${it.answer.title}  Reward ${BELI_SYMBOL}${it.reward}",
+                    positive = it.correct,
+                )
+                OutlinedButton(onClick = viewModel::resetAnimeGuess, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+                    Text("New Guess Round", color = Color.White)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("blur", "pixel", "silhouette").forEach { item ->
+                    ChoiceButton(item.replaceFirstChar { it.uppercase() }, mode == item, Modifier.weight(1f)) { mode = item }
+                }
+            }
+            Button(
+                onClick = { viewModel.startAnimeGuess(mode) },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GameKind.Guess.accent),
+            ) {
+                Text("Start Guess (${BELI_SYMBOL}${state.status?.config?.skillGames?.animeGuessEntryCost ?: 3})", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            GuessPoster(imageUrl = game.imageUrl, mode = game.mode)
+            if (game.hints.isNotEmpty()) {
+                Surface(color = Color(0x14FFFFFF), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        game.hints.forEach { Text(it, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp) }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = typedAnswer,
+                    onValueChange = { typedAnswer = it },
+                    label = { Text("Anime title") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                Button(
+                    onClick = { viewModel.revealGuessHint() },
+                    enabled = !busy && game.hints.size < 2,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64B5F6)),
+                ) { Text("Hint") }
+            }
+            Button(
+                onClick = { viewModel.answerAnimeGuess(typedAnswer) },
+                enabled = !busy && typedAnswer.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(8.dp),
+            ) { Text("Submit Guess") }
+            Text("Or choose one:", color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp)
+            game.choices.forEach { choice ->
+                OutlinedButton(
+                    onClick = { viewModel.answerAnimeGuess(animeId = choice.animeId) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Text(choice.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GuessPoster(imageUrl: String, mode: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(360.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0x14FFFFFF)),
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = "Anime guess poster",
+            contentScale = ContentScale.Crop,
+            colorFilter = if (mode == "silhouette") ColorFilter.tint(Color.Black.copy(alpha = 0.86f), BlendMode.SrcAtop) else null,
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (mode == "blur") Modifier.blur(24.dp) else Modifier)
+                .then(if (mode == "pixel") Modifier.blur(10.dp) else Modifier),
+        )
+        if (mode == "pixel") {
+            Canvas(Modifier.fillMaxSize()) {
+                val step = 28.dp.toPx()
+                var x = 0f
+                while (x < size.width) {
+                    drawLine(Color.Black.copy(alpha = 0.22f), Offset(x, 0f), Offset(x, size.height), 3f)
+                    x += step
+                }
+                var y = 0f
+                while (y < size.height) {
+                    drawLine(Color.Black.copy(alpha = 0.22f), Offset(0f, y), Offset(size.width, y), 3f)
+                    y += step
+                }
+            }
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.18f)))
+    }
+}
+
+@Composable
+private fun TriviaGame(viewModel: GamesViewModel, state: GamesUiState) {
+    val game = state.triviaState
+    val result = state.triviaResult
+    val busy = state.busyAction?.startsWith("trivia") == true
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        if (game == null || game.state != "playing") {
+            result?.let {
+                ResultPanel(
+                    title = if (it.correct) "Correct" else "Wrong",
+                    body = it.explanation,
+                    positive = it.correct,
+                )
+                OutlinedButton(onClick = viewModel::resetTrivia, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+                    Text("New Trivia Round", color = Color.White)
+                }
+            }
+            Button(
+                onClick = viewModel::startTrivia,
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = GameKind.Trivia.accent),
+            ) {
+                Text("Start Trivia (${BELI_SYMBOL}${state.status?.config?.skillGames?.triviaEntryCost ?: 2})", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Surface(color = Color(0x14FFFFFF), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Text(game.question, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+            }
+            game.choices.forEachIndexed { index, choice ->
+                val selected = game.selectedIndex == index
+                val correct = result?.correctIndex == index
+                val color = when {
+                    correct -> Color(0xFF81C784)
+                    selected && result != null -> Color(0xFFE57373)
+                    else -> Color.White.copy(alpha = 0.08f)
+                }
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (mines.state == "lost") Color(0x1AE74C3C) else Color(0x1A2ECC71))
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center,
+                        .clickable(enabled = !busy && result == null) { viewModel.answerTrivia(index) },
+                    color = color,
+                    shape = RoundedCornerShape(8.dp),
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(resultText, color = resultColor, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        if (mines.state == "cashed_out") {
-                            Text(
-                                "+${BELI_SYMBOL}${state.status?.coins?.minus(coins - bet) ?: 0}",
-                                color = Color(0xFFFFD700),
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = { viewModel.clearMines() },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
-                ) {
-                    Text("PLAY AGAIN", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-
-            // Bet & mine count selectors
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Bet", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { betText = (bet - 5).coerceAtLeast(1).toString() },
-                            enabled = bet > 1,
-                        ) {
-                            Box(
-                                Modifier.size(36.dp).clip(CircleShape).background(Color(0x22FFFFFF)),
-                                contentAlignment = Alignment.Center,
-                            ) { Text("-", color = Color.White, fontSize = 18.sp) }
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Color(0x15FFFFFF)).padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text("${BELI_SYMBOL}$bet", color = Color(0xFFFFD700), fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(
-                            onClick = { betText = (bet + 5).coerceAtMost(min(coins, 5000)).toString() },
-                            enabled = bet + 5 <= min(coins, 5000),
-                        ) {
-                            Box(
-                                Modifier.size(36.dp).clip(CircleShape).background(Color(0x22FFFFFF)),
-                                contentAlignment = Alignment.Center,
-                            ) { Text("+", color = Color.White, fontSize = 18.sp) }
-                        }
-                    }
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Mines", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { mineCountText = (mineCount - 1).coerceAtLeast(1).toString() },
-                            enabled = mineCount > 1,
-                        ) {
-                            Box(
-                                Modifier.size(36.dp).clip(CircleShape).background(Color(0x22FFFFFF)),
-                                contentAlignment = Alignment.Center,
-                            ) { Text("-", color = Color.White, fontSize = 18.sp) }
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Color(0x15FFFFFF)).padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text("$mineCount", color = Color(0xFF9B59B6), fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(
-                            onClick = { mineCountText = (mineCount + 1).coerceAtMost(10).toString() },
-                            enabled = mineCount < 10,
-                        ) {
-                            Box(
-                                Modifier.size(36.dp).clip(CircleShape).background(Color(0x22FFFFFF)),
-                                contentAlignment = Alignment.Center,
-                            ) { Text("+", color = Color.White, fontSize = 18.sp) }
-                        }
-                    }
+                    Text(choice, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(14.dp))
                 }
             }
-
-            Spacer(Modifier.height(16.dp))
-
-            state.error?.let { err ->
-                Text(err, color = Color(0xFFE74C3C), fontSize = 14.sp)
-                Spacer(Modifier.height(8.dp))
-            }
-
-            Button(
-                onClick = {
-                    viewModel.createMines(bet, mineCount)
-                },
-                enabled = canStart,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF9B59B6),
-                    disabledContainerColor = Color(0x18FFFFFF),
-                ),
-            ) {
-                if (state.creatingMines) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(
-                    if (state.creatingMines) "STARTING..." else "START GAME",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            return
-        }
-
-        // Playing state - show grid
-        val gridSize = mines.gridSize
-        val gridTiles = gridSize * gridSize
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0x0FFFFFFF))
-                .padding(8.dp),
-        ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                for (row in 0 until gridSize) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        for (col in 0 until gridSize) {
-                            val index = row * gridSize + col
-                            val isRevealed = index in mines.revealedTiles
-                            val isMine = state.minesRevealResult?.let {
-                                it.tileIndex == index && it.isMine
-                            } ?: false
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        when {
-                                            isRevealed && isMine -> Color(0xFFE74C3C)
-                                            isRevealed && !isMine -> Color(0xFF2ECC71)
-                                            else -> Color(0x22FFFFFF)
-                                        }
-                                    )
-                                    .clickable(enabled = mines.state == "playing" && !isRevealed && !state.revealingMine) {
-                                        viewModel.revealMinesTile(index)
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (isRevealed && isMine) {
-                                    Text("💣", fontSize = 18.sp)
-                                } else if (isRevealed && !isMine) {
-                                    Icon(
-                                        Icons.Filled.Star,
-                                        contentDescription = null,
-                                        tint = Color(0xFFFFD700),
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "Bet: ${BELI_SYMBOL}${mines.bet}",
-                color = Color.White.copy(alpha = 0.6f),
-                fontSize = 14.sp,
-            )
-            Text(
-                "Multiplier: ${formatFloat(mines.currentMultiplier, 2)}x",
-                color = Color(0xFFFFD700),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        state.error?.let { err ->
-            Text(err, color = Color(0xFFE74C3C), fontSize = 14.sp)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Button(
-            onClick = { viewModel.cashoutMines() },
-            enabled = mines.state == "playing" && mines.revealedTiles.isNotEmpty() && !state.cashingOutMines,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF2ECC71),
-                disabledContainerColor = Color(0x18FFFFFF),
-            ),
-        ) {
-            if (state.cashingOutMines) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(
-                if (state.cashingOutMines) "CASHING OUT..." else "CASH OUT",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-            )
         }
     }
 }
 
 @Composable
-private fun StatBox(label: String, value: String, color: Color) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0x0FFFFFFF))
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-    ) {
-        Text(value, color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Text(label, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+private fun BetStepper(bet: Int, maxBet: Int, onChange: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            Text("Bet", color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp, modifier = Modifier.width(52.dp))
+            StepButton("-", enabled = bet > 1) { onChange((bet - 5).coerceAtLeast(1)) }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0x14FFFFFF))
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("$BELI_SYMBOL${formatBerries(bet)}", color = Color(0xFFFFD166), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            }
+            StepButton("+", enabled = bet < maxBet) { onChange((bet + 5).coerceAtMost(maxBet)) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            listOf(10, 25, 50, 100).forEach { value ->
+                OutlinedButton(
+                    onClick = { onChange(value.coerceAtMost(maxBet).coerceAtLeast(1)) },
+                    enabled = maxBet >= value,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                ) { Text("$BELI_SYMBOL$value", color = Color.White, fontSize = 12.sp) }
+            }
+        }
     }
 }
 
-private fun formatInt(amount: Int): String {
-    val s = amount.toString()
-    val b = StringBuilder()
-    var count = 0
-    for (i in s.lastIndex downTo 0) {
-        if (count > 0 && count % 3 == 0) b.insert(0, ',')
-        b.insert(0, s[i])
-        count++
+@Composable
+private fun MineCountStepper(count: Int, onChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        Text("Mines", color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp, modifier = Modifier.width(52.dp))
+        StepButton("-", enabled = count > 1) { onChange(count - 1) }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0x14FFFFFF))
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(count.toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        }
+        StepButton("+", enabled = count < 10) { onChange(count + 1) }
     }
-    return b.toString()
 }
+
+@Composable
+private fun StepButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(44.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0x22FFFFFF)),
+        contentPadding = ButtonDefaults.ContentPadding,
+    ) {
+        Text(text, fontWeight = FontWeight.Black, color = Color.White, fontSize = 18.sp)
+    }
+}
+
+@Composable
+private fun ChoiceButton(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Surface(
+        modifier = modifier
+            .height(52.dp)
+            .clickable(onClick = onClick),
+        color = if (selected) Color(0xFFFFD166) else Color(0x14FFFFFF),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(text, color = if (selected) Color.Black else Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun RoundInfoRow(left: String, center: String, right: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatTile(left, "", Color.White, Modifier.weight(1f))
+        StatTile(center, "", Color(0xFFFFD166), Modifier.weight(1f))
+        StatTile(right, "", Color.White, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun ResultPanel(title: String, body: String, positive: Boolean) {
+    val color = if (positive) Color(0xFF81C784) else Color(0xFFE57373)
+    Surface(color = color.copy(alpha = 0.16f), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, color = color, fontSize = 22.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+            Text(body, color = Color.White.copy(alpha = 0.78f), fontSize = 13.sp, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+private fun crashMultiplier(startedAt: String, growthPerSecond: Double, nowMs: Long): Double {
+    val startedMs = runCatching { Instant.parse(startedAt).toEpochMilliseconds() }
+        .getOrDefault(nowMs)
+    val elapsed = ((nowMs - startedMs).coerceAtLeast(0)).toDouble() / 1000.0
+    return (1.0 + elapsed * growthPerSecond).coerceAtMost(50.0)
+}
+
+private fun formatMultiplier(value: Double): String =
+    ((value * 100.0).toInt() / 100.0).toString()
+
+private fun formatBerries(amount: Int): String =
+    amount.toString().reversed().chunked(3).joinToString(",").reversed()

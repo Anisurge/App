@@ -10,16 +10,31 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
+import to.kuudere.anisuge.data.models.BffAnimeGuessAnswerRequest
+import to.kuudere.anisuge.data.models.BffAnimeGuessAnswerResponse
+import to.kuudere.anisuge.data.models.BffAnimeGuessHintResponse
+import to.kuudere.anisuge.data.models.BffAnimeGuessStartRequest
+import to.kuudere.anisuge.data.models.BffAnimeGuessStartResponse
 import to.kuudere.anisuge.data.models.BffCoinFlipRequest
 import to.kuudere.anisuge.data.models.BffCoinFlipResponse
+import to.kuudere.anisuge.data.models.BffCrashCashoutResponse
+import to.kuudere.anisuge.data.models.BffCrashStartRequest
+import to.kuudere.anisuge.data.models.BffCrashStartResponse
+import to.kuudere.anisuge.data.models.BffEmptyGameRequest
 import to.kuudere.anisuge.data.models.BffErrorResponse
+import to.kuudere.anisuge.data.models.BffGameIdRequest
 import to.kuudere.anisuge.data.models.BffGameStatusResponse
-import to.kuudere.anisuge.data.models.BffMinesCashoutRequest
+import to.kuudere.anisuge.data.models.BffHigherLowerAnswerRequest
+import to.kuudere.anisuge.data.models.BffHigherLowerAnswerResponse
+import to.kuudere.anisuge.data.models.BffHigherLowerStartResponse
 import to.kuudere.anisuge.data.models.BffMinesCashoutResponse
 import to.kuudere.anisuge.data.models.BffMinesCreateRequest
 import to.kuudere.anisuge.data.models.BffMinesCreateResponse
 import to.kuudere.anisuge.data.models.BffMinesRevealRequest
 import to.kuudere.anisuge.data.models.BffMinesRevealResponse
+import to.kuudere.anisuge.data.models.BffTriviaAnswerRequest
+import to.kuudere.anisuge.data.models.BffTriviaAnswerResponse
+import to.kuudere.anisuge.data.models.BffTriviaStartResponse
 import to.kuudere.anisuge.data.models.BffWheelSpinRequest
 import to.kuudere.anisuge.data.models.BffWheelSpinResponse
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
@@ -46,85 +61,58 @@ class BffGamesService(
         }
     }
 
-    suspend fun spinWheel(freeSpin: Boolean = true): Result<BffWheelSpinResponse> {
-        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
-        return try {
-            val response = httpClient.post("${AnisurgeApi.v1Base}/games/wheel/spin") {
-                applyAnisurgeAuth(stored)
-                contentType(ContentType.Application.Json)
-                setBody(BffWheelSpinRequest(freeSpin = freeSpin))
-            }
-            if (response.status.isSuccess()) {
-                Result.success(response.body())
-            } else {
-                Result.failure(Exception(errorMessage(response.bodyAsText())))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun spinWheel(freeSpin: Boolean = true): Result<BffWheelSpinResponse> =
+        postJson("/games/wheel/spin", BffWheelSpinRequest(freeSpin = freeSpin))
 
-    suspend fun flipCoin(bet: Int, choice: String): Result<BffCoinFlipResponse> {
-        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
-        return try {
-            val response = httpClient.post("${AnisurgeApi.v1Base}/games/coin-flip") {
-                applyAnisurgeAuth(stored)
-                contentType(ContentType.Application.Json)
-                setBody(BffCoinFlipRequest(bet = bet, choice = choice))
-            }
-            if (response.status.isSuccess()) {
-                Result.success(response.body())
-            } else {
-                Result.failure(Exception(errorMessage(response.bodyAsText())))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun flipCoin(bet: Int, choice: String): Result<BffCoinFlipResponse> =
+        postJson("/games/coin-flip", BffCoinFlipRequest(bet = bet, choice = choice))
 
-    suspend fun createMines(bet: Int, mines: Int): Result<BffMinesCreateResponse> {
-        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
-        return try {
-            val response = httpClient.post("${AnisurgeApi.v1Base}/games/mines/create") {
-                applyAnisurgeAuth(stored)
-                contentType(ContentType.Application.Json)
-                setBody(BffMinesCreateRequest(bet = bet, mines = mines))
-            }
-            if (response.status.isSuccess()) {
-                Result.success(response.body())
-            } else {
-                Result.failure(Exception(errorMessage(response.bodyAsText())))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun createMines(bet: Int, mines: Int): Result<BffMinesCreateResponse> =
+        postJson("/games/mines/create", BffMinesCreateRequest(bet = bet, mines = mines))
 
-    suspend fun revealMinesTile(gameId: String, tileIndex: Int): Result<BffMinesRevealResponse> {
-        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
-        return try {
-            val response = httpClient.post("${AnisurgeApi.v1Base}/games/mines/reveal") {
-                applyAnisurgeAuth(stored)
-                contentType(ContentType.Application.Json)
-                setBody(BffMinesRevealRequest(gameId = gameId, tileIndex = tileIndex))
-            }
-            if (response.status.isSuccess()) {
-                Result.success(response.body())
-            } else {
-                Result.failure(Exception(errorMessage(response.bodyAsText())))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    suspend fun revealMinesTile(gameId: String, tileIndex: Int): Result<BffMinesRevealResponse> =
+        postJson("/games/mines/reveal", BffMinesRevealRequest(gameId = gameId, tileIndex = tileIndex))
 
-    suspend fun cashoutMines(gameId: String): Result<BffMinesCashoutResponse> {
+    suspend fun cashoutMines(gameId: String): Result<BffMinesCashoutResponse> =
+        postJson("/games/mines/cashout", BffGameIdRequest(gameId = gameId))
+
+    suspend fun startCrash(bet: Int): Result<BffCrashStartResponse> =
+        postJson("/games/crash/start", BffCrashStartRequest(bet = bet))
+
+    suspend fun cashoutCrash(gameId: String): Result<BffCrashCashoutResponse> =
+        postJson("/games/crash/cashout", BffGameIdRequest(gameId = gameId))
+
+    suspend fun startHigherLower(): Result<BffHigherLowerStartResponse> =
+        postJson("/games/higher-lower/start", BffEmptyGameRequest)
+
+    suspend fun answerHigherLower(gameId: String, answer: String): Result<BffHigherLowerAnswerResponse> =
+        postJson("/games/higher-lower/answer", BffHigherLowerAnswerRequest(gameId = gameId, answer = answer))
+
+    suspend fun startAnimeGuess(mode: String): Result<BffAnimeGuessStartResponse> =
+        postJson("/games/guess/start", BffAnimeGuessStartRequest(mode = mode))
+
+    suspend fun revealAnimeGuessHint(gameId: String): Result<BffAnimeGuessHintResponse> =
+        postJson("/games/guess/hint", BffGameIdRequest(gameId = gameId))
+
+    suspend fun answerAnimeGuess(gameId: String, answer: String = "", animeId: String? = null): Result<BffAnimeGuessAnswerResponse> =
+        postJson("/games/guess/answer", BffAnimeGuessAnswerRequest(gameId = gameId, answer = answer, animeId = animeId))
+
+    suspend fun startTrivia(): Result<BffTriviaStartResponse> =
+        postJson("/games/trivia/start", BffEmptyGameRequest)
+
+    suspend fun answerTrivia(gameId: String, choiceIndex: Int): Result<BffTriviaAnswerResponse> =
+        postJson("/games/trivia/answer", BffTriviaAnswerRequest(gameId = gameId, choiceIndex = choiceIndex))
+
+    private suspend inline fun <reified Request : Any, reified Response : Any> postJson(
+        path: String,
+        request: Request,
+    ): Result<Response> {
         val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
         return try {
-            val response = httpClient.post("${AnisurgeApi.v1Base}/games/mines/cashout") {
+            val response = httpClient.post("${AnisurgeApi.v1Base}$path") {
                 applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
-                setBody(BffMinesCashoutRequest(gameId = gameId))
+                setBody(request)
             }
             if (response.status.isSuccess()) {
                 Result.success(response.body())
