@@ -469,7 +469,7 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                             scoreLabel,
                         )
                         val watchlistButtonLabel = if (isInWatchlist) {
-                            episodeData.folder?.takeIf { it.isNotBlank() && it != "Remove" }
+                            episodeData.folder.takeIf { it.isNotBlank() && it != "Remove" }
                                 ?: "In Watchlist"
                         } else {
                             "Watchlist"

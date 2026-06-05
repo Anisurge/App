@@ -3,8 +3,9 @@ package to.kuudere.anisuge.screens.watch
 import to.kuudere.anisuge.data.models.SkipData
 
 internal fun SkipData?.isPositionInRange(positionSec: Double): Boolean {
-    val start = this?.start ?: return false
-    val end = end ?: return false
+    val skip = this ?: return false
+    val start = skip.start ?: return false
+    val end = skip.end ?: return false
     return positionSec >= start + 0.25 && positionSec < end - 0.25
 }
 

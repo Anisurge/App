@@ -1308,7 +1308,8 @@ private fun HeroCarouselExpanded(
                                 )
                             }
                         }
-                        if ((item.score ?: 0) > 0) {
+                        val score = item.score
+                        if (score != null && score > 0) {
                             Row(
                                 Modifier
                                     .clip(RoundedCornerShape(5.dp))
@@ -1324,7 +1325,7 @@ private fun HeroCarouselExpanded(
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Text(
-                                    formatFloat(item.score.toDouble(), 1),
+                                    formatFloat(score.toDouble(), 1),
                                     color = Color(0xFFfbbf24),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold

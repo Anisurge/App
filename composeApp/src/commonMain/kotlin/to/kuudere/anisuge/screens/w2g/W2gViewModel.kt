@@ -207,10 +207,10 @@ class W2gViewModel(
         }
 
         // Non-host with shared stream URL: use it directly
-        if (!isCurrentUserHost(room?.hostUserId) && roomStreamUrl != null) {
+        if (!isCurrentUserHost(room.hostUserId) && roomStreamUrl != null) {
             _state.value = _state.value.copy(
                 isLoadingPlayback = false,
-                playbackSource = W2gPlaybackSource(roomStreamUrl, room.streamHeaders),
+                playbackSource = W2gPlaybackSource(roomStreamUrl, room.streamHeaders ?: emptyMap()),
                 error = null,
             )
             return

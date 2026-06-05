@@ -118,7 +118,7 @@ fun AnimeInfoScreen(
                     anilistId = anilistId,
                     episodeNumber = ep.number,
                     title = title,
-                    coverImage = state.details!!.image ?: state.details!!.poster ?: state.details!!.cover,
+                    coverImage = state.details!!.bestCoverImage(),
                     server = server,
                     subtitleLabels = subtitleLabels,
                     audioLang = audioLang,
@@ -141,7 +141,7 @@ fun AnimeInfoScreen(
                 val details = state.details ?: return@SeasonBatchPickerDialog
                 val anilistId = details.anilistId ?: 0
                 val title = details.title.displayTitle(preferRomajiAnimeTitles)
-                val cover = details.image ?: details.poster ?: details.cover
+                val cover = details.bestCoverImage()
                 batchScope.launch {
                     val batch = episodes
                         .sortedBy { it.number }
@@ -273,8 +273,8 @@ fun AnimeInfoScreen(
                         state = state,
                         onBack = onBack,
                         onWatchlistUpdate = { viewModel.updateWatchlist(it) },
-                        onWatchNow = { onWatchEpisode(anime.slug ?: anime.id, "sub", 1) },
-                        onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
+                        onWatchNow = { onWatchEpisode(anime.activeSlug, "sub", 1) },
+                        onWatchEpisode = { epNum -> onWatchEpisode(anime.activeSlug, "sub", epNum) },
                         onPosterClick = { previewImageUrl = it },
                         showFullAnimeTitles = showFullAnimeTitles,
                     )
@@ -283,8 +283,8 @@ fun AnimeInfoScreen(
                         anime = anime,
                         state = state,
                         onWatchlistUpdate = { viewModel.updateWatchlist(it) },
-                        onWatchNow = { onWatchEpisode(anime.slug ?: anime.id, "sub", 1) },
-                        onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
+                        onWatchNow = { onWatchEpisode(anime.activeSlug, "sub", 1) },
+                        onWatchEpisode = { epNum -> onWatchEpisode(anime.activeSlug, "sub", epNum) },
                         onGenreClick = onGenreClick,
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
                         onDownloadSeason = { episodes -> openBatchPicker(episodes) },
@@ -310,8 +310,8 @@ fun AnimeInfoScreen(
                         },
                         onBack = onBack,
                         onWatchlistUpdate = { viewModel.updateWatchlist(it) },
-                        onWatchNow = { onWatchEpisode(anime.slug ?: anime.id, "sub", 1) },
-                        onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
+                        onWatchNow = { onWatchEpisode(anime.activeSlug, "sub", 1) },
+                        onWatchEpisode = { epNum -> onWatchEpisode(anime.activeSlug, "sub", epNum) },
                         onGenreClick = onGenreClick,
                         onDownloadEpisode = { selectedEpisodeForDownload = it },
                         onDownloadSeason = { episodes -> openBatchPicker(episodes) },
@@ -351,6 +351,11 @@ private fun buildAnimeShareText(
     val title = anime.title.displayTitle(preferRomajiAnimeTitles).ifBlank { "this anime" }
     return "$title\nWatch this on Anisurge:\nhttps://www.anisurge.lol/anime/$id"
 }
+
+private fun AnimeDetails.bestCoverImage(): String =
+    image.takeIf { it.isNotBlank() }
+        ?: poster.takeIf { it.isNotBlank() }
+        ?: cover
 
 private data class RelatedSeasonItem(
     val animeId: String,
@@ -682,8 +687,9 @@ private fun TvLayout(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                val coverImage = anime.bestCoverImage()
                 AsyncImage(
-                    model = anime.image ?: anime.poster ?: anime.cover,
+                    model = coverImage,
                     contentDescription = "Cover",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -691,7 +697,7 @@ private fun TvLayout(
                         .aspectRatio(2f / 3f)
                         .clip(RoundedCornerShape(18.dp))
                         .border(1.dp, AppColors.border, RoundedCornerShape(18.dp))
-                        .clickable { onPosterClick(anime.image ?: anime.poster ?: anime.cover) },
+                        .clickable { onPosterClick(coverImage) },
                 )
 
                 Column(
@@ -715,11 +721,11 @@ private fun TvLayout(
                     val seasonLabel = if (seasonStr != null && anime.seasonYear != null) {
                         "$seasonStr ${anime.seasonYear}"
                     } else null
-                    val formatLabel = anime.format?.takeIf { it.isNotBlank() }
+                    val formatLabel = anime.format.takeIf { it.isNotBlank() }
                     val meta = buildList {
                         seasonLabel?.let { add(it) }
                         formatLabel?.let { add(it) }
-                        anime.status?.takeIf { it.isNotBlank() }?.let { add(it) }
+                        anime.status.takeIf { it.isNotBlank() }?.let { add(it) }
                         anime.type?.takeIf { it.isNotBlank() }?.let { add(it) }
                         anime.duration?.takeIf { it > 0 }?.let { add("${it}m") }
                     }.joinToString(" • ")
@@ -728,7 +734,7 @@ private fun TvLayout(
                         Text(meta, color = AppColors.textMuted, fontSize = 15.sp)
                     }
 
-                    val genres = anime.genres?.take(3)?.joinToString(" • ").orEmpty()
+                    val genres = anime.genres.take(3).joinToString(" • ")
                     if (genres.isNotBlank()) {
                         Text(
                             genres,
@@ -739,7 +745,7 @@ private fun TvLayout(
                         )
                     }
 
-                    val desc = stripHtmlTags(anime.description ?: "").trim()
+                    val desc = stripHtmlTags(anime.description).trim()
                     if (desc.isNotBlank()) {
                         Text(
                             text = desc,
@@ -915,7 +921,7 @@ private fun MobileLayout(
                 val bannerUrl = anime.banner?.takeIf {
                     it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
                 }
-                val bgImage = bannerUrl ?: (anime.image ?: anime.poster ?: anime.cover)
+                val bgImage = bannerUrl ?: anime.bestCoverImage()
                 val hasBanner = bannerUrl != null
                 AsyncImage(
                     model = bgImage,
@@ -977,15 +983,16 @@ private fun MobileLayout(
                     // Top details block
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Top) {
                         // Poster
+                        val coverImage = anime.bestCoverImage()
                         AsyncImage(
-                            model = anime.image ?: anime.poster ?: anime.cover,
+                            model = coverImage,
                             contentDescription = "Cover",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
                                 .width(130.dp)
                                 .height(190.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { onPosterClick(anime.image ?: anime.poster ?: anime.cover) }
+                                .clickable { onPosterClick(coverImage) }
                         )
                         Spacer(Modifier.width(16.dp))
                         // Right Details
@@ -1038,7 +1045,7 @@ private fun MobileLayout(
                             val seasonLabel = if (seasonStr != null && anime.seasonYear != null) {
                                 "$seasonStr ${anime.seasonYear}"
                             } else null
-                            val formatLabel = anime.format?.takeIf { it.isNotBlank() }
+                            val formatLabel = anime.format.takeIf { it.isNotBlank() }
                             val infoParts = listOfNotNull(seasonLabel, formatLabel)
                             if (infoParts.isNotEmpty()) {
                                 Text(
@@ -1050,7 +1057,7 @@ private fun MobileLayout(
                             }
                             // Status - Genres
                             Text(
-                                text = "${anime.status} • ${anime.genres?.take(2)?.joinToString(" / ") ?: ""}",
+                                text = "${anime.status} • ${anime.genres.take(2).joinToString(" / ")}",
                                 color = AppColors.textMuted,
                                 fontSize = 13.sp
                             )
@@ -1113,7 +1120,7 @@ private fun MobileLayout(
                         Text("Storyline", color = AppColors.text, fontSize = 20.sp, fontWeight = FontWeight.Normal)
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = stripHtmlTags(anime.description ?: ""),
+                            text = stripHtmlTags(anime.description),
                             color = AppColors.textMuted,
                             fontSize = 14.sp,
                             lineHeight = 22.sp,
@@ -1290,7 +1297,7 @@ private fun DesktopLayout(
                     val bannerUrl = anime.banner?.takeIf {
                         it.isNotBlank() && it != "null" && !it.contains("placeholder") && it.startsWith("http")
                     }
-                    val bgImage = bannerUrl ?: (anime.image ?: anime.poster ?: anime.cover)
+                    val bgImage = bannerUrl ?: anime.bestCoverImage()
                     val hasBanner = bannerUrl != null
 
                     AsyncImage(
@@ -1384,7 +1391,7 @@ private fun DesktopLayout(
 
                                 // "For a chance..." Text
                                 Text(
-                                    text = stripHtmlTags(anime.description ?: ""),
+                                    text = stripHtmlTags(anime.description),
                                     color = Color.White.copy(alpha = 0.9f),
                                     fontSize = 17.sp,
                                     lineHeight = 26.sp,
@@ -1400,16 +1407,17 @@ private fun DesktopLayout(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     // Genres
-                                    val genresText = anime.genres?.take(3)?.joinToString(" • ")
-                                    if (!genresText.isNullOrEmpty()) {
+                                    val genresText = anime.genres.take(3).joinToString(" • ")
+                                    if (genresText.isNotEmpty()) {
                                         Text(genresText, color = AppColors.text, fontSize = 15.sp)
                                         Text("•", color = AppColors.textMuted, fontSize = 15.sp)
                                     }
 
                                     // Duration
-                                    if (anime.duration != null && anime.duration!! > 0) {
+                                    val duration = anime.duration
+                                    if (duration != null && duration > 0) {
                                         Text(
-                                            "${anime.duration}m",
+                                            "${duration}m",
                                             color = AppColors.text,
                                             fontSize = 15.sp
                                         )
@@ -1418,10 +1426,11 @@ private fun DesktopLayout(
 
                                     // Season & Year
                                     val seasonStr = anime.season?.lowercase()?.replaceFirstChar { it.uppercase() }
+                                    val year = anime.year
                                     val seasonLabel = if (seasonStr != null && anime.seasonYear != null) {
                                         "$seasonStr ${anime.seasonYear}"
-                                    } else if (anime.year != null && anime.year!! > 0) {
-                                        "${anime.year}"
+                                    } else if (year != null && year > 0) {
+                                        "$year"
                                     } else null
                                     if (seasonLabel != null) {
                                         Text(seasonLabel, color = AppColors.text, fontSize = 15.sp)
@@ -1455,7 +1464,8 @@ private fun DesktopLayout(
                                     }
 
                                     // Anisurge Score
-                                    if (anime.score != null && anime.score!! > 0) {
+                                    val score = anime.score
+                                    if (score != null && score > 0) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1472,7 +1482,7 @@ private fun DesktopLayout(
                                                 )
                                             }
                                             Text(
-                                                anime.score.toString(),
+                                                score.toString(),
                                                 color = AppColors.text,
                                                 fontSize = 15.sp
                                             )
@@ -1481,7 +1491,7 @@ private fun DesktopLayout(
                                     }
 
                                     // Language/Format
-                                    if (anime.status != null) {
+                                    if (anime.status.isNotBlank()) {
                                         Text(
                                             anime.status.uppercase(),
                                             color = AppColors.textMuted,
@@ -1615,8 +1625,9 @@ private fun DesktopLayout(
                             } // End Column
 
                             // Cover Image on the right side
+                            val coverImage = anime.bestCoverImage()
                             AsyncImage(
-                                model = anime.image ?: anime.poster ?: anime.cover,
+                                model = coverImage,
                                 contentDescription = "Cover Image",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -1624,7 +1635,7 @@ private fun DesktopLayout(
                                     .aspectRatio(2f / 3f)
                                     .clip(RoundedCornerShape(16.dp))
                                     .border(2.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
-                                    .clickable { onPosterClick(anime.image ?: anime.poster ?: anime.cover) }
+                                    .clickable { onPosterClick(coverImage) }
                             )
                         } // End inner Row
                     } // End inner content alignment Box
@@ -2014,7 +2025,7 @@ private fun DesktopLayout(
                                     items(filteredEpisodes, key = { it.number }) { episode ->
                                         DesktopEpisodeCard(
                                             episode = episode,
-                                            thumbnail = anime.image ?: anime.poster ?: anime.cover,
+                                            thumbnail = anime.bestCoverImage(),
                                             watchedEpisode = anime.watchProgress?.episode,
                                             currentProgressSeconds = anime.watchProgress?.currentTime,
                                             episodeProgress = state.episodeProgress[episode.number],
@@ -2173,9 +2184,10 @@ private fun DesktopEpisodeCard(
                         fontWeight = FontWeight.Bold
                     )
 
-                    val hasDetailedProgress = episodeProgress != null
-                    val progressPercent = if (hasDetailedProgress && episodeProgress!!.duration > 0) {
-                        (episodeProgress.currentTime / episodeProgress.duration).coerceIn(0.0, 1.0)
+                    val progress = episodeProgress
+                    val hasDetailedProgress = progress != null
+                    val progressPercent = if (progress != null && progress.duration > 0) {
+                        (progress.currentTime / progress.duration).coerceIn(0.0, 1.0)
                     } else 0.0
 
                     when {
@@ -3138,9 +3150,10 @@ private fun ProgressBadge(text: String) {
 }
 
 private fun watchedProgressSummary(anime: AnimeDetails): String? {
-    val episode = anime.watchProgress?.episode ?: return null
+    val progress = anime.watchProgress ?: return null
+    val episode = progress.episode ?: return null
     if (episode <= 0) return null
-    val currentTime = anime.watchProgress?.currentTime
+    val currentTime = progress.currentTime
     val fullyWatchedUntil = (episode - 1).coerceAtLeast(0)
     val fullyWatchedPart = if (fullyWatchedUntil > 0) "Watched EP 1-$fullyWatchedUntil" else null
     val currentPart = if ((currentTime ?: 0.0) > 0.0) {

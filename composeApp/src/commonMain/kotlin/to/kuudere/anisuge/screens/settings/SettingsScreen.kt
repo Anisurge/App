@@ -4723,7 +4723,7 @@ private fun ProfileTab(
                 onChatProfilePrivacyChange = onChatProfilePrivacyChange,
             )
         } else {
-            val user = uiState.userProfile ?: return
+            val user = uiState.userProfile
             ProfileSummaryCard(
                 user = user,
                 onClick = onOpenAccount,
@@ -4936,7 +4936,7 @@ private fun MobileProfileContent(
             CircularProgressIndicator(color = Color.White)
         }
     } else if (uiState.userProfile != null) {
-        val user = uiState.userProfile ?: return
+        val user = uiState.userProfile
         Column(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.fillMaxWidth(),

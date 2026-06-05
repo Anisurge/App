@@ -224,7 +224,7 @@ buildConfig {
 
 android {
     namespace = "to.kuudere.anisuge"
-    setProperty("archivesBaseName", "anisurge")
+    base.archivesName.set("anisurge")
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     // Configure JVM target for Android
