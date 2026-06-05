@@ -45,6 +45,9 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
@@ -63,6 +66,7 @@ fun AnimeInfoScreen(
     onDownloadsClick: () -> Unit = {},
     isPremiumUser: Boolean = false,
     onGenreClick: (String) -> Unit = {},
+    onAnimeClick: (String) -> Unit = {},
     onExit: () -> Unit = {}
 ) {
     LaunchedEffect(animeId) {
@@ -283,6 +287,7 @@ fun AnimeInfoScreen(
                         isPremiumUser = isPremiumUser,
                         onShareAnime = shareAnime,
                         onDownloadsClick = onDownloadsClick,
+                        onAnimeClick = onAnimeClick,
                         onExit = onExit,
                         onBack = onBack,
                         onPosterClick = { previewImageUrl = it },
@@ -308,6 +313,7 @@ fun AnimeInfoScreen(
                         isPremiumUser = isPremiumUser,
                         onShareAnime = shareAnime,
                         onDownloadsClick = onDownloadsClick,
+                        onAnimeClick = onAnimeClick,
                         onPosterClick = { previewImageUrl = it },
                     )
                 }
@@ -338,6 +344,202 @@ private fun buildAnimeShareText(
     val id = anime.animeId.ifBlank { routeAnimeId }
     val title = anime.title.displayTitle(preferRomajiAnimeTitles).ifBlank { "this anime" }
     return "$title\nWatch this on Anisurge:\nhttps://www.anisurge.lol/anime/$id"
+}
+
+private data class RelatedSeasonItem(
+    val animeId: String,
+    val title: String,
+    val coverUrl: String?,
+    val relationType: String?,
+    val format: String?,
+    val seasonYear: Int?,
+    val isCurrent: Boolean,
+)
+
+private fun AnimeDetails.relatedSeasonItems(): List<RelatedSeasonItem> {
+    val currentId = animeId.ifBlank { id }
+    return relations.orEmpty()
+        .mapNotNull { relation -> relation.toRelatedSeasonItem(currentId) }
+        .distinctBy { it.animeId }
+        .sortedWith(
+            compareBy<RelatedSeasonItem> { it.seasonYear ?: Int.MAX_VALUE }
+                .thenBy { relationOrderRank(it.relationType, it.isCurrent) }
+                .thenBy { it.title.lowercase() }
+        )
+}
+
+private fun relationOrderRank(relationType: String?, isCurrent: Boolean): Int {
+    if (isCurrent) return 10
+    return when (relationType?.uppercase()) {
+        "PREQUEL" -> 0
+        "PARENT", "SOURCE" -> 1
+        "SEQUEL" -> 20
+        else -> 15
+    }
+}
+
+private fun JsonObject.toRelatedSeasonItem(currentAnimeId: String): RelatedSeasonItem? {
+    val node = this["node"] as? JsonObject ?: this
+    val animeId = node.stringValue("anime_id")
+        ?: node.stringValue("id")
+        ?: this.stringValue("anime_id")
+        ?: this.stringValue("id")
+        ?: return null
+    val titleObj = node["title"] as? JsonObject
+    val title = titleObj?.stringValue("english")
+        ?: titleObj?.stringValue("romaji")
+        ?: titleObj?.stringValue("user_preferred")
+        ?: titleObj?.stringValue("native")
+        ?: node.stringValue("title")
+        ?: animeId
+    val coverObj = node["cover_image"] as? JsonObject
+    val coverUrl = coverObj?.stringValue("extra_large")
+        ?: coverObj?.stringValue("large")
+        ?: coverObj?.stringValue("medium")
+    val relationType = this.stringValue("relation_type")
+        ?: this.stringValue("relationType")
+        ?: this.stringValue("type")
+        ?: node.stringValue("relation_type")
+        ?: node.stringValue("relationType")
+    return RelatedSeasonItem(
+        animeId = animeId,
+        title = title,
+        coverUrl = coverUrl,
+        relationType = relationType?.replace('_', ' ')?.lowercase()?.replaceFirstChar { it.uppercase() },
+        format = node.stringValue("format"),
+        seasonYear = node.intValue("season_year") ?: this.intValue("season_year"),
+        isCurrent = animeId == currentAnimeId,
+    )
+}
+
+private fun JsonObject.stringValue(key: String): String? =
+    (this[key] as? JsonPrimitive)
+        ?.contentOrNull
+        ?.takeIf { it.isNotBlank() && it != "null" }
+
+private fun JsonObject.intValue(key: String): Int? =
+    (this[key] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+
+@Composable
+private fun RelatedSeasonsSection(
+    anime: AnimeDetails,
+    onAnimeClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val items = remember(anime.relations, anime.animeId) { anime.relatedSeasonItems() }
+    if (items.isEmpty()) return
+
+    Column(modifier) {
+        Text(
+            text = "Seasons & related",
+            color = AppColors.text,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(12.dp))
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            items(items, key = { it.animeId }) { item ->
+                RelatedSeasonCard(
+                    item = item,
+                    onClick = { if (!item.isCurrent) onAnimeClick(item.animeId) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelatedSeasonCard(
+    item: RelatedSeasonItem,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        modifier = Modifier
+            .width(238.dp)
+            .height(112.dp)
+            .clip(shape)
+            .background(AppColors.surface)
+            .border(
+                width = if (item.isCurrent) 1.5.dp else 1.dp,
+                color = if (item.isCurrent) AppColors.accent else AppColors.border,
+                shape = shape,
+            )
+            .then(if (item.isCurrent) Modifier else Modifier.clickable(onClick = onClick)),
+    ) {
+        AsyncImage(
+            model = item.coverUrl,
+            contentDescription = item.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to Color.Black.copy(alpha = 0.05f),
+                        0.45f to Color.Black.copy(alpha = 0.18f),
+                        1.0f to Color.Black.copy(alpha = 0.82f),
+                    )
+                )
+        )
+
+        val meta = listOfNotNull(item.relationType, item.seasonYear?.toString(), item.format)
+            .distinct()
+            .joinToString(" • ")
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .blur(0.5.dp)
+                .background(Color.Black.copy(alpha = 0.05f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Text(
+                text = item.title,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 17.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (meta.isNotBlank()) {
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = meta,
+                    color = Color.White.copy(alpha = 0.74f),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        if (item.isCurrent) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(AppColors.accent)
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+            ) {
+                Text(
+                    text = "Current",
+                    color = AppColors.onAccent,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -691,6 +893,7 @@ private fun MobileLayout(
     isPremiumUser: Boolean,
     onShareAnime: () -> Unit,
     onDownloadsClick: () -> Unit,
+    onAnimeClick: (String) -> Unit,
     onPosterClick: (String) -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
@@ -912,6 +1115,16 @@ private fun MobileLayout(
 
                     Spacer(Modifier.height(16.dp))
 
+                    RelatedSeasonsSection(
+                        anime = anime,
+                        onAnimeClick = onAnimeClick,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+
+                    if (anime.relatedSeasonItems().isNotEmpty()) {
+                        Spacer(Modifier.height(18.dp))
+                    }
+
                     // Custom Tabs
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -1045,6 +1258,7 @@ private fun DesktopLayout(
     isPremiumUser: Boolean,
     onShareAnime: () -> Unit,
     onDownloadsClick: () -> Unit,
+    onAnimeClick: (String) -> Unit,
     onExit: () -> Unit,
     onBack: () -> Unit,
     onPosterClick: (String) -> Unit = {},
@@ -1412,6 +1626,16 @@ private fun DesktopLayout(
                             .fillMaxWidth()
                             .padding(start = 48.dp, bottom = 48.dp, end = 48.dp)
                     ) {
+                        RelatedSeasonsSection(
+                            anime = anime,
+                            onAnimeClick = onAnimeClick,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        if (anime.relatedSeasonItems().isNotEmpty()) {
+                            Spacer(Modifier.height(30.dp))
+                        }
+
                         val episodesPerPage = 100
                         val totalEpisodes = state.episodes.size
                         var currentPageStart by remember(totalEpisodes > 0) {

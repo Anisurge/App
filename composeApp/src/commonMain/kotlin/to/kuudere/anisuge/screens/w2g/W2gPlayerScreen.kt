@@ -534,13 +534,31 @@ fun W2gPlayerScreen(
                             .background(AppColors.background)
                     ) {
                         Column(Modifier.fillMaxSize()) {
-                            Text(
-                                "Room Chat",
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp),
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, top = 8.dp, end = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "Room Chat",
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                IconButton(
+                                    onClick = { viewModel.setChatSheetOpen(false) },
+                                    modifier = Modifier.size(36.dp),
+                                ) {
+                                    Text(
+                                        text = "X",
+                                        color = Color.White.copy(alpha = 0.86f),
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
                             Spacer(Modifier.height(8.dp))
                             LazyColumn(
                                 modifier = Modifier
@@ -1288,7 +1306,24 @@ private fun ChatSheet(
                     .fillMaxWidth()
                     .height(sheetHeight),
             ) {
-                Text("Room Chat", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Room Chat", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Text(
+                            text = "X",
+                            color = Color.White.copy(alpha = 0.86f),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
 
                 LazyColumn(

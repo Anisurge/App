@@ -561,6 +561,11 @@ fun App(
                                 searchVm.search()
                                 navController.navigate(Screen.Home(startTab = "Search").route)
                             },
+                            onAnimeClick = { relatedAnimeId ->
+                                navController.navigate(Screen.Info(relatedAnimeId).route) {
+                                    launchSingleTop = true
+                                }
+                            },
                             onExit = onAppExit
                         )
                     }
