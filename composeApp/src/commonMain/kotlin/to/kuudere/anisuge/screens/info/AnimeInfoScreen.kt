@@ -77,6 +77,9 @@ fun AnimeInfoScreen(
     val preferRomajiAnimeTitles by to.kuudere.anisuge.AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(
         initial = false
     )
+    val showFullAnimeTitles by to.kuudere.anisuge.AppComponent.settingsStore.showFullAnimeTitlesFlow.collectAsState(
+        initial = false
+    )
     var showEpisodes by remember { mutableStateOf(true) }
     var selectedEpisodeForDownload by remember { mutableStateOf<to.kuudere.anisuge.data.models.EpisodeItem?>(null) }
     var batchPickerEpisodes by remember { mutableStateOf<List<to.kuudere.anisuge.data.models.EpisodeItem>>(emptyList()) }
@@ -273,6 +276,7 @@ fun AnimeInfoScreen(
                         onWatchNow = { onWatchEpisode(anime.slug ?: anime.id, "sub", 1) },
                         onWatchEpisode = { epNum -> onWatchEpisode(anime.slug ?: anime.id, "sub", epNum) },
                         onPosterClick = { previewImageUrl = it },
+                        showFullAnimeTitles = showFullAnimeTitles,
                     )
                 } else if (isDesktop) {
                     DesktopLayout(
@@ -291,6 +295,7 @@ fun AnimeInfoScreen(
                         onExit = onExit,
                         onBack = onBack,
                         onPosterClick = { previewImageUrl = it },
+                        showFullAnimeTitles = showFullAnimeTitles,
                     )
                 } else {
                     MobileLayout(
@@ -315,6 +320,7 @@ fun AnimeInfoScreen(
                         onDownloadsClick = onDownloadsClick,
                         onAnimeClick = onAnimeClick,
                         onPosterClick = { previewImageUrl = it },
+                        showFullAnimeTitles = showFullAnimeTitles,
                     )
                 }
 
@@ -597,6 +603,7 @@ private fun TvLayout(
     onWatchNow: () -> Unit,
     onWatchEpisode: (Int) -> Unit,
     onPosterClick: (String) -> Unit = {},
+    showFullAnimeTitles: Boolean = false,
 ) {
     val episodesState = rememberLazyListState()
 
@@ -692,14 +699,15 @@ private fun TvLayout(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     var titleExpanded by remember { mutableStateOf(false) }
+                    val showExpandedTitle = showFullAnimeTitles || titleExpanded
                     Text(
                         text = anime.resolveDisplayTitle(),
                         color = Color.White,
                         fontSize = 34.sp,
                         fontWeight = FontWeight.Bold,
                         lineHeight = 38.sp,
-                        maxLines = if (titleExpanded) Int.MAX_VALUE else 2,
-                        overflow = TextOverflow.Ellipsis,
+                        maxLines = if (showExpandedTitle) Int.MAX_VALUE else 2,
+                        overflow = if (showExpandedTitle) TextOverflow.Clip else TextOverflow.Ellipsis,
                         modifier = Modifier.clickable { titleExpanded = !titleExpanded }
                     )
 
@@ -895,6 +903,7 @@ private fun MobileLayout(
     onDownloadsClick: () -> Unit,
     onAnimeClick: (String) -> Unit,
     onPosterClick: (String) -> Unit = {},
+    showFullAnimeTitles: Boolean = false,
 ) {
     val scrollState = rememberScrollState()
 
@@ -983,13 +992,14 @@ private fun MobileLayout(
                         Column(Modifier.weight(1f)) {
                             // Title
                             var titleExpanded by remember { mutableStateOf(false) }
+                            val showExpandedTitle = showFullAnimeTitles || titleExpanded
                             Text(
                                 text = anime.resolveDisplayTitle(),
                                 color = Color.White,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold,
-                                maxLines = if (titleExpanded) Int.MAX_VALUE else 2,
-                                overflow = TextOverflow.Ellipsis,
+                                maxLines = if (showExpandedTitle) Int.MAX_VALUE else 2,
+                                overflow = if (showExpandedTitle) TextOverflow.Clip else TextOverflow.Ellipsis,
                                 modifier = Modifier.clickable { titleExpanded = !titleExpanded }
                             )
                             Spacer(Modifier.height(8.dp))
@@ -1262,6 +1272,7 @@ private fun DesktopLayout(
     onExit: () -> Unit,
     onBack: () -> Unit,
     onPosterClick: (String) -> Unit = {},
+    showFullAnimeTitles: Boolean = false,
 ) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val baseWidth = 1400.dp
@@ -1357,14 +1368,15 @@ private fun DesktopLayout(
                                 modifier = Modifier.fillMaxWidth(0.6f)
                             ) {
                                 var titleExpanded by remember { mutableStateOf(false) }
+                                val showExpandedTitle = showFullAnimeTitles || titleExpanded
                                 Text(
                                     text = anime.resolveDisplayTitle(),
                                     color = Color.White,
                                     fontSize = 44.sp,
                                     fontWeight = FontWeight.Bold,
                                     lineHeight = 52.sp,
-                                    maxLines = if (titleExpanded) Int.MAX_VALUE else 2,
-                                    overflow = TextOverflow.Ellipsis,
+                                    maxLines = if (showExpandedTitle) Int.MAX_VALUE else 2,
+                                    overflow = if (showExpandedTitle) TextOverflow.Clip else TextOverflow.Ellipsis,
                                     modifier = Modifier.clickable { titleExpanded = !titleExpanded }
                                 )
 

@@ -197,8 +197,8 @@ import to.kuudere.anisuge.ui.tvFocusableClick
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.haze
-import dev.chrisbanes.haze.hazeChild
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
@@ -411,7 +411,7 @@ fun HomeScreen(
                     Box(
                         Modifier
                             .fillMaxSize()
-                            .haze(state = hazeState)
+                            .hazeSource(state = hazeState)
                             .padding(
                                 top = topBarHeight,
                                 bottom = if (useFloatingBottomBar) 0.dp else bottomBarHeight
@@ -594,7 +594,7 @@ private fun TabContent(
                                     verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
                                     Text(
-                                        homeState.error!!,
+                                        homeState.error,
                                         color = AppColors.textMuted,
                                         textAlign = TextAlign.Center
                                     )
@@ -973,7 +973,7 @@ private fun HeroCarousel(
                                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    val genresText = animItem.genres?.take(4)?.joinToString(" • ")
+                                    val genresText = animItem.genres.take(4).joinToString(" • ")
                                     if (!genresText.isNullOrEmpty()) {
                                         Text(
                                             genresText,
@@ -1005,7 +1005,7 @@ private fun HeroCarousel(
                                 Spacer(Modifier.height(24.dp))
 
                                 Text(
-                                    text = stripHtmlTags(animItem.description ?: "").replace("\n", " ")
+                                    text = stripHtmlTags(animItem.description).replace("\n", " ")
                                         .replace("  ", " ").trim(),
                                     color = Color.White.copy(alpha = 0.7f),
                                     fontSize = 15.sp,
@@ -1301,7 +1301,7 @@ private fun HeroCarouselExpanded(
                                     .padding(horizontal = 8.dp, vertical = 3.dp)
                             ) {
                                 Text(
-                                    item.type!!,
+                                    item.type,
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -1324,7 +1324,7 @@ private fun HeroCarouselExpanded(
                                     modifier = Modifier.size(11.dp)
                                 )
                                 Text(
-                                    formatFloat(item.score?.toDouble() ?: 0.0, 1),
+                                    formatFloat(item.score.toDouble(), 1),
                                     color = Color(0xFFfbbf24),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
@@ -1347,7 +1347,7 @@ private fun HeroCarouselExpanded(
                     )
 
                     // Genres
-                    val genresStr = item.genres?.take(3)?.joinToString(" • ") ?: ""
+                    val genresStr = item.genres.take(3).joinToString(" • ")
                     if (genresStr.isNotEmpty()) {
                         Spacer(Modifier.height(4.dp))
                         Text(
@@ -1547,7 +1547,7 @@ private fun FanCarousel(
         Spacer(Modifier.height(6.dp))
 
         val type = activeItem.type ?: "TV"
-        val genresStr = activeItem.genres?.joinToString(", ") ?: ""
+        val genresStr = activeItem.genres.joinToString(", ")
         val metaText = if (genresStr.isNotEmpty()) "$type  •  $genresStr" else type
 
         Text(
@@ -2198,7 +2198,7 @@ private fun MobileTopBar(
         modifier = modifier
             .fillMaxWidth()
             .background(Color.Black.copy(alpha = 0.4f))
-            .hazeChild(
+            .hazeEffect(
                 state = hazeState,
                 style = HazeStyle(
                     tints = listOf(HazeTint(Color.Black.copy(alpha = 0.85f))),
@@ -2246,7 +2246,7 @@ private fun MobileTopBar(
                                 .width(180.dp)
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(Color.Black.copy(alpha = 0.42f))
-                                .hazeChild(
+                                .hazeEffect(
                                     state = hazeState,
                                     style = HazeStyle(
                                         tints = listOf(HazeTint(Color.White.copy(alpha = 0.10f))),
@@ -2420,7 +2420,7 @@ private fun AnisugBottomBar(
     val navShape = RoundedCornerShape(if (liquidGlass) 30.dp else 28.dp)
     val navMaterial = if (liquidGlass) {
         Modifier
-            .hazeChild(
+            .hazeEffect(
                 state = hazeState,
                 style = HazeStyle(
                     tints = listOf(
@@ -2434,7 +2434,7 @@ private fun AnisugBottomBar(
         Modifier
             .background(AppColors.surface.copy(alpha = 0.92f))
             .border(1.dp, AppColors.border, navShape)
-            .hazeChild(
+            .hazeEffect(
                 state = hazeState,
                 style = HazeStyle(
                     tints = listOf(HazeTint(Color.Black.copy(alpha = 0.55f))),
@@ -2509,7 +2509,7 @@ private fun NormalAnisugBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .background(AppColors.surface)
-            .hazeChild(
+            .hazeEffect(
                 state = hazeState,
                 style = HazeStyle(
                     tints = listOf(HazeTint(Color.Black.copy(alpha = 0.62f))),

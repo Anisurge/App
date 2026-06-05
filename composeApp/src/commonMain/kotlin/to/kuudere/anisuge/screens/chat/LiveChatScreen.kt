@@ -33,6 +33,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -83,7 +85,9 @@ import org.jetbrains.compose.resources.painterResource
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ChatAction
 import to.kuudere.anisuge.data.models.ChatAnimeCard
+import to.kuudere.anisuge.data.models.ChatImageAttachment
 import to.kuudere.anisuge.data.models.ChatMessage
+import to.kuudere.anisuge.platform.ChatImagePick
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ChatUsernameLabel
 import to.kuudere.anisuge.ui.ChatDecoratedAvatar
@@ -91,6 +95,7 @@ import to.kuudere.anisuge.ui.StickerInline
 import to.kuudere.anisuge.ui.StickerPickerDialog
 import to.kuudere.anisuge.ui.chatAccentColor
 import to.kuudere.anisuge.platform.copyToClipboard
+import to.kuudere.anisuge.platform.rememberChatImagePicker
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -113,6 +118,10 @@ fun LiveChatScreen(
     var didInitialScroll by remember { mutableStateOf(false) }
     var messageCountBeforeOlder by remember { mutableIntStateOf(0) }
     var stickerPickerOpen by remember { mutableStateOf(false) }
+    val pickChatImage = rememberChatImagePicker(
+        allowVideo = false,
+        onResult = viewModel::onImagePicked,
+    )
 
     DisposableEffect(Unit) {
         didInitialScroll = false
@@ -415,6 +424,13 @@ fun LiveChatScreen(
                                 SurgeMentionSuggestion(onClick = viewModel::insertSurgeMention)
                                 Spacer(Modifier.height(6.dp))
                             }
+                            state.pendingImage?.let { pending ->
+                                PendingChatImageChip(
+                                    pick = pending,
+                                    onRemove = viewModel::removePendingImage,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                            }
                             OutlinedTextField(
                                 value = state.draft,
                                 onValueChange = viewModel::onDraftChange,
@@ -433,6 +449,22 @@ fun LiveChatScreen(
                                 maxLines = 4,
                                 enabled = !state.isSending,
                             )
+                        }
+                        if (state.isCurrentUserStaff) {
+                            IconButton(
+                                onClick = pickChatImage,
+                                enabled = !state.isSending && state.cooldownSecondsLeft == 0,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(AppColors.surfaceVariant.copy(alpha = 0.9f)),
+                            ) {
+                                Icon(
+                                    Icons.Default.Image,
+                                    contentDescription = "Attach image",
+                                    tint = AppColors.accent,
+                                )
+                            }
                         }
                         IconButton(
                             onClick = {
@@ -453,14 +485,16 @@ fun LiveChatScreen(
                         }
                         IconButton(
                             onClick = { viewModel.sendMessage() },
-                            enabled = state.draft.isNotBlank() && !state.isSending && state.cooldownSecondsLeft == 0,
+                            enabled = (state.draft.isNotBlank() || state.pendingImage != null) &&
+                                !state.isSending &&
+                                state.cooldownSecondsLeft == 0,
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(CircleShape)
                                 .background(
                                     when {
                                         state.cooldownSecondsLeft > 0 -> AppColors.border
-                                        state.draft.isNotBlank() -> AppColors.accent
+                                        state.draft.isNotBlank() || state.pendingImage != null -> AppColors.accent
                                         else -> AppColors.border
                                     },
                                 ),
@@ -670,6 +704,9 @@ private fun ChatMessageRow(
                                     lineHeight = 20.sp,
                                 )
                             }
+                            message.metadata.image?.let { image ->
+                                ChatImageAttachmentView(image)
+                            }
                             message.metadata.anime?.let { anime ->
                                 ChatAnimeCardView(
                                     anime = anime,
@@ -717,6 +754,78 @@ private fun ChatMessageRow(
         }
     }
 }
+
+@Composable
+private fun PendingChatImageChip(
+    pick: ChatImagePick,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.07f))
+            .border(1.dp, AppColors.accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            .padding(start = 10.dp, end = 4.dp, top = 7.dp, bottom = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            Icons.Default.Image,
+            contentDescription = null,
+            tint = AppColors.accent,
+            modifier = Modifier.size(18.dp),
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                pick.fileName.ifBlank { "Image attached" },
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+            Text(
+                formatChatImageBytes(pick.sizeBytes),
+                color = Color.White.copy(alpha = 0.55f),
+                fontSize = 11.sp,
+            )
+        }
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier.size(30.dp),
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Remove image",
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChatImageAttachmentView(image: ChatImageAttachment) {
+    if (image.url.isBlank()) return
+    AsyncImage(
+        model = image.url,
+        contentDescription = image.fileName ?: "Chat image",
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 120.dp, max = 210.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.Black.copy(alpha = 0.35f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp)),
+        contentScale = ContentScale.Crop,
+    )
+}
+
+private fun formatChatImageBytes(bytes: Long): String =
+    if (bytes >= 1024 * 1024) {
+        "${(bytes / (1024f * 1024f)).let { kotlin.math.round(it * 10) / 10 }} MB"
+    } else {
+        "${(bytes / 1024f).let { kotlin.math.round(it).toInt().coerceAtLeast(1) }} KB"
+    }
 
 @Composable
 private fun PremiumChatBadge() {

@@ -439,7 +439,7 @@ private fun LegacyScheduleRow(
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White.copy(alpha = 0.06f)),
         ) {
-            anime.imageUrl?.takeIf { it.isNotBlank() }?.let { imageUrl ->
+            anime.imageUrl.takeIf { it.isNotBlank() }?.let { imageUrl ->
                 AsyncImage(
                     model = imageUrl,
                     contentDescription = anime.resolveDisplayTitle(),

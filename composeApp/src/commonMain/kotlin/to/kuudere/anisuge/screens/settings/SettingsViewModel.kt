@@ -94,6 +94,7 @@ data class SettingsUiState(
     val quickActionMenu: Boolean = true,
     val appLocale: AppLocale = AppLocale.default,
     val preferRomajiAnimeTitles: Boolean = false,
+    val showFullAnimeTitles: Boolean = false,
     val themeId: AppThemeId = AppThemeId.Default,
     val legacyScheduleUi: Boolean = false,
     val homeLayout: LayoutConfig = LayoutConfig.DEFAULT,
@@ -408,6 +409,11 @@ class SettingsViewModel(
             }
         }
         viewModelScope.launch {
+            settingsStore.showFullAnimeTitlesFlow.collect { v ->
+                _uiState.update { it.copy(showFullAnimeTitles = v) }
+            }
+        }
+        viewModelScope.launch {
             settingsStore.legacyScheduleUiFlow.collect { v ->
                 _uiState.update { it.copy(legacyScheduleUi = v) }
             }
@@ -554,6 +560,10 @@ class SettingsViewModel(
 
     fun setPreferRomajiAnimeTitles(enabled: Boolean) {
         viewModelScope.launch { settingsStore.setPreferRomajiAnimeTitles(enabled) }
+    }
+
+    fun setShowFullAnimeTitles(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setShowFullAnimeTitles(enabled) }
     }
 
     fun setThemeId(themeId: AppThemeId) {
@@ -1466,10 +1476,10 @@ class SettingsViewModel(
                 onSuccess()
             } else {
                 _uiState.update {
-                    it.copy(
-                        isChangingPassword = false,
-                        errorMessage = response?.message ?: "Failed to change password"
-                    )
+                        it.copy(
+                            isChangingPassword = false,
+                            errorMessage = response.message ?: "Failed to change password"
+                        )
                 }
             }
         }

@@ -50,7 +50,7 @@ internal suspend fun exportHlsPlaylistToFile(
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
         val assetLoaderFactory = ExoPlayerAssetLoader.Factory(
             context,
-            DefaultDecoderFactory(context),
+            DefaultDecoderFactory.Builder(context).build(),
             Clock.DEFAULT,
             mediaSourceFactory,
         )

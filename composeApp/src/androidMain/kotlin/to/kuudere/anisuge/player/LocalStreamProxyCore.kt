@@ -296,7 +296,7 @@ internal class LocalStreamProxy {
 
         val isPartial = !range.isNullOrBlank()
         val (start, endInclusive) = if (isPartial) {
-            parseHttpRangeLong(range!!, totalSize) ?: return false
+            parseHttpRangeLong(range, totalSize) ?: return false
         } else {
             0L to (totalSize - 1)
         }

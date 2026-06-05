@@ -79,6 +79,8 @@ data class AppStrings(
     val animeTitlesDisplay: String,
     val animeTitlesDisplayDescription: String,
     val animeTitlesPreferJapanese: String,
+    val animeTitlesShowFull: String = "Show full anime titles",
+    val animeTitlesShowFullDescription: String = "Anime info and bookmarks wrap long titles instead of cutting them off.",
     val noInternetConnection: String,
     val offlineDescription: String,
     val disconnectAniList: String,

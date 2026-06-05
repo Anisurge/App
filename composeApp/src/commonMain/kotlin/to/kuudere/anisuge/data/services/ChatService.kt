@@ -21,8 +21,12 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.data.models.BffErrorResponse
+import to.kuudere.anisuge.data.models.ChatImageAttachment
 import to.kuudere.anisuge.data.models.ChatLiveEvent
 import to.kuudere.anisuge.data.models.ChatMessageMetadata
 import to.kuudere.anisuge.data.models.ChatMessage
@@ -32,6 +36,8 @@ import to.kuudere.anisuge.data.models.ChatPostMessageRequest
 import to.kuudere.anisuge.data.models.ChatRoomResponse
 import to.kuudere.anisuge.data.models.ChatWsEnvelope
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
+import to.kuudere.anisuge.platform.CHAT_IMAGE_MAX_BYTES
+import to.kuudere.anisuge.platform.ChatImagePick
 
 class ChatService(
     private val sessionStore: SessionStore,
@@ -165,6 +171,38 @@ class ChatService(
         }
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
+    suspend fun uploadChatImage(pick: ChatImagePick): Result<ChatImageAttachment> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        if (pick.bytes.isEmpty()) {
+            return Result.failure(IllegalStateException("Selected image is empty"))
+        }
+        if (pick.bytes.size > CHAT_IMAGE_MAX_BYTES) {
+            return Result.failure(IllegalStateException("Image must be less than 2.5 MB"))
+        }
+        return try {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/chat/upload") {
+                applyAnisurgeAuth(stored)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ChatImageUploadRequest(
+                        imageBase64 = Base64.Default.encode(pick.bytes),
+                        mimeType = pick.mimeType,
+                        fileName = pick.fileName.ifBlank { "chat-image.jpg" },
+                    ),
+                )
+            }
+            if (response.status.isSuccess()) {
+                Result.success(response.body())
+            } else {
+                Result.failure(Exception(parseError(response)))
+            }
+        } catch (e: Exception) {
+            println("[ChatService] uploadChatImage error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     fun connectLive(roomSlug: String = GLOBAL_ROOM_SLUG): Flow<ChatLiveEvent> = callbackFlow {
         val stored = sessionStore.get()
         val token = stored?.anisurgeToken?.takeIf { it.isNotBlank() }
@@ -211,3 +249,10 @@ class ChatService(
         awaitClose { }
     }
 }
+
+@Serializable
+private data class ChatImageUploadRequest(
+    val imageBase64: String,
+    val mimeType: String,
+    val fileName: String,
+)

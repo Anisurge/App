@@ -71,8 +71,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -91,6 +89,7 @@ import to.kuudere.anisuge.player.VideoPlayerSurface
 import to.kuudere.anisuge.player.rememberVideoPlayerState
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.ProfileAvatar
+import to.kuudere.anisuge.platform.copyToClipboard
 import to.kuudere.anisuge.ui.StickerInline
 import to.kuudere.anisuge.ui.StickerPickerDialog
 import to.kuudere.anisuge.platform.LockScreenOrientation
@@ -109,7 +108,6 @@ fun W2gPlayerScreen(
     onBack: () -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
-    val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var chatInput by remember { mutableStateOf("") }
     val chatListState = rememberLazyListState()
@@ -193,7 +191,7 @@ fun W2gPlayerScreen(
                             Spacer(Modifier.width(4.dp))
                             IconButton(
                                 onClick = {
-                                    clipboard.setText(AnnotatedString(inviteCode))
+                                    copyToClipboard(inviteCode)
                                 },
                                 modifier = Modifier.size(24.dp),
                             ) {
@@ -461,7 +459,7 @@ fun W2gPlayerScreen(
                         val detail = state.roomDetail
                         if (state.isHost && detail?.animeId != null) {
                             RoomControls(
-                                animeId = detail.animeId ?: "",
+                                animeId = detail.animeId,
                                 episodeNumber = detail.episodeNumber ?: 1,
                                 server = detail.server ?: "suzu",
                                 language = detail.language,

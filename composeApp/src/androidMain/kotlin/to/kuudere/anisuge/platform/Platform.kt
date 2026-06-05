@@ -55,7 +55,7 @@ actual val isAndroidTvPlatform: Boolean
                 forcedTvUi ||
                 (androidAppContext.resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION ||
                 packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
-                packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
+                packageManager.hasSystemFeature("android.hardware.type.television")
     }
 actual val PlatformName: String = "Android"
 actual val UpdatePlatform: String = "android"

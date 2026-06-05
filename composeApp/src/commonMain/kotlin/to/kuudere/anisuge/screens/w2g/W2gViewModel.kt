@@ -210,7 +210,7 @@ class W2gViewModel(
         if (!isCurrentUserHost(room?.hostUserId) && roomStreamUrl != null) {
             _state.value = _state.value.copy(
                 isLoadingPlayback = false,
-                playbackSource = W2gPlaybackSource(roomStreamUrl, room?.streamHeaders ?: emptyMap()),
+                playbackSource = W2gPlaybackSource(roomStreamUrl, room.streamHeaders),
                 error = null,
             )
             return
@@ -229,7 +229,7 @@ class W2gViewModel(
         }
         if (resolvedIds.anilistId != initialAnilistId || resolvedIds.malId != initialMalId) {
             val current = _state.value.roomDetail
-            if (current != null && current.inviteCode == room?.inviteCode) {
+            if (current != null && current.inviteCode == room.inviteCode) {
                 _state.value = _state.value.copy(
                     roomDetail = current.copy(
                         anilistId = resolvedIds.anilistId,
@@ -293,7 +293,7 @@ class W2gViewModel(
         )
 
         // Host: store resolved stream URL on the room so late joiners can use it
-        if (resolvedUrl != null && isCurrentUserHost(room?.hostUserId)) {
+        if (resolvedUrl != null && isCurrentUserHost(room.hostUserId)) {
             val detail = _state.value.roomDetail
             if (detail != null) {
                 _state.value = _state.value.copy(
@@ -643,7 +643,7 @@ class W2gViewModel(
                 return@launch
             }
             println("[W2gViewModel] connecting websocket invite=$inviteCode")
-            doConnect(inviteCode, stored?.anisurgeToken ?: return@launch)
+            doConnect(inviteCode, stored.anisurgeToken)
         }
     }
 

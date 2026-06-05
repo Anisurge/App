@@ -67,6 +67,14 @@ data class ChatMessageMetadata(
     val actions: List<ChatAction> = emptyList(),
     val anime: ChatAnimeCard? = null,
     val sticker: StickerMessage? = null,
+    val image: ChatImageAttachment? = null,
+)
+
+@Serializable
+data class ChatImageAttachment(
+    val url: String = "",
+    @SerialName("mimeType") val mimeType: String = "",
+    @SerialName("fileName") val fileName: String? = null,
 )
 
 @Serializable

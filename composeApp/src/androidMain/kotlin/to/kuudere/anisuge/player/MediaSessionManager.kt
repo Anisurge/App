@@ -124,7 +124,7 @@ private class PlayerAdapter(
                 Player.COMMAND_PLAY_PAUSE,
                 Player.COMMAND_STOP,
                 Player.COMMAND_GET_CURRENT_MEDIA_ITEM,
-                Player.COMMAND_GET_MEDIA_ITEMS_METADATA,
+                Player.COMMAND_GET_METADATA,
             )
 
         if (onNext != null && state.hasNextEpisode) {

@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeChild
+import dev.chrisbanes.haze.hazeEffect
 import to.kuudere.anisuge.ui.tvFocusableClick
 
 @Composable
@@ -135,7 +135,7 @@ private fun BlurPillSurface(
                 .height(64.dp)
                 .fillMaxWidth()
                 .clip(navShape)
-                .hazeChild(
+                .hazeEffect(
                     state = hazeState,
                     style = HazeStyle(
                         tints = listOf(HazeTint(Color.Black.copy(alpha = 0.20f))),

@@ -789,7 +789,7 @@ fun W2gPlayerControls(
                                 // MAL Sync button
                                 if (onSyncMALClick != null) {
                                     IconButton(
-                                        onClick = { onSyncMALClick?.invoke(); recordInteraction(forceShow = false) },
+                                        onClick = { onSyncMALClick.invoke(); recordInteraction(forceShow = false) },
                                         modifier = Modifier.size(38.dp),
                                         enabled = !isOffline && !isSyncingMAL
                                     ) {
@@ -813,7 +813,7 @@ fun W2gPlayerControls(
                                 // AniList Sync button
                                 if (onSyncAniListClick != null) {
                                     IconButton(
-                                        onClick = { onSyncAniListClick?.invoke(); recordInteraction(forceShow = false) },
+                                        onClick = { onSyncAniListClick.invoke(); recordInteraction(forceShow = false) },
                                         modifier = Modifier.size(38.dp),
                                         enabled = !isOffline && !isSyncingAniList
                                     ) {

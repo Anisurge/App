@@ -784,7 +784,7 @@ private fun MobileSettingsList(
             }
         } else if (!uiState.isLoadingProfile && uiState.userProfile != null) {
             ProfileSummaryCard(
-                user = uiState.userProfile!!,
+                user = uiState.userProfile,
                 modifier = Modifier.padding(vertical = 16.dp),
                 onClick = onProfileClick,
                 showChevron = true,
@@ -1040,6 +1040,7 @@ private fun MobileSettingsDetail(
                     onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                     onQuickActionMenuChange = viewModel::setQuickActionMenu,
                     onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
+                    onShowFullAnimeTitlesChange = viewModel::setShowFullAnimeTitles,
                     onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                     onThemeSelected = viewModel::setThemeId,
                     onOpenHomeLayout = onOpenHomeLayout,
@@ -1198,6 +1199,7 @@ private fun SettingsContent(
                 onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                 onQuickActionMenuChange = viewModel::setQuickActionMenu,
                 onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
+                onShowFullAnimeTitlesChange = viewModel::setShowFullAnimeTitles,
                 onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                 onThemeSelected = viewModel::setThemeId,
                 onOpenHomeLayout = onOpenHomeLayout,
@@ -1291,6 +1293,7 @@ private fun AppearanceTab(
     onExpandedHeroCarouselChange: (Boolean) -> Unit,
     onQuickActionMenuChange: (Boolean) -> Unit,
     onPreferRomajiAnimeTitlesChange: (Boolean) -> Unit,
+    onShowFullAnimeTitlesChange: (Boolean) -> Unit,
     onLegacyScheduleUiChange: (Boolean) -> Unit,
     onThemeSelected: (AppThemeId) -> Unit,
     onOpenHomeLayout: () -> Unit,
@@ -1331,11 +1334,24 @@ private fun AppearanceTab(
             description = strings.animeTitlesDisplayDescription,
             modifier = Modifier.fillMaxWidth()
         ) {
-            SettingToggle(
-                checked = uiState.preferRomajiAnimeTitles,
-                onCheckedChange = onPreferRomajiAnimeTitlesChange,
-                label = strings.animeTitlesPreferJapanese
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SettingToggle(
+                    checked = uiState.preferRomajiAnimeTitles,
+                    onCheckedChange = onPreferRomajiAnimeTitlesChange,
+                    label = strings.animeTitlesPreferJapanese
+                )
+                SettingToggle(
+                    checked = uiState.showFullAnimeTitles,
+                    onCheckedChange = onShowFullAnimeTitlesChange,
+                    label = strings.animeTitlesShowFull
+                )
+                Text(
+                    text = strings.animeTitlesShowFullDescription,
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -2534,11 +2550,17 @@ private fun SettingToggle(
     enabled: Boolean = true,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, color = if (enabled) TEXT else MUTED.copy(alpha = 0.55f), fontSize = 14.sp)
+        Text(
+            text = label,
+            color = if (enabled) TEXT else MUTED.copy(alpha = 0.55f),
+            fontSize = 14.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.weight(1f)
+        )
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
@@ -4701,7 +4723,7 @@ private fun ProfileTab(
                 onChatProfilePrivacyChange = onChatProfilePrivacyChange,
             )
         } else {
-            val user = uiState.userProfile!!
+            val user = uiState.userProfile ?: return
             ProfileSummaryCard(
                 user = user,
                 onClick = onOpenAccount,
@@ -4914,7 +4936,7 @@ private fun MobileProfileContent(
             CircularProgressIndicator(color = Color.White)
         }
     } else if (uiState.userProfile != null) {
-        val user = uiState.userProfile!!
+        val user = uiState.userProfile ?: return
         Column(modifier = Modifier.fillMaxWidth()) {
             Column(
                 modifier = Modifier.fillMaxWidth(),

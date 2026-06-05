@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import to.kuudere.anisuge.data.models.ChatLiveEvent
 import to.kuudere.anisuge.data.models.ChatAnimeCard
+import to.kuudere.anisuge.data.models.ChatImageAttachment
 import to.kuudere.anisuge.data.models.ChatMemberProfile
 import to.kuudere.anisuge.data.models.ChatMessage
 import to.kuudere.anisuge.data.models.ChatMessageMetadata
@@ -24,6 +25,8 @@ import to.kuudere.anisuge.data.services.SearchService
 import to.kuudere.anisuge.data.services.StickerService
 import to.kuudere.anisuge.data.services.toSticker
 import to.kuudere.anisuge.navigation.Screen
+import to.kuudere.anisuge.platform.CHAT_IMAGE_MAX_BYTES
+import to.kuudere.anisuge.platform.ChatImagePick
 import to.kuudere.anisuge.ui.ChatFramePrefetch
 
 enum class LiveChatConnectionState {
@@ -66,6 +69,7 @@ data class LiveChatUiState(
     val isLoadingStickers: Boolean = false,
     val stickerError: String? = null,
     val purchasingStickerId: String? = null,
+    val pendingImage: ChatImagePick? = null,
 )
 
 class LiveChatViewModel(
@@ -98,6 +102,10 @@ class LiveChatViewModel(
             ),
         )
         _uiState.update { state ->
+            val staff = state.isCurrentUserStaff || profile?.isStaff == true
+            if (staff) {
+                isCurrentUserStaff = true
+            }
             val next = state.copy(
                 currentUserId = profile?.effectiveId,
                 currentUserAvatar = profile?.effectiveAvatar,
@@ -105,6 +113,7 @@ class LiveChatViewModel(
                 currentUserOuterFrameUrl = profile?.equippedOuterFrameUrl,
                 currentUsername = profile?.displayName ?: profile?.username,
                 isPremium = profile?.isPremium == true,
+                isCurrentUserStaff = staff,
             )
             next.copy(messages = next.messages.map { enrichOwnMessage(it, next) })
         }
@@ -357,7 +366,8 @@ class LiveChatViewModel(
 
     fun sendMessage() {
         val text = _uiState.value.draft.trim()
-        if (text.isEmpty() || _uiState.value.isSending) return
+        val image = _uiState.value.pendingImage
+        if ((text.isEmpty() && image == null) || _uiState.value.isSending) return
         if (text.equals("/anime", ignoreCase = true) || text.startsWith("/anime ", ignoreCase = true)) {
             val query = text.drop("/anime".length).trim()
             _uiState.update { it.copy(draft = "") }
@@ -379,12 +389,33 @@ class LiveChatViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSending = true, error = null, cooldownSecondsLeft = 0) }
-            postChatMessage(text)
+            postChatMessage(text, imagePick = image)
             lastSentAtMs = Clock.System.now().toEpochMilliseconds()
             if (!isCurrentUserPremium) {
                 startCooldownTimer(COOLDOWN_MS)
             }
         }
+    }
+
+    fun onImagePicked(pick: ChatImagePick?) {
+        if (pick == null) return
+        if (!isCurrentUserStaff) {
+            _uiState.update { it.copy(error = "Only staff can attach images in chat") }
+            return
+        }
+        if (pick.bytes.isEmpty()) {
+            _uiState.update { it.copy(error = "Selected image is empty") }
+            return
+        }
+        if (pick.bytes.size > CHAT_IMAGE_MAX_BYTES) {
+            _uiState.update { it.copy(error = "Image must be less than 2.5 MB") }
+            return
+        }
+        _uiState.update { it.copy(pendingImage = pick, error = null) }
+    }
+
+    fun removePendingImage() {
+        _uiState.update { it.copy(pendingImage = null, error = null) }
     }
 
     fun loadStickers(force: Boolean = false) {
@@ -572,8 +603,28 @@ class LiveChatViewModel(
         text: String,
         metadata: ChatMessageMetadata? = null,
         stickerId: String? = null,
+        imagePick: ChatImagePick? = null,
     ) {
-        val result = chatService.postMessage(text, metadata = metadata, stickerId = stickerId)
+        val sendMetadata = if (imagePick != null) {
+            chatService.uploadChatImage(imagePick).fold(
+                onSuccess = { attachment ->
+                    mergeImageMetadata(metadata, attachment)
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isSending = false,
+                            error = e.message ?: "Image upload failed",
+                        )
+                    }
+                    return
+                },
+            )
+        } else {
+            metadata
+        }
+
+        val result = chatService.postMessage(text, metadata = sendMetadata, stickerId = stickerId)
         result.fold(
             onSuccess = { message ->
                 val snapshot = _uiState.value
@@ -592,6 +643,7 @@ class LiveChatViewModel(
                     val merged = mergeMessages(state.messages, listOf(enriched))
                     state.copy(
                         draft = "",
+                        pendingImage = if (imagePick != null) null else state.pendingImage,
                         isSending = false,
                         messages = merged,
                         error = null,
@@ -608,6 +660,15 @@ class LiveChatViewModel(
             },
         )
     }
+
+    private fun mergeImageMetadata(
+        metadata: ChatMessageMetadata?,
+        image: ChatImageAttachment,
+    ): ChatMessageMetadata =
+        (metadata ?: ChatMessageMetadata()).copy(
+            kind = metadata?.kind ?: "image",
+            image = image,
+        )
 
     private fun searchAnimeForPicker(query: String) {
         animeSearchJob?.cancel()

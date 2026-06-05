@@ -59,6 +59,8 @@ fun AnimeCard(
     badgeText: String? = null,
     /** When true, shows a SUB / DUB / SUB·DUB badge for the latest aired episode (top-right). */
     showLatestLangBadge: Boolean = false,
+    /** When true, wraps the title instead of clamping it to one line. */
+    showFullTitle: Boolean = false,
     onClick: () -> Unit,
 ) {
     val inter   = remember { MutableInteractionSource() }
@@ -259,8 +261,8 @@ fun AnimeCard(
                     color      = AppColors.text,
                     fontSize   = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    maxLines   = 1,
-                    overflow   = TextOverflow.Ellipsis,
+                    maxLines   = if (showFullTitle) Int.MAX_VALUE else 1,
+                    overflow   = if (showFullTitle) TextOverflow.Clip else TextOverflow.Ellipsis,
                     lineHeight = 17.sp,
                     modifier   = Modifier.weight(1f)
                 )
@@ -283,7 +285,7 @@ fun AnimeCard(
                     // .metadata-separator { color:#6b7280; font-size:12px }
                     Text("•", color = AppColors.textDim, fontSize = 12.sp)
                 }
-                Text("${item.duration ?: 24}m", color = AppColors.textMuted, fontSize = 12.sp)
+                Text("${item.duration}m", color = AppColors.textMuted, fontSize = 12.sp)
             }
         }
     }

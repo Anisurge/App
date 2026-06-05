@@ -39,7 +39,6 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.journeyapps.barcodescanner.CaptureActivity
-import com.google.zxing.integration.android.IntentIntegrator
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.Inet4Address
@@ -67,6 +66,13 @@ private val pairingJson = Json {
     ignoreUnknownKeys = true
     encodeDefaults = true
 }
+
+private const val QR_SCAN_ACTION = "com.google.zxing.client.android.SCAN"
+private const val QR_SCAN_FORMATS_EXTRA = "SCAN_FORMATS"
+private const val QR_SCAN_PROMPT_EXTRA = "PROMPT_MESSAGE"
+private const val QR_SCAN_BEEP_EXTRA = "BEEP_ENABLED"
+private const val QR_SCAN_ORIENTATION_LOCKED_EXTRA = "SCAN_ORIENTATION_LOCKED"
+private const val QR_SCAN_RESULT_EXTRA = "SCAN_RESULT"
 
 actual fun generatePairingNonce(): String {
     val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
@@ -233,8 +239,7 @@ actual fun TvQrPairingAction(
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
     ) { result ->
-        val scan = IntentIntegrator.parseActivityResult(result.resultCode, result.data)
-        val contents = scan?.contents
+        val contents = result.data?.getStringExtra(QR_SCAN_RESULT_EXTRA)
         if (result.resultCode != Activity.RESULT_OK || contents.isNullOrBlank()) {
             message = "No QR scanned"
             isPairing = false
@@ -302,13 +307,13 @@ actual fun TvQrPairingAction(
                         if (activity == null) {
                             message = "Scanner unavailable"
                         } else {
-                            val intent = IntentIntegrator(activity)
-                                .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
-                                .setPrompt("Scan Anisurge TV QR")
-                                .setBeepEnabled(false)
-                                .setOrientationLocked(false)
-                                .setCaptureActivity(CaptureActivity::class.java)
-                                .createScanIntent()
+                            val intent = Intent(activity, CaptureActivity::class.java).apply {
+                                action = QR_SCAN_ACTION
+                                putExtra(QR_SCAN_FORMATS_EXTRA, "QR_CODE")
+                                putExtra(QR_SCAN_PROMPT_EXTRA, "Scan Anisurge TV QR")
+                                putExtra(QR_SCAN_BEEP_EXTRA, false)
+                                putExtra(QR_SCAN_ORIENTATION_LOCKED_EXTRA, false)
+                            }
                             launcher.launch(intent)
                         }
                     },

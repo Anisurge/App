@@ -7,7 +7,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
-import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CoroutineScope
@@ -1059,7 +1059,7 @@ object DownloadManager {
         }
         val raw = httpClient.get(segmentUrl) {
             requestHeaders.forEach { (k, v) -> header(k, v) }
-        }.readBytes()
+        }.readRawBytes()
         return HlsPngTsStrip.stripSegmentPayloadIfNeeded(segmentUrl, raw)
     }
 
@@ -1210,7 +1210,7 @@ object DownloadManager {
         return try {
             val rawBytes = httpClient.get(url) {
                 requestHeaders.forEach { (k, v) -> header(k, v) }
-            }.readBytes()
+            }.readRawBytes()
             val head = rawBytes.decodeToString(0, minOf(rawBytes.size, 64))
             if (head.contains("#EXTM3U", ignoreCase = true)) {
                 val bodyText = rawBytes.decodeToString()

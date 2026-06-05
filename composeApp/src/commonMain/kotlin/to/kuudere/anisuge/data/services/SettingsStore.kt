@@ -40,6 +40,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val QUICK_ACTION_MENU_KEY = booleanPreferencesKey("quick_action_menu")
         val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
         val PREFER_ROMAJI_ANIME_TITLES_KEY = booleanPreferencesKey("prefer_romaji_anime_titles")
+        val SHOW_FULL_ANIME_TITLES_KEY = booleanPreferencesKey("show_full_anime_titles")
         val VIDEO_SCALE_MODE_KEY = stringPreferencesKey("video_scale_mode")
         val THEME_ID_KEY = stringPreferencesKey("theme_id")
         val LEGACY_SCHEDULE_UI_KEY = booleanPreferencesKey("legacy_schedule_ui")
@@ -83,6 +84,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val quickActionMenuFlow: Flow<Boolean> = dataStore.data.map { it[QUICK_ACTION_MENU_KEY] ?: true }
     val appLocaleFlow: Flow<String> = dataStore.data.map { it[APP_LOCALE_KEY] ?: "en" }
     val preferRomajiAnimeTitlesFlow: Flow<Boolean> = dataStore.data.map { it[PREFER_ROMAJI_ANIME_TITLES_KEY] ?: false }
+    val showFullAnimeTitlesFlow: Flow<Boolean> = dataStore.data.map { it[SHOW_FULL_ANIME_TITLES_KEY] ?: false }
     val videoScaleModeFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[VIDEO_SCALE_MODE_KEY]?.takeIf { it == "Fit" || it == "Zoom" || it == "Stretch" } ?: "Fit"
     }
@@ -215,6 +217,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setPreferRomajiAnimeTitles(enabled: Boolean) {
         dataStore.edit { it[PREFER_ROMAJI_ANIME_TITLES_KEY] = enabled }
+    }
+
+    suspend fun setShowFullAnimeTitles(enabled: Boolean) {
+        dataStore.edit { it[SHOW_FULL_ANIME_TITLES_KEY] = enabled }
     }
 
     suspend fun setVideoScaleMode(mode: String) {

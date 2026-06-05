@@ -81,6 +81,7 @@ data class UserProfile(
     val website: String? = null,
     val coins: Int = 0,
     val karmaPoints: Int = 0,
+    val isStaff: Boolean = false,
     val equippedFrameUrl: String? = null,
     val equippedOuterFrameUrl: String? = null,
     val equippedFrameItemId: String? = null,
