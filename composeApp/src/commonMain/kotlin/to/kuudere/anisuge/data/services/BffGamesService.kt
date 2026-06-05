@@ -14,6 +14,12 @@ import to.kuudere.anisuge.data.models.BffCoinFlipRequest
 import to.kuudere.anisuge.data.models.BffCoinFlipResponse
 import to.kuudere.anisuge.data.models.BffErrorResponse
 import to.kuudere.anisuge.data.models.BffGameStatusResponse
+import to.kuudere.anisuge.data.models.BffMinesCashoutRequest
+import to.kuudere.anisuge.data.models.BffMinesCashoutResponse
+import to.kuudere.anisuge.data.models.BffMinesCreateRequest
+import to.kuudere.anisuge.data.models.BffMinesCreateResponse
+import to.kuudere.anisuge.data.models.BffMinesRevealRequest
+import to.kuudere.anisuge.data.models.BffMinesRevealResponse
 import to.kuudere.anisuge.data.models.BffWheelSpinRequest
 import to.kuudere.anisuge.data.models.BffWheelSpinResponse
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
@@ -65,6 +71,60 @@ class BffGamesService(
                 applyAnisurgeAuth(stored)
                 contentType(ContentType.Application.Json)
                 setBody(BffCoinFlipRequest(bet = bet, choice = choice))
+            }
+            if (response.status.isSuccess()) {
+                Result.success(response.body())
+            } else {
+                Result.failure(Exception(errorMessage(response.bodyAsText())))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createMines(bet: Int, mines: Int): Result<BffMinesCreateResponse> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/games/mines/create") {
+                applyAnisurgeAuth(stored)
+                contentType(ContentType.Application.Json)
+                setBody(BffMinesCreateRequest(bet = bet, mines = mines))
+            }
+            if (response.status.isSuccess()) {
+                Result.success(response.body())
+            } else {
+                Result.failure(Exception(errorMessage(response.bodyAsText())))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun revealMinesTile(gameId: String, tileIndex: Int): Result<BffMinesRevealResponse> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/games/mines/reveal") {
+                applyAnisurgeAuth(stored)
+                contentType(ContentType.Application.Json)
+                setBody(BffMinesRevealRequest(gameId = gameId, tileIndex = tileIndex))
+            }
+            if (response.status.isSuccess()) {
+                Result.success(response.body())
+            } else {
+                Result.failure(Exception(errorMessage(response.bodyAsText())))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun cashoutMines(gameId: String): Result<BffMinesCashoutResponse> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/games/mines/cashout") {
+                applyAnisurgeAuth(stored)
+                contentType(ContentType.Application.Json)
+                setBody(BffMinesCashoutRequest(gameId = gameId))
             }
             if (response.status.isSuccess()) {
                 Result.success(response.body())
