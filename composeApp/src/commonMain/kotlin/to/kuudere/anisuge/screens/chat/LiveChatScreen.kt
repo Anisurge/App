@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -59,6 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -74,8 +76,11 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import io.ktor.client.call.body
+import io.ktor.client.request.get
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -118,6 +123,7 @@ fun LiveChatScreen(
     var didInitialScroll by remember { mutableStateOf(false) }
     var messageCountBeforeOlder by remember { mutableIntStateOf(0) }
     var stickerPickerOpen by remember { mutableStateOf(false) }
+    var previewChatImage by remember { mutableStateOf<ChatImageAttachment?>(null) }
     val pickChatImage = rememberChatImagePicker(
         allowVideo = false,
         onResult = viewModel::onImagePicked,
@@ -395,6 +401,7 @@ fun LiveChatScreen(
                                     isScrolling = isUserScrolling,
                                     isStickerVisible = visibleMessageIds.contains(message.id),
                                     onProfileClick = { viewModel.showMemberProfile(message) },
+                                    onImageClick = { previewChatImage = it },
                                     onActionClick = onAction,
                                     onDelete = if (state.isCurrentUserStaff) { { viewModel.deleteMessage(message.id) } } else null,
                                 )
@@ -518,6 +525,12 @@ fun LiveChatScreen(
             }
         }
     }
+        previewChatImage?.let { image ->
+            FullScreenChatImagePreview(
+                image = image,
+                onDismiss = { previewChatImage = null },
+            )
+        }
     }
 }
 
@@ -548,6 +561,7 @@ private fun ChatMessageRow(
     isScrolling: Boolean,
     isStickerVisible: Boolean,
     onProfileClick: () -> Unit,
+    onImageClick: (ChatImageAttachment) -> Unit,
     onActionClick: (String) -> Unit,
     onDelete: (() -> Unit)? = null,
 ) {
@@ -561,7 +575,7 @@ private fun ChatMessageRow(
     val rowModifier = Modifier.combinedClickable(
         interactionSource = rowInteraction,
         indication = null,
-        onClick = onProfileClick,
+        onClick = {},
         onLongClick = { if (onDelete != null) showDeleteDialog = true },
     )
 
@@ -612,10 +626,10 @@ private fun ChatMessageRow(
                         avatarUrl = message.effectiveAvatarUrl,
                         frameUrl = message.avatarFrameUrl,
                         outerFrameUrl = message.avatarOuterUrl,
-                        userId = message.userId,
-                        modifier = Modifier,
+                        modifier = Modifier.clickable(onClick = onProfileClick),
                         avatarSize = 36.dp,
                         contentDescription = message.username,
+                        userId = message.userId,
                         playVideo = !isScrolling,
                     )
                 } else {
@@ -705,7 +719,10 @@ private fun ChatMessageRow(
                                 )
                             }
                             message.metadata.image?.let { image ->
-                                ChatImageAttachmentView(image)
+                                ChatImageAttachmentView(
+                                    image = image,
+                                    onClick = { onImageClick(image) },
+                                )
                             }
                             message.metadata.anime?.let { anime ->
                                 ChatAnimeCardView(
@@ -740,10 +757,10 @@ private fun ChatMessageRow(
                         avatarUrl = message.effectiveAvatarUrl,
                         frameUrl = message.avatarFrameUrl,
                         outerFrameUrl = message.avatarOuterUrl,
-                        userId = message.userId,
-                        modifier = Modifier,
+                        modifier = Modifier.clickable(onClick = onProfileClick),
                         avatarSize = 36.dp,
                         contentDescription = message.username,
+                        userId = message.userId,
                         playVideo = !isScrolling,
                     )
                 } else {
@@ -805,19 +822,130 @@ private fun PendingChatImageChip(
 }
 
 @Composable
-private fun ChatImageAttachmentView(image: ChatImageAttachment) {
+private fun ChatImageAttachmentView(
+    image: ChatImageAttachment,
+    onClick: () -> Unit,
+) {
     if (image.url.isBlank()) return
     AsyncImage(
         model = image.url,
         contentDescription = image.fileName ?: "Chat image",
         modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 120.dp, max = 210.dp)
+            .widthIn(max = 220.dp)
+            .heightIn(min = 96.dp, max = 180.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Color.Black.copy(alpha = 0.35f))
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp)),
-        contentScale = ContentScale.Crop,
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+        contentScale = ContentScale.Fit,
     )
+}
+
+@Composable
+private fun FullScreenChatImagePreview(
+    image: ChatImageAttachment,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var isSaving by remember { mutableStateOf(false) }
+    var saveMessage by remember { mutableStateOf<String?>(null) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable { onDismiss() },
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = image.url,
+            contentDescription = image.fileName ?: "Chat image",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+                .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+        ) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Close",
+                tint = Color.White,
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.Black.copy(alpha = 0.62f))
+                .clickable(enabled = !isSaving) {
+                    scope.launch {
+                        isSaving = true
+                        saveMessage = null
+                        try {
+                            val response = to.kuudere.anisuge.AppComponent.httpClient.get(image.url)
+                            val bytes = response.body<ByteArray>()
+                            val safeName = image.fileName
+                                ?.substringBeforeLast('.')
+                                ?.take(50)
+                                ?.replace(Regex("[^a-zA-Z0-9 ]"), "")
+                                ?.trim()
+                                ?.ifBlank { null }
+                                ?: "chat-image"
+                            val extension = image.fileName
+                                ?.substringAfterLast('.', "")
+                                ?.takeIf { it.length in 2..5 }
+                                ?: "jpg"
+                            val fileName =
+                                "$safeName-${kotlinx.datetime.Clock.System.now().toEpochMilliseconds()}.$extension"
+                            val dir = to.kuudere.anisuge.utils.getDownloadsDirectory()
+                            val imagesDir = "$dir/Images"
+                            to.kuudere.anisuge.platform.KmpFileSystem.createDirectories(imagesDir)
+                            to.kuudere.anisuge.platform.KmpFileSystem.write(
+                                "$imagesDir/$fileName",
+                                bytes,
+                            )
+                            saveMessage = "Saved to $imagesDir"
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            saveMessage = "Failed to save image"
+                        } finally {
+                            isSaving = false
+                        }
+                    }
+                }
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (isSaving) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = saveMessage ?: "Save Image",
+                color = Color.White,
+                fontSize = 14.sp,
+            )
+        }
+    }
 }
 
 private fun formatChatImageBytes(bytes: Long): String =
