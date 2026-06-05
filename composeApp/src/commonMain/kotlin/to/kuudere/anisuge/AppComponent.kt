@@ -172,4 +172,8 @@ object AppComponent {
     val syncManager: to.kuudere.anisuge.data.services.SyncManager by lazy {
         to.kuudere.anisuge.data.services.SyncManager(trackingService)
     }
+
+    val bffGamesService: to.kuudere.anisuge.data.services.BffGamesService by lazy {
+        to.kuudere.anisuge.data.services.BffGamesService(sessionStore, httpClient)
+    }
 }

@@ -855,9 +855,9 @@ private fun FullScreenChatImagePreview(
     var isSaving by remember { mutableStateOf(false) }
     var saveMessage by remember { mutableStateOf<String?>(null) }
 
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var offsetY by remember { mutableFloatStateOf(0f) }
+    var scale by remember { mutableStateOf(1f) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
 
     Box(
         modifier = Modifier
@@ -893,9 +893,9 @@ private fun FullScreenChatImagePreview(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(scale) {
+                .pointerInput(Unit) {
                     detectTapGestures {
-                        if (scale <= 1.01f) {
+                        if (scale.compareTo(1.01f) <= 0) {
                             onDismiss()
                         } else {
                             scale = 1f

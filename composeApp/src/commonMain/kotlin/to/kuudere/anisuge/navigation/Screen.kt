@@ -70,6 +70,7 @@ sealed class Screen(val route: String) {
     data object LiveChat : Screen("live-chat") {
         const val displayName = "Community Chat"
     }
+    data object Games : Screen("games")
     data object W2gRoomList : Screen("w2g")
     data class W2gRoom(val inviteCode: String) : Screen("w2g-room/$inviteCode") {
         companion object {

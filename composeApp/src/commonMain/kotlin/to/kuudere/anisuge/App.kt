@@ -36,6 +36,8 @@ import to.kuudere.anisuge.screens.chat.LiveChatViewModel
 import to.kuudere.anisuge.screens.w2g.W2gRoomListScreen
 import to.kuudere.anisuge.screens.w2g.W2gPlayerScreen
 import to.kuudere.anisuge.screens.w2g.W2gViewModel
+import to.kuudere.anisuge.screens.games.GamesScreen
+import to.kuudere.anisuge.screens.games.GamesViewModel
 import to.kuudere.anisuge.screens.search.SearchScreen
 import to.kuudere.anisuge.screens.search.SearchViewModel
 import to.kuudere.anisuge.screens.search.KUUDERE_GENRES
@@ -184,6 +186,7 @@ fun App(
                 AppComponent.stickerService,
             )
         }
+        val gamesVm = remember { GamesViewModel() }
         val w2gVm = remember {
             W2gViewModel(
                 AppComponent.sessionStore,
@@ -513,6 +516,7 @@ fun App(
                                 liveChatViewModel = liveChatVm,
                                 onLiveChatClick = { navController.navigate(Screen.LiveChat.route) },
                                 onW2gClick = { navController.navigate(Screen.W2gRoomList.route) },
+                                onGamesClick = { navController.navigate(Screen.Games.route) },
                                 onLiveChatSignIn = {
                                     navController.navigate(Screen.Auth.route) {
                                         popUpTo(Screen.Home().route) { inclusive = false }
@@ -676,6 +680,13 @@ fun App(
                                 }
                             },
                             onAction = handleChatAction,
+                        )
+                    }
+
+                    composable(Screen.Games.route) {
+                        GamesScreen(
+                            viewModel = gamesVm,
+                            onBack = { navController.popBackStack() },
                         )
                     }
 

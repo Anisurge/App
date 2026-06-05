@@ -222,6 +222,7 @@ fun HomeScreen(
     onViewNewOnAppMore: () -> Unit = {},
     liveChatViewModel: LiveChatViewModel,
     onLiveChatClick: () -> Unit = {},
+    onGamesClick: () -> Unit = {},
     onW2gClick: () -> Unit = {},
     onLiveChatSignIn: () -> Unit = {},
     onChatAction: (String) -> Unit = {},
@@ -333,6 +334,7 @@ fun HomeScreen(
                         switchTab(tab, nested)
                     },
                     onLiveChatClick = { showDesktopLiveChat = true },
+                    onGamesClick = onGamesClick,
                     onW2gClick = onW2gClick,
                     chatUnreadCount = chatUnreadCount,
                     onLogout = {
@@ -474,6 +476,7 @@ fun HomeScreen(
                             switchTab(AnisugTab.Settings, SettingsTab.Profile)
                         },
                         onLiveChatClick = onLiveChatClick,
+                        onGamesClick = onGamesClick,
                         onW2gClick = onW2gClick,
                         chatUnreadCount = chatUnreadCount,
                         useQuickActionMenu = settingsState.quickActionMenu,
@@ -1931,6 +1934,7 @@ private fun AnisugSidebar(
     isLoggingOut: Boolean,
     onTabSelect: (AnisugTab, SettingsTab?) -> Unit,
     onLiveChatClick: () -> Unit,
+    onGamesClick: () -> Unit = {},
     onW2gClick: () -> Unit = {},
     chatUnreadCount: Int = 0,
     onLogout: () -> Unit,
@@ -2000,6 +2004,11 @@ private fun AnisugSidebar(
                     badgeCount = chatUnreadCount,
                     badgeColor = Color(0xFFE50914),
                     onClick = onLiveChatClick,
+                )
+                SidebarIcon(
+                    Icons.Filled.Star,
+                    isSelected = false,
+                    onClick = onGamesClick,
                 )
                 SidebarIcon(
                     Icons.Outlined.Group,
@@ -2184,6 +2193,7 @@ private fun MobileTopBar(
     onDownloadClick: () -> Unit,
     onProfileClick: () -> Unit,
     onLiveChatClick: () -> Unit,
+    onGamesClick: () -> Unit = {},
     onW2gClick: () -> Unit = {},
     chatUnreadCount: Int = 0,
     useQuickActionMenu: Boolean = true,
@@ -2260,6 +2270,14 @@ private fun MobileTopBar(
                                 modifier = Modifier.padding(vertical = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(0.dp),
                             ) {
+                                QuickMenuItem(
+                                    text = "games",
+                                    icon = Icons.Filled.Star,
+                                    onClick = {
+                                        quickMenuExpanded = false
+                                        onGamesClick()
+                                    },
+                                )
                                 QuickMenuItem(
                                     text = "watch2gether",
                                     icon = Icons.Outlined.Group,
