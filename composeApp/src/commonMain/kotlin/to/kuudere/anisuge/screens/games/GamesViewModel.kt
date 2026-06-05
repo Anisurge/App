@@ -52,7 +52,10 @@ class GamesViewModel(
                     state = state.copy(
                         spinning = false,
                         wheelResult = result,
-                        status = state.status?.copy(coins = result.coins, canFreeWheel = freeSpin && result.prize > 0),
+                        status = state.status?.copy(
+                            coins = result.coins,
+                            canFreeWheel = if (freeSpin) false else (state.status?.canFreeWheel ?: false),
+                        ),
                         error = null,
                     )
                 },
