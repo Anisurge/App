@@ -336,6 +336,9 @@ actual fun VideoPlayerSurface(
                     }
                 } else if (property == "duration") {
                     state.duration = value
+                    if (value > state.peakPlaybackDuration) {
+                        state.peakPlaybackDuration = value
+                    }
                 }
             }
 
@@ -432,8 +435,8 @@ actual fun VideoPlayerSurface(
                             .getOrNull()?.coerceAtLeast(0.0) ?: state.duration
                         state.position = pos
                         state.duration = dur
-                        val naturalEnd = dur >= 45.0 && pos >= 20.0 &&
-                                (pos >= dur - 2.5 || pos >= dur * 0.88)
+                        val stableDuration = maxOf(dur, state.peakPlaybackDuration)
+                        val naturalEnd = stableDuration >= 45.0 && pos >= 20.0 && pos >= stableDuration - 2.5
                         if (naturalEnd) {
                             state.error = null
                             if (!state.config.loop) currentOnFinished?.invoke()

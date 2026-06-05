@@ -51,8 +51,9 @@ internal fun watchedEnoughForAutoNext(
 ): Boolean {
     if (durationSec < 45.0) return false
     if (positionSec < 20.0) return false
-    // User scrubbed back from the end — do not treat stale "near end" samples as finished.
-    val atEndNow = positionSec >= durationSec - 2.5 || positionSec >= durationSec * 0.88
+    // Only a real end-of-file/last-seconds position may advance. A percentage threshold is unsafe:
+    // seeking to ~21m of a 24m episode is >88% but still has minutes left.
+    val atEndNow = positionSec >= durationSec - 2.5
     if (!atEndNow) return false
     // Must have played most of the episode forward at least once (not a seek-to-end glitch).
     if (peakPositionSec < durationSec * 0.75) return false

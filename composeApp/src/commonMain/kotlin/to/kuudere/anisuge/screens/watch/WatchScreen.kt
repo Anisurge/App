@@ -2267,11 +2267,18 @@ fun WatchVideoPlayer(
 
             LaunchedEffect(uiState.currentEpisodeNumber, playbackUrl) {
                 playerState.peakPlaybackPosition = 0.0
+                playerState.peakPlaybackDuration = 0.0
             }
 
             LaunchedEffect(playerState.position) {
                 if (playerState.position > playerState.peakPlaybackPosition) {
                     playerState.peakPlaybackPosition = playerState.position
+                }
+            }
+
+            LaunchedEffect(playerState.duration) {
+                if (playerState.duration > playerState.peakPlaybackDuration) {
+                    playerState.peakPlaybackDuration = playerState.duration
                 }
             }
 
@@ -2305,11 +2312,16 @@ fun WatchVideoPlayer(
                 val resumeAt = uiState.savedWatchPosition
                 if (resumeAt < 1.0) return@LaunchedEffect
                 var waited = 0
-                while (waited < 6_000 && playerState.duration < 0.25) {
+                fun durationIsPlausible(): Boolean {
+                    val duration = playerState.duration
+                    if (duration < 0.25) return false
+                    return resumeAt <= 60.0 || duration >= resumeAt + 30.0
+                }
+                while (waited < 6_000 && !durationIsPlausible()) {
                     kotlinx.coroutines.delay(24)
                     waited += 24
                 }
-                if (playerState.duration < 0.25) return@LaunchedEffect
+                if (!durationIsPlausible()) return@LaunchedEffect
                 if (playerState.position > 2.0) return@LaunchedEffect
                 val safeEnd = (playerState.duration - 0.75).coerceAtLeast(0.0)
                 val target = resumeAt.coerceIn(0.0, safeEnd)
@@ -2569,7 +2581,7 @@ fun WatchVideoPlayer(
                 val now = Clock.System.now().toEpochMilliseconds()
                 if (isWithinUserSeekCooldown(playerState.lastUserSeekAtMs, now)) return@LaunchedEffect
                 val pos = playerState.position
-                val dur = playerState.duration
+                val dur = maxOf(playerState.duration, playerState.peakPlaybackDuration)
 
                 if (playerState.hasNextEpisode &&
                     watchedEnoughForAutoNext(pos, dur, playerState.peakPlaybackPosition)
@@ -2785,7 +2797,7 @@ fun WatchVideoPlayer(
                     onFinished = {
                         viewModel.tryAutoAdvanceToNextEpisode(
                             playerState.position,
-                            playerState.duration,
+                            maxOf(playerState.duration, playerState.peakPlaybackDuration),
                             playerState.peakPlaybackPosition,
                             playerState.lastUserSeekAtMs,
                         )

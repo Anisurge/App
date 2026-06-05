@@ -32,6 +32,8 @@ class VideoPlayerState(config: VideoPlayerConfig) {
     /** Set when the user scrubs/seeks — auto-skip and auto-next must not run briefly after. */
     var lastUserSeekAtMs by mutableStateOf(0L)
     var peakPlaybackPosition by mutableStateOf(0.0)
+    /** Largest duration seen for the current media; shields auto-next/resume from transient short durations. */
+    var peakPlaybackDuration by mutableStateOf(0.0)
     var subFileUrl      by mutableStateOf<String?>(null)  // single sub change at runtime
     var subFileName     by mutableStateOf<String?>(null)
     var allSubUrls      by mutableStateOf<List<Triple<String, String, Boolean>>?>(null) // (url, lang_name, isDefault)

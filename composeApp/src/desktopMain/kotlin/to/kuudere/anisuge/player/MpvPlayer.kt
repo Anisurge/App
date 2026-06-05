@@ -365,7 +365,11 @@ internal class MpvPlayer(
                                 state.isBuffering = false
                                 val durPtr = mpv.mpv_get_property_string(handle, "duration")
                                 if (durPtr != null) {
-                                    state.duration = durPtr.getString(0).toDoubleOrNull() ?: 0.0
+                                    val duration = durPtr.getString(0).toDoubleOrNull() ?: 0.0
+                                    state.duration = duration
+                                    if (duration > state.peakPlaybackDuration) {
+                                        state.peakPlaybackDuration = duration
+                                    }
                                     mpv.mpv_free(durPtr)
                                 }
                             }
