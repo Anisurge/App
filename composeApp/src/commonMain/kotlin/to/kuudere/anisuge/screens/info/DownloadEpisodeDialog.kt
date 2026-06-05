@@ -93,6 +93,9 @@ fun DownloadEpisodeDialog(
     val selectedM3u8 by remember(availableQualities, selectedQualityIndex) {
         derivedStateOf { availableQualities.getOrElse(selectedQualityIndex) { availableQualities.firstOrNull() }?.second }
     }
+    val selectedQualityHeaders by remember(availableQualities, selectedQualityIndex) {
+        derivedStateOf { availableQualities.getOrElse(selectedQualityIndex) { availableQualities.firstOrNull() }?.third }
+    }
     var isLoadingSubs by remember { mutableStateOf(false) }
     var estimatedSizeBytes by remember { mutableStateOf(0L) }
     var currentHeaders by remember { mutableStateOf<Map<String, String>?>(null) }
@@ -123,7 +126,7 @@ fun DownloadEpisodeDialog(
                         selectedSubtitleLabels.toList(),
                         selectedAudioLang,
                         true,
-                        currentHeaders,
+                        selectedQualityHeaders,
                         if (isSeasonBatch) null else selectedM3u8,
                         selectedSubDub == "dub",
                     )
@@ -151,8 +154,11 @@ fun DownloadEpisodeDialog(
             }
     }
 
-    /** AllAnime-style catalogs are MP4-only; mixed providers (e.g. Anikage) keep the HLS quality row. */
-    val showDirectMp4Picker = remember(availableQualities, mp4QualityOptions) {
+    val selectedServerUsesMainDownloadButton = selectedServer.equals("anikage", ignoreCase = true)
+
+    /** AllAnime-style catalogs are MP4-only; mixed providers (e.g. Anikage) keep the shared download button. */
+    val showDirectMp4Picker = remember(selectedServerUsesMainDownloadButton, availableQualities, mp4QualityOptions) {
+        if (selectedServerUsesMainDownloadButton) return@remember false
         mp4QualityOptions.isNotEmpty() &&
                 availableQualities.all { isDirectProgressiveMp4Url(it.second) }
     }
@@ -335,6 +341,7 @@ fun DownloadEpisodeDialog(
         if (availableQualities.isEmpty()) {
             estimatedSizeBytes = 0L
             availableAudioTracks = emptyList()
+            currentHeaders = null
             return@LaunchedEffect
         }
         if (showDirectMp4Picker) {
@@ -440,10 +447,12 @@ fun DownloadEpisodeDialog(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    val selectedDownloadHeaders = currentHeaders ?: selectedQualityHeaders
     val canDownload = selectedSubDub != null &&
             selectedServer.isNotBlank() &&
             !isLoadingSubs &&
             isPathValid &&
+            (isSeasonBatch || !selectedM3u8.isNullOrBlank()) &&
             !selectedQualityIsDash
 
     ModalBottomSheet(
@@ -912,20 +921,21 @@ fun DownloadEpisodeDialog(
                                 println("[DownloadDialog] needsSaf=$needsSaf downloadPath=$downloadPath")
                                 if (needsSaf) {
                                     println("[DownloadDialog] → launching SAF folder picker")
-                                    pendingDownloadParams = selectedServer to currentHeaders
+                                    pendingDownloadParams = selectedServer to selectedDownloadHeaders
                                     launchDirectoryPicker()
                                 } else {
                                     val storageOk = to.kuudere.anisuge.utils.hasStoragePermission()
                                     println("[DownloadDialog] storageOk=$storageOk")
                                     if (!storageOk) {
                                         println("[DownloadDialog] → requesting storage permission")
-                                        pendingDownloadParams = selectedServer to currentHeaders
+                                        pendingDownloadParams = selectedServer to selectedDownloadHeaders
                                         shouldRequestStoragePermission = true
                                     } else {
                                         val notifOk = to.kuudere.anisuge.utils.hasNotificationPermission()
                                         println("[DownloadDialog] notifOk=$notifOk")
                                         if (!notifOk) {
                                             println("[DownloadDialog] → requesting notification permission")
+                                            pendingDownloadParams = selectedServer to selectedDownloadHeaders
                                             shouldRequestNotificationPermission = true
                                         } else {
                                             println("[DownloadDialog] → calling onStartDownload(server=$selectedServer)")
@@ -934,7 +944,7 @@ fun DownloadEpisodeDialog(
                                                 selectedSubtitleLabels.toList(),
                                                 selectedAudioLang,
                                                 true,
-                                                currentHeaders,
+                                                selectedDownloadHeaders,
                                                 if (isSeasonBatch) null else selectedM3u8,
                                                 selectedSubDub == "dub",
                                             )
