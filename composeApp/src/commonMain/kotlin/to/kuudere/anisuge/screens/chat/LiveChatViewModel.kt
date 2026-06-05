@@ -102,7 +102,7 @@ class LiveChatViewModel(
             ),
         )
         _uiState.update { state ->
-            val staff = state.isCurrentUserStaff || profile?.isStaff == true
+            val staff = profile?.isStaff == true
             if (staff) {
                 isCurrentUserStaff = true
             }
