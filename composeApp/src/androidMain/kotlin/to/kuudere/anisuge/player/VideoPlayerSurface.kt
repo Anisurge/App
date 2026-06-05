@@ -1,6 +1,8 @@
 package to.kuudere.anisuge.player
 
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -68,6 +70,7 @@ actual fun VideoPlayerSurface(
         return
     }
 
+    val isSeeking = remember { mutableStateOf(false) }
     val surfaceView = remember(resolvedUrl) {
         val view = SurfaceView(context).apply {
             // SurfaceView is more stable than TextureView for hardware-accelerated video
@@ -76,12 +79,15 @@ actual fun VideoPlayerSurface(
                 override fun surfaceCreated(holder: SurfaceHolder) {
                     MPVLib.attachSurface(holder.surface)
                     MPVLib.setOptionString("force-window", "yes")
+                    // Restore Video Output immediately — must be synchronous so mpv
+                    // has the surface pointer before any internal reconfig fires.
+                    // Previously this was inside a Dispatchers.IO coroutine, which
+                    // created a race on orientation handoff (the surface was attached
+                    // but vo=gpu hadn't been applied yet, causing "Missing surface pointer").
+                    MPVLib.setPropertyString("vo", "gpu")
 
                     coroutineScope.launch(Dispatchers.IO) {
                         try {
-                            // Restore Video Output (Crucial for returning from background)
-                            MPVLib.setPropertyString("vo", "gpu")
-
                             // Check if the file is already loaded to avoid unnecessary reloads
                             val currentPath = try {
                                 MPVLib.getPropertyString("path")
@@ -89,7 +95,9 @@ actual fun VideoPlayerSurface(
                                 null
                             }
 
-                            if (currentPath != resolvedUrl) {
+                            val sameLoadedOrOpeningUrl = currentPath == resolvedUrl || lastMpvPlaybackUrl == resolvedUrl
+
+                            if (!sameLoadedOrOpeningUrl) {
                                 // New file — only use the API-provided start position.
                                 // Never use state.position here: it belongs to the PREVIOUS
                                 // file and would seek the new episode to the wrong timestamp.
@@ -99,11 +107,15 @@ actual fun VideoPlayerSurface(
                                 } else {
                                     MPVLib.setOptionString("start", "0")
                                 }
+                                lastMpvPlaybackUrl = resolvedUrl
                                 MPVLib.command(arrayOf<String>("loadfile", resolvedUrl))
                             } else {
                                 // Already loaded correct file, just force a redraw.
-                                // If it was paused, it stays paused; if it was playing, it resumes rendering.
-                                MPVLib.command(arrayOf("video-redraw"))
+                                // The fullscreen/inline handoff creates a fresh Compose
+                                // VideoPlayerState, but mpv does not emit FILE_LOADED again
+                                // for an already-loaded URL. Hydrate the new state from mpv
+                                // so controls do not sit on the loading spinner forever.
+                                hydrateFromLoadedMpv(state, isSeeking.value)
                                 if (!state.isPaused) {
                                     MPVLib.setPropertyString("pause", "no")
                                 }
@@ -125,18 +137,13 @@ actual fun VideoPlayerSurface(
                             val pos = runCatching { MPVLib.getPropertyDouble("time-pos") }.getOrNull()
                             if (pos != null && pos > 0.0) {
                                 MPVLib.command(arrayOf("seek", pos.toString(), "absolute+exact"))
-                            } else {
-                                MPVLib.command(arrayOf("video-redraw"))
                             }
-                        } else {
-                            MPVLib.command(arrayOf("video-redraw"))
                         }
                     }
                 }
 
                 override fun surfaceDestroyed(holder: SurfaceHolder) {
                     MPVLib.setPropertyString("vo", "null")
-                    MPVLib.setPropertyString("force-window", "no")
                     MPVLib.detachSurface()
                 }
             })
@@ -162,10 +169,11 @@ actual fun VideoPlayerSurface(
         surfaceView.keepScreenOn = (state.isPlaying || state.isBuffering) && !state.isPaused
     }
 
-    val isSeeking = remember { mutableStateOf(false) }
     val retriedWithSoftwareDecode = remember(resolvedUrl) { mutableStateOf(false) }
 
     DisposableEffect(resolvedUrl) {
+        cancelPendingMpvStop()
+
         val configDir = context.filesDir.absolutePath
         val subfontFile = File(configDir, "subfont.ttf")
         if (!subfontFile.exists()) {
@@ -191,8 +199,12 @@ actual fun VideoPlayerSurface(
             }
         }
 
-        // Shared native engine, so we set non-global options per-instance here
-        MPVLib.setOptionString("vo", "gpu")
+        // mpv core already initialized — vo is managed via setPropertyString in
+        // surfaceCreated's onAttach, which ensures the GPU surface is valid.
+        // Only set the default vo option before mpv_init (first-time setup).
+        if (!isMPVInited) {
+            MPVLib.setOptionString("vo", "gpu")
+        }
 
         // Keep Android decoder setup close to Aniyomi/mpv-android defaults.
         // Forcing mediacodec-copy can produce audio-only black video on some
@@ -446,7 +458,7 @@ actual fun VideoPlayerSurface(
                         } else if (dur <= 0.0 && pos <= 0.5) {
                             state.error = "Stream failed to start — trying another server"
                             println("[VideoPlayerSurface] END_FILE failed start before metadata (pos=$pos dur=$dur)")
-                        } else if (dur >= 90.0 && pos < 8.0) {
+                        } else if (dur >= 90.0 && pos < 1.0 && state.peakPlaybackPosition < 1.0) {
                             state.error = "Stream failed to start — try another server in Settings"
                             println("[VideoPlayerSurface] END_FILE failed start (pos=$pos dur=$dur)")
                         } else {
@@ -468,10 +480,13 @@ actual fun VideoPlayerSurface(
         onDispose {
             MPVLib.removeObserver(observer)
             try {
-                // Fully wipe state on navigate away to prevent race conditions
-                MPVLib.command(arrayOf<String>("stop"))
-                MPVLib.setPropertyString("vo", "null")
+                // Compose tears down this SurfaceView during Android fullscreen/orientation
+                // handoff, then immediately attaches a new one for the same loaded URL.
+                // Stopping mpv here races that handoff and can leave fullscreen stuck on
+                // the loading UI. URL/episode/server changes are still handled by the
+                // next surfaceCreated() loadfile call when current path differs.
                 MPVLib.detachSurface()
+                scheduleMpvStopIfSurfaceNotReattached(resolvedUrl)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -696,6 +711,83 @@ actual fun VideoPlayerSurface(
 // Ensure MPV natively creates only once for app stability
 private var isMPVInitialized = false
 private var isMPVInited = false
+private var lastMpvPlaybackUrl: String? = null
+private val mpvStopHandler = Handler(Looper.getMainLooper())
+private var pendingMpvStop: Runnable? = null
+
+private fun cancelPendingMpvStop() {
+    pendingMpvStop?.let(mpvStopHandler::removeCallbacks)
+    pendingMpvStop = null
+}
+
+private fun scheduleMpvStopIfSurfaceNotReattached(url: String) {
+    cancelPendingMpvStop()
+    pendingMpvStop = Runnable {
+        pendingMpvStop = null
+        try {
+            val currentPath = runCatching { MPVLib.getPropertyString("path") }.getOrNull()
+            if (currentPath == url) {
+                MPVLib.command(arrayOf<String>("stop"))
+                MPVLib.setPropertyString("force-window", "no")
+                if (lastMpvPlaybackUrl == url) {
+                    lastMpvPlaybackUrl = null
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }.also { mpvStopHandler.postDelayed(it, 1500L) }
+}
+
+private fun hydrateFromLoadedMpv(state: VideoPlayerState, seeking: Boolean) {
+    val pos = runCatching { MPVLib.getPropertyDouble("time-pos") }.getOrNull()
+    val dur = runCatching { MPVLib.getPropertyDouble("duration") }.getOrNull()
+    val paused = runCatching { MPVLib.getPropertyString("pause") }.getOrNull()
+        ?.equals("yes", ignoreCase = true) == true
+    val pausedForCache = runCatching { MPVLib.getPropertyString("paused-for-cache") }.getOrNull()
+        ?.equals("yes", ignoreCase = true) == true
+
+    state.isPlaying = true
+    state.isPaused = paused
+    state.isBuffering = pausedForCache || seeking
+    state.error = null
+
+    if (pos != null && pos >= 0.0 && !seeking) {
+        state.position = pos
+        if (pos > state.peakPlaybackPosition) {
+            state.peakPlaybackPosition = pos
+        }
+    }
+    if (dur != null && dur > 0.0) {
+        state.duration = dur
+        if (dur > state.peakPlaybackDuration) {
+            state.peakPlaybackDuration = dur
+        }
+    }
+
+    refreshMpvAudioTracks(state)
+    refreshMpvSubtitleTracks(state)
+}
+
+private fun refreshMpvAudioTracks(state: VideoPlayerState) {
+    try {
+        val count = MPVLib.getPropertyInt("track-list/count") ?: 0
+        val aTracks = mutableListOf<Pair<Int, String>>()
+        for (i in 0 until count) {
+            val type = MPVLib.getPropertyString("track-list/$i/type") ?: continue
+            if (type != "audio") continue
+            val id = MPVLib.getPropertyInt("track-list/$i/id") ?: continue
+            val lang = MPVLib.getPropertyString("track-list/$i/lang") ?: "Audio $id"
+            val title = MPVLib.getPropertyString("track-list/$i/title")
+            val label = if (title != null) "$lang - $title" else lang
+            aTracks.add(id to label)
+        }
+        state.audioTracks = aTracks
+    } catch (e: Exception) {
+        println("[VideoPlayerSurface] refreshMpvAudioTracks: ${e.message}")
+    }
+}
+
 private fun subAddExternal(url: String, flag: String, headers: Map<String, String>): Boolean {
     val preferLocalText = url.contains(".vtt", ignoreCase = true) ||
             url.contains(".srt", ignoreCase = true) ||

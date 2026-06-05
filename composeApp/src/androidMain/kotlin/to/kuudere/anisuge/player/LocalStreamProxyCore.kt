@@ -17,6 +17,8 @@ import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import to.kuudere.anisuge.utils.HlsPngTsStrip
 import to.kuudere.anisuge.utils.ProgressiveStreamAccel
@@ -32,6 +34,7 @@ internal class LocalStreamProxy {
     private val sessions = ConcurrentHashMap<String, Session>()
     private val urls = ConcurrentHashMap<String, String>()
     private val targets = ConcurrentHashMap<String, String>()
+    private val pendingReleases = ConcurrentHashMap<String, ScheduledFuture<*>>()
 
     @Volatile
     private var serverSocket: ServerSocket? = null
@@ -42,22 +45,29 @@ internal class LocalStreamProxy {
     private val rangeFetchPool = Executors.newCachedThreadPool { runnable ->
         thread(start = false, name = "anisurge-stream-range", isDaemon = true) { runnable.run() }
     }
+    private val releaseScheduler = Executors.newSingleThreadScheduledExecutor { runnable ->
+        thread(start = false, name = "anisurge-stream-release", isDaemon = true) { runnable.run() }
+    }
 
     fun proxyUrl(url: String, headers: Map<String, String>?): String {
         if (headers.isNullOrEmpty()) return url
 
-        val sessionId = UUID.randomUUID().toString()
+        pendingReleases.remove(url)?.cancel(false)
+        val sessionId = urls[url] ?: UUID.randomUUID().toString().also { urls[url] = it }
         sessions[sessionId] = Session(headers)
-        urls[url] = sessionId
         ensureStarted()
         return proxiedUrl(sessionId, url)
     }
 
     fun release(url: String) {
-        urls.remove(url)?.let { sessionId ->
-            sessions.remove(sessionId)
-            targets.keys.removeAll { it.startsWith("$sessionId:") }
-        }
+        pendingReleases.remove(url)?.cancel(false)
+        pendingReleases[url] = releaseScheduler.schedule({
+            pendingReleases.remove(url)
+            urls.remove(url)?.let { sessionId ->
+                sessions.remove(sessionId)
+                targets.keys.removeAll { it.startsWith("$sessionId:") }
+            }
+        }, 3, TimeUnit.SECONDS)
         // Do not stop the local server here — mpv may still be reading the previous
         // session's proxied URLs; stopping changes the port and causes HLS open failures.
     }

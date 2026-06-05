@@ -111,6 +111,7 @@ class WatchViewModel(
     /** Bumps when a new stream fetch starts; stale loads must not publish UI state. */
     private var streamLoadGeneration = 0
     private var lastAutoEpisodeAdvanceMs = 0L
+    private var lastPlaybackSurfaceChangeMs = 0L
     private var pendingQualitySelection: String? = null
 
     /** Last batch_scrape section (for per-stream subtitles when switching quality). */
@@ -521,6 +522,7 @@ class WatchViewModel(
         }
 
         val generation = ++streamLoadGeneration
+        lastPlaybackSurfaceChangeMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         lastSkipEpisodeLengthSec = 0.0
         val currState = _uiState.value
         var anilistId = explicitAnilistId ?: currState.episodeData?.anilistId
@@ -869,10 +871,6 @@ class WatchViewModel(
 
     fun tryNextServerAfterPlaybackFailure(position: Double) {
         val current = _uiState.value.currentServer.lowercase()
-        if (userPinnedStreamServer == current) {
-            println("[WatchVM] playback failed on pinned server=$current; keeping user selection")
-            return
-        }
         val fallbackKey = "$current:${_uiState.value.currentEpisodeNumber}"
         if (lastAutoServerFallbackKey == fallbackKey) {
             println("[WatchVM] playback failed again on $current; not auto-falling back repeatedly")
@@ -904,6 +902,9 @@ class WatchViewModel(
             ?: servers.first()
 
         lastAutoServerFallbackKey = fallbackKey
+        if (userPinnedStreamServer == current) {
+            userPinnedStreamServer = null
+        }
         println("[WatchVM] playback failed on $current, trying next server=$next")
         changeServerWithState(
             newServer = next,
@@ -943,6 +944,7 @@ class WatchViewModel(
     }
 
     fun setFullscreen(fullscreen: Boolean) {
+        lastPlaybackSurfaceChangeMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         _uiState.update { it.copy(isFullscreen = fullscreen) }
     }
 
@@ -958,6 +960,7 @@ class WatchViewModel(
         if (!_uiState.value.autoNext) return false
         if (_uiState.value.offlinePath != null) return false
         val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        if (now - lastPlaybackSurfaceChangeMs < 12_000L) return false
         if (isWithinUserSeekCooldown(lastUserSeekAtMs, now)) return false
         if (!watchedEnoughForAutoNext(positionSec, durationSec, peakPositionSec)) return false
         if (now - lastAutoEpisodeAdvanceMs < 8_000) return false

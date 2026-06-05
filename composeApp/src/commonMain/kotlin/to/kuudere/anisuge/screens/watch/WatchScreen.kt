@@ -774,7 +774,10 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                 .padding(top = 48.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text("No episodes found", color = Color.Gray)
+                                            Text(
+                                                if (uiState.isLoading || uiState.episodeData == null) "Loading episodes..." else "No episodes found",
+                                                color = Color.Gray,
+                                            )
                                         }
                                     }
                                 } else {
@@ -1149,21 +1152,41 @@ private fun AndroidWatchPageLayout(
                 allowLandscapeTabs &&
                 maxWidth > maxHeight
 
-        // Wrap the player call in a Box so the player surface and the SettingsOverlay sibling
-        // (both emitted by WatchVideoPlayer) share an overlay parent. Without this wrapper, the
-        // overlay competes with the player for vertical space inside the Column and stays
-        // invisible in fullscreen.
-        if (uiState.isFullscreen) {
-            Row(
+        // Keep the player at a fixed position in the composition tree so it is never
+        // unmounted/remounted when fullscreen or orientation changes (which would destroy
+        // and recreate the SurfaceView, causing mpv to lose its surface and crash with
+        // "Missing surface pointer"). This mirrors the approach used by the W2G player.
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (!uiState.isFullscreen && useLandscapeTabs) {
+                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                    } else Modifier
+                )
+                .background(Color.Black)
+        ) {
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
+                    .weight(
+                        when {
+                            uiState.isFullscreen && selectedTab == WatchPageTab.Comments -> 0.7f
+                            useLandscapeTabs -> 0.62f
+                            else -> 1f
+                        }
+                    )
+                    .fillMaxHeight()
             ) {
                 Box(
                     modifier = Modifier
-                        .weight(if (selectedTab == WatchPageTab.Comments) 0.7f else 1f)
-                        .fillMaxHeight()
-                        .background(Color.Black)
+                        .fillMaxWidth()
+                        .then(
+                            when {
+                                uiState.isFullscreen -> Modifier.weight(1f)
+                                useLandscapeTabs -> Modifier.fillMaxSize()
+                                else -> Modifier.aspectRatio(16f / 9f)
+                            }
+                        )
                 ) {
                     key(playerKey) {
                         WatchVideoPlayer(
@@ -1177,69 +1200,44 @@ private fun AndroidWatchPageLayout(
                             onInfoClick = {},
                             onEpisodesClick = {
                                 selectedTab = WatchPageTab.Episodes
-                                viewModel.setFullscreen(false)
+                                if (uiState.isFullscreen) viewModel.setFullscreen(false)
                             },
                             onCommentsClick = {
                                 selectedTab = WatchPageTab.Comments
                             },
-                            showPlayerLibraryActions = true,
+                            showPlayerLibraryActions = uiState.isFullscreen,
                             showFullscreenButton = true,
-                            compactControls = false,
+                            compactControls = !uiState.isFullscreen,
                         )
                     }
                 }
 
-                if (selectedTab == WatchPageTab.Comments) {
-                    Box(
+                if (!uiState.isFullscreen && !useLandscapeTabs && uiState.offlinePath == null && uiState.servers.isNotEmpty()) {
+                    InlineServerSelector(
+                        servers = uiState.servers,
+                        currentServerId = uiState.currentServer,
+                        onServerSelected = { serverId -> viewModel.switchServer(serverId) },
+                    )
+
+                    WatchPageTabContent(
+                        selectedTab = selectedTab,
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        animeId = animeId,
+                        onClose = { selectedTab = WatchPageTab.Episodes },
                         modifier = Modifier
-                            .weight(0.3f)
-                            .fillMaxHeight()
-                            .background(AppColors.background)
-                    ) {
-                        WatchCommentsContent(
-                            animeId = animeId,
-                            uiState = uiState,
-                            onClose = { selectedTab = WatchPageTab.Episodes },
-                        )
-                    }
+                            .fillMaxWidth()
+                            .weight(1f),
+                    )
+
+                    WatchPageTabs(
+                        selectedTab = selectedTab,
+                        onSelectTab = { selectedTab = it },
+                    )
                 }
             }
-        } else if (useLandscapeTabs) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .background(Color.Black)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(0.62f)
-                        .fillMaxHeight()
-                        .background(Color.Black)
-                ) {
-                    key(playerKey) {
-                        WatchVideoPlayer(
-                            uiState = uiState,
-                            viewModel = viewModel,
-                            modifier = Modifier.fillMaxSize(),
-                            isPremiumUser = isPremiumUser,
-                            onFullscreenToggle = onFullscreenToggle,
-                            onBack = onBack,
-                            onExit = onExit,
-                            onInfoClick = {},
-                            onEpisodesClick = {
-                                selectedTab = WatchPageTab.Episodes
-                            },
-                            onCommentsClick = {
-                                selectedTab = WatchPageTab.Comments
-                            },
-                            showPlayerLibraryActions = false,
-                            showFullscreenButton = true,
-                            compactControls = true,
-                        )
-                    }
-                }
 
+            if (useLandscapeTabs) {
                 Column(
                     modifier = Modifier
                         .weight(0.38f)
@@ -1272,62 +1270,18 @@ private fun AndroidWatchPageLayout(
                     )
                 }
             }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-            ) {
+
+            if (uiState.isFullscreen && selectedTab == WatchPageTab.Comments) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .background(Color.Black)
+                        .weight(0.3f)
+                        .fillMaxHeight()
+                        .background(AppColors.background)
                 ) {
-                    key(playerKey) {
-                        WatchVideoPlayer(
-                            uiState = uiState,
-                            viewModel = viewModel,
-                            modifier = Modifier.fillMaxSize(),
-                            isPremiumUser = isPremiumUser,
-                            onFullscreenToggle = onFullscreenToggle,
-                            onBack = onBack,
-                            onExit = onExit,
-                            onInfoClick = {},
-                            onEpisodesClick = {
-                                selectedTab = WatchPageTab.Episodes
-                            },
-                            onCommentsClick = {
-                                selectedTab = WatchPageTab.Comments
-                            },
-                            showPlayerLibraryActions = false,
-                            showFullscreenButton = true,
-                            compactControls = true,
-                        )
-                    }
-                }
-
-                if (uiState.offlinePath == null && uiState.servers.isNotEmpty()) {
-                    InlineServerSelector(
-                        servers = uiState.servers,
-                        currentServerId = uiState.currentServer,
-                        onServerSelected = { serverId -> viewModel.switchServer(serverId) },
-                    )
-
-                    WatchPageTabContent(
-                        selectedTab = selectedTab,
-                        uiState = uiState,
-                        viewModel = viewModel,
+                    WatchCommentsContent(
                         animeId = animeId,
+                        uiState = uiState,
                         onClose = { selectedTab = WatchPageTab.Episodes },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                    )
-
-                    WatchPageTabs(
-                        selectedTab = selectedTab,
-                        onSelectTab = { selectedTab = it },
                     )
                 }
             }
@@ -1640,7 +1594,10 @@ private fun EpisodeListContent(
                             .padding(top = 48.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("No episodes found", color = Color.Gray)
+                        Text(
+                            if (uiState.isLoading || uiState.episodeData == null) "Loading episodes..." else "No episodes found",
+                            color = Color.Gray,
+                        )
                     }
                 }
             } else {
