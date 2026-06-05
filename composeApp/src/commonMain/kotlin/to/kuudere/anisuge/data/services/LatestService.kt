@@ -17,7 +17,7 @@ class LatestService(
         cursor: String? = null,
     ): LatestAiredResponse? {
         return try {
-            val response = httpClient.get("${AppComponent.BASE_URL}/home/latest-aired") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/home/latest-aired") {
                 lang?.let { parameter("lang", it) }
                 parameter("limit", limit)
                 cursor?.let { parameter("cursor", it) }

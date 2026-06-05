@@ -89,6 +89,10 @@ plugins {
 kotlin {
     androidTarget()
     jvm("desktop")
+
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
     // iOS targets are prepared but require commonMain JVM refactoring first.
     // See iosMain/ stubs and .github/workflows/build-release.yml for CI setup.
     // iosArm64()

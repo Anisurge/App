@@ -2566,7 +2566,7 @@ private fun AppLanguageSelector(
                 onClick = { expanded = true },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                border = ButtonDefaults.outlinedButtonBorder.copy(brush = SolidColor(BORDER)),
+                border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(brush = SolidColor(BORDER)),
                 shape = RoundedCornerShape(10.dp),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
             ) {
@@ -3205,7 +3205,7 @@ private fun StorageTab(
                         onClick = onClearFontCache,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE50914)),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                        border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                             brush = androidx.compose.ui.graphics.SolidColor(
                                 Color(0xFFE50914).copy(alpha = 0.5f)
                             )
@@ -3219,7 +3219,7 @@ private fun StorageTab(
                         onClick = onRefresh,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = SolidColor(BORDER)),
+                        border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(brush = SolidColor(BORDER)),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Refresh")
@@ -3468,7 +3468,7 @@ private fun MobileStorageContent(
                     onClick = onClearFontCache,
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFE50914)),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                    border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                         brush = androidx.compose.ui.graphics.SolidColor(
                             Color(0xFFE50914).copy(alpha = 0.5f)
                         )
@@ -3611,7 +3611,7 @@ private fun ServersTab(
             OutlinedButton(
                 onClick = onReset,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
+                border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                     brush = androidx.compose.ui.graphics.SolidColor(
                         TEXT.copy(
                             alpha = 0.3f
@@ -3948,7 +3948,7 @@ private fun MobileServersContent(
             onClick = onReset,
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = TEXT),
-            border = ButtonDefaults.outlinedButtonBorder.copy(
+            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                 brush = androidx.compose.ui.graphics.SolidColor(
                     Color.White.copy(
                         alpha = 0.3f

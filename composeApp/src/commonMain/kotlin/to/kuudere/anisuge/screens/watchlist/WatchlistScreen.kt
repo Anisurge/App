@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -137,13 +138,13 @@ fun WatchlistScreen(
                                         val isHovered by interactionSource.collectIsHoveredAsState()
 
                                         DropdownMenuItem(
-                                            text = { 
+                                            text = {
                                                 Text(
-                                                    text = folder, 
+                                                    text = folder,
                                                     color = if (isHovered || isSelected) AppColors.accent else AppColors.text,
                                                     fontSize = 13.sp,
                                                     fontWeight = if (isSelected || isHovered) FontWeight.SemiBold else FontWeight.Normal
-                                                ) 
+                                                )
                                             },
                                             onClick = {
                                                 selectedList = folder
@@ -182,12 +183,20 @@ fun WatchlistScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                     Spacer(Modifier.width(12.dp))
                                     androidx.compose.foundation.text.BasicTextField(
                                         value = searchQuery,
                                         onValueChange = { searchQuery = it },
-                                        textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.text, fontSize = 14.sp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(
+                                            color = AppColors.text,
+                                            fontSize = 14.sp
+                                        ),
                                         singleLine = true,
                                         cursorBrush = androidx.compose.ui.graphics.SolidColor(AppColors.text),
                                         modifier = Modifier.weight(1f),
@@ -228,8 +237,8 @@ fun WatchlistScreen(
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             AdvancedFilterDropdown(
-                                label = "Genre", 
-                                value = state.selectedGenres.joinToString(", ").ifBlank { null }, 
+                                label = "Genre",
+                                value = state.selectedGenres.joinToString(", ").ifBlank { null },
                                 hint = "Any genre",
                                 options = listOf(
                                     "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror",
@@ -238,25 +247,40 @@ fun WatchlistScreen(
                                     "Music", "Psychological", "School", "Military", "Historical",
                                     "Demons", "Magic", "Vampire", "Hentai"
                                 ),
-                                onOptionSelected = { viewModel.onGenreToggle(it) }, 
-                                icon = Icons.Default.Style, 
+                                onOptionSelected = { viewModel.onGenreToggle(it) },
+                                icon = Icons.Default.Style,
                                 modifier = Modifier.weight(1f),
                                 multiSelect = true,
                                 onClear = { viewModel.clearGenres() }
                             )
                             AdvancedFilterDropdown(
-                                "Sorting", if (state.sort == "Recently Updated") null else state.sort, "Recently Updated", listOf("Recently Updated", "Score", "Popularity", "Year", "Episodes"),
-                                { viewModel.updateFilters(newSort = it) }, Icons.Default.Sort, Modifier.weight(1f),
+                                "Sorting",
+                                if (state.sort == "Recently Updated") null else state.sort,
+                                "Recently Updated",
+                                listOf("Recently Updated", "Score", "Popularity", "Year", "Episodes"),
+                                { viewModel.updateFilters(newSort = it) },
+                                Icons.AutoMirrored.Filled.Sort,
+                                Modifier.weight(1f),
                                 onClear = { viewModel.updateFilters(newSort = "Recently Updated") }
                             )
                             AdvancedFilterDropdown(
-                                "Format", if (state.format == "All formats") null else state.format, "All formats", listOf("TV", "TV_SHORT", "MOVIE", "SPECIAL", "OVA", "ONA", "MUSIC"),
-                                { viewModel.updateFilters(newFormat = it) }, Icons.Default.Tv, Modifier.weight(1f),
+                                "Format",
+                                if (state.format == "All formats") null else state.format,
+                                "All formats",
+                                listOf("TV", "TV_SHORT", "MOVIE", "SPECIAL", "OVA", "ONA", "MUSIC"),
+                                { viewModel.updateFilters(newFormat = it) },
+                                Icons.Default.Tv,
+                                Modifier.weight(1f),
                                 onClear = { viewModel.updateFilters(newFormat = "All formats") }
                             )
                             AdvancedFilterDropdown(
-                                "Status", if (state.status == "All statuses") null else state.status, "All statuses", listOf("FINISHED", "RELEASING", "NOT_YET_RELEASED", "CANCELLED", "HIATUS"),
-                                { viewModel.updateFilters(newStatus = it) }, Icons.Default.SignalCellularAlt, Modifier.weight(1f),
+                                "Status",
+                                if (state.status == "All statuses") null else state.status,
+                                "All statuses",
+                                listOf("FINISHED", "RELEASING", "NOT_YET_RELEASED", "CANCELLED", "HIATUS"),
+                                { viewModel.updateFilters(newStatus = it) },
+                                Icons.Default.SignalCellularAlt,
+                                Modifier.weight(1f),
                                 onClear = { viewModel.updateFilters(newStatus = "All statuses") }
                             )
                         }
@@ -282,12 +306,20 @@ fun WatchlistScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                     Spacer(Modifier.width(12.dp))
                                     androidx.compose.foundation.text.BasicTextField(
                                         value = searchQuery,
                                         onValueChange = { searchQuery = it },
-                                        textStyle = androidx.compose.ui.text.TextStyle(color = AppColors.text, fontSize = 14.sp),
+                                        textStyle = androidx.compose.ui.text.TextStyle(
+                                            color = AppColors.text,
+                                            fontSize = 14.sp
+                                        ),
                                         singleLine = true,
                                         cursorBrush = androidx.compose.ui.graphics.SolidColor(AppColors.text),
                                         modifier = Modifier.weight(1f),
@@ -318,7 +350,7 @@ fun WatchlistScreen(
                                     Icon(Icons.Default.Delete, contentDescription = "Clear", tint = Color.Gray)
                                 }
                             }
-                            
+
                             // Expand Icon
                             Box(
                                 modifier = Modifier
@@ -329,7 +361,11 @@ fun WatchlistScreen(
                                     .padding(10.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(if (expandedFilters) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = "Expand", tint = Color.Gray)
+                                Icon(
+                                    if (expandedFilters) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Expand",
+                                    tint = Color.Gray
+                                )
                             }
                         }
 
@@ -372,13 +408,13 @@ fun WatchlistScreen(
                                             val isHovered by interactionSource.collectIsHoveredAsState()
 
                                             DropdownMenuItem(
-                                                text = { 
+                                                text = {
                                                     Text(
-                                                        text = folder, 
+                                                        text = folder,
                                                         color = if (isHovered || isSelected) AppColors.accent else AppColors.text,
                                                         fontSize = 13.sp,
                                                         fontWeight = if (isSelected || isHovered) FontWeight.SemiBold else FontWeight.Normal
-                                                    ) 
+                                                    )
                                                 },
                                                 onClick = {
                                                     selectedList = folder
@@ -402,7 +438,7 @@ fun WatchlistScreen(
                                         }
                                     }
                                 }
-                                
+
                                 Spacer(Modifier.height(8.dp))
 
                                 // Next 2 rows: 2 advanced filters per row
@@ -411,8 +447,8 @@ fun WatchlistScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     AdvancedFilterDropdown(
-                                        label = "Genre", 
-                                        value = state.selectedGenres.joinToString(", ").ifBlank { null }, 
+                                        label = "Genre",
+                                        value = state.selectedGenres.joinToString(", ").ifBlank { null },
                                         hint = "Any genre",
                                         options = listOf(
                                             "Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror",
@@ -421,15 +457,20 @@ fun WatchlistScreen(
                                             "Music", "Psychological", "School", "Military", "Historical",
                                             "Demons", "Magic", "Vampire", "Hentai"
                                         ),
-                                        onOptionSelected = { viewModel.onGenreToggle(it) }, 
-                                        icon = Icons.Default.Style, 
+                                        onOptionSelected = { viewModel.onGenreToggle(it) },
+                                        icon = Icons.Default.Style,
                                         modifier = Modifier.weight(1f),
                                         multiSelect = true,
                                         onClear = { viewModel.clearGenres() }
                                     )
                                     AdvancedFilterDropdown(
-                                        "Sorting", if (state.sort == "Recently Updated") null else state.sort, "Recently Updated", listOf("Recently Updated", "Score", "Popularity", "Year", "Episodes"),
-                                        { viewModel.updateFilters(newSort = it) }, Icons.Default.Sort, Modifier.weight(1f),
+                                        "Sorting",
+                                        if (state.sort == "Recently Updated") null else state.sort,
+                                        "Recently Updated",
+                                        listOf("Recently Updated", "Score", "Popularity", "Year", "Episodes"),
+                                        { viewModel.updateFilters(newSort = it) },
+                                        Icons.AutoMirrored.Filled.Sort,
+                                        Modifier.weight(1f),
                                         onClear = { viewModel.updateFilters(newSort = "Recently Updated") }
                                     )
                                 }
@@ -439,13 +480,23 @@ fun WatchlistScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     AdvancedFilterDropdown(
-                                        "Format", if (state.format == "All formats") null else state.format, "All formats", listOf("TV", "TV_SHORT", "MOVIE", "SPECIAL", "OVA", "ONA", "MUSIC"),
-                                        { viewModel.updateFilters(newFormat = it) }, Icons.Default.Tv, Modifier.weight(1f),
+                                        "Format",
+                                        if (state.format == "All formats") null else state.format,
+                                        "All formats",
+                                        listOf("TV", "TV_SHORT", "MOVIE", "SPECIAL", "OVA", "ONA", "MUSIC"),
+                                        { viewModel.updateFilters(newFormat = it) },
+                                        Icons.Default.Tv,
+                                        Modifier.weight(1f),
                                         onClear = { viewModel.updateFilters(newFormat = "All formats") }
                                     )
                                     AdvancedFilterDropdown(
-                                        "Status", if (state.status == "All statuses") null else state.status, "All statuses", listOf("FINISHED", "RELEASING", "NOT_YET_RELEASED", "CANCELLED", "HIATUS"),
-                                        { viewModel.updateFilters(newStatus = it) }, Icons.Default.SignalCellularAlt, Modifier.weight(1f),
+                                        "Status",
+                                        if (state.status == "All statuses") null else state.status,
+                                        "All statuses",
+                                        listOf("FINISHED", "RELEASING", "NOT_YET_RELEASED", "CANCELLED", "HIATUS"),
+                                        { viewModel.updateFilters(newStatus = it) },
+                                        Icons.Default.SignalCellularAlt,
+                                        Modifier.weight(1f),
                                         onClear = { viewModel.updateFilters(newStatus = "All statuses") }
                                     )
                                 }
@@ -461,7 +512,9 @@ fun WatchlistScreen(
                 OfflineState(onRetry = { viewModel.onFolderChange(state.selectedFolder) }, isLoading = state.isLoading)
             } else {
                 if (isDesktop) {
-                    searchOptionsBlock(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 16.dp, bottom = 8.dp))
+                    searchOptionsBlock(
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(top = 16.dp, bottom = 8.dp)
+                    )
                 }
 
                 // Lists content
@@ -484,7 +537,12 @@ fun WatchlistScreen(
                 LazyVerticalGrid(
                     columns = gridColumns,
                     state = listState,
-                    contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 8.dp, bottom = if (isDesktop) 24.dp else 156.dp),
+                    contentPadding = PaddingValues(
+                        start = 24.dp,
+                        end = 24.dp,
+                        top = 8.dp,
+                        bottom = if (isDesktop) 24.dp else 156.dp
+                    ),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp),
                     modifier = Modifier.fillMaxSize()
@@ -502,91 +560,96 @@ fun WatchlistScreen(
                             }
                         }
                     } else {
-                    val showAll = selectedList == "All lists"
-                    var hasAnyItems = false
+                        val showAll = selectedList == "All lists"
+                        var hasAnyItems = false
 
-                    if (showAll) {
-                        items(state.items) { AnimeCard(item = it, badgeText = it.folder, onClick = { onAnimeClick(it.activeSlug) }) }
-                        if (state.items.isNotEmpty()) hasAnyItems = true
-                    } else {
-                        if (selectedList == "WATCHING" && currentList.isNotEmpty()) {
-                            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                SectionHeader("Watching", currentList.size)
+                        if (showAll) {
+                            items(state.items) {
+                                AnimeCard(
+                                    item = it,
+                                    badgeText = it.folder,
+                                    onClick = { onAnimeClick(it.activeSlug) })
                             }
-                            items(currentList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
-                            if (currentList.isNotEmpty()) hasAnyItems = true
-                        }
-                        
-                        if (selectedList == "PAUSED" && onHoldList.isNotEmpty()) {
-                            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                SectionHeader("On Hold", onHoldList.size)
+                            if (state.items.isNotEmpty()) hasAnyItems = true
+                        } else {
+                            if (selectedList == "WATCHING" && currentList.isNotEmpty()) {
+                                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                    SectionHeader("Watching", currentList.size)
+                                }
+                                items(currentList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
+                                if (currentList.isNotEmpty()) hasAnyItems = true
                             }
-                            items(onHoldList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
-                            if (onHoldList.isNotEmpty()) hasAnyItems = true
+
+                            if (selectedList == "PAUSED" && onHoldList.isNotEmpty()) {
+                                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                    SectionHeader("On Hold", onHoldList.size)
+                                }
+                                items(onHoldList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
+                                if (onHoldList.isNotEmpty()) hasAnyItems = true
+                            }
+
+                            if (selectedList == "PLANNING" && planningList.isNotEmpty()) {
+                                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                    SectionHeader("Plan To Watch", planningList.size)
+                                }
+                                items(planningList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
+                                if (planningList.isNotEmpty()) hasAnyItems = true
+                            }
+
+                            if (selectedList == "DROPPED" && droppedList.isNotEmpty()) {
+                                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                    SectionHeader("Dropped", droppedList.size)
+                                }
+                                items(droppedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
+                                if (droppedList.isNotEmpty()) hasAnyItems = true
+                            }
+
+                            if (selectedList == "COMPLETED" && completedList.isNotEmpty()) {
+                                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                    SectionHeader("Completed", completedList.size)
+                                }
+                                items(completedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
+                                if (completedList.isNotEmpty()) hasAnyItems = true
+                            }
                         }
 
-                        if (selectedList == "PLANNING" && planningList.isNotEmpty()) {
+                        if (state.isPaginating || (state.isLoading && state.items.isNotEmpty())) {
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                SectionHeader("Plan To Watch", planningList.size)
+                                Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) {
+                                    CircularProgressIndicator(color = AppColors.accent, strokeWidth = 3.dp)
+                                }
                             }
-                            items(planningList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
-                            if (planningList.isNotEmpty()) hasAnyItems = true
-                        }
-                        
-                        if (selectedList == "DROPPED" && droppedList.isNotEmpty()) {
+                        } else if (!hasAnyItems && !state.isLoading) {
                             item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                SectionHeader("Dropped", droppedList.size)
-                            }
-                            items(droppedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
-                            if (droppedList.isNotEmpty()) hasAnyItems = true
-                        }
-
-                        if (selectedList == "COMPLETED" && completedList.isNotEmpty()) {
-                            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                SectionHeader("Completed", completedList.size)
-                            }
-                            items(completedList) { AnimeCard(item = it, onClick = { onAnimeClick(it.activeSlug) }) }
-                            if (completedList.isNotEmpty()) hasAnyItems = true
-                        }
-                    }
-
-                    if (state.isPaginating || (state.isLoading && state.items.isNotEmpty())) {
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) {
-                                CircularProgressIndicator(color = AppColors.accent, strokeWidth = 3.dp)
-                            }
-                        }
-                    } else if (!hasAnyItems && !state.isLoading) {
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            Box(Modifier.fillMaxWidth().height(300.dp), Alignment.Center) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Inventory2,
-                                        contentDescription = null,
-                                        tint = Color.White.copy(alpha = 0.25f),
-                                        modifier = Modifier.size(56.dp),
-                                    )
-                                    Text(
-                                        text = "Nothing here",
-                                        color = AppColors.text,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Text(
-                                        text = "This list is currently empty.",
-                                        color = Color.White.copy(alpha = 0.45f),
-                                        fontSize = 13.sp,
-                                        textAlign = TextAlign.Center,
-                                    )
+                                Box(Modifier.fillMaxWidth().height(300.dp), Alignment.Center) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Inventory2,
+                                            contentDescription = null,
+                                            tint = Color.White.copy(alpha = 0.25f),
+                                            modifier = Modifier.size(56.dp),
+                                        )
+                                        Text(
+                                            text = "Nothing here",
+                                            color = AppColors.text,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        Text(
+                                            text = "This list is currently empty.",
+                                            color = Color.White.copy(alpha = 0.45f),
+                                            fontSize = 13.sp,
+                                            textAlign = TextAlign.Center,
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
             } // else (not offline)
         }
     }
@@ -627,16 +690,16 @@ fun AdvancedFilterDropdown(
             Icon(icon, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                text = value ?: hint, 
-                color = if (value == null) Color.Gray else AppColors.text, 
-                fontSize = 13.sp, 
-                maxLines = 1, 
+                text = value ?: hint,
+                color = if (value == null) Color.Gray else AppColors.text,
+                fontSize = 13.sp,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
             if (value != null && onClear != null) {
                 IconButton(
-                    onClick = { 
+                    onClick = {
                         onClear()
                         expanded = false // Close if open
                     },
@@ -650,7 +713,12 @@ fun AdvancedFilterDropdown(
                 }
                 Spacer(Modifier.width(4.dp))
             }
-            Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+            Icon(
+                if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = Color.Gray,
+                modifier = Modifier.size(16.dp)
+            )
         }
 
         DropdownMenu(
@@ -674,18 +742,19 @@ fun AdvancedFilterDropdown(
 
             fullOptions.forEach { option ->
                 val isHintOption = option == hint && !options.contains(hint)
-                val isSelected = if (multiSelect) selectedItems.contains(option) else (option == value || (value.isNullOrBlank() && (isHintOption || option == hint)))
+                val isSelected =
+                    if (multiSelect) selectedItems.contains(option) else (option == value || (value.isNullOrBlank() && (isHintOption || option == hint)))
                 val interactionSource = remember { MutableInteractionSource() }
                 val isHovered by interactionSource.collectIsHoveredAsState()
 
                 DropdownMenuItem(
-                    text = { 
+                    text = {
                         Text(
-                            text = option, 
+                            text = option,
                             color = if (isHovered || (!multiSelect && isSelected)) AppColors.accent else if (isSelected) AppColors.text else AppColors.text,
                             fontSize = 13.sp,
                             fontWeight = if (isSelected || isHovered) FontWeight.SemiBold else FontWeight.Normal
-                        ) 
+                        )
                     },
                     onClick = {
                         if (isHintOption) {
@@ -749,4 +818,3 @@ fun SectionHeader(title: String, count: Int) {
         Text(count.toString(), color = Color.Gray, fontSize = 16.sp, fontWeight = FontWeight.Medium)
     }
 }
-

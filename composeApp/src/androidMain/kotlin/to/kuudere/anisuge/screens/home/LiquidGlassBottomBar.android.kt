@@ -61,9 +61,9 @@ actual fun LiquidGlassBottomBar(
     val tabs = remember {
         listOf(
             BottomNavItem(AnisugTab.Calendar, Icons.Outlined.CalendarToday),
-            BottomNavItem(AnisugTab.Home,     Icons.Outlined.Home),
-            BottomNavItem(AnisugTab.Search,   Icons.Default.Search),
-            BottomNavItem(AnisugTab.Bookmarks,Icons.Outlined.Bookmarks),
+            BottomNavItem(AnisugTab.Home, Icons.Outlined.Home),
+            BottomNavItem(AnisugTab.Search, Icons.Default.Search),
+            BottomNavItem(AnisugTab.Bookmarks, Icons.Outlined.Bookmarks),
             BottomNavItem(AnisugTab.Settings, Icons.Outlined.Settings)
         )
     }

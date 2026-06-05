@@ -30,7 +30,7 @@ class SearchService(
         facets: Boolean? = null,
     ): SearchResponse? {
         val stored = sessionStore.get()
-        val response = httpClient.get("${AppComponent.BASE_URL}/search") {
+        val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/search") {
             q?.let { parameter("q", it) }
             parameter("limit", limit)
             if (offset > 0) parameter("offset", offset)
@@ -56,7 +56,7 @@ class SearchService(
         q: String? = null,
     ): Map<String, List<String>>? {
         return try {
-            val response = httpClient.get("${AppComponent.BASE_URL}/search/facets/$type") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/search/facets/$type") {
                 q?.let { parameter("q", it) }
             }
             response.body()

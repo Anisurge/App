@@ -500,63 +500,63 @@ fun W2gPlayerControls(
                         .then(if (isFullscreen) Modifier.windowInsetsPadding(WindowInsets.safeDrawing) else Modifier)
                 ) {
                     Column(Modifier.fillMaxWidth().padding(bottom = 0.dp)) {
-                            // 1. Progress Bar Row
-                            val duration = playerState.duration
-                            val activePosition =
-                                if (isSeeking) seekValue.toDouble() else expectedPosition ?: playerState.position
-                            val progress =
-                                if (duration > 0) (activePosition / duration).toFloat().coerceIn(0f, 1f) else 0f
-                            val introRange = introMarker ?: streamingData?.intro
-                            val outroRange = outroMarker ?: streamingData?.outro
+                        // 1. Progress Bar Row
+                        val duration = playerState.duration
+                        val activePosition =
+                            if (isSeeking) seekValue.toDouble() else expectedPosition ?: playerState.position
+                        val progress =
+                            if (duration > 0) (activePosition / duration).toFloat().coerceIn(0f, 1f) else 0f
+                        val introRange = introMarker ?: streamingData?.intro
+                        val outroRange = outroMarker ?: streamingData?.outro
 
-                            Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = formatDuration(activePosition),
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = formatDuration(activePosition),
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
 
-                                Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(12.dp))
 
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(28.dp)
-                                        .then(
-                                            if (showMediaControls) Modifier.pointerInput(duration) {
-                                                detectTapGestures(
-                                                    onTap = { offset ->
-                                                        if (duration <= 0) return@detectTapGestures
-                                                        val tapValue =
-                                                            ((offset.x / size.width) * duration).coerceIn(0.0, duration)
-                                                        playerState.seekTarget = tapValue
-                                                        onSeek?.invoke(tapValue)
-                                                        expectedPosition = tapValue
-                                                        recordInteraction(forceShow = false)
-                                                    }
-                                                )
-                                            } else Modifier
-                                        )
-                                        .then(
-                                            if (showMediaControls) Modifier.pointerInput(duration) {
-                                                detectDragGestures(
-                                                    onDragStart = { offset ->
-                                                        if (duration <= 0) return@detectDragGestures
-                                                        isSeeking = true
-                                                        controlsVisible = true
-                                                        recordInteraction(forceShow = false)
-                                                        seekValue = ((offset.x / size.width) * duration).toFloat()
-                                                            .coerceIn(0f, duration.toFloat())
-                                                    },
-                                                    onDrag = { change, _ ->
-                                                        if (duration <= 0) return@detectDragGestures
-                                                        seekValue = ((change.position.x / size.width) * duration).toFloat()
-                                                            .coerceIn(0f, duration.toFloat())
-                                                    },
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(28.dp)
+                                    .then(
+                                        if (showMediaControls) Modifier.pointerInput(duration) {
+                                            detectTapGestures(
+                                                onTap = { offset ->
+                                                    if (duration <= 0) return@detectTapGestures
+                                                    val tapValue =
+                                                        ((offset.x / size.width) * duration).coerceIn(0.0, duration)
+                                                    playerState.seekTarget = tapValue
+                                                    onSeek?.invoke(tapValue)
+                                                    expectedPosition = tapValue
+                                                    recordInteraction(forceShow = false)
+                                                }
+                                            )
+                                        } else Modifier
+                                    )
+                                    .then(
+                                        if (showMediaControls) Modifier.pointerInput(duration) {
+                                            detectDragGestures(
+                                                onDragStart = { offset ->
+                                                    if (duration <= 0) return@detectDragGestures
+                                                    isSeeking = true
+                                                    controlsVisible = true
+                                                    recordInteraction(forceShow = false)
+                                                    seekValue = ((offset.x / size.width) * duration).toFloat()
+                                                        .coerceIn(0f, duration.toFloat())
+                                                },
+                                                onDrag = { change, _ ->
+                                                    if (duration <= 0) return@detectDragGestures
+                                                    seekValue = ((change.position.x / size.width) * duration).toFloat()
+                                                        .coerceIn(0f, duration.toFloat())
+                                                },
                                                 onDragEnd = {
                                                     if (duration > 0) {
                                                         val target = seekValue.toDouble()
@@ -567,286 +567,286 @@ fun W2gPlayerControls(
                                                         recordInteraction(forceShow = false)
                                                     }
                                                 },
-                                                    onDragCancel = {
-                                                        isSeeking = false; recordInteraction(forceShow = false)
-                                                    }
-                                                )
-                                            } else Modifier
-                                        ),
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    val bufferedProgress =
-                                        if (duration > 0) (playerState.bufferedPosition / duration).toFloat()
-                                            .coerceIn(0f, 1f) else 0f
-                                    Canvas(Modifier.fillMaxWidth().height(3.dp)) {
-                                        val w = size.width
-                                        val h = size.height
-                                        val corner = CornerRadius(4.dp.toPx())
+                                                onDragCancel = {
+                                                    isSeeking = false; recordInteraction(forceShow = false)
+                                                }
+                                            )
+                                        } else Modifier
+                                    ),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                val bufferedProgress =
+                                    if (duration > 0) (playerState.bufferedPosition / duration).toFloat()
+                                        .coerceIn(0f, 1f) else 0f
+                                Canvas(Modifier.fillMaxWidth().height(3.dp)) {
+                                    val w = size.width
+                                    val h = size.height
+                                    val corner = CornerRadius(4.dp.toPx())
 
+                                    drawRoundRect(
+                                        Color.White.copy(alpha = 0.25f),
+                                        size = size,
+                                        cornerRadius = corner
+                                    )
+                                    if (bufferedProgress > progress) {
                                         drawRoundRect(
-                                            Color.White.copy(alpha = 0.25f),
-                                            size = size,
+                                            Color.White.copy(alpha = 0.5f),
+                                            size = Size(w * bufferedProgress, h),
                                             cornerRadius = corner
                                         )
-                                        if (bufferedProgress > progress) {
-                                            drawRoundRect(
-                                                Color.White.copy(alpha = 0.5f),
-                                                size = Size(w * bufferedProgress, h),
-                                                cornerRadius = corner
-                                            )
-                                        }
+                                    }
 
-                                        fun drawSkipSpan(startSec: Double, endSec: Double, color: Color) {
-                                            if (duration <= 0) return
-                                            val endClamped = endSec.coerceAtMost(duration)
-                                            val startClamped = startSec.coerceIn(0.0, endClamped)
-                                            val x0 = ((startClamped / duration).toFloat() * w).coerceIn(0f, w)
-                                            val x1 = ((endClamped / duration).toFloat() * w).coerceIn(0f, w)
-                                            if (x1 > x0) drawRect(color, Offset(x0, 0f), Size(x1 - x0, h))
-                                        }
+                                    fun drawSkipSpan(startSec: Double, endSec: Double, color: Color) {
+                                        if (duration <= 0) return
+                                        val endClamped = endSec.coerceAtMost(duration)
+                                        val startClamped = startSec.coerceIn(0.0, endClamped)
+                                        val x0 = ((startClamped / duration).toFloat() * w).coerceIn(0f, w)
+                                        val x1 = ((endClamped / duration).toFloat() * w).coerceIn(0f, w)
+                                        if (x1 > x0) drawRect(color, Offset(x0, 0f), Size(x1 - x0, h))
+                                    }
 
-                                        drawRoundRect(Color.White, size = Size(w * progress, h), cornerRadius = corner)
+                                    drawRoundRect(Color.White, size = Size(w * progress, h), cornerRadius = corner)
 
-                                        // Draw skip regions on top so outro at end of timeline stays visible
-                                        if (introRange?.start != null && introRange.end != null) {
-                                            drawSkipSpan(
-                                                introRange.start,
-                                                introRange.end,
-                                                Color.Yellow.copy(alpha = 0.9f)
-                                            )
-                                        }
-                                        if (outroRange?.start != null && outroRange.end != null) {
-                                            drawSkipSpan(
-                                                outroRange.start,
-                                                outroRange.end,
-                                                Color(0xFFFF8A80).copy(alpha = 0.9f)
-                                            )
-                                        }
+                                    // Draw skip regions on top so outro at end of timeline stays visible
+                                    if (introRange?.start != null && introRange.end != null) {
+                                        drawSkipSpan(
+                                            introRange.start,
+                                            introRange.end,
+                                            Color.Yellow.copy(alpha = 0.9f)
+                                        )
+                                    }
+                                    if (outroRange?.start != null && outroRange.end != null) {
+                                        drawSkipSpan(
+                                            outroRange.start,
+                                            outroRange.end,
+                                            Color(0xFFFF8A80).copy(alpha = 0.9f)
+                                        )
+                                    }
 
-                                        streamingData?.chapters?.forEach { ch ->
-                                            if (ch.start_time != null && ch.start_time > 0 && duration > 0) {
-                                                val x = (ch.start_time / duration).toFloat() * w
-                                                if (x > 1f && x < w - 1f) {
-                                                    drawRect(
-                                                        Color.Black.copy(alpha = 0.8f),
-                                                        Offset(x - 1.dp.toPx(), 0f),
-                                                        Size(2.dp.toPx(), h)
-                                                    )
-                                                }
+                                    streamingData?.chapters?.forEach { ch ->
+                                        if (ch.start_time != null && ch.start_time > 0 && duration > 0) {
+                                            val x = (ch.start_time / duration).toFloat() * w
+                                            if (x > 1f && x < w - 1f) {
+                                                drawRect(
+                                                    Color.Black.copy(alpha = 0.8f),
+                                                    Offset(x - 1.dp.toPx(), 0f),
+                                                    Size(2.dp.toPx(), h)
+                                                )
                                             }
                                         }
                                     }
-                                    Box(Modifier.fillMaxWidth(progress).wrapContentWidth(Alignment.End)) {
-                                        Box(Modifier.size(10.dp).background(Color.White, CircleShape))
-                                    }
                                 }
-
-                                Spacer(Modifier.width(12.dp))
-
-                                Text(
-                                    text = formatDuration(duration),
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                Box(Modifier.fillMaxWidth(progress).wrapContentWidth(Alignment.End)) {
+                                    Box(Modifier.size(10.dp).background(Color.White, CircleShape))
+                                }
                             }
 
-                            // 2. Control Row
-                            Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 0.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Left actions: Volume
+                            Spacer(Modifier.width(12.dp))
+
+                            Text(
+                                text = formatDuration(duration),
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // 2. Control Row
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 0.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Left actions: Volume
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = {
+                                    playerState.isMuted = !playerState.isMuted; recordInteraction(forceShow = false)
+                                }, modifier = Modifier.size(38.dp)) {
+                                    Icon(
+                                        if (playerState.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                                        null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                if (pipManager?.isAvailable == true && !pipManager.isActive) {
+                                    IconButton(
+                                        onClick = {
+                                            pipManager.requestPip(16, 9)
+                                            recordInteraction(forceShow = false)
+                                        },
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(
+                                            getPictureInPictureIcon(),
+                                            contentDescription = "Picture in picture",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.weight(1f))
+
+                            if (showMediaControls) {
+                                // Main Playback controls
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(onClick = {
-                                        playerState.isMuted = !playerState.isMuted; recordInteraction(forceShow = false)
-                                    }, modifier = Modifier.size(38.dp)) {
+                                        val nPos = (playerState.position - 10).coerceAtLeast(0.0)
+                                        playerState.seekTarget = nPos
+                                        onSeek?.invoke(nPos)
+                                        expectedPosition = nPos
+                                        recordInteraction(forceShow = false)
+                                    }, modifier = Modifier.size(40.dp)) {
                                         Icon(
-                                            if (playerState.isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                                            Icons.Default.Replay10,
                                             null,
                                             tint = Color.White,
                                             modifier = Modifier.size(24.dp)
                                         )
                                     }
-                                    if (pipManager?.isAvailable == true && !pipManager.isActive) {
+                                    if (!compactControls) {
                                         IconButton(
-                                            onClick = {
-                                                pipManager.requestPip(16, 9)
-                                                recordInteraction(forceShow = false)
-                                            },
+                                            onClick = { onPrevEpisode(); recordInteraction(forceShow = false) },
+                                            enabled = playerState.hasPrevEpisode,
                                             modifier = Modifier.size(40.dp)
                                         ) {
                                             Icon(
-                                                getPictureInPictureIcon(),
-                                                contentDescription = "Picture in picture",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(Modifier.weight(1f))
-
-                                if (showMediaControls) {
-                                    // Main Playback controls
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        IconButton(onClick = {
-                                            val nPos = (playerState.position - 10).coerceAtLeast(0.0)
-                                            playerState.seekTarget = nPos
-                                            onSeek?.invoke(nPos)
-                                            expectedPosition = nPos
-                                            recordInteraction(forceShow = false)
-                                        }, modifier = Modifier.size(40.dp)) {
-                                            Icon(
-                                                Icons.Default.Replay10,
+                                                Icons.Default.SkipPrevious,
                                                 null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-                                        if (!compactControls) {
-                                            IconButton(
-                                                onClick = { onPrevEpisode(); recordInteraction(forceShow = false) },
-                                                enabled = playerState.hasPrevEpisode,
-                                                modifier = Modifier.size(40.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.SkipPrevious,
-                                                    null,
-                                                    tint = if (playerState.hasPrevEpisode) Color.White else Color.Gray,
-                                                    modifier = Modifier.size(26.dp)
-                                                )
-                                            }
-                                        }
-
-                                        // BIG PLAY BUTTON
-                                        Box(
-                                            Modifier.size(54.dp).padding(4.dp).clip(CircleShape).background(Color.White)
-                                                .clickable {
-                                                    val wasPaused = playerState.isPaused
-                                                    playerState.pauseRequested = !wasPaused
-                                                    val shouldPlay = wasPaused
-                                                    onPlayPause?.invoke(shouldPlay)
-                                                    recordInteraction(forceShow = false)
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                if (playerState.isPaused || !playerState.isPlaying) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                                null,
-                                                tint = Color.Black,
-                                                modifier = Modifier.size(32.dp)
-                                            )
-                                        }
-
-                                        if (!compactControls) {
-                                            IconButton(
-                                                onClick = { onNextEpisode(); recordInteraction(forceShow = false) },
-                                                enabled = playerState.hasNextEpisode,
-                                                modifier = Modifier.size(40.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.SkipNext,
-                                                    null,
-                                                    tint = if (playerState.hasNextEpisode) Color.White else Color.Gray,
-                                                    modifier = Modifier.size(26.dp)
-                                                )
-                                            }
-                                        }
-                                        IconButton(onClick = {
-                                            val nPos = (playerState.position + 10).coerceAtMost(duration)
-                                            playerState.seekTarget = nPos
-                                            onSeek?.invoke(nPos)
-                                            expectedPosition = nPos
-                                            recordInteraction(forceShow = false)
-                                        }, modifier = Modifier.size(40.dp)) {
-                                            Icon(
-                                                Icons.Default.Forward10,
-                                                null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(Modifier.weight(1f))
-
-                                // Right actions: Chat, Fullscreen/PiP.
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(onClick = {
-                                        onChatClick(); recordInteraction(forceShow = false)
-                                    }, modifier = Modifier.size(40.dp)) {
-                                        Icon(
-                                            Icons.Default.Chat,
-                                            null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
-                                    // MAL Sync button
-                                    if (onSyncMALClick != null) {
-                                        IconButton(
-                                            onClick = { onSyncMALClick?.invoke(); recordInteraction(forceShow = false) },
-                                            modifier = Modifier.size(38.dp),
-                                            enabled = !isOffline && !isSyncingMAL
-                                        ) {
-                                            if (isSyncingMAL) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(18.dp),
-                                                    color = Color.White,
-                                                    strokeWidth = 2.dp,
-                                                    progress = { 0.7f }
-                                                )
-                                            } else {
-                                                Icon(
-                                                    Icons.Default.Sync,
-                                                    "Sync to MAL",
-                                                    tint = if (isOffline) Color.Gray else Color.White,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                    // AniList Sync button
-                                    if (onSyncAniListClick != null) {
-                                        IconButton(
-                                            onClick = { onSyncAniListClick?.invoke(); recordInteraction(forceShow = false) },
-                                            modifier = Modifier.size(38.dp),
-                                            enabled = !isOffline && !isSyncingAniList
-                                        ) {
-                                            if (isSyncingAniList) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(18.dp),
-                                                    color = Color.White,
-                                                    strokeWidth = 2.dp,
-                                                    progress = { 0.7f }
-                                                )
-                                            } else {
-                                                Icon(
-                                                    Icons.Default.Sync,
-                                                    "Sync to AniList",
-                                                    tint = if (isOffline) Color.Gray else Color.White,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                    if (showFullscreenButton) {
-                                        IconButton(
-                                            onClick = { onFullscreenToggle(); recordInteraction(forceShow = false) },
-                                            modifier = Modifier.size(40.dp)
-                                        ) {
-                                            Icon(
-                                                if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                                null,
-                                                tint = Color.White,
+                                                tint = if (playerState.hasPrevEpisode) Color.White else Color.Gray,
                                                 modifier = Modifier.size(26.dp)
                                             )
                                         }
                                     }
+
+                                    // BIG PLAY BUTTON
+                                    Box(
+                                        Modifier.size(54.dp).padding(4.dp).clip(CircleShape).background(Color.White)
+                                            .clickable {
+                                                val wasPaused = playerState.isPaused
+                                                playerState.pauseRequested = !wasPaused
+                                                val shouldPlay = wasPaused
+                                                onPlayPause?.invoke(shouldPlay)
+                                                recordInteraction(forceShow = false)
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            if (playerState.isPaused || !playerState.isPlaying) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                            null,
+                                            tint = Color.Black,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+
+                                    if (!compactControls) {
+                                        IconButton(
+                                            onClick = { onNextEpisode(); recordInteraction(forceShow = false) },
+                                            enabled = playerState.hasNextEpisode,
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.SkipNext,
+                                                null,
+                                                tint = if (playerState.hasNextEpisode) Color.White else Color.Gray,
+                                                modifier = Modifier.size(26.dp)
+                                            )
+                                        }
+                                    }
+                                    IconButton(onClick = {
+                                        val nPos = (playerState.position + 10).coerceAtMost(duration)
+                                        playerState.seekTarget = nPos
+                                        onSeek?.invoke(nPos)
+                                        expectedPosition = nPos
+                                        recordInteraction(forceShow = false)
+                                    }, modifier = Modifier.size(40.dp)) {
+                                        Icon(
+                                            Icons.Default.Forward10,
+                                            null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.weight(1f))
+
+                            // Right actions: Chat, Fullscreen/PiP.
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = {
+                                    onChatClick(); recordInteraction(forceShow = false)
+                                }, modifier = Modifier.size(40.dp)) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Chat,
+                                        null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                // MAL Sync button
+                                if (onSyncMALClick != null) {
+                                    IconButton(
+                                        onClick = { onSyncMALClick?.invoke(); recordInteraction(forceShow = false) },
+                                        modifier = Modifier.size(38.dp),
+                                        enabled = !isOffline && !isSyncingMAL
+                                    ) {
+                                        if (isSyncingMAL) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                color = Color.White,
+                                                strokeWidth = 2.dp,
+                                                progress = { 0.7f }
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.Sync,
+                                                "Sync to MAL",
+                                                tint = if (isOffline) Color.Gray else Color.White,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                // AniList Sync button
+                                if (onSyncAniListClick != null) {
+                                    IconButton(
+                                        onClick = { onSyncAniListClick?.invoke(); recordInteraction(forceShow = false) },
+                                        modifier = Modifier.size(38.dp),
+                                        enabled = !isOffline && !isSyncingAniList
+                                    ) {
+                                        if (isSyncingAniList) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                color = Color.White,
+                                                strokeWidth = 2.dp,
+                                                progress = { 0.7f }
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.Sync,
+                                                "Sync to AniList",
+                                                tint = if (isOffline) Color.Gray else Color.White,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                if (showFullscreenButton) {
+                                    IconButton(
+                                        onClick = { onFullscreenToggle(); recordInteraction(forceShow = false) },
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Icon(
+                                            if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                            null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(26.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

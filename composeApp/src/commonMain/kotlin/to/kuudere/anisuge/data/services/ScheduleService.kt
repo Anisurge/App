@@ -17,7 +17,7 @@ class ScheduleService(
         month: Int? = null,
     ): ScheduleApiResponse {
         return try {
-            val response = httpClient.get("${AppComponent.BASE_URL}/schedule") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/schedule") {
                 parameter("tz", tz)
                 year?.let { parameter("year", it) }
                 month?.let { parameter("month", it) }

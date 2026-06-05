@@ -36,7 +36,7 @@ class SettingsService(
     suspend fun getUserProfile(): CurrentUserResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
-            val response = httpClient.get("${AppComponent.BASE_URL}/user") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/user") {
                 header("Authorization", "Bearer ${stored.token}")
             }
             response.body<CurrentUserResponse>()
@@ -49,7 +49,7 @@ class SettingsService(
     suspend fun updateProfile(request: ProfileUpdateRequest): ProfileUpdateResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
-            val response = httpClient.patch("${AppComponent.BASE_URL}/user") {
+            val response = httpClient.patch("${AppComponent.PROJECT_R_BASE_URL}/user") {
                 header("Authorization", "Bearer ${stored.token}")
                 contentType(ContentType.Application.Json)
                 setBody(request)
@@ -65,7 +65,7 @@ class SettingsService(
     suspend fun getSettings(): UserSettings? {
         return try {
             val stored = sessionStore.get() ?: return null
-            val response = httpClient.get("${AppComponent.BASE_URL}/user/settings") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/user/settings") {
                 header("Authorization", "Bearer ${stored.token}")
             }
             response.body<UserSettings>()
@@ -78,7 +78,7 @@ class SettingsService(
     suspend fun updateSettings(settings: UserSettings): UserSettings? {
         return try {
             val stored = sessionStore.get() ?: return null
-            val response = httpClient.patch("${AppComponent.BASE_URL}/user/settings") {
+            val response = httpClient.patch("${AppComponent.PROJECT_R_BASE_URL}/user/settings") {
                 header("Authorization", "Bearer ${stored.token}")
                 contentType(ContentType.Application.Json)
                 setBody(settings)
@@ -116,7 +116,7 @@ class SettingsService(
     suspend fun getNotificationCount(): NotificationCountResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
-            val response = httpClient.get("${AppComponent.BASE_URL}/notifications/count") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/notifications/count") {
                 header("Authorization", "Bearer ${stored.token}")
             }
             response.body()
@@ -133,7 +133,7 @@ class SettingsService(
     ): NotificationsResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
-            val response = httpClient.get("${AppComponent.BASE_URL}/notifications/$type") {
+            val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/notifications/$type") {
                 header("Authorization", "Bearer ${stored.token}")
                 parameter("page", page)
                 typeQuery?.let { parameter("type", it) }
@@ -151,7 +151,7 @@ class SettingsService(
             val body = buildJsonObject {
                 if (type.isNotBlank()) put("type", type)
             }
-            val response = httpClient.post("${AppComponent.BASE_URL}/notifications/mark-all-read") {
+            val response = httpClient.post("${AppComponent.PROJECT_R_BASE_URL}/notifications/mark-all-read") {
                 header("Authorization", "Bearer ${stored.token}")
                 contentType(ContentType.Application.Json)
                 setBody(body.toString())

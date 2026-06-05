@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -652,7 +653,7 @@ fun CommentsSection(
                                                 )
                                             } else {
                                                 Icon(
-                                                    Icons.Default.Send,
+                                                    Icons.AutoMirrored.Filled.Send,
                                                     contentDescription = "Send",
                                                     tint = Color.White,
                                                     modifier = Modifier.size(14.dp)
@@ -872,7 +873,7 @@ private fun ThreadConnectionLayout(
 
             val path = Path().apply {
                 moveTo(0f, curveY - r)
-                quadraticBezierTo(0f, curveY, r, curveY)
+                quadraticTo(0f, curveY, r, curveY)
                 lineTo(24.dp.toPx(), curveY)
             }
             drawPath(path, color = BorderLine.copy(alpha = 0.8f), style = Stroke(strokeWidth))
@@ -1464,7 +1465,7 @@ private fun ReplyEditor(
                         CircularProgressIndicator(Modifier.size(13.dp), color = Color.White, strokeWidth = 1.5.dp)
                     } else {
                         Icon(
-                            Icons.Default.Send,
+                            Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Reply",
                             tint = Color.White,
                             modifier = Modifier.size(13.dp)

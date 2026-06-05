@@ -83,94 +83,103 @@ fun SearchScreen(
             if (showOffline) {
                 OfflineState(onRetry = { viewModel.search() }, isLoading = state.isLoading)
             } else {
-            LazyVerticalGrid(
-                columns = columns,
-                state = scrollState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = hPadding, end = hPadding, top = 8.dp, bottom = if (isSmall) 156.dp else 100.dp),
-                horizontalArrangement = Arrangement.spacedBy(itemSpacing),
-                verticalArrangement = Arrangement.spacedBy(itemSpacing)
-            ) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                   Box(Modifier.fillMaxWidth()) {
-                        to.kuudere.anisuge.platform.WindowManagementButtons(
-                            onClose = onExit,
-                            modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp)
-                        )
-                   }
-                }
-
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    FilterSection(state, viewModel)
-                }
-
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    Text(
-                        text = strings.resultsCount(state.results.size),
-                        color = AppColors.text,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(vertical = 12.dp)
-                    )
-                }
-
-                if (state.isLoading && state.results.isEmpty()) {
+                LazyVerticalGrid(
+                    columns = columns,
+                    state = scrollState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = hPadding,
+                        end = hPadding,
+                        top = 8.dp,
+                        bottom = if (isSmall) 156.dp else 100.dp
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(itemSpacing),
+                    verticalArrangement = Arrangement.spacedBy(itemSpacing)
+                ) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = AppColors.accent)
+                        Box(Modifier.fillMaxWidth()) {
+                            to.kuudere.anisuge.platform.WindowManagementButtons(
+                                onClose = onExit,
+                                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp)
+                            )
                         }
                     }
-                } else if (!state.isLoading && state.results.isEmpty()) {
-                    // No results found state
+
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                        FilterSection(state, viewModel)
+                    }
+
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            text = strings.resultsCount(state.results.size),
+                            color = AppColors.text,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                    }
+
+                    if (state.isLoading && state.results.isEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = AppColors.accent)
+                            }
+                        }
+                    } else if (!state.isLoading && state.results.isEmpty()) {
+                        // No results found state
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.25f),
-                                    modifier = Modifier.size(56.dp),
-                                )
-                                Text(
-                                    text = strings.noResultsFound,
-                                    color = AppColors.text,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Text(
-                                    text = strings.tryAdjustingFilters,
-                                    color = Color.White.copy(alpha = 0.45f),
-                                    fontSize = 13.sp,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(horizontal = 32.dp),
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = Color.White.copy(alpha = 0.25f),
+                                        modifier = Modifier.size(56.dp),
+                                    )
+                                    Text(
+                                        text = strings.noResultsFound,
+                                        color = AppColors.text,
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Text(
+                                        text = strings.tryAdjustingFilters,
+                                        color = Color.White.copy(alpha = 0.45f),
+                                        fontSize = 13.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 32.dp),
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        items(state.results) { anime ->
+                            to.kuudere.anisuge.ui.AnimeCard(
+                                item = anime,
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = { onAnimeClick(anime.activeSlug) }
+                            )
+                        }
+                    }
+
+                    if (state.isLoadingMore && !state.isLoading) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(
+                                    color = AppColors.accent,
+                                    modifier = Modifier.size(28.dp),
+                                    strokeWidth = 2.dp
                                 )
                             }
                         }
                     }
-                } else {
-                    items(state.results) { anime ->
-                        to.kuudere.anisuge.ui.AnimeCard(
-                            item     = anime,
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick  = { onAnimeClick(anime.activeSlug) }
-                        )
-                    }
                 }
-
-                if (state.isLoadingMore && !state.isLoading) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = AppColors.accent, modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
-                        }
-                    }
-                }
-            }
             } // else (not offline)
         }
     }
@@ -195,12 +204,12 @@ val KUUDERE_GENRES = listOf(
     "Music", "Psychological", "School", "Military", "Historical",
     "Demons", "Magic", "Vampire", "Hentai"
 )
-private val KUUDERE_SORTS    = listOf("Popularity", "Latest", "Score", "Year", "Episodes")
-private val KUUDERE_SEASONS  = listOf("Winter", "Spring", "Summer", "Fall")
-private val KUUDERE_YEARS    = (2025 downTo 1975).map { it.toString() }
+private val KUUDERE_SORTS = listOf("Popularity", "Latest", "Score", "Year", "Episodes")
+private val KUUDERE_SEASONS = listOf("Winter", "Spring", "Summer", "Fall")
+private val KUUDERE_YEARS = (2025 downTo 1975).map { it.toString() }
 private val KUUDERE_STATUSES = listOf("Finished", "Releasing", "Not Yet Released", "Cancelled")
-private val KUUDERE_FORMATS  = listOf("TV", "TV Short", "Movie", "Special", "OVA", "ONA", "Music")
-private val KUUDERE_ORIGINS  = listOf("Japan", "South Korea", "China", "Taiwan")
+private val KUUDERE_FORMATS = listOf("TV", "TV Short", "Movie", "Special", "OVA", "ONA", "Music")
+private val KUUDERE_ORIGINS = listOf("Japan", "South Korea", "China", "Taiwan")
 
 // ─── Large screen layout ─────────────────────────────────────────────────────
 @Composable
@@ -212,13 +221,13 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
 
         // Row 1: Search | Genres | Sort by | Reset
         Row(
-            Modifier.fillMaxWidth(), 
+            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             KSearchInput(
-                state.keyword, 
-                viewModel::onKeywordChange, 
+                state.keyword,
+                viewModel::onKeywordChange,
                 onSearch = { viewModel.search() },
                 modifier = Modifier.weight(1.5f)
             )
@@ -240,10 +249,10 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
                 hint = strings.popularity,
                 selected = state.selectedSort,
                 items = KUUDERE_SORTS,
-                icon = Icons.Default.Sort,
+                icon = Icons.AutoMirrored.Filled.Sort,
                 modifier = Modifier.weight(1f)
-            ) { 
-                viewModel.onSortChange(it) 
+            ) {
+                viewModel.onSortChange(it)
             }
 
             // Reset Button
@@ -264,25 +273,25 @@ private fun LargeScreenFilterSection(state: SearchUiState, viewModel: SearchView
         // Row 2: Year | Status | Format | Season | Origin
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             KAdvancedFilterDropdown(
-                strings.year, strings.anyYear, state.selectedYear, KUUDERE_YEARS, 
+                strings.year, strings.anyYear, state.selectedYear, KUUDERE_YEARS,
                 Icons.Default.Event, Modifier.weight(1f)
             ) { viewModel.onYearChange(it) }
-            
+
             KAdvancedFilterDropdown(
-                strings.status, strings.anyStatus, state.selectedStatus, KUUDERE_STATUSES, 
+                strings.status, strings.anyStatus, state.selectedStatus, KUUDERE_STATUSES,
                 Icons.Default.SignalCellularAlt, Modifier.weight(1f)
             ) { viewModel.onStatusChange(it) }
-            
+
             KAdvancedFilterDropdown(
-                strings.format, strings.anyFormat, state.selectedType, KUUDERE_FORMATS, 
+                strings.format, strings.anyFormat, state.selectedType, KUUDERE_FORMATS,
                 Icons.Default.Tv, Modifier.weight(1f)
             ) { viewModel.onTypeChange(it) }
-            
+
             KAdvancedFilterDropdown(
-                strings.season, strings.anySeason, state.selectedSeason, KUUDERE_SEASONS, 
+                strings.season, strings.anySeason, state.selectedSeason, KUUDERE_SEASONS,
                 Icons.Default.WbSunny, Modifier.weight(1f)
             ) { viewModel.onSeasonChange(it) }
-            
+
             KAdvancedFilterDropdown(
                 strings.origin, strings.anyOrigin, state.selectedCountry, KUUDERE_ORIGINS,
                 Icons.Default.Public, Modifier.weight(1f),
@@ -310,7 +319,12 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
         Text(strings.search, color = AppColors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            KSearchInput(state.keyword, viewModel::onKeywordChange, onSearch = { viewModel.search() }, modifier = Modifier.weight(1f))
+            KSearchInput(
+                state.keyword,
+                viewModel::onKeywordChange,
+                onSearch = { viewModel.search() },
+                modifier = Modifier.weight(1f)
+            )
             Spacer(Modifier.width(10.dp))
             Box(
                 Modifier
@@ -332,18 +346,61 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
         AnimatedVisibility(visible = isExpanded) {
             Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KAdvancedFilterDropdown(strings.genres, strings.anyGenre, state.selectedGenres.joinToString(", ").ifBlank { null }, KUUDERE_GENRES, Icons.Default.Style, Modifier.weight(1f), multiSelect = true) {
+                    KAdvancedFilterDropdown(
+                        strings.genres,
+                        strings.anyGenre,
+                        state.selectedGenres.joinToString(", ").ifBlank { null },
+                        KUUDERE_GENRES,
+                        Icons.Default.Style,
+                        Modifier.weight(1f),
+                        multiSelect = true
+                    ) {
                         if (it != null) viewModel.onGenreToggle(it) else viewModel.clearGenres()
                     }
-                    KAdvancedFilterDropdown(strings.sortBy, strings.popularity, state.selectedSort, KUUDERE_SORTS, Icons.Default.Sort, Modifier.weight(1f)) { viewModel.onSortChange(it) }
+                    KAdvancedFilterDropdown(
+                        strings.sortBy,
+                        strings.popularity,
+                        state.selectedSort,
+                        KUUDERE_SORTS,
+                        Icons.AutoMirrored.Filled.Sort,
+                        Modifier.weight(1f)
+                    ) { viewModel.onSortChange(it) }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KAdvancedFilterDropdown(strings.season, strings.anySeason, state.selectedSeason, KUUDERE_SEASONS, Icons.Default.WbSunny, Modifier.weight(1f)) { viewModel.onSeasonChange(it) }
-                    KAdvancedFilterDropdown(strings.year, strings.anyYear, state.selectedYear, KUUDERE_YEARS, Icons.Default.Event, Modifier.weight(1f)) { viewModel.onYearChange(it) }
+                    KAdvancedFilterDropdown(
+                        strings.season,
+                        strings.anySeason,
+                        state.selectedSeason,
+                        KUUDERE_SEASONS,
+                        Icons.Default.WbSunny,
+                        Modifier.weight(1f)
+                    ) { viewModel.onSeasonChange(it) }
+                    KAdvancedFilterDropdown(
+                        strings.year,
+                        strings.anyYear,
+                        state.selectedYear,
+                        KUUDERE_YEARS,
+                        Icons.Default.Event,
+                        Modifier.weight(1f)
+                    ) { viewModel.onYearChange(it) }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    KAdvancedFilterDropdown(strings.status, strings.anyStatus, state.selectedStatus, KUUDERE_STATUSES, Icons.Default.SignalCellularAlt, Modifier.weight(1f)) { viewModel.onStatusChange(it) }
-                    KAdvancedFilterDropdown(strings.format, strings.anyFormat, state.selectedType, KUUDERE_FORMATS, Icons.Default.Tv, Modifier.weight(1f)) { viewModel.onTypeChange(it) }
+                    KAdvancedFilterDropdown(
+                        strings.status,
+                        strings.anyStatus,
+                        state.selectedStatus,
+                        KUUDERE_STATUSES,
+                        Icons.Default.SignalCellularAlt,
+                        Modifier.weight(1f)
+                    ) { viewModel.onStatusChange(it) }
+                    KAdvancedFilterDropdown(
+                        strings.format,
+                        strings.anyFormat,
+                        state.selectedType,
+                        KUUDERE_FORMATS,
+                        Icons.Default.Tv,
+                        Modifier.weight(1f)
+                    ) { viewModel.onTypeChange(it) }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     KAdvancedFilterDropdown(
@@ -354,7 +411,7 @@ private fun SmallScreenFilterSection(state: SearchUiState, viewModel: SearchView
                         Icons.Default.Public,
                         Modifier.weight(1f),
                     ) { viewModel.onCountryChange(it) }
-                    
+
                     Button(
                         onClick = { viewModel.clearFilters() },
                         modifier = Modifier.weight(1f).height(44.dp),
@@ -467,7 +524,7 @@ private fun KAdvancedFilterDropdown(
                 )
                 if (selected != null) {
                     IconButton(
-                        onClick = { 
+                        onClick = {
                             onItemSelected(null)
                             expanded = false
                         },
@@ -511,7 +568,8 @@ private fun KAdvancedFilterDropdown(
 
             fullItems.forEach { item ->
                 val isHintItem = item == hint && !items.contains(hint)
-                val isSelected = if (multiSelect) selectedItems.contains(item) else (item == selected || (selected.isNullOrBlank() && (isHintItem || item == hint)))
+                val isSelected =
+                    if (multiSelect) selectedItems.contains(item) else (item == selected || (selected.isNullOrBlank() && (isHintItem || item == hint)))
                 val interactionSource = remember { MutableInteractionSource() }
                 val isHovered by interactionSource.collectIsHoveredAsState()
 
@@ -574,4 +632,3 @@ private fun KAdvancedFilterDropdown(
         }
     }
 }
-

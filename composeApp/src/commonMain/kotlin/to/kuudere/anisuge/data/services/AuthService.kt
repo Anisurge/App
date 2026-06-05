@@ -99,18 +99,19 @@ class AuthService(
     private fun isRetryableAuthError(e: Exception): Boolean {
         val msg = e.message.orEmpty()
         return msg.contains("timeout", ignoreCase = true) ||
-            msg.contains("timed out", ignoreCase = true) ||
-            msg.contains("408", ignoreCase = false) ||
-            msg.contains("504", ignoreCase = false)
+                msg.contains("timed out", ignoreCase = true) ||
+                msg.contains("408", ignoreCase = false) ||
+                msg.contains("504", ignoreCase = false)
     }
 
     private suspend fun HttpResponse.bffErrorMessage(fallback: String): String {
         val raw = bodyAsText()
         try {
             bffErrorJson.decodeFromString<BffErrorResponse>(raw).displayMessage()
-                ?.takeIf { it.isNotBlank() }
+                .takeIf { it.isNotBlank() }
                 ?.let { return it }
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+        }
         return try {
             val root = bffErrorJson.parseToJsonElement(raw).jsonObject
             val err = root["error"] ?: return fallback
@@ -139,7 +140,7 @@ class AuthService(
     private fun formatBffValidationError(err: JsonObject): String? {
         val fieldErrors = err["fieldErrors"]?.jsonObject ?: return null
         val parts = fieldErrors.mapNotNull { (field, messages) ->
-            val msg = messages.jsonArray?.firstOrNull()?.jsonPrimitive?.contentOrNull
+            val msg = messages.jsonArray.firstOrNull()?.jsonPrimitive?.contentOrNull
                 ?: messages.jsonPrimitive.contentOrNull
             msg?.let { "$field: $it" }
         }
@@ -231,7 +232,11 @@ class AuthService(
             setBody(buildJsonObject {})
         }
         if (response.status != HttpStatusCode.OK) {
-            val err = try { response.body<BffErrorResponse>() } catch (_: Exception) { null }
+            val err = try {
+                response.body<BffErrorResponse>()
+            } catch (_: Exception) {
+                null
+            }
             throw Exception(err?.displayMessage() ?: "Sync failed (${response.status})")
         }
         val body: BffAuthResponse = response.body()

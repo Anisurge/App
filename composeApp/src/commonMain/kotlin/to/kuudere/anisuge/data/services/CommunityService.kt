@@ -42,7 +42,7 @@ class CommunityService(
         private val ErrorBodyJson = Json { ignoreUnknownKeys = true }
     }
 
-    private val baseUrl = "${AppComponent.BASE_URL}/community"
+    private val baseUrl = "${AppComponent.PROJECT_R_BASE_URL}/community"
 
     /** Avoid `Authorization: Bearer Bearer …` if the stored token already included the scheme. */
     private fun sanitizedBearerCredential(rawToken: String): String {
@@ -116,7 +116,7 @@ class CommunityService(
             if (!response.status.isSuccess()) {
                 val tryFlat =
                     response.status == HttpStatusCode.NotFound ||
-                        response.status == HttpStatusCode.MethodNotAllowed
+                            response.status == HttpStatusCode.MethodNotAllowed
                 if (tryFlat) {
                     response = httpClient.post("$baseUrl/comment") {
                         header("Authorization", "Bearer $credential")
@@ -161,6 +161,7 @@ class CommunityService(
                 } else {
                     detail
                 }
+
             else -> detail
         }
     }

@@ -35,7 +35,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -253,396 +253,400 @@ fun W2gPlayerScreen(
             }
 
             Row(Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f),
-            ) {
-                // Player area
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (isFullscreen) Modifier.weight(1f)
-                            else Modifier.height(250.dp)
-                        )
-                        .background(Color.Black),
-                    contentAlignment = Alignment.Center,
+                        .fillMaxHeight()
+                        .weight(1f),
                 ) {
-                    val animeId = state.roomDetail?.animeId
-                    val playback = state.playbackSource
-                    if (playback != null) {
-                        val room = state.roomDetail
-                        val playbackIdentity = listOf(
-                            room?.animeId.orEmpty(),
-                            room?.anilistId?.toString().orEmpty(),
-                            room?.episodeNumber?.toString().orEmpty(),
-                            room?.server.orEmpty(),
-                            room?.language.orEmpty(),
-                            playback.url,
-                        ).joinToString("|")
-                        key(playbackIdentity) {
-                            val playbackUrl = remember(playback.url, playback.headers) {
-                                StreamProxy.proxyUrl(playback.url, playback.headers)
-                            }
-                            val videoState = rememberVideoPlayerState(
-                                url = playbackUrl,
-                                showControls = false,
-                                autoPlay = true,
-                                headers = playback.headers,
+                    // Player area
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (isFullscreen) Modifier.weight(1f)
+                                else Modifier.height(250.dp)
                             )
-                            DisposableEffect(playbackUrl) {
-                                onDispose { StreamProxy.release(playback.url) }
-                            }
-                            VideoPlayerSurface(
-                                state = videoState,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                            videoState.error?.let { err ->
-                                Text(
-                                    err,
-                                    color = Color(0xFFFFB74D),
-                                    fontSize = 12.sp,
-                                    modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .padding(8.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color.Black.copy(alpha = 0.75f))
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                            .background(Color.Black),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val animeId = state.roomDetail?.animeId
+                        val playback = state.playbackSource
+                        if (playback != null) {
+                            val room = state.roomDetail
+                            val playbackIdentity = listOf(
+                                room?.animeId.orEmpty(),
+                                room?.anilistId?.toString().orEmpty(),
+                                room?.episodeNumber?.toString().orEmpty(),
+                                room?.server.orEmpty(),
+                                room?.language.orEmpty(),
+                                playback.url,
+                            ).joinToString("|")
+                            key(playbackIdentity) {
+                                val playbackUrl = remember(playback.url, playback.headers) {
+                                    StreamProxy.proxyUrl(playback.url, playback.headers)
+                                }
+                                val videoState = rememberVideoPlayerState(
+                                    url = playbackUrl,
+                                    showControls = false,
+                                    autoPlay = true,
+                                    headers = playback.headers,
                                 )
-                            }
-
-                            // W2GPlayerControls overlay
-                            W2gPlayerControls(
-                                playerState = videoState,
-                                streamingData = null,
-                                title = state.roomDetail?.animeTitle ?: "",
-                                isFullscreen = isFullscreen,
-                                showMediaControls = state.isHost,
-                                showFullscreenButton = true,
-                                showLibraryActions = false,
-                                compactControls = !isFullscreen,
-                                onFullscreenToggle = { isFullscreen = !isFullscreen },
-                                onBack = {},
-                                onChatClick = {
-                                    viewModel.setChatSheetOpen(true)
-                                },
-                                onSettingsClick = {},
-                                onPlayPause = if (state.isHost) { shouldPlay ->
-                                    hostShouldPlay = shouldPlay
-                                    if (shouldPlay) viewModel.play(videoState.position)
-                                    else viewModel.pause(videoState.position)
-                                } else null,
-                                onSeek = if (state.isHost) { pos ->
-                                    viewModel.seek(pos, playing = hostShouldPlay)
-                                } else null,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-
-                            // Host: periodic position broadcast so non-hosts can correct drift
-                            if (state.isHost) {
-                                LaunchedEffect(playbackIdentity) {
-                                    hostShouldPlay = true
-                                    while (true) {
-                                        delay(3_000)
-                                        val syncPosition = if (hostShouldPlay) {
-                                            val ledPosition = videoState.position + 2.0
-                                            if (videoState.duration > 0) ledPosition.coerceAtMost(videoState.duration) else ledPosition
-                                        } else {
-                                            videoState.position
-                                        }
-                                        viewModel.syncPosition(syncPosition, playing = hostShouldPlay)
-                                    }
+                                DisposableEffect(playbackUrl) {
+                                    onDispose { StreamProxy.release(playback.url) }
                                 }
-                            }
-
-                            // Non-host remote sync
-                            if (!state.isHost) {
-                                LaunchedEffect(state.playerState, playbackIdentity) {
-                                    val ps = state.playerState
-                                    if (ps.timestamp > 0) {
-                                        val target = estimateW2gHostPosition(ps, videoState.duration)
-                                        if (target > 0) {
-                                            val diff = abs(videoState.position - target)
-                                            val threshold = if (ps.playing) 1.25 else 0.75
-                                            val now = currentTimeMillis()
-                                            val cooldownElapsed = now - lastRemoteSeekAtMs >= 2_000
-                                            val isLargeJump = diff > 12.0
-                                            if (diff > threshold && (!ps.playing || cooldownElapsed || isLargeJump)) {
-                                                videoState.seekTarget = target
-                                                lastRemoteSeekAtMs = now
-                                            }
-                                        }
-                                        if (ps.playing && videoState.isPaused) {
-                                            videoState.pauseRequested = false
-                                        } else if (!ps.playing && videoState.isPlaying) {
-                                            videoState.pauseRequested = true
-                                        }
-                                    } else if (videoState.isPaused) {
-                                        videoState.pauseRequested = false
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                        ) {
-                            if (animeId != null) {
-                                Text(
-                                    "${state.roomDetail?.animeTitle ?: animeId} \u2014 Ep ${state.roomDetail?.episodeNumber ?: 1}",
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
+                                VideoPlayerSurface(
+                                    state = videoState,
+                                    modifier = Modifier.fillMaxSize(),
                                 )
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    if (state.isLoadingPlayback) "Loading stream..."
-                                    else "${state.roomDetail?.server ?: "suzu"} \u00b7 ${state.roomDetail?.language ?: "sub"} \u00b7 auto",
-                                    color = Color.Gray,
-                                    fontSize = 14.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            } else if (state.isHost) {
-                                Button(
-                                    onClick = { viewModel.openHostPicker() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
-                                ) {
-                                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Search Anime to Watch")
-                                }
-                            } else {
-                                Text(
-                                    state.error ?: "Waiting for host to pick an anime...",
-                                    color = if (state.error != null) Color.Red else Color.Gray,
-                                    fontSize = 16.sp,
-                                )
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            if (state.isConnected) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFF4CAF50))
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Connected", color = Color(0xFF4CAF50), fontSize = 12.sp)
-                                }
-                            } else {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFFFFA500))
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(state.loadingMessage ?: "Connecting...", color = Color(0xFFFFA500), fontSize = 12.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Host controls, members, and now-playing info (only when not fullscreen)
-                if (!isFullscreen) {
-                    val detail = state.roomDetail
-                    if (state.isHost && detail?.animeId != null) {
-                        RoomControls(
-                            animeId = detail.animeId ?: "",
-                            episodeNumber = detail.episodeNumber ?: 1,
-                            server = detail.server ?: "suzu",
-                            language = detail.language,
-                            quality = detail.quality,
-                            onChangeAnime = { viewModel.openHostPicker() },
-                            onChangeEpisode = { animeId, ep, server, lang, quality ->
-                                viewModel.changeEpisode(animeId, ep, server, lang, quality)
-                            },
-                        )
-                    }
-
-                    // Members row
-                    if (state.members.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Members (${state.members.size})",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            state.members.forEach { member ->
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.width(56.dp),
-                                ) {
-                                    ProfileAvatar(
-                                        url = member.avatarUrl,
-                                        avatarSize = 40.dp,
-                                        contentDescription = member.username ?: "Member",
-                                        backgroundColor = Color.White.copy(alpha = 0.1f),
-                                        playVideo = false,
-                                    )
+                                videoState.error?.let { err ->
                                     Text(
-                                        member.username ?: "User",
+                                        err,
+                                        color = Color(0xFFFFB74D),
+                                        fontSize = 12.sp,
+                                        modifier = Modifier
+                                            .align(Alignment.TopCenter)
+                                            .padding(8.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color.Black.copy(alpha = 0.75f))
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    )
+                                }
+
+                                // W2GPlayerControls overlay
+                                W2gPlayerControls(
+                                    playerState = videoState,
+                                    streamingData = null,
+                                    title = state.roomDetail?.animeTitle ?: "",
+                                    isFullscreen = isFullscreen,
+                                    showMediaControls = state.isHost,
+                                    showFullscreenButton = true,
+                                    showLibraryActions = false,
+                                    compactControls = !isFullscreen,
+                                    onFullscreenToggle = { isFullscreen = !isFullscreen },
+                                    onBack = {},
+                                    onChatClick = {
+                                        viewModel.setChatSheetOpen(true)
+                                    },
+                                    onSettingsClick = {},
+                                    onPlayPause = if (state.isHost) { shouldPlay ->
+                                        hostShouldPlay = shouldPlay
+                                        if (shouldPlay) viewModel.play(videoState.position)
+                                        else viewModel.pause(videoState.position)
+                                    } else null,
+                                    onSeek = if (state.isHost) { pos ->
+                                        viewModel.seek(pos, playing = hostShouldPlay)
+                                    } else null,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                // Host: periodic position broadcast so non-hosts can correct drift
+                                if (state.isHost) {
+                                    LaunchedEffect(playbackIdentity) {
+                                        hostShouldPlay = true
+                                        while (true) {
+                                            delay(3_000)
+                                            val syncPosition = if (hostShouldPlay) {
+                                                val ledPosition = videoState.position + 2.0
+                                                if (videoState.duration > 0) ledPosition.coerceAtMost(videoState.duration) else ledPosition
+                                            } else {
+                                                videoState.position
+                                            }
+                                            viewModel.syncPosition(syncPosition, playing = hostShouldPlay)
+                                        }
+                                    }
+                                }
+
+                                // Non-host remote sync
+                                if (!state.isHost) {
+                                    LaunchedEffect(state.playerState, playbackIdentity) {
+                                        val ps = state.playerState
+                                        if (ps.timestamp > 0) {
+                                            val target = estimateW2gHostPosition(ps, videoState.duration)
+                                            if (target > 0) {
+                                                val diff = abs(videoState.position - target)
+                                                val threshold = if (ps.playing) 1.25 else 0.75
+                                                val now = currentTimeMillis()
+                                                val cooldownElapsed = now - lastRemoteSeekAtMs >= 2_000
+                                                val isLargeJump = diff > 12.0
+                                                if (diff > threshold && (!ps.playing || cooldownElapsed || isLargeJump)) {
+                                                    videoState.seekTarget = target
+                                                    lastRemoteSeekAtMs = now
+                                                }
+                                            }
+                                            if (ps.playing && videoState.isPaused) {
+                                                videoState.pauseRequested = false
+                                            } else if (!ps.playing && videoState.isPlaying) {
+                                                videoState.pauseRequested = true
+                                            }
+                                        } else if (videoState.isPaused) {
+                                            videoState.pauseRequested = false
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            ) {
+                                if (animeId != null) {
+                                    Text(
+                                        "${state.roomDetail?.animeTitle ?: animeId} \u2014 Ep ${state.roomDetail?.episodeNumber ?: 1}",
+                                        color = Color.White,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        if (state.isLoadingPlayback) "Loading stream..."
+                                        else "${state.roomDetail?.server ?: "suzu"} \u00b7 ${state.roomDetail?.language ?: "sub"} \u00b7 auto",
                                         color = Color.Gray,
-                                        fontSize = 10.sp,
+                                        fontSize = 14.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
+                                } else if (state.isHost) {
+                                    Button(
+                                        onClick = { viewModel.openHostPicker() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                                    ) {
+                                        Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Search Anime to Watch")
+                                    }
+                                } else {
+                                    Text(
+                                        state.error ?: "Waiting for host to pick an anime...",
+                                        color = if (state.error != null) Color.Red else Color.Gray,
+                                        fontSize = 16.sp,
+                                    )
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                if (state.isConnected) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFF4CAF50))
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Connected", color = Color(0xFF4CAF50), fontSize = 12.sp)
+                                    }
+                                } else {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFFFFA500))
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            state.loadingMessage ?: "Connecting...",
+                                            color = Color(0xFFFFA500),
+                                            fontSize = 12.sp
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Spacer(Modifier.height(16.dp))
-                    NowPlayingCard(
-                        room = state.roomDetail,
-                        isHost = state.isHost,
-                        isLoadingPlayback = state.isLoadingPlayback,
-                        error = state.error,
-                        onPickAnime = { viewModel.openHostPicker() },
-                        onChatClick = { viewModel.setChatSheetOpen(true) },
-                    )
-                }
-            }
+                    // Host controls, members, and now-playing info (only when not fullscreen)
+                    if (!isFullscreen) {
+                        val detail = state.roomDetail
+                        if (state.isHost && detail?.animeId != null) {
+                            RoomControls(
+                                animeId = detail.animeId ?: "",
+                                episodeNumber = detail.episodeNumber ?: 1,
+                                server = detail.server ?: "suzu",
+                                language = detail.language,
+                                quality = detail.quality,
+                                onChangeAnime = { viewModel.openHostPicker() },
+                                onChangeEpisode = { animeId, ep, server, lang, quality ->
+                                    viewModel.changeEpisode(animeId, ep, server, lang, quality)
+                                },
+                            )
+                        }
 
-            if (showSideChat) {
-                Box(
-                    modifier = Modifier
-                        .width(sideChatWidth)
-                        .fillMaxHeight()
-                        .background(AppColors.background)
-                ) {
-                    Column(Modifier.fillMaxSize()) {
-                        Text(
-                            "Room Chat",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp),
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        LazyColumn(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp),
-                            state = chatListState,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            items(state.chatMessages, key = { it.id }) { msg ->
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color.White.copy(alpha = 0.03f))
-                                        .padding(8.dp),
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            msg.username ?: "User",
-                                            color = AppColors.accent,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
+                        // Members row
+                        if (state.members.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Members (${state.members.size})",
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                state.members.forEach { member ->
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.width(56.dp),
+                                    ) {
+                                        ProfileAvatar(
+                                            url = member.avatarUrl,
+                                            avatarSize = 40.dp,
+                                            contentDescription = member.username ?: "Member",
+                                            backgroundColor = Color.White.copy(alpha = 0.1f),
+                                            playVideo = false,
                                         )
-                                        if (msg.userId == state.roomDetail?.hostUserId) {
-                                            Spacer(Modifier.width(4.dp))
-                                            Icon(
-                                                Icons.Outlined.Verified,
-                                                null,
-                                                tint = AppColors.accent,
-                                                modifier = Modifier.size(12.dp),
+                                        Text(
+                                            member.username ?: "User",
+                                            color = Color.Gray,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+                        NowPlayingCard(
+                            room = state.roomDetail,
+                            isHost = state.isHost,
+                            isLoadingPlayback = state.isLoadingPlayback,
+                            error = state.error,
+                            onPickAnime = { viewModel.openHostPicker() },
+                            onChatClick = { viewModel.setChatSheetOpen(true) },
+                        )
+                    }
+                }
+
+                if (showSideChat) {
+                    Box(
+                        modifier = Modifier
+                            .width(sideChatWidth)
+                            .fillMaxHeight()
+                            .background(AppColors.background)
+                    ) {
+                        Column(Modifier.fillMaxSize()) {
+                            Text(
+                                "Room Chat",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            LazyColumn(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp),
+                                state = chatListState,
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                items(state.chatMessages, key = { it.id }) { msg ->
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color.White.copy(alpha = 0.03f))
+                                            .padding(8.dp),
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                msg.username ?: "User",
+                                                color = AppColors.accent,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
                                             )
+                                            if (msg.userId == state.roomDetail?.hostUserId) {
+                                                Spacer(Modifier.width(4.dp))
+                                                Icon(
+                                                    Icons.Outlined.Verified,
+                                                    null,
+                                                    tint = AppColors.accent,
+                                                    modifier = Modifier.size(12.dp),
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            msg.body,
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                        )
+                                        msg.sticker?.let { sticker ->
+                                            Spacer(Modifier.height(6.dp))
+                                            StickerInline(sticker = sticker)
                                         }
                                     }
-                                    Text(
-                                        msg.body,
-                                        color = Color.White,
-                                        fontSize = 14.sp,
-                                    )
-                                    msg.sticker?.let { sticker ->
-                                        Spacer(Modifier.height(6.dp))
-                                        StickerInline(sticker = sticker)
-                                    }
                                 }
                             }
-                        }
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OutlinedTextField(
-                                value = chatInput,
-                                onValueChange = { chatInput = it },
-                                placeholder = { Text("Type a message...", color = Color.Gray) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                keyboardActions = KeyboardActions(onSend = {
-                                    if (chatInput.isNotBlank()) {
-                                        viewModel.sendMessage(chatInput.trim())
-                                        chatInput = ""
-                                    }
-                                }),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White,
-                                    focusedBorderColor = AppColors.accent,
-                                    unfocusedBorderColor = Color.Gray,
-                                    cursorColor = AppColors.accent,
-                                ),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            IconButton(
-                                onClick = {
-                                    sideStickerPickerOpen = true
-                                    viewModel.loadStickers()
-                                },
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(
-                                    Icons.Default.EmojiEmotions,
-                                    "Stickers",
-                                    tint = AppColors.accent,
+                                OutlinedTextField(
+                                    value = chatInput,
+                                    onValueChange = { chatInput = it },
+                                    placeholder = { Text("Type a message...", color = Color.Gray) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                    keyboardActions = KeyboardActions(onSend = {
+                                        if (chatInput.isNotBlank()) {
+                                            viewModel.sendMessage(chatInput.trim())
+                                            chatInput = ""
+                                        }
+                                    }),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = AppColors.accent,
+                                        unfocusedBorderColor = Color.Gray,
+                                        cursorColor = AppColors.accent,
+                                    ),
                                 )
-                            }
-                            Spacer(Modifier.width(4.dp))
-                            IconButton(
-                                onClick = {
-                                    if (chatInput.isNotBlank()) {
-                                        viewModel.sendMessage(chatInput.trim())
-                                        chatInput = ""
-                                    }
-                                },
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Send,
-                                    "Send",
-                                    tint = AppColors.accent,
-                                )
+                                Spacer(Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = {
+                                        sideStickerPickerOpen = true
+                                        viewModel.loadStickers()
+                                    },
+                                ) {
+                                    Icon(
+                                        Icons.Default.EmojiEmotions,
+                                        "Stickers",
+                                        tint = AppColors.accent,
+                                    )
+                                }
+                                Spacer(Modifier.width(4.dp))
+                                IconButton(
+                                    onClick = {
+                                        if (chatInput.isNotBlank()) {
+                                            viewModel.sendMessage(chatInput.trim())
+                                            chatInput = ""
+                                        }
+                                    },
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Outlined.Send,
+                                        "Send",
+                                        tint = AppColors.accent,
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-        }
         }
     }
 
@@ -869,6 +873,7 @@ private fun NowPlayingCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+
                     isLoadingPlayback -> Text("Loading stream...", color = AppColors.accent, fontSize = 12.sp)
                     hasAnime -> Text("Synced with the room", color = Color(0xFF4CAF50), fontSize = 12.sp)
                     isHost -> Button(
@@ -881,7 +886,12 @@ private fun NowPlayingCard(
                         Spacer(Modifier.width(6.dp))
                         Text("Pick anime", fontSize = 12.sp, maxLines = 1)
                     }
-                    else -> Text("The host has not selected an episode yet.", color = AppColors.textMuted, fontSize = 12.sp)
+
+                    else -> Text(
+                        "The host has not selected an episode yet.",
+                        color = AppColors.textMuted,
+                        fontSize = 12.sp
+                    )
                 }
             }
         }
@@ -1027,7 +1037,12 @@ private fun HostEpisodeSheet(
                 ) {
                     if (picker.isSearching) {
                         item {
-                            Text("Searching...", color = AppColors.textMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp))
+                            Text(
+                                "Searching...",
+                                color = AppColors.textMuted,
+                                fontSize = 14.sp,
+                                modifier = Modifier.padding(vertical = 12.dp)
+                            )
                         }
                     } else if (picker.results.isEmpty()) {
                         item {
@@ -1038,7 +1053,12 @@ private fun HostEpisodeSheet(
                                     .background(AppColors.surfaceVariant.copy(alpha = 0.7f))
                                     .padding(14.dp),
                             ) {
-                                Text("No anime found", color = AppColors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "No anime found",
+                                    color = AppColors.text,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
                                     "Try a shorter title or search by the English name.",
@@ -1139,7 +1159,14 @@ private fun W2gAnimeSearchRow(anime: AnimeItem, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(anime.displayTitle, color = AppColors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                anime.displayTitle,
+                color = AppColors.text,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
             val meta = listOfNotNull(
                 anime.format.takeIf { it.isNotBlank() },
                 anime.seasonYear?.toString(),
@@ -1184,7 +1211,14 @@ private fun W2gSelectedAnimeSummary(anime: AnimeItem, onChangeAnime: () -> Unit)
         )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(anime.displayTitle, color = AppColors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                anime.displayTitle,
+                color = AppColors.text,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
             Text("Sub ${anime.subbed} · Dub ${anime.dubbed}", color = AppColors.textMuted, fontSize = 12.sp)
         }
         TextButton(onClick = onChangeAnime) {
@@ -1253,80 +1287,80 @@ private fun ChatSheet(
                     .fillMaxWidth()
                     .height(sheetHeight),
             ) {
-            Text("Room Chat", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
+                Text("Room Chat", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
 
-            LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                state = chatListState,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(chatMessages, key = { it.id }) { msg ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.White.copy(alpha = 0.03f))
-                            .padding(8.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                msg.username ?: "User",
-                                color = AppColors.accent,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                        if (msg.body.isNotBlank()) {
-                            Text(msg.body, color = Color.White, fontSize = 14.sp)
-                        }
-                        msg.sticker?.let { sticker ->
-                            Spacer(Modifier.height(6.dp))
-                            StickerInline(sticker = sticker)
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    state = chatListState,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(chatMessages, key = { it.id }) { msg ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.03f))
+                                .padding(8.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    msg.username ?: "User",
+                                    color = AppColors.accent,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            if (msg.body.isNotBlank()) {
+                                Text(msg.body, color = Color.White, fontSize = 14.sp)
+                            }
+                            msg.sticker?.let { sticker ->
+                                Spacer(Modifier.height(6.dp))
+                                StickerInline(sticker = sticker)
+                            }
                         }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = chatInput,
-                    onValueChange = { chatInput = it },
-                    placeholder = { Text("Type a message...", color = Color.Gray) },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = chatInput,
+                        onValueChange = { chatInput = it },
+                        placeholder = { Text("Type a message...", color = Color.Gray) },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = {
+                            onSend(chatInput)
+                            chatInput = ""
+                        }),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = AppColors.accent,
+                            unfocusedBorderColor = Color.Gray,
+                            cursorColor = AppColors.accent,
+                        ),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(onClick = {
+                        stickerPickerOpen = true
+                        onLoadStickers()
+                    }) {
+                        Icon(Icons.Default.EmojiEmotions, "Stickers", tint = AppColors.accent)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(onClick = {
                         onSend(chatInput)
                         chatInput = ""
-                    }),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = AppColors.accent,
-                        unfocusedBorderColor = Color.Gray,
-                        cursorColor = AppColors.accent,
-                    ),
-                )
-                Spacer(Modifier.width(8.dp))
-                IconButton(onClick = {
-                    stickerPickerOpen = true
-                    onLoadStickers()
-                }) {
-                    Icon(Icons.Default.EmojiEmotions, "Stickers", tint = AppColors.accent)
+                    }) {
+                        Icon(Icons.AutoMirrored.Outlined.Send, "Send", tint = AppColors.accent)
+                    }
                 }
-                Spacer(Modifier.width(4.dp))
-                IconButton(onClick = {
-                    onSend(chatInput)
-                    chatInput = ""
-                }) {
-                    Icon(Icons.Outlined.Send, "Send", tint = AppColors.accent)
-                }
-            }
             }
         }
     }
@@ -1356,7 +1390,14 @@ private fun W2gServerRow(server: ServerInfo, selected: Boolean, onClick: () -> U
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(server.label, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            server.label,
+            color = Color.White,
+            fontSize = 14.sp,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
         if (selected) {
             Text("Selected", color = AppColors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
