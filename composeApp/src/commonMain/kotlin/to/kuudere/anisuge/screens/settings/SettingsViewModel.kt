@@ -35,6 +35,7 @@ import to.kuudere.anisuge.data.services.WatchlistService
 import to.kuudere.anisuge.data.services.StorageService
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.LibrarySyncDirection
+import to.kuudere.anisuge.data.services.MalAnilistIdCache
 import to.kuudere.anisuge.data.services.TrackingService
 import to.kuudere.anisuge.data.services.WatchHistorySyncProgress
 import to.kuudere.anisuge.data.services.WatchHistorySyncService
@@ -227,6 +228,7 @@ class SettingsViewModel(
     private val watchlistService: WatchlistService,
     private val communityService: CommunityService,
     private val watchHistorySyncService: WatchHistorySyncService,
+    private val malAnilistIdCache: MalAnilistIdCache,
     private val integrationsSyncService: to.kuudere.anisuge.data.services.IntegrationsSyncService,
     private val bffMeService: to.kuudere.anisuge.data.services.BffMeService,
     private val bffShopService: to.kuudere.anisuge.data.services.BffShopService,
@@ -245,6 +247,15 @@ class SettingsViewModel(
     private data class TrackerImportResult(
         val imported: Boolean,
         val detail: String?,
+    )
+
+    private data class ResolvedTrackerImport(
+        val entry: TrackingService.ExternalListEntry,
+        val match: AnimeItem,
+        val animeId: String,
+        val malId: Int?,
+        val anilistId: Int?,
+        val duplicateAnimeId: String? = null,
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -1726,26 +1737,47 @@ class SettingsViewModel(
                     )
                 }
 
+                val existingAnimeIdByKey = loadTrackerImportExistingKeys()
+                val seenKeys = mutableSetOf<String>()
                 var imported = 0
                 var completed = 0
                 entries.chunked(TRACKING_IMPORT_CONCURRENCY).forEach { chunk ->
                     val results = chunk.map { entry ->
                         async {
-                            val match = resolveImportedTrackerAnime(entry, fromAnilist)
+                            val resolved = resolveImportedTrackerImport(entry, fromAnilist, existingAnimeIdByKey)
                                 ?: return@async TrackerImportResult(
                                     imported = false,
                                     detail = entry.title?.let { "Skipped $it" }
                                         ?: "Skipped tracker id ${entry.externalId}",
                                 )
+                            val key = trackerImportKey(resolved.malId, resolved.anilistId)
+                            if (key != null) {
+                                var alreadyHandled = false
+                                synchronized(seenKeys) {
+                                    if (!seenKeys.add(key)) {
+                                        alreadyHandled = true
+                                    }
+                                }
+                                if (alreadyHandled) return@async TrackerImportResult(
+                                    imported = true,
+                                    detail = resolved.entry.title ?: resolved.match.displayTitle,
+                                )
+                            }
                             val ok = watchlistService.updateStatus(
-                                animeId = match.animeId,
+                                animeId = resolved.animeId,
                                 folder = entry.toAnisurgeFolder(fromAnilist),
-                                anilistId = if (fromAnilist) entry.externalId else match.anilistId,
-                                malId = if (fromAnilist) match.malId else entry.externalId,
+                                anilistId = resolved.anilistId,
+                                malId = resolved.malId,
                             ) != null
+                            if (ok) {
+                                resolved.duplicateAnimeId
+                                    ?.takeIf { it.isNotBlank() && it != resolved.animeId }
+                                    ?.let { duplicateId -> watchlistService.removeFromWatchlist(duplicateId) }
+                                key?.let { existingAnimeIdByKey[it] = resolved.animeId }
+                            }
                             TrackerImportResult(
                                 imported = ok,
-                                detail = entry.title ?: match.displayTitle,
+                                detail = entry.title ?: resolved.match.displayTitle,
                             )
                         }
                     }.awaitAll()
@@ -1827,6 +1859,70 @@ class SettingsViewModel(
                     normalizeImportedTitle(anime.romaji) == normalizedTitle
         } ?: results.firstOrNull { it.canWatch && it.animeId.isNotBlank() }
         ?: results.firstOrNull { it.animeId.isNotBlank() }
+    }
+
+    private suspend fun resolveImportedTrackerImport(
+        entry: TrackingService.ExternalListEntry,
+        fromAnilist: Boolean,
+        existingAnimeIdByKey: MutableMap<String, String>,
+    ): ResolvedTrackerImport? {
+        val match = resolveImportedTrackerAnime(entry, fromAnilist) ?: return null
+        val ids = resolveTrackerImportIds(entry, fromAnilist, match)
+        val key = trackerImportKey(ids.first, ids.second)
+        val existingAnimeId = key?.let { synchronized(existingAnimeIdByKey) { existingAnimeIdByKey[it] } }
+        val targetAnimeId = existingAnimeId?.takeIf { it.isNotBlank() } ?: match.animeId
+        return ResolvedTrackerImport(
+            entry = entry,
+            match = match,
+            animeId = targetAnimeId,
+            malId = ids.first,
+            anilistId = ids.second,
+            duplicateAnimeId = match.animeId.takeIf { existingAnimeId != null && it != targetAnimeId },
+        )
+    }
+
+    private suspend fun resolveTrackerImportIds(
+        entry: TrackingService.ExternalListEntry,
+        fromAnilist: Boolean,
+        match: AnimeItem,
+    ): Pair<Int?, Int?> {
+        var malId = entry.malId?.takeIf { it > 0 } ?: match.malId?.takeIf { it > 0 }
+        var anilistId = entry.anilistId?.takeIf { it > 0 } ?: match.anilistId?.takeIf { it > 0 }
+        if (fromAnilist) {
+            anilistId = entry.externalId.takeIf { it > 0 } ?: anilistId
+            if (malId == null && anilistId != null) {
+                malId = malAnilistIdCache.getMalForAnilist(anilistId)
+            }
+        } else {
+            malId = entry.externalId.takeIf { it > 0 } ?: malId
+            if (anilistId == null && malId != null) {
+                anilistId = malAnilistIdCache.getAll()[malId]
+                    ?: runCatching { trackingService.lookupAnilistIdFromMal(malId) }.getOrNull()
+            }
+        }
+        if (malId != null && anilistId != null) {
+            malAnilistIdCache.put(malId, anilistId)
+        }
+        return malId to anilistId
+    }
+
+    private suspend fun loadTrackerImportExistingKeys(): MutableMap<String, String> {
+        val cache = malAnilistIdCache.getAll()
+        val out = mutableMapOf<String, String>()
+        loadAllWatchlistEntries().forEach { item ->
+            val animeId = item.effectiveAnimeId.takeIf { it.isNotBlank() } ?: return@forEach
+            val malId = item.anime.malId?.takeIf { it > 0 }
+            val anilistId = item.anime.anilistId?.takeIf { it > 0 } ?: malId?.let { cache[it] }
+            trackerImportKey(malId, anilistId)?.let { key ->
+                out.putIfAbsent(key, animeId)
+            }
+        }
+        return out
+    }
+
+    private fun trackerImportKey(malId: Int?, anilistId: Int?): String? {
+        return malId?.takeIf { it > 0 }?.let { "mal:$it" }
+            ?: anilistId?.takeIf { it > 0 }?.let { "anilist:$it" }
     }
 
     private fun normalizeImportedTitle(value: String): String =

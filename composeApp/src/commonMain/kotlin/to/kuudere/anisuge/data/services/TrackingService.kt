@@ -264,6 +264,8 @@ class TrackingService(
         val status: String,
         val progress: Int,
         val title: String? = null,
+        val malId: Int? = null,
+        val anilistId: Int? = null,
     ) {
         /** Maps external MAL status to Anisurge folder name. */
         fun toAnisurgeFolder(fromAnilist: Boolean): String = if (fromAnilist) {
@@ -318,7 +320,13 @@ class TrackingService(
                     val status = listStatus["status"]?.jsonPrimitive?.content ?: "watching"
                     val progress = listStatus["num_episodes_watched"]?.jsonPrimitive?.intOrNull ?: 0
                     val title = node["title"]?.jsonPrimitive?.content
-                    entries += ExternalListEntry(malId, status, progress, title)
+                    entries += ExternalListEntry(
+                        externalId = malId,
+                        status = status,
+                        progress = progress,
+                        title = title,
+                        malId = malId,
+                    )
                 }
                 // Follow pagination cursor
                 val nextUrl = body["paging"]?.jsonObject?.get("next")?.jsonPrimitive?.content
@@ -363,7 +371,7 @@ class TrackingService(
                     mediaId
                     status
                     progress
-                    media { title { romaji english } }
+                    media { idMal title { romaji english } }
                   }
                 }
               }
@@ -403,11 +411,19 @@ class TrackingService(
                     val status = obj["status"]?.jsonPrimitive?.content ?: "CURRENT"
                     val progress = obj["progress"]?.jsonPrimitive?.intOrNull ?: 0
                     val media = obj["media"]?.jsonObject
+                    val malId = media?.get("idMal")?.jsonPrimitive?.intOrNull?.takeIf { it > 0 }
                     val title = media?.get("title")?.jsonObject?.let {
                         it["english"]?.jsonPrimitive?.content?.takeIf { t -> t.isNotBlank() }
                             ?: it["romaji"]?.jsonPrimitive?.content
                     }
-                    entries += ExternalListEntry(mediaId, status, progress, title)
+                    entries += ExternalListEntry(
+                        externalId = mediaId,
+                        status = status,
+                        progress = progress,
+                        title = title,
+                        malId = malId,
+                        anilistId = mediaId,
+                    )
                 }
             }
             Result.success(entries)

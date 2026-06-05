@@ -166,6 +166,7 @@ fun App(
                 AppComponent.watchlistService,
                 AppComponent.communityService,
                 AppComponent.watchHistorySyncService,
+                AppComponent.malAnilistIdCache,
                 AppComponent.integrationsSyncService,
                 AppComponent.bffMeService,
                 AppComponent.bffShopService,
