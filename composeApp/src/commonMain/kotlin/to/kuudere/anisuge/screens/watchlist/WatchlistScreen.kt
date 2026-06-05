@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,19 +47,17 @@ fun WatchlistScreen(
     onAnimeClick: (String) -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
-    var selectedTab by remember { mutableStateOf("Anime") }
-    var selectedList by remember { mutableStateOf("All lists") }
+    val selectedList = normalizeLibraryFolder(state.selectedFolder)
     var searchQuery by remember { mutableStateOf(state.searchQuery) }
     var expandedFilters by remember { mutableStateOf(false) }
 
-    to.kuudere.anisuge.platform.PlatformBackHandler(enabled = expandedFilters || searchQuery.isNotEmpty() || selectedList != "All lists") {
+    to.kuudere.anisuge.platform.PlatformBackHandler(enabled = expandedFilters || searchQuery.isNotEmpty() || selectedList != "ALL") {
         if (expandedFilters) {
             expandedFilters = false
         } else if (searchQuery.isNotEmpty()) {
             searchQuery = ""
             viewModel.onSearchQueryChange("")
-        } else if (selectedList != "All lists") {
-            selectedList = "All lists"
+        } else if (selectedList != "ALL") {
             viewModel.onFolderChange("All")
         }
     }
@@ -86,94 +86,21 @@ fun WatchlistScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             val searchOptionsBlock = @Composable { modifier: Modifier ->
-                var showDesktopDropdown by remember { mutableStateOf(false) }
-                var showMobileDropdown by remember { mutableStateOf(false) }
-                val folderOptions = listOf("All lists", "WATCHING", "PAUSED", "PLANNING", "DROPPED", "COMPLETED")
-                val density = LocalDensity.current
-
                 Column(
                     modifier = modifier
                 ) {
                     if (isDesktop) {
-                        // Desktop layout: list selector, search bar, trash icon
+                        // Desktop layout: search bar and clear icon
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Dropdown for list selector
-                            var showFolderDropdown by remember { mutableStateOf(false) }
-                            var folderTriggerWidthPx by remember { mutableStateOf(0) }
-                            val folderTriggerWidthDp = with(density) { folderTriggerWidthPx.toDp() }
-                            Box(
-                                modifier = Modifier
-                                    .height(44.dp)
-                                    .weight(0.3f)
-                                    .onSizeChanged { folderTriggerWidthPx = it.width }
-                                    .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
-                                    .clickable { showFolderDropdown = true },
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(selectedList, color = AppColors.text, fontSize = 14.sp)
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.Gray)
-                                }
-
-                                DropdownMenu(
-                                    expanded = showFolderDropdown,
-                                    onDismissRequest = { showFolderDropdown = false },
-                                    modifier = Modifier
-                                        .width(folderTriggerWidthDp)
-                                        .background(AppColors.surface)
-                                        .border(1.dp, AppColors.border, RoundedCornerShape(8.dp)),
-                                    offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)
-                                ) {
-                                    folderOptions.forEach { folder ->
-                                        val isSelected = selectedList == folder
-                                        val interactionSource = remember { MutableInteractionSource() }
-                                        val isHovered by interactionSource.collectIsHoveredAsState()
-
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    text = folder,
-                                                    color = if (isHovered || isSelected) AppColors.accent else AppColors.text,
-                                                    fontSize = 13.sp,
-                                                    fontWeight = if (isSelected || isHovered) FontWeight.SemiBold else FontWeight.Normal
-                                                )
-                                            },
-                                            onClick = {
-                                                selectedList = folder
-                                                viewModel.onFolderChange(if (folder == "All lists") "All" else folder)
-                                                showFolderDropdown = false
-                                            },
-                                            modifier = Modifier
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                .clip(RoundedCornerShape(8.dp)),
-                                            interactionSource = interactionSource,
-                                            trailingIcon = {
-                                                if (isSelected) {
-                                                    Icon(
-                                                        Icons.Default.CheckCircle, null,
-                                                        tint = AppColors.accent,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-
                             // Search field
                             Box(
                                 modifier = Modifier
                                     .height(44.dp)
-                                    .weight(0.6f)
+                                    .weight(1f)
                                     .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(8.dp))
                                     .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
                                     .padding(horizontal = 16.dp),
@@ -220,7 +147,6 @@ fun WatchlistScreen(
                             ) {
                                 IconButton(onClick = {
                                     searchQuery = ""
-                                    selectedList = "All lists"
                                     expandedFilters = false
                                     viewModel.resetAllFilters()
                                 }) {
@@ -343,7 +269,6 @@ fun WatchlistScreen(
                             ) {
                                 IconButton(onClick = {
                                     searchQuery = ""
-                                    selectedList = "All lists"
                                     expandedFilters = false
                                     viewModel.resetAllFilters()
                                 }) {
@@ -371,77 +296,7 @@ fun WatchlistScreen(
 
                         AnimatedVisibility(expandedFilters) {
                             Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                                // Next row: list selector
-                                var showFolderDropdownMobile by remember { mutableStateOf(false) }
-                                var folderTriggerWidthPxMobile by remember { mutableStateOf(0) }
-                                val folderTriggerWidthDpMobile = with(density) { folderTriggerWidthPxMobile.toDp() }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(44.dp)
-                                        .onSizeChanged { folderTriggerWidthPxMobile = it.width }
-                                        .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
-                                        .clickable { showFolderDropdownMobile = true },
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(selectedList, color = AppColors.text, fontSize = 14.sp)
-                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.Gray)
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = showFolderDropdownMobile,
-                                        onDismissRequest = { showFolderDropdownMobile = false },
-                                        modifier = Modifier
-                                            .width(folderTriggerWidthDpMobile)
-                                            .background(AppColors.surface)
-                                            .border(1.dp, AppColors.border, RoundedCornerShape(8.dp)),
-                                        offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp)
-                                    ) {
-                                        folderOptions.forEach { folder ->
-                                            val isSelected = selectedList == folder
-                                            val interactionSource = remember { MutableInteractionSource() }
-                                            val isHovered by interactionSource.collectIsHoveredAsState()
-
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        text = folder,
-                                                        color = if (isHovered || isSelected) AppColors.accent else AppColors.text,
-                                                        fontSize = 13.sp,
-                                                        fontWeight = if (isSelected || isHovered) FontWeight.SemiBold else FontWeight.Normal
-                                                    )
-                                                },
-                                                onClick = {
-                                                    selectedList = folder
-                                                    viewModel.onFolderChange(if (folder == "All lists") "All" else folder)
-                                                    showFolderDropdownMobile = false
-                                                },
-                                                modifier = Modifier
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    .clip(RoundedCornerShape(8.dp)),
-                                                interactionSource = interactionSource,
-                                                trailingIcon = {
-                                                    if (isSelected) {
-                                                        Icon(
-                                                            Icons.Default.CheckCircle, null,
-                                                            tint = AppColors.accent,
-                                                            modifier = Modifier.size(16.dp)
-                                                        )
-                                                    }
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(Modifier.height(8.dp))
-
-                                // Next 2 rows: 2 advanced filters per row
+                                // Advanced filters: 2 per row
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -508,6 +363,18 @@ fun WatchlistScreen(
 
             val showOffline = state.isOffline && state.items.isEmpty()
 
+            LibraryFolderTabs(
+                selectedKey = selectedList,
+                isDesktop = isDesktop,
+                onFolderSelected = { folder ->
+                    expandedFilters = false
+                    viewModel.onFolderChange(if (folder == "ALL") "All" else folder)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = if (isDesktop) 18.dp else 8.dp, bottom = 8.dp),
+            )
+
             if (showOffline) {
                 OfflineState(onRetry = { viewModel.onFolderChange(state.selectedFolder) }, isLoading = state.isLoading)
             } else {
@@ -560,7 +427,7 @@ fun WatchlistScreen(
                             }
                         }
                     } else {
-                        val showAll = selectedList == "All lists"
+                        val showAll = selectedList == "ALL"
                         var hasAnyItems = false
 
                         if (showAll) {
@@ -652,6 +519,83 @@ fun WatchlistScreen(
                 }
             } // else (not offline)
         }
+    }
+}
+
+private data class LibraryFolderTab(
+    val key: String,
+    val label: String,
+)
+
+private val libraryFolderTabs = listOf(
+    LibraryFolderTab("ALL", "All"),
+    LibraryFolderTab("WATCHING", "Watching"),
+    LibraryFolderTab("PLANNING", "Plan to Watch"),
+    LibraryFolderTab("COMPLETED", "Completed"),
+    LibraryFolderTab("PAUSED", "On Hold"),
+    LibraryFolderTab("DROPPED", "Dropped"),
+)
+
+private fun normalizeLibraryFolder(folder: String): String =
+    when (folder.trim().uppercase().replace('-', '_').replace(' ', '_')) {
+        "", "ALL", "ALL_LISTS" -> "ALL"
+        "CURRENT" -> "WATCHING"
+        "PLAN_TO_WATCH", "PLAN_TO_WATCHING" -> "PLANNING"
+        "ON_HOLD" -> "PAUSED"
+        else -> folder.trim().uppercase()
+    }
+
+@Composable
+private fun LibraryFolderTabs(
+    selectedKey: String,
+    isDesktop: Boolean,
+    onFolderSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scrollState = rememberScrollState()
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .then(
+                    if (isDesktop) {
+                        Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+                    } else {
+                        Modifier.horizontalScroll(scrollState).padding(horizontal = 24.dp)
+                    }
+                )
+                .height(48.dp),
+            horizontalArrangement = if (isDesktop) Arrangement.SpaceBetween else Arrangement.spacedBy(30.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            libraryFolderTabs.forEach { tab ->
+                val selected = selectedKey == tab.key
+                Column(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onFolderSelected(tab.key) }
+                        .padding(horizontal = 2.dp, vertical = 5.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = tab.label,
+                        color = if (selected) AppColors.text else AppColors.textMuted,
+                        fontSize = if (isDesktop) 15.sp else 16.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(if (selected) 30.dp else 1.dp)
+                            .height(2.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (selected) AppColors.accent else Color.Transparent)
+                    )
+                }
+            }
+        }
+        HorizontalDivider(color = AppColors.border.copy(alpha = 0.75f), thickness = 1.dp)
     }
 }
 
