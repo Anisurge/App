@@ -687,6 +687,9 @@ fun App(
                         GamesScreen(
                             viewModel = gamesVm,
                             onBack = { navController.popBackStack() },
+                            onBuyBerries = {
+                                navController.navigate(Screen.Home(startTab = "settings", startSettingsTab = "berries").route)
+                            },
                         )
                     }
 

@@ -84,10 +84,10 @@ class GamesViewModel(
         }
     }
 
-    fun createMines(bet: Int, mines: Int) {
+    fun createMines(bet: Int) {
         state = state.copy(busyAction = "mines-start", minesState = null, minesRevealResult = null, minesCashoutResult = null, error = null)
         viewModelScope.launch {
-            bffGamesService.createMines(bet, mines).fold(
+            bffGamesService.createMines(bet).fold(
                 onSuccess = { result ->
                     state = state.copy(
                         busyAction = null,

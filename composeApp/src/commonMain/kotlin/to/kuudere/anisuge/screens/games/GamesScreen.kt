@@ -70,6 +70,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import to.kuudere.anisuge.data.models.BffAnimeGameItem
 import to.kuudere.anisuge.data.models.BffCoinFlipResponse
+import to.kuudere.anisuge.platform.PlatformBackHandler
 import to.kuudere.anisuge.screens.settings.BELI_SYMBOL
 import to.kuudere.anisuge.theme.AppColors
 import kotlin.math.min
@@ -105,9 +106,13 @@ private val fallbackWheelSegments = listOf(
 fun GamesScreen(
     viewModel: GamesViewModel,
     onBack: () -> Unit,
+    onBuyBerries: () -> Unit = {},
 ) {
     val state = viewModel.state
     var selectedGame by remember { mutableStateOf<GameKind?>(null) }
+    PlatformBackHandler(enabled = selectedGame != null) {
+        selectedGame = null
+    }
 
     Column(
         modifier = Modifier
@@ -121,6 +126,7 @@ fun GamesScreen(
                 if (selectedGame == null) onBack() else selectedGame = null
             },
             onRefresh = { viewModel.loadStatus() },
+            onBuyBerries = onBuyBerries,
         )
 
         state.error?.let { error ->
@@ -166,6 +172,7 @@ private fun GamesHeader(
     selectedGame: GameKind?,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
+    onBuyBerries: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -193,6 +200,9 @@ private fun GamesHeader(
         }
         Spacer(Modifier.weight(1f))
         BalancePill(state.status?.coins ?: 0)
+        TextButton(onClick = onBuyBerries) {
+            Text("Buy", color = Color(0xFFFFD166), fontWeight = FontWeight.Bold)
+        }
         IconButton(onClick = onRefresh) {
             Icon(Icons.Default.PlayArrow, "Refresh", tint = Color.White.copy(alpha = 0.8f))
         }
@@ -396,9 +406,25 @@ private fun WheelGame(viewModel: GamesViewModel, state: GamesUiState) {
         }
         ?: fallbackWheelSegments
     val busy = state.busyAction == "wheel"
+    var spinRotation by remember { mutableStateOf(0f) }
+    var lastSpinKey by remember { mutableStateOf<String?>(null) }
+    val resultKey = state.wheelResult?.let { "${it.prize}:${it.prizeLabel}:${it.coins}" }
+    LaunchedEffect(busy, resultKey) {
+        if (busy) {
+            spinRotation += 1260f
+        } else if (resultKey != null && resultKey != lastSpinKey) {
+            val segmentIndex = segments.indexOfFirst { it.prize == state.wheelResult.prize }
+                .takeIf { it >= 0 }
+                ?: 0
+            val sweep = 360f / segments.size
+            val targetInsideSegment = segmentIndex * sweep + sweep / 2f
+            spinRotation += 1080f + (360f - targetInsideSegment)
+            lastSpinKey = resultKey
+        }
+    }
     val rotation by animateFloatAsState(
-        targetValue = if (busy) 1440f else if (state.wheelResult != null) 180f else 0f,
-        animationSpec = tween(1600),
+        targetValue = spinRotation,
+        animationSpec = tween(if (busy) 1200 else 2200),
         label = "wheel",
     )
 
@@ -531,9 +557,23 @@ private fun CoinFlipGame(viewModel: GamesViewModel, state: GamesUiState) {
 
 @Composable
 private fun CoinFace(result: BffCoinFlipResponse?, choice: String, busy: Boolean) {
+    var coinTurns by remember { mutableStateOf(0f) }
+    var lastResultKey by remember { mutableStateOf<String?>(null) }
+    val resultKey = result?.let { "${it.result}:${it.won}:${it.coins}" }
+    LaunchedEffect(busy, resultKey) {
+        if (busy) {
+            coinTurns += 900f
+        } else if (resultKey != null && resultKey != lastResultKey) {
+            val finalSide = if (result.result == "tails") 180f else 0f
+            coinTurns = (coinTurns + 1080f).let { base ->
+                base - (base % 360f) + finalSide
+            }
+            lastResultKey = resultKey
+        }
+    }
     val rotation by animateFloatAsState(
-        targetValue = if (busy) 720f else 0f,
-        animationSpec = tween(900),
+        targetValue = coinTurns,
+        animationSpec = tween(if (busy) 900 else 1300),
         label = "coin",
     )
     Box(
@@ -569,7 +609,6 @@ private fun CoinFace(result: BffCoinFlipResponse?, choice: String, busy: Boolean
 @Composable
 private fun MinesGame(viewModel: GamesViewModel, state: GamesUiState) {
     var bet by remember { mutableStateOf(10) }
-    var mineCount by remember { mutableStateOf(3) }
     val coins = state.status?.coins ?: 0
     val maxBet = min(coins, state.status?.config?.mines?.maxBet ?: 5000).coerceAtLeast(1)
     val game = state.minesState
@@ -596,9 +635,9 @@ private fun MinesGame(viewModel: GamesViewModel, state: GamesUiState) {
                 }
             }
             BetStepper(bet = bet, maxBet = maxBet, onChange = { bet = it })
-            MineCountStepper(count = mineCount, onChange = { mineCount = it.coerceIn(1, 10) })
+            RiskInfoRow("10 bombs", "40% of the board", "Fixed house odds")
             Button(
-                onClick = { viewModel.createMines(bet, mineCount) },
+                onClick = { viewModel.createMines(bet) },
                 enabled = !busy && coins >= bet,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(8.dp),
@@ -1011,21 +1050,20 @@ private fun BetStepper(bet: Int, maxBet: Int, onChange: (Int) -> Unit) {
 }
 
 @Composable
-private fun MineCountStepper(count: Int, onChange: (Int) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-        Text("Mines", color = Color.White.copy(alpha = 0.65f), fontSize = 13.sp, modifier = Modifier.width(52.dp))
-        StepButton("-", enabled = count > 1) { onChange(count - 1) }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0x14FFFFFF))
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(count.toString(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+private fun RiskInfoRow(left: String, center: String, right: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        listOf(left, center, right).forEach { label ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0x14FFFFFF))
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label, color = Color.White.copy(alpha = 0.74f), fontSize = 12.sp, textAlign = TextAlign.Center)
+            }
         }
-        StepButton("+", enabled = count < 10) { onChange(count + 1) }
     }
 }
 

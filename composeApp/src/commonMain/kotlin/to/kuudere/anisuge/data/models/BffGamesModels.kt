@@ -31,7 +31,7 @@ data class BffActiveGameSession(
 
 @Serializable
 data class BffGameConfig(
-    val maxBet: Int = 5000,
+    val maxBet: Int = 1000,
     val wheel: BffWheelConfig = BffWheelConfig(),
     val coinFlip: BffCoinFlipConfig = BffCoinFlipConfig(),
     val mines: BffMinesConfig = BffMinesConfig(),
@@ -53,27 +53,27 @@ data class BffWheelSegment(
 
 @Serializable
 data class BffCoinFlipConfig(
-    val payoutMultiplier: Double = 1.7,
+    val payoutMultiplier: Double = 1.85,
     val minBet: Int = 1,
-    val maxBet: Int = 5000,
+    val maxBet: Int = 1000,
 )
 
 @Serializable
 data class BffMinesConfig(
     val gridSize: Int = 5,
-    val minMines: Int = 1,
+    val minMines: Int = 10,
     val maxMines: Int = 10,
     val minBet: Int = 1,
-    val maxBet: Int = 5000,
-    val houseEdge: Double = 0.15,
+    val maxBet: Int = 1000,
+    val houseEdge: Double = 0.25,
 )
 
 @Serializable
 data class BffCrashConfig(
     val minBet: Int = 1,
-    val maxBet: Int = 5000,
+    val maxBet: Int = 1000,
     val growthPerSecond: Double = 0.42,
-    val maxMultiplier: Double = 50.0,
+    val maxMultiplier: Double = 10.0,
 )
 
 @Serializable
@@ -265,7 +265,7 @@ data class BffWheelSpinRequest(val freeSpin: Boolean = true)
 data class BffCoinFlipRequest(val bet: Int, val choice: String)
 
 @Serializable
-data class BffMinesCreateRequest(val bet: Int, val mines: Int)
+data class BffMinesCreateRequest(val bet: Int)
 
 @Serializable
 data class BffMinesRevealRequest(val gameId: String, val tileIndex: Int)

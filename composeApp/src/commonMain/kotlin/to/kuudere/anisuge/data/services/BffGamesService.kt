@@ -67,8 +67,8 @@ class BffGamesService(
     suspend fun flipCoin(bet: Int, choice: String): Result<BffCoinFlipResponse> =
         postJson("/games/coin-flip", BffCoinFlipRequest(bet = bet, choice = choice))
 
-    suspend fun createMines(bet: Int, mines: Int): Result<BffMinesCreateResponse> =
-        postJson("/games/mines/create", BffMinesCreateRequest(bet = bet, mines = mines))
+    suspend fun createMines(bet: Int): Result<BffMinesCreateResponse> =
+        postJson("/games/mines/create", BffMinesCreateRequest(bet = bet))
 
     suspend fun revealMinesTile(gameId: String, tileIndex: Int): Result<BffMinesRevealResponse> =
         postJson("/games/mines/reveal", BffMinesRevealRequest(gameId = gameId, tileIndex = tileIndex))
