@@ -713,7 +713,7 @@ fun App(
                             viewModel = gamesVm,
                             onBack = { navController.popBackStack() },
                             onBuyBerries = {
-                                navController.navigate(Screen.Home(startTab = "settings", startSettingsTab = "berries").route)
+                                settingsVm.startBerryPurchase(uriHandler::openUri)
                             },
                         )
                     }

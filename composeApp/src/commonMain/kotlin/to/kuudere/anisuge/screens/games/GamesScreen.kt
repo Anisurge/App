@@ -50,9 +50,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -83,11 +81,18 @@ private enum class GameKind(
     Wheel("Berry Wheel", "Daily free spin and paid prize spins", Color(0xFFFFC107)),
     Coin("Coin Flip", "Pick a side, wager Berries", Color(0xFFE57373)),
     HigherLower("Anime Higher/Lower", "Compare catalog scores", Color(0xFF64B5F6)),
-    Guess("Anime Guess", "Blurred, pixel, and silhouette poster rounds", Color(0xFFBA68C8)),
+    Guess("Anime Guess", "Timed blur and pixel poster rounds", Color(0xFFBA68C8)),
     Mines("Mines", "Reveal safe tiles and cash out", Color(0xFF4DB6AC)),
     Crash("Crash", "Cash out before the multiplier breaks", Color(0xFFFF8A65)),
     Trivia("Anime Trivia", "Catalog questions with rewards", Color(0xFFAED581)),
 }
+
+private val visibleGames = listOf(
+    GameKind.HigherLower,
+    GameKind.Guess,
+    GameKind.Mines,
+    GameKind.Trivia,
+)
 
 private data class WheelSegmentUi(val label: String, val prize: Int, val color: Color)
 
@@ -155,6 +160,7 @@ fun GamesScreen(
             GamesLobby(
                 state = state,
                 onSelect = { selectedGame = it },
+                onBuyBerries = onBuyBerries,
             )
         } else {
             GameDetail(
@@ -200,9 +206,6 @@ private fun GamesHeader(
         }
         Spacer(Modifier.weight(1f))
         BalancePill(state.status?.coins ?: 0)
-        TextButton(onClick = onBuyBerries) {
-            Text("Buy", color = Color(0xFFFFD166), fontWeight = FontWeight.Bold)
-        }
         IconButton(onClick = onRefresh) {
             Icon(Icons.Default.PlayArrow, "Refresh", tint = Color.White.copy(alpha = 0.8f))
         }
@@ -249,6 +252,7 @@ private fun MessageBand(
 private fun GamesLobby(
     state: GamesUiState,
     onSelect: (GameKind) -> Unit,
+    onBuyBerries: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -258,6 +262,7 @@ private fun GamesLobby(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         StatsStrip(state)
+        BuyBerriesCard(onBuyBerries)
         ActiveSessionsStrip(state)
         ResponsiveGameGrid(onSelect)
         Spacer(Modifier.height(20.dp))
@@ -274,6 +279,37 @@ private fun StatsStrip(state: GamesUiState) {
         StatTile("Earned", "${BELI_SYMBOL}${formatBerries(status?.totalEarned ?: 0)}", Color(0xFF81C784), Modifier.weight(1f))
         StatTile("Lost", "${BELI_SYMBOL}${formatBerries(status?.totalLost ?: 0)}", Color(0xFFE57373), Modifier.weight(1f))
         StatTile("Best", "${status?.bestStreak ?: 0}", Color(0xFFFFD166), Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun BuyBerriesCard(onBuyBerries: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onBuyBerries),
+        color = Color(0x22FFD166),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .border(1.dp, Color(0xFFFFD166).copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Need more Berries?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Open the official checkout tied to your Anisurge account.", color = Color.White.copy(alpha = 0.62f), fontSize = 12.sp)
+            }
+            Button(
+                onClick = onBuyBerries,
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD166)),
+            ) {
+                Text("Buy Berries", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
@@ -310,8 +346,7 @@ private fun ActiveSessionsStrip(state: GamesUiState) {
                 fontSize = 14.sp,
             )
             Text(
-                if (state.status?.canFreeWheel == true) "Free Berry Wheel spin is ready."
-                else "Free Berry Wheel spin is used for today.",
+                "Skill rounds pay Berries; paused luck games are hidden while they are tuned.",
                 color = Color.White.copy(alpha = 0.55f),
                 fontSize = 12.sp,
             )
@@ -324,7 +359,7 @@ private fun ResponsiveGameGrid(onSelect: (GameKind) -> Unit) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val columns = if (maxWidth < 620.dp) 2 else 3
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            GameKind.entries.chunked(columns).forEach { row ->
+            visibleGames.chunked(columns).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     row.forEach { game ->
                         GameCard(game = game, modifier = Modifier.weight(1f), onClick = { onSelect(game) })
@@ -877,6 +912,20 @@ private fun AnimeGuessGame(viewModel: GamesViewModel, state: GamesUiState) {
     val busy = state.busyAction?.startsWith("guess") == true
     var typedAnswer by remember(game?.gameId) { mutableStateOf("") }
     var mode by remember { mutableStateOf("blur") }
+    var guessSecondsLeft by remember(game?.gameId) { mutableStateOf(6) }
+
+    LaunchedEffect(game?.gameId, game?.state) {
+        val activeGame = game ?: return@LaunchedEffect
+        if (activeGame.state != "playing") return@LaunchedEffect
+        guessSecondsLeft = 6
+        while (guessSecondsLeft > 0 && activeGame.state == "playing") {
+            delay(1000)
+            guessSecondsLeft -= 1
+        }
+        if (guessSecondsLeft <= 0 && activeGame.state == "playing") {
+            viewModel.answerAnimeGuess("")
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         if (game == null || game.state != "playing") {
@@ -891,7 +940,7 @@ private fun AnimeGuessGame(viewModel: GamesViewModel, state: GamesUiState) {
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("blur", "pixel", "silhouette").forEach { item ->
+                listOf("blur", "pixel").forEach { item ->
                     ChoiceButton(item.replaceFirstChar { it.uppercase() }, mode == item, Modifier.weight(1f)) { mode = item }
                 }
             }
@@ -905,6 +954,7 @@ private fun AnimeGuessGame(viewModel: GamesViewModel, state: GamesUiState) {
                 Text("Start Guess (${BELI_SYMBOL}${state.status?.config?.skillGames?.animeGuessEntryCost ?: 3})", color = Color.Black, fontWeight = FontWeight.Bold)
             }
         } else {
+            RoundInfoRow("Timer ${guessSecondsLeft}s", "Entry ${BELI_SYMBOL}${state.status?.config?.skillGames?.animeGuessEntryCost ?: 3}", "No repeats")
             GuessPoster(imageUrl = game.imageUrl, mode = game.mode)
             if (game.hints.isNotEmpty()) {
                 Surface(color = Color(0x14FFFFFF), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -923,14 +973,14 @@ private fun AnimeGuessGame(viewModel: GamesViewModel, state: GamesUiState) {
                 )
                 Button(
                     onClick = { viewModel.revealGuessHint() },
-                    enabled = !busy && game.hints.size < 2,
+                    enabled = !busy && guessSecondsLeft > 0 && game.hints.size < 2,
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64B5F6)),
                 ) { Text("Hint") }
             }
             Button(
                 onClick = { viewModel.answerAnimeGuess(typedAnswer) },
-                enabled = !busy && typedAnswer.isNotBlank(),
+                enabled = !busy && guessSecondsLeft > 0 && typedAnswer.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(8.dp),
             ) { Text("Submit Guess") }
@@ -938,7 +988,7 @@ private fun AnimeGuessGame(viewModel: GamesViewModel, state: GamesUiState) {
             game.choices.forEach { choice ->
                 OutlinedButton(
                     onClick = { viewModel.answerAnimeGuess(animeId = choice.animeId) },
-                    enabled = !busy,
+                    enabled = !busy && guessSecondsLeft > 0,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
                 ) {
@@ -963,7 +1013,6 @@ private fun GuessPoster(imageUrl: String, mode: String) {
             model = imageUrl,
             contentDescription = "Anime guess poster",
             contentScale = ContentScale.Crop,
-            colorFilter = if (mode == "silhouette") ColorFilter.tint(Color.Black.copy(alpha = 0.86f), BlendMode.SrcAtop) else null,
             modifier = Modifier
                 .fillMaxSize()
                 .then(if (mode == "blur") Modifier.blur(24.dp) else Modifier)
