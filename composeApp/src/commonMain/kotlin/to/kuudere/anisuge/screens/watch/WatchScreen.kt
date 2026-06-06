@@ -2251,14 +2251,7 @@ fun WatchVideoPlayer(
             LaunchedEffect(playerState.error) {
                 val error = playerState.error ?: return@LaunchedEffect
                 if (error.contains("trying another server", ignoreCase = true)) {
-                    if (!isPremiumUser) {
-                        playerState.error = "Stream failed to start — try another server in Settings"
-                        return@LaunchedEffect
-                    }
-                    val resumeAt = playerState.position.takeIf { it >= 1.0 }
-                        ?: uiState.savedWatchPosition
-                    viewModel.tryNextServerAfterPlaybackFailure(resumeAt)
-                    playerState.error = null
+                    playerState.error = "Stream failed to start — choose another server in Settings"
                 }
             }
 

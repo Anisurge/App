@@ -559,22 +559,7 @@ class WatchViewModel(
 
         try {
             val scrapeSource = apiSource
-            var response = infoService.getVideoStream(anilistId, episodeNum, scrapeSource)
-            if (
-                response == null ||
-                (response.sub?.streams.isNullOrEmpty() == true &&
-                        response.dub?.streams.isNullOrEmpty() == true)
-            ) {
-                val fallback = when {
-                    scrapeSource.equals("anitaku-2", ignoreCase = true) -> "anitaku"
-                    scrapeSource.equals("anitaku-1", ignoreCase = true) -> "anitaku"
-                    else -> null
-                }
-                if (fallback != null && !fallback.equals(scrapeSource, ignoreCase = true)) {
-                    println("[WatchVM] batch_scrape empty for $scrapeSource, retrying source=$fallback")
-                    response = infoService.getVideoStream(anilistId, episodeNum, fallback)
-                }
-            }
+            val response = infoService.getVideoStream(anilistId, episodeNum, scrapeSource)
 
             if (!coroutineContext.isActive || generation != streamLoadGeneration) return
 
@@ -870,49 +855,7 @@ class WatchViewModel(
     }
 
     fun tryNextServerAfterPlaybackFailure(position: Double) {
-        val current = _uiState.value.currentServer.lowercase()
-        val fallbackKey = "$current:${_uiState.value.currentEpisodeNumber}"
-        if (lastAutoServerFallbackKey == fallbackKey) {
-            println("[WatchVM] playback failed again on $current; not auto-falling back repeatedly")
-            return
-        }
-        val failedBase = current.removeSuffix("-dub")
-        val servers = getAvailableServers()
-            .map { it.id.lowercase() }
-            .filter {
-                it.isNotBlank() &&
-                        it != current &&
-                        it != "offline" &&
-                        it.removeSuffix("-dub") != failedBase
-            }
-            .distinct()
-        if (servers.isEmpty()) return
-
-        val priority = serverRepository.getFallbackPriority().map { it.lowercase() }
-        val premiumOrder = listOf("anitaku-1", "anitaku", "anikage")
-        val preferredNext = if (current in premiumOrder) {
-            premiumOrder
-                .drop(premiumOrder.indexOf(current) + 1)
-                .firstOrNull { it in servers }
-        } else {
-            premiumOrder.firstOrNull { it in servers }
-        }
-        val next = preferredNext
-            ?: priority.firstOrNull { it in servers }
-            ?: servers.first()
-
-        lastAutoServerFallbackKey = fallbackKey
-        if (userPinnedStreamServer == current) {
-            userPinnedStreamServer = null
-        }
-        println("[WatchVM] playback failed on $current, trying next server=$next")
-        changeServerWithState(
-            newServer = next,
-            position = position,
-            targetAudioLang = _uiState.value.targetLang,
-            targetSubtitleLang = _uiState.value.targetSubtitleLang,
-            targetSubtitleLangCode = _uiState.value.targetSubtitleLangCode,
-        )
+        println("[WatchVM] playback failed; auto server switching is disabled")
     }
 
     /**

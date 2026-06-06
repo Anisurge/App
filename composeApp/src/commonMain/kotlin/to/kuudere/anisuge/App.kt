@@ -33,6 +33,8 @@ import to.kuudere.anisuge.screens.home.HomeViewModel
 import to.kuudere.anisuge.screens.home.ContinueWatchingScreen
 import to.kuudere.anisuge.screens.chat.LiveChatScreen
 import to.kuudere.anisuge.screens.chat.LiveChatViewModel
+import to.kuudere.anisuge.screens.announcements.AnnouncementsScreen
+import to.kuudere.anisuge.screens.announcements.AnnouncementsViewModel
 import to.kuudere.anisuge.screens.w2g.W2gRoomListScreen
 import to.kuudere.anisuge.screens.w2g.W2gPlayerScreen
 import to.kuudere.anisuge.screens.w2g.W2gViewModel
@@ -186,6 +188,12 @@ fun App(
                 AppComponent.stickerService,
             )
         }
+        val announcementsVm = remember {
+            AnnouncementsViewModel(
+                AppComponent.announcementService,
+                AppComponent.chatService,
+            )
+        }
         val gamesVm = remember { GamesViewModel() }
         val w2gVm = remember {
             W2gViewModel(
@@ -202,6 +210,7 @@ fun App(
         val updateState by updateVm.state.collectAsState()
         val authState by AppComponent.authService.authState.collectAsState()
         val currentUserProfile = (authState as? SessionCheckResult.Valid)?.user
+        val announcementsState by announcementsVm.uiState.collectAsState()
 
         LaunchedEffect(authState) {
             if (authState is SessionCheckResult.NoSession || authState is SessionCheckResult.Expired) {
@@ -215,6 +224,8 @@ fun App(
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            } else if (authState is SessionCheckResult.Valid) {
+                announcementsVm.refreshStatus()
             }
         }
         val appLocaleCode by AppComponent.settingsStore.appLocaleFlow.collectAsState(initial = AppLocale.default.code)
@@ -244,6 +255,9 @@ fun App(
                 }
                 deeplink.equals("anisurge://chat", ignoreCase = true) -> {
                     navController.navigate(Screen.LiveChat.route) { launchSingleTop = true }
+                }
+                deeplink.equals("anisurge://announcements", ignoreCase = true) -> {
+                    navController.navigate(Screen.Announcements.route) { launchSingleTop = true }
                 }
                 deeplink.startsWith("anisurge://settings", ignoreCase = true) -> {
                     val key = deeplink.removePrefix("anisurge://settings").trim('/').substringBefore("/")
@@ -515,6 +529,7 @@ fun App(
                                 onOpenLayoutEditor = { navController.navigate(Screen.HomeLayout.route) },
                                 liveChatViewModel = liveChatVm,
                                 onLiveChatClick = { navController.navigate(Screen.LiveChat.route) },
+                                onAnnouncementsClick = { navController.navigate(Screen.Announcements.route) },
                                 onW2gClick = { navController.navigate(Screen.W2gRoomList.route) },
                                 onGamesClick = { navController.navigate(Screen.Games.route) },
                                 onLiveChatSignIn = {
@@ -523,6 +538,7 @@ fun App(
                                     }
                                 },
                                 onChatAction = handleChatAction,
+                                announcementUnreadCount = announcementsState.unreadCount,
                                 startOnDownloads = downloadsArg || (splashVm.destination.value == SplashDestination.GoHomeOffline),
                                 startTab = requestedTab,
                                 startSettingsTab = requestedSettingsTab,
@@ -680,6 +696,15 @@ fun App(
                                 }
                             },
                             onAction = handleChatAction,
+                            announcementUnreadCount = announcementsState.unreadCount,
+                            onAnnouncementsClick = { navController.navigate(Screen.Announcements.route) },
+                        )
+                    }
+
+                    composable(Screen.Announcements.route) {
+                        AnnouncementsScreen(
+                            viewModel = announcementsVm,
+                            onBack = { navController.popBackStack() },
                         )
                     }
 

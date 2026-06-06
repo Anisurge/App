@@ -51,6 +51,10 @@ object AppComponent {
         to.kuudere.anisuge.data.services.ChatService(sessionStore, httpClient)
     }
 
+    val announcementService: to.kuudere.anisuge.data.services.AnnouncementService by lazy {
+        to.kuudere.anisuge.data.services.AnnouncementService(sessionStore, httpClient)
+    }
+
     val dataStore: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> by lazy {
         createDataStore()
     }

@@ -222,10 +222,12 @@ fun HomeScreen(
     onViewNewOnAppMore: () -> Unit = {},
     liveChatViewModel: LiveChatViewModel,
     onLiveChatClick: () -> Unit = {},
+    onAnnouncementsClick: () -> Unit = {},
     onGamesClick: () -> Unit = {},
     onW2gClick: () -> Unit = {},
     onLiveChatSignIn: () -> Unit = {},
     onChatAction: (String) -> Unit = {},
+    announcementUnreadCount: Int = 0,
     onOpenLayoutEditor: () -> Unit = {},
     startOnDownloads: Boolean = false,
     startTab: String? = null,
@@ -334,9 +336,11 @@ fun HomeScreen(
                         switchTab(tab, nested)
                     },
                     onLiveChatClick = { showDesktopLiveChat = true },
+                    onAnnouncementsClick = onAnnouncementsClick,
                     onGamesClick = onGamesClick,
                     onW2gClick = onW2gClick,
                     chatUnreadCount = chatUnreadCount,
+                    announcementUnreadCount = announcementUnreadCount,
                     onLogout = {
                         showLogoutConfirm = true
                     },
@@ -353,6 +357,8 @@ fun HomeScreen(
                                 onBack = { showDesktopLiveChat = false },
                                 onSignIn = onLiveChatSignIn,
                                 onAction = onChatAction,
+                                announcementUnreadCount = announcementUnreadCount,
+                                onAnnouncementsClick = onAnnouncementsClick,
                             )
                         } else {
                             AnimatedContent(
@@ -476,9 +482,11 @@ fun HomeScreen(
                             switchTab(AnisugTab.Settings, SettingsTab.Profile)
                         },
                         onLiveChatClick = onLiveChatClick,
+                        onAnnouncementsClick = onAnnouncementsClick,
                         onGamesClick = onGamesClick,
                         onW2gClick = onW2gClick,
                         chatUnreadCount = chatUnreadCount,
+                        announcementUnreadCount = announcementUnreadCount,
                         useQuickActionMenu = settingsState.quickActionMenu,
                         hazeState = hazeState,
                         modifier = Modifier
@@ -1934,9 +1942,11 @@ private fun AnisugSidebar(
     isLoggingOut: Boolean,
     onTabSelect: (AnisugTab, SettingsTab?) -> Unit,
     onLiveChatClick: () -> Unit,
+    onAnnouncementsClick: () -> Unit = {},
     onGamesClick: () -> Unit = {},
     onW2gClick: () -> Unit = {},
     chatUnreadCount: Int = 0,
+    announcementUnreadCount: Int = 0,
     onLogout: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -2004,6 +2014,13 @@ private fun AnisugSidebar(
                     badgeCount = chatUnreadCount,
                     badgeColor = Color(0xFFE50914),
                     onClick = onLiveChatClick,
+                )
+                SidebarIcon(
+                    Icons.Default.Notifications,
+                    isSelected = false,
+                    badgeCount = announcementUnreadCount,
+                    badgeColor = Color(0xFFE50914),
+                    onClick = onAnnouncementsClick,
                 )
                 SidebarIcon(
                     Icons.Filled.Star,
@@ -2193,9 +2210,11 @@ private fun MobileTopBar(
     onDownloadClick: () -> Unit,
     onProfileClick: () -> Unit,
     onLiveChatClick: () -> Unit,
+    onAnnouncementsClick: () -> Unit = {},
     onGamesClick: () -> Unit = {},
     onW2gClick: () -> Unit = {},
     chatUnreadCount: Int = 0,
+    announcementUnreadCount: Int = 0,
     useQuickActionMenu: Boolean = true,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
@@ -2296,9 +2315,13 @@ private fun MobileTopBar(
                                     },
                                 )
                                 QuickMenuItem(
-                                    text = "notifications",
+                                    text = "announcements",
                                     icon = Icons.Default.Notifications,
-                                    onClick = { quickMenuExpanded = false },
+                                    badgeCount = announcementUnreadCount,
+                                    onClick = {
+                                        quickMenuExpanded = false
+                                        onAnnouncementsClick()
+                                    },
                                 )
                             }
                         }

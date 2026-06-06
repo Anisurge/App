@@ -408,11 +408,14 @@ private fun WheelGame(viewModel: GamesViewModel, state: GamesUiState) {
     val busy = state.busyAction == "wheel"
     var spinRotation by remember { mutableStateOf(0f) }
     var lastSpinKey by remember { mutableStateOf<String?>(null) }
+    var revealedSpinKey by remember { mutableStateOf<String?>(null) }
     val resultKey = state.wheelResult?.let { "${it.prize}:${it.prizeLabel}:${it.coins}" }
     LaunchedEffect(busy, resultKey) {
         if (busy) {
+            revealedSpinKey = null
             spinRotation += 1260f
         } else if (resultKey != null && resultKey != lastSpinKey) {
+            revealedSpinKey = null
             val segmentIndex = segments.indexOfFirst { it.prize == state.wheelResult.prize }
                 .takeIf { it >= 0 }
                 ?: 0
@@ -420,6 +423,14 @@ private fun WheelGame(viewModel: GamesViewModel, state: GamesUiState) {
             val targetInsideSegment = segmentIndex * sweep + sweep / 2f
             spinRotation += 1080f + (360f - targetInsideSegment)
             lastSpinKey = resultKey
+        }
+    }
+    LaunchedEffect(resultKey) {
+        if (resultKey == null) {
+            revealedSpinKey = null
+        } else {
+            delay(2300)
+            revealedSpinKey = resultKey
         }
     }
     val rotation by animateFloatAsState(
@@ -468,7 +479,7 @@ private fun WheelGame(viewModel: GamesViewModel, state: GamesUiState) {
             if (busy) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(38.dp), strokeWidth = 3.dp)
         }
 
-        state.wheelResult?.let {
+        state.wheelResult?.takeIf { revealedSpinKey == resultKey }?.let {
             ResultPanel(
                 title = it.prizeLabel,
                 body = if (it.prize > 0) "+$BELI_SYMBOL${it.prize}" else "Spin again tomorrow or spend Berries.",
@@ -517,6 +528,17 @@ private fun CoinFlipGame(viewModel: GamesViewModel, state: GamesUiState) {
     val coins = state.status?.coins ?: 0
     val maxBet = min(coins, state.status?.config?.coinFlip?.maxBet ?: 5000).coerceAtLeast(1)
     val busy = state.busyAction == "coin"
+    var revealedCoinKey by remember { mutableStateOf<String?>(null) }
+    val coinResultKey = state.coinFlipResult?.let { "${it.result}:${it.won}:${it.coins}" }
+    LaunchedEffect(busy, coinResultKey) {
+        if (busy || coinResultKey == null) {
+            revealedCoinKey = null
+        } else {
+            delay(1400)
+            revealedCoinKey = coinResultKey
+        }
+    }
+    val visibleCoinResult = state.coinFlipResult?.takeIf { revealedCoinKey == coinResultKey }
     bet = bet.coerceIn(1, maxBet)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -525,7 +547,7 @@ private fun CoinFlipGame(viewModel: GamesViewModel, state: GamesUiState) {
             ChoiceButton("Tails", choice == "tails", Modifier.weight(1f)) { choice = "tails" }
         }
 
-        CoinFace(result = state.coinFlipResult, choice = choice, busy = busy)
+        CoinFace(result = visibleCoinResult, spinResult = state.coinFlipResult, choice = choice, busy = busy)
         BetStepper(bet = bet, maxBet = maxBet, onChange = { bet = it })
 
         Text(
@@ -545,7 +567,7 @@ private fun CoinFlipGame(viewModel: GamesViewModel, state: GamesUiState) {
             else Text("Flip Coin", fontWeight = FontWeight.Bold)
         }
 
-        state.coinFlipResult?.let {
+        visibleCoinResult?.let {
             ResultPanel(
                 title = if (it.won) "You won" else "You lost",
                 body = "Result: ${it.result.uppercase()}  Payout: ${BELI_SYMBOL}${it.payout}",
@@ -556,15 +578,15 @@ private fun CoinFlipGame(viewModel: GamesViewModel, state: GamesUiState) {
 }
 
 @Composable
-private fun CoinFace(result: BffCoinFlipResponse?, choice: String, busy: Boolean) {
+private fun CoinFace(result: BffCoinFlipResponse?, spinResult: BffCoinFlipResponse?, choice: String, busy: Boolean) {
     var coinTurns by remember { mutableStateOf(0f) }
     var lastResultKey by remember { mutableStateOf<String?>(null) }
-    val resultKey = result?.let { "${it.result}:${it.won}:${it.coins}" }
+    val resultKey = spinResult?.let { "${it.result}:${it.won}:${it.coins}" }
     LaunchedEffect(busy, resultKey) {
         if (busy) {
             coinTurns += 900f
         } else if (resultKey != null && resultKey != lastResultKey) {
-            val finalSide = if (result.result == "tails") 180f else 0f
+            val finalSide = if (spinResult.result == "tails") 180f else 0f
             coinTurns = (coinTurns + 1080f).let { base ->
                 base - (base % 360f) + finalSide
             }

@@ -168,7 +168,6 @@ private val PREMIUM_BENEFITS = listOf(
     "No chat cooldown",
     "50-episode season downloads",
     "Faster parallel downloads",
-    "Auto server fallback",
     "300 Berries per purchase",
     "Lifetime animated/MP4 PFP",
     "Premium chat badge and gradient name",

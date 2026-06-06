@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.BffAnimeGameItem
@@ -57,8 +58,13 @@ class GamesViewModel(
                             coins = result.coins,
                             canFreeWheel = if (freeSpin) false else state.status?.canFreeWheel ?: false,
                         ),
-                        toast = if (result.prize > 0) "+${result.prize} Berries" else "No prize this spin",
                     )
+                    delay(2300)
+                    if (state.wheelResult == result) {
+                        state = state.copy(
+                            toast = if (result.prize > 0) "+${result.prize} Berries" else "No prize this spin",
+                        )
+                    }
                     loadStatus(quiet = true)
                 },
                 onFailure = { e -> fail(e.message) },
@@ -75,8 +81,13 @@ class GamesViewModel(
                         busyAction = null,
                         coinFlipResult = result,
                         status = state.status?.copy(coins = result.coins),
-                        toast = if (result.won) "Won ${result.payout} Berries" else "Lost $bet Berries",
                     )
+                    delay(1400)
+                    if (state.coinFlipResult == result) {
+                        state = state.copy(
+                            toast = if (result.won) "Won ${result.payout} Berries" else "Lost $bet Berries",
+                        )
+                    }
                     loadStatus(quiet = true)
                 },
                 onFailure = { e -> fail(e.message) },

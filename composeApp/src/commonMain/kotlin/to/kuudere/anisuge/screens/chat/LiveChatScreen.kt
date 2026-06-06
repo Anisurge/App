@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -113,6 +114,8 @@ fun LiveChatScreen(
     onBack: () -> Unit,
     onSignIn: () -> Unit,
     onAction: (String) -> Unit = {},
+    announcementUnreadCount: Int = 0,
+    onAnnouncementsClick: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
@@ -266,6 +269,39 @@ fun LiveChatScreen(
                             contentDescription = "Back",
                             tint = Color.White,
                         )
+                    }
+                },
+                actions = {
+                    Box(modifier = Modifier.size(44.dp)) {
+                        IconButton(
+                            onClick = onAnnouncementsClick,
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = "Announcements",
+                                tint = Color.White,
+                            )
+                        }
+                        if (announcementUnreadCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 5.dp, end = 5.dp)
+                                    .size(if (announcementUnreadCount > 9) 20.dp else 17.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFE50914)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = if (announcementUnreadCount > 99) "99+" else announcementUnreadCount.toString(),
+                                    color = Color.White,
+                                    fontSize = if (announcementUnreadCount > 9) 9.sp else 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
