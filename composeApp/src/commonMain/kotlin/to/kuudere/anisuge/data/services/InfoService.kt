@@ -150,10 +150,19 @@ class InfoService(
         }
     }
 
-    suspend fun prewarmStreamUrl(url: String) {
+    suspend fun prewarmStreamUrl(url: String, headers: Map<String, String>? = null) {
         try {
-            httpClient.head(url)
-        } catch (_: Exception) {}
+            httpClient.head(url) {
+                headers.orEmpty().forEach { (name, value) -> header(name, value) }
+            }
+        } catch (_: Exception) {
+            try {
+                httpClient.get(url) {
+                    headers.orEmpty().forEach { (name, value) -> header(name, value) }
+                    header("Range", "bytes=0-0")
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     suspend fun saveProgress(

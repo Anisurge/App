@@ -677,8 +677,10 @@ class WatchViewModel(
                     )
                 }
 
-                qualities.firstOrNull { it.first == defaultQuality }?.second?.let { streamUrl ->
-                    viewModelScope.launch { infoService.prewarmStreamUrl(streamUrl) }
+                streamSection.streams.firstOrNull { (it.quality ?: "Auto") == defaultQuality }?.let { stream ->
+                    viewModelScope.launch {
+                        infoService.prewarmStreamUrl(stream.url, stream.headers.asHttpHeaderMap())
+                    }
                 }
 
                 attachAniskipTimes(
