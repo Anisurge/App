@@ -27,8 +27,6 @@ internal class LocalStreamProxy {
     private companion object {
         const val DEFAULT_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        const val DEFAULT_ACCEPT =
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     }
 
     private data class Session(val headers: Map<String, String>)
@@ -52,15 +50,12 @@ internal class LocalStreamProxy {
     }
 
     fun proxyUrl(url: String, headers: Map<String, String>?): String {
-        if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
-            return url
-        }
+        if (headers.isNullOrEmpty()) return url
 
         pendingReleases.remove(url)?.cancel(false)
         val sessionId = urls[url] ?: UUID.randomUUID().toString().also { urls[url] = it }
-        sessions[sessionId] = Session(normalizeHeaders(url, headers))
+        sessions[sessionId] = Session(headers)
         ensureStarted()
-        if (serverPort <= 0) return url
         return proxiedUrl(sessionId, url)
     }
 
@@ -173,6 +168,9 @@ internal class LocalStreamProxy {
             if (session.headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
                 setRequestProperty("User-Agent", DEFAULT_USER_AGENT)
             }
+            if (session.headers.keys.none { it.equals("Accept", ignoreCase = true) }) {
+                setRequestProperty("Accept", "*/*")
+            }
             // Disguised PNG+TS segments must be fetched whole so we can strip the PNG prefix before
             // honoring the player's byte range on the MPEG-TS payload.
             if (!HlsPngTsStrip.isDisguisedTsCdnHost(targetUrl)) {
@@ -186,17 +184,6 @@ internal class LocalStreamProxy {
             val source = if (status >= 400) connection.errorStream else connection.inputStream
             if (source == null) {
                 writeStatus(output, status, connection.responseMessage ?: "OK")
-                return
-            }
-            if (status !in 200..299) {
-                writeHeaders(
-                    output,
-                    status,
-                    connection.responseMessage ?: "Upstream Error",
-                    proxiedContentType(targetUrl, contentType),
-                    connection.contentLengthLong,
-                )
-                source.use { it.copyTo(output) }
                 return
             }
 
@@ -293,74 +280,8 @@ internal class LocalStreamProxy {
         if (session.headers.keys.none { it.equals("User-Agent", ignoreCase = true) }) {
             setRequestProperty("User-Agent", DEFAULT_USER_AGENT)
         }
-    }
-
-    private fun normalizeHeaders(url: String, headers: Map<String, String>?): Map<String, String> {
-        val normalized = linkedMapOf<String, String>()
-        headers.orEmpty().forEach { (name, value) ->
-            val cleanName = name.trim()
-            val cleanValue = value.trim()
-            if (cleanName.isNotBlank() && cleanValue.isNotBlank()) {
-                normalized[canonicalHeaderName(cleanName)] = cleanValue
-            }
-        }
-        if (!normalized.hasHeader("User-Agent")) {
-            normalized["User-Agent"] = DEFAULT_USER_AGENT
-        }
-        if (!normalized.hasHeader("Accept")) {
-            normalized["Accept"] = DEFAULT_ACCEPT
-        }
-        if (!normalized.hasHeader("Origin")) {
-            normalized.headerValue("Referer")?.let { referer ->
-                originFromUrl(referer)?.let { normalized["Origin"] = it }
-            }
-        }
-        if (!normalized.hasHeader("Referer")) {
-            inferredReferer(url)?.let { referer ->
-                normalized["Referer"] = referer
-                if (!normalized.hasHeader("Origin")) {
-                    originFromUrl(referer)?.let { normalized["Origin"] = it }
-                }
-            }
-        }
-        return normalized
-    }
-
-    private fun canonicalHeaderName(name: String): String = when (name.lowercase()) {
-        "referer" -> "Referer"
-        "user-agent" -> "User-Agent"
-        "origin" -> "Origin"
-        "accept" -> "Accept"
-        else -> name
-    }
-
-    private fun Map<String, String>.hasHeader(name: String): Boolean =
-        keys.any { it.equals(name, ignoreCase = true) }
-
-    private fun Map<String, String>.headerValue(name: String): String? =
-        entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
-
-    private fun originFromUrl(url: String): String? = runCatching {
-        val uri = URI(url)
-        val scheme = uri.scheme ?: return@runCatching null
-        val host = uri.host ?: return@runCatching null
-        val port = if (uri.port > 0) ":${uri.port}" else ""
-        "$scheme://$host$port"
-    }.getOrNull()
-
-    private fun inferredReferer(url: String): String? {
-        val host = url.substringAfter("://", "").substringBefore('/').lowercase()
-        return when {
-            host.contains("vibeplayer.site") ||
-                host.contains("vibevibe.workers.dev") ||
-                host.contains("ibyteimg.com") ||
-                host.contains("byteimg.com") -> "https://anitaku.online/"
-            host.contains("video.wixstatic.com") ||
-                host.contains("wixmp.com") ||
-                host.contains("fast4speed.rsvp") -> "https://allmanga.to/"
-            host.contains("flixcloud.cc") ||
-                host.contains("slopnet.site") -> "https://lunaranime.ru/"
-            else -> null
+        if (session.headers.keys.none { it.equals("Accept", ignoreCase = true) }) {
+            setRequestProperty("Accept", "*/*")
         }
     }
 
