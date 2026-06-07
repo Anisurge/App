@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.data.models.LayoutConfig
+import to.kuudere.anisuge.data.models.AiChatUiMessage
 import to.kuudere.anisuge.platform.randomInstallUuid
 
 class SettingsStore(private val dataStore: DataStore<Preferences>) {
@@ -45,6 +46,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val THEME_ID_KEY = stringPreferencesKey("theme_id")
         val LEGACY_SCHEDULE_UI_KEY = booleanPreferencesKey("legacy_schedule_ui")
         val HOME_LAYOUT_KEY = stringPreferencesKey("home_layout_v1")
+        val AI_CHAT_HISTORY_KEY = stringPreferencesKey("ai_chat_history")
 
         // MAL tokens
         val MAL_ACCESS_TOKEN_KEY = stringPreferencesKey("mal_access_token")
@@ -383,5 +385,42 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             it.remove(LUNAR_USERNAME_KEY)
             it.remove(LUNAR_USER_ID_KEY)
         }
+    }
+
+    // ── AI Chat History ─────────────────────────────────────────────────────────
+    val aiChatHistoryFlow: Flow<List<AiChatUiMessage>> = dataStore.data.map { preferences ->
+        val jsonStr = preferences[AI_CHAT_HISTORY_KEY]
+        if (jsonStr != null) {
+            try {
+                json.decodeFromString<List<AiChatUiMessage>>(jsonStr)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } else {
+            emptyList()
+        }
+    }
+
+    suspend fun getAiChatHistory(): List<AiChatUiMessage> {
+        return dataStore.data.map { preferences ->
+            val jsonStr = preferences[AI_CHAT_HISTORY_KEY]
+            if (jsonStr != null) {
+                try {
+                    json.decodeFromString<List<AiChatUiMessage>>(jsonStr)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            } else {
+                emptyList()
+            }
+        }.first()
+    }
+
+    suspend fun setAiChatHistory(history: List<AiChatUiMessage>) {
+        dataStore.edit { it[AI_CHAT_HISTORY_KEY] = json.encodeToString(history) }
+    }
+
+    suspend fun clearAiChatHistory() {
+        dataStore.edit { it.remove(AI_CHAT_HISTORY_KEY) }
     }
 }

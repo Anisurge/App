@@ -27,3 +27,11 @@ data class AiChatQuotaResponse(
 data class AiChatErrorResponse(
     val error: String,
 )
+
+@Serializable
+data class AiChatUiMessage(
+    val id: String,
+    val role: String, // "user" | "assistant"
+    val content: String,
+    val isStreaming: Boolean = false,
+)

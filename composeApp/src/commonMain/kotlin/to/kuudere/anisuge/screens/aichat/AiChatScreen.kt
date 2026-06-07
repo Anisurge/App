@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +65,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.kuudere.anisuge.theme.AppColors
+import to.kuudere.anisuge.data.models.AiChatUiMessage
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
@@ -138,7 +140,9 @@ fun AiChatScreen(
                 // Welcome message when empty
                 if (state.messages.isEmpty() && !state.streaming) {
                     item {
-                        WelcomeCard()
+                        WelcomeCard(onSuggestionClick = { suggestion ->
+                            viewModel.sendMessage(suggestion)
+                        })
                     }
                 }
 
@@ -459,7 +463,7 @@ private fun StreamingBubble(text: String) {
 // ── Welcome Card ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun WelcomeCard() {
+private fun WelcomeCard(onSuggestionClick: (String) -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -513,6 +517,7 @@ private fun WelcomeCard() {
                         Modifier
                             .clip(RoundedCornerShape(20.dp))
                             .background(AiAccent.copy(alpha = 0.12f))
+                            .clickable { onSuggestionClick(suggestion) }
                             .padding(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Text(

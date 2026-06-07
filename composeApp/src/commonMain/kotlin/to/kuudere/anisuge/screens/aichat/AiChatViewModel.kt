@@ -10,8 +10,10 @@ import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.AiChatMessageRequest
 import to.kuudere.anisuge.data.models.AiChatQuotaResponse
+import to.kuudere.anisuge.data.models.AiChatUiMessage
 import to.kuudere.anisuge.data.services.AiChatService
 import to.kuudere.anisuge.data.services.AiChatToken
+import to.kuudere.anisuge.data.services.SettingsStore
 
 // ── UI State ──────────────────────────────────────────────────────────────────
 
@@ -25,17 +27,11 @@ data class AiChatUiState(
     val error: String? = null,
 )
 
-data class AiChatUiMessage(
-    val id: String,
-    val role: String, // "user" | "assistant"
-    val content: String,
-    val isStreaming: Boolean = false,
-)
-
 // ── ViewModel ─────────────────────────────────────────────────────────────────
 
 class AiChatViewModel(
     private val aiChatService: AiChatService = AppComponent.aiChatService,
+    private val settingsStore: SettingsStore = AppComponent.settingsStore,
 ) : ViewModel() {
 
     var state by mutableStateOf(AiChatUiState())
@@ -46,6 +42,17 @@ class AiChatViewModel(
 
     init {
         refreshQuota()
+        loadHistory()
+    }
+
+    private fun loadHistory() {
+        viewModelScope.launch {
+            val savedMessages = settingsStore.getAiChatHistory()
+            state = state.copy(messages = savedMessages)
+            msgCounter = savedMessages.maxOfOrNull {
+                it.id.removePrefix("u-").removePrefix("a-").toLongOrNull() ?: 0L
+            } ?: 0L
+        }
     }
 
     fun refreshQuota() {
@@ -95,6 +102,11 @@ class AiChatViewModel(
             error = null,
         )
 
+        // Save immediately when user message is added
+        viewModelScope.launch {
+            settingsStore.setAiChatHistory(state.messages)
+        }
+
         streamJob?.cancel()
         streamJob = viewModelScope.launch {
             try {
@@ -127,6 +139,8 @@ class AiChatViewModel(
                                     )
                                 )
                             }
+                            // Save to settings store on completed streaming response
+                            settingsStore.setAiChatHistory(state.messages)
                         }
                     }
                 }
@@ -147,6 +161,9 @@ class AiChatViewModel(
     fun clearHistory() {
         streamJob?.cancel()
         state = AiChatUiState(quota = state.quota)
+        viewModelScope.launch {
+            settingsStore.clearAiChatHistory()
+        }
     }
 
     override fun onCleared() {
