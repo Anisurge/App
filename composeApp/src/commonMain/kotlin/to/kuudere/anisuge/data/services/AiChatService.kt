@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+import to.kuudere.anisuge.data.models.AiChatAnimeCard
 import to.kuudere.anisuge.data.models.AiChatMessageRequest
 import to.kuudere.anisuge.data.models.AiChatQuotaResponse
 import to.kuudere.anisuge.data.models.AiChatSendRequest
@@ -81,6 +83,8 @@ class AiChatService(
             val channel = response.bodyAsChannel()
             val sb = StringBuilder()
 
+            var animeCard: AiChatAnimeCard? = null
+
             while (!channel.isClosedForRead) {
                 val line = channel.readUTF8Line() ?: break
                 if (!line.startsWith("data:")) continue
@@ -89,7 +93,17 @@ class AiChatService(
 
                 try {
                     val element = json.parseToJsonElement(data)
-                    val token = element.jsonObject["token"]?.jsonPrimitive?.content
+                    val obj = element.jsonObject
+
+                    // Check for anime card event
+                    val animeJson = obj["anime"]
+                    if (animeJson != null) {
+                        animeCard = json.decodeFromJsonElement(animeJson)
+                        emit(AiChatToken.AnimeCard(animeCard!!))
+                        continue
+                    }
+
+                    val token = obj["token"]?.jsonPrimitive?.content
                     if (!token.isNullOrEmpty()) {
                         sb.append(token)
                         emit(AiChatToken.Chunk(token))
@@ -99,7 +113,7 @@ class AiChatService(
                 }
             }
 
-            emit(AiChatToken.Done(sb.toString()))
+            emit(AiChatToken.Done(sb.toString(), animeCard))
         }
     }
 }
@@ -107,6 +121,11 @@ class AiChatService(
 sealed class AiChatToken {
     /** A partial text token streaming in */
     data class Chunk(val text: String) : AiChatToken()
-    /** Stream ended; full accumulated text */
-    data class Done(val fullText: String) : AiChatToken()
+    /** Anime card was resolved from the server */
+    data class AnimeCard(val card: to.kuudere.anisuge.data.models.AiChatAnimeCard) : AiChatToken()
+    /** Stream ended; full accumulated text and optional anime card */
+    data class Done(
+        val fullText: String,
+        val anime: to.kuudere.anisuge.data.models.AiChatAnimeCard? = null,
+    ) : AiChatToken()
 }

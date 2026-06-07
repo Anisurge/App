@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,13 +59,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import to.kuudere.anisuge.theme.AppColors
+import to.kuudere.anisuge.data.models.AiChatAnimeCard
 import to.kuudere.anisuge.data.models.AiChatUiMessage
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -335,62 +339,157 @@ private fun QuotaChip(quota: to.kuudere.anisuge.data.models.AiChatQuotaResponse)
 @Composable
 private fun MessageBubble(msg: AiChatUiMessage, onAnimeClick: (String) -> Unit) {
     val isUser = msg.role == "user"
-    Row(
+    Column(
         Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
     ) {
-        if (!isUser) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        ) {
+            if (!isUser) {
+                Box(
+                    Modifier
+                        .padding(top = 4.dp, end = 8.dp)
+                        .size(28.dp)
+                        .background(
+                            Brush.linearGradient(listOf(AiAccent, AiAccentLight)),
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+
             Box(
                 Modifier
-                    .padding(top = 4.dp, end = 8.dp)
-                    .size(28.dp)
-                    .background(
-                        Brush.linearGradient(listOf(AiAccent, AiAccentLight)),
-                        CircleShape,
-                    ),
-                contentAlignment = Alignment.Center,
+                    .weight(1f, fill = false)
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = if (isUser) 18.dp else 4.dp,
+                            topEnd = if (isUser) 4.dp else 18.dp,
+                            bottomStart = 18.dp,
+                            bottomEnd = 18.dp,
+                        )
+                    )
+                    .background(if (isUser) UserBubble else AiBubble)
+                    .then(
+                        if (!isUser) Modifier.padding(1.dp) else Modifier
+                    )
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Icon(
-                    Icons.Default.AutoAwesome,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp),
-                )
+                if (isUser) {
+                    Text(
+                        text = msg.content,
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp,
+                    )
+                } else {
+                    AiChatMarkdownText(
+                        text = msg.content,
+                        onAnimeClick = onAnimeClick,
+                    )
+                }
             }
         }
 
-        Box(
-            Modifier
-                .weight(1f, fill = false)
-                .clip(
-                    RoundedCornerShape(
-                        topStart = if (isUser) 18.dp else 4.dp,
-                        topEnd = if (isUser) 4.dp else 18.dp,
-                        bottomStart = 18.dp,
-                        bottomEnd = 18.dp,
-                    )
-                )
-                .background(if (isUser) UserBubble else AiBubble)
-                .then(
-                    if (!isUser) Modifier.padding(1.dp) else Modifier
-                )
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+        // Anime card below the bubble
+        if (!isUser && msg.anime != null) {
+            Spacer(Modifier.height(6.dp))
+            AiChatAnimeCardView(
+                anime = msg.anime,
+                onClick = { onAnimeClick(msg.anime.animeId) },
+            )
+        }
+    }
+}
+
+// ── Anime Card ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun AiChatAnimeCardView(
+    anime: AiChatAnimeCard,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 36.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.35f))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        AsyncImage(
+            model = anime.imageUrl,
+            contentDescription = anime.title,
+            modifier = Modifier
+                .width(58.dp)
+                .height(82.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color.White.copy(alpha = 0.08f)),
+            contentScale = ContentScale.Crop,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            if (isUser) {
+            Text(
+                anime.title.ifBlank { "Anime" },
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+            )
+            aiChatAnimeMetaLine(anime)?.let {
                 Text(
-                    text = msg.content,
-                    color = TextPrimary,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
+                    it,
+                    color = Color.White.copy(alpha = 0.62f),
+                    fontSize = 11.sp,
+                    maxLines = 1,
                 )
-            } else {
-                AiChatMarkdownText(
-                    text = msg.content,
-                    onAnimeClick = onAnimeClick,
+            }
+            val description = aiChatPlainDescription(anime.description)
+            if (description.isNotBlank()) {
+                Text(
+                    description,
+                    color = Color.White.copy(alpha = 0.72f),
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 3,
                 )
             }
         }
     }
+}
+
+private fun aiChatAnimeMetaLine(anime: AiChatAnimeCard): String? {
+    val pieces = listOfNotNull(
+        anime.format?.takeIf { it.isNotBlank() },
+        anime.year?.toString(),
+        anime.episodes?.let { "$it eps" },
+        anime.score?.let { "$it%" },
+    )
+    return pieces.joinToString(" / ").takeIf { it.isNotBlank() }
+}
+
+private fun aiChatPlainDescription(raw: String?): String {
+    return (raw ?: "")
+        .replace(Regex("<[^>]+>"), "")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .trim()
+        .take(180)
 }
 
 @Composable

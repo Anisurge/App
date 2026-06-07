@@ -29,9 +29,22 @@ data class AiChatErrorResponse(
 )
 
 @Serializable
+data class AiChatAnimeCard(
+    val animeId: String,
+    val title: String,
+    val description: String? = null,
+    val imageUrl: String? = null,
+    val format: String? = null,
+    val year: Int? = null,
+    val score: Int? = null,
+    val episodes: Int? = null,
+)
+
+@Serializable
 data class AiChatUiMessage(
     val id: String,
     val role: String, // "user" | "assistant"
     val content: String,
+    val anime: AiChatAnimeCard? = null,
     val isStreaming: Boolean = false,
 )

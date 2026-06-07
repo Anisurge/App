@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.models.AiChatAnimeCard
 import to.kuudere.anisuge.data.models.AiChatMessageRequest
 import to.kuudere.anisuge.data.models.AiChatQuotaResponse
 import to.kuudere.anisuge.data.models.AiChatUiMessage
@@ -108,6 +109,8 @@ class AiChatViewModel(
         }
 
         streamJob?.cancel()
+        var latestAnimeCard: AiChatAnimeCard? = null
+
         streamJob = viewModelScope.launch {
             try {
                 aiChatService.streamMessage(
@@ -118,12 +121,16 @@ class AiChatViewModel(
                         is AiChatToken.Chunk -> {
                             state = state.copy(streamingText = state.streamingText + token.text)
                         }
+                        is AiChatToken.AnimeCard -> {
+                            latestAnimeCard = token.card
+                        }
                         is AiChatToken.Done -> {
                             val fullText = token.fullText.ifBlank { state.streamingText }
                             val assistantMsg = AiChatUiMessage(
                                 id = assistantMsgId,
                                 role = "assistant",
                                 content = fullText,
+                                anime = token.anime ?: latestAnimeCard,
                             )
                             state = state.copy(
                                 messages = state.messages + assistantMsg,
