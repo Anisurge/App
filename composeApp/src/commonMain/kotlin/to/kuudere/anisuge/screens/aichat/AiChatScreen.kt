@@ -85,6 +85,7 @@ private val TopBarBg      = Color(0xFF0D0D1A).copy(alpha = 0.95f)
 fun AiChatScreen(
     viewModel: AiChatViewModel,
     onBack: () -> Unit,
+    onAnimeClick: (animeId: String) -> Unit = {},
 ) {
     val state = viewModel.state
     val listState = rememberLazyListState()
@@ -147,7 +148,7 @@ fun AiChatScreen(
                 }
 
                 items(state.messages, key = { it.id }) { msg ->
-                    MessageBubble(msg = msg)
+                    MessageBubble(msg = msg, onAnimeClick = onAnimeClick)
                 }
 
                 // Streaming bubble
@@ -332,14 +333,13 @@ private fun QuotaChip(quota: to.kuudere.anisuge.data.models.AiChatQuotaResponse)
 // ── Message Bubbles ───────────────────────────────────────────────────────────
 
 @Composable
-private fun MessageBubble(msg: AiChatUiMessage) {
+private fun MessageBubble(msg: AiChatUiMessage, onAnimeClick: (String) -> Unit) {
     val isUser = msg.role == "user"
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
     ) {
         if (!isUser) {
-            // AI avatar dot
             Box(
                 Modifier
                     .padding(top = 4.dp, end = 8.dp)
@@ -376,12 +376,19 @@ private fun MessageBubble(msg: AiChatUiMessage) {
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Text(
-                text = msg.content,
-                color = TextPrimary,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-            )
+            if (isUser) {
+                Text(
+                    text = msg.content,
+                    color = TextPrimary,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                )
+            } else {
+                AiChatMarkdownText(
+                    text = msg.content,
+                    onAnimeClick = onAnimeClick,
+                )
+            }
         }
     }
 }
@@ -447,14 +454,17 @@ private fun StreamingBubble(text: String) {
                     }
                 }
             } else {
-                Text(
-                    text = text + "▌".also { _ ->
-                        // The blinking cursor effect via alpha would require Canvas; use a simple approach
-                    },
-                    color = TextPrimary.copy(alpha = if (text.isEmpty()) 0f else 1f),
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AiChatStreamingText(
+                        text = text,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Text(
+                        text = "▌",
+                        color = AiAccentLight.copy(alpha = cursorAlpha),
+                        fontSize = 14.sp,
+                    )
+                }
             }
         }
     }

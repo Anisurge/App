@@ -726,6 +726,11 @@ fun App(
                         AiChatScreen(
                             viewModel = aiChatVm,
                             onBack = { navController.popBackStack() },
+                            onAnimeClick = { animeId ->
+                                navController.navigate(Screen.Info(animeId).route) {
+                                    launchSingleTop = true
+                                }
+                            },
                         )
                     }
 
