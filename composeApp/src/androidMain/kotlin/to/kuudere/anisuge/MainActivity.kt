@@ -109,9 +109,11 @@ class MainActivity : ComponentActivity() {
                         if (username != null) AppComponent.settingsStore.saveMalUsername(username)
                     } catch (_: Exception) {}
                     AppComponent.integrationsSyncService.pushFromLocal()
+                    AppComponent.trackingLinkedFlow.tryEmit(Unit)
                 }
                 "mal-linked" -> {
                     AppComponent.integrationsSyncService.restoreFromServer()
+                    AppComponent.trackingLinkedFlow.tryEmit(Unit)
                 }
                 "anilist" -> {
                     val accessToken = data.getQueryParameter("access_token") ?: return@launch
@@ -122,9 +124,11 @@ class MainActivity : ComponentActivity() {
                         if (username != null) AppComponent.settingsStore.saveAnilistUsername(username)
                     } catch (_: Exception) {}
                     AppComponent.integrationsSyncService.pushFromLocal()
+                    AppComponent.trackingLinkedFlow.tryEmit(Unit)
                 }
                 "anilist-linked" -> {
                     AppComponent.integrationsSyncService.restoreFromServer()
+                    AppComponent.trackingLinkedFlow.tryEmit(Unit)
                 }
                 "lunar" -> {
                     val accessToken = data.getQueryParameter("access_token") ?: return@launch
@@ -138,6 +142,7 @@ class MainActivity : ComponentActivity() {
                         }
                     } catch (_: Exception) {}
                     AppComponent.integrationsSyncService.pushFromLocal()
+                    AppComponent.trackingLinkedFlow.tryEmit(Unit)
                 }
             }
         }

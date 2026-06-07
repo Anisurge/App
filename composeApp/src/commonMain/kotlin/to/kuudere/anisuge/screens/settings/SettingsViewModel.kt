@@ -290,6 +290,12 @@ class SettingsViewModel(
         refresh()
 
         viewModelScope.launch {
+            to.kuudere.anisuge.AppComponent.trackingLinkedFlow.collect {
+                loadTrackingState()
+            }
+        }
+
+        viewModelScope.launch {
             settingsStore.autoPlayFlow.collect { v ->
                 if (!_uiState.value.hasSettingsChanges) {
                     _uiState.update { it.copy(settings = it.settings.copy(autoPlay = v)) }

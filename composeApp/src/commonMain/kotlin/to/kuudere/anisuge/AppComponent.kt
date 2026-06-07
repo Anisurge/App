@@ -7,6 +7,7 @@ import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.AuthService
@@ -62,6 +63,9 @@ object AppComponent {
     val sessionStore: SessionStore by lazy {
         SessionStore(dataStore)
     }
+
+    /** Emitted after a MAL/AniList OAuth deep link is handled, so UI can refresh tracking state. */
+    val trackingLinkedFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     val integrationsSyncService: to.kuudere.anisuge.data.services.IntegrationsSyncService by lazy {
         to.kuudere.anisuge.data.services.IntegrationsSyncService(httpClient, sessionStore, settingsStore)

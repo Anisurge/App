@@ -28,6 +28,10 @@ class IntegrationsSyncService(
         explicitNulls = true
         encodeDefaults = false
     }
+    private val clearJson = Json {
+        explicitNulls = true
+        encodeDefaults = true
+    }
 
     /** Upload current local tracking tokens to the server (no-op if not signed in). */
     suspend fun pushFromLocal(): Boolean {
@@ -47,6 +51,7 @@ class IntegrationsSyncService(
                 malExpiresAt = null,
                 malUsername = null,
             ),
+            json = clearJson,
         )
     }
 
@@ -60,6 +65,7 @@ class IntegrationsSyncService(
                 anilistExpiresAt = null,
                 anilistUsername = null,
             ),
+            json = clearJson,
         )
     }
 
@@ -75,6 +81,7 @@ class IntegrationsSyncService(
                 lunarUserId = null,
                 lunarUsername = null,
             ),
+            json = clearJson,
         )
     }
 
@@ -198,12 +205,12 @@ class IntegrationsSyncService(
         )
     }
 
-    private suspend fun patch(session: to.kuudere.anisuge.data.models.SessionInfo, payload: BffIntegrationsPayload): Boolean {
+    private suspend fun patch(session: to.kuudere.anisuge.data.models.SessionInfo, payload: BffIntegrationsPayload, json: Json = patchJson): Boolean {
         return try {
             val response = httpClient.patch("${AnisurgeApi.v1Base}/me/integrations") {
                 applyAnisurgeAuth(session)
                 contentType(ContentType.Application.Json)
-                setBody(patchJson.encodeToString(payload))
+                setBody(json.encodeToString(payload))
             }
             if (response.status == HttpStatusCode.OK) {
                 true
