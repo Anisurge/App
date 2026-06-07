@@ -18,7 +18,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import to.kuudere.anisuge.data.models.AiChatAnimeCard
 import to.kuudere.anisuge.data.models.AiChatMessageRequest
-import to.kuudere.anisuge.data.models.AiChatQuotaResponse
 import to.kuudere.anisuge.data.models.AiChatSendRequest
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 
@@ -33,23 +32,6 @@ class AiChatService(
     private val httpClient: HttpClient,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
-
-    suspend fun getQuota(): Result<AiChatQuotaResponse> {
-        val stored = sessionStore.get()
-            ?: return Result.failure(IllegalStateException("Not signed in"))
-        return try {
-            val response = httpClient.get("${AnisurgeApi.v1Base}/ai-chat/quota") {
-                applyAnisurgeAuth(stored)
-            }
-            if (response.status.isSuccess()) {
-                Result.success(response.body())
-            } else {
-                Result.failure(Exception("Quota fetch failed (${response.status.value})"))
-            }
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
 
     /**
      * Sends a message and emits AiChatToken events as they stream from the BFF.

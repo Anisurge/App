@@ -15,15 +15,6 @@ data class AiChatSendRequest(
 )
 
 @Serializable
-data class AiChatQuotaResponse(
-    val used: Int,
-    val limit: Int,
-    val remaining: Int,
-    val isPremium: Boolean,
-    val resetAt: String,
-)
-
-@Serializable
 data class AiChatErrorResponse(
     val error: String,
 )

@@ -126,11 +126,8 @@ fun AiChatScreen(
         Column(Modifier.fillMaxSize()) {
             // ── Top Bar ───────────────────────────────────────────────────────
             AiChatTopBar(
-                quota = state.quota,
-                quotaLoading = state.quotaLoading,
                 onBack = onBack,
                 onClear = { viewModel.clearHistory() },
-                onRefreshQuota = { viewModel.refreshQuota() },
             )
 
             // ── Messages List ─────────────────────────────────────────────────
@@ -211,11 +208,8 @@ fun AiChatScreen(
 
 @Composable
 private fun AiChatTopBar(
-    quota: to.kuudere.anisuge.data.models.AiChatQuotaResponse?,
-    quotaLoading: Boolean,
     onBack: () -> Unit,
     onClear: () -> Unit,
-    onRefreshQuota: () -> Unit,
 ) {
     Column(
         Modifier
@@ -270,20 +264,6 @@ private fun AiChatTopBar(
                 )
             }
 
-            // Quota chip
-            if (quotaLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = AiAccentLight,
-                    strokeWidth = 2.dp,
-                )
-            } else if (quota != null) {
-                QuotaChip(quota = quota)
-                IconButton(onClick = onRefreshQuota, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.Refresh, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
-                }
-            }
-
             IconButton(onClick = onClear, modifier = Modifier.size(44.dp)) {
                 Icon(
                     Icons.Default.DeleteSweep,
@@ -304,35 +284,6 @@ private fun AiChatTopBar(
     }
 }
 
-@Composable
-private fun QuotaChip(quota: to.kuudere.anisuge.data.models.AiChatQuotaResponse) {
-    val isLow = quota.remaining <= 3
-    val chipColor = when {
-        quota.remaining == 0 -> Color(0xFFE50914).copy(alpha = 0.18f)
-        isLow               -> Color(0xFFFF8C00).copy(alpha = 0.18f)
-        quota.isPremium     -> AiAccent.copy(alpha = 0.18f)
-        else                -> Color.White.copy(alpha = 0.07f)
-    }
-    val textColor = when {
-        quota.remaining == 0 -> Color(0xFFFF6B6B)
-        isLow               -> Color(0xFFFFAA44)
-        quota.isPremium     -> AiAccentLight
-        else                -> TextSecondary
-    }
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(chipColor)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = "${quota.remaining}/${quota.limit}",
-            color = textColor,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
 
 // ── Message Bubbles ───────────────────────────────────────────────────────────
 
