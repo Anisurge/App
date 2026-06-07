@@ -411,6 +411,45 @@ class GamesViewModel(
         state = state.copy(triviaState = null, triviaResult = null)
     }
 
+    fun sendRetroAiMessage(message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty() || state.retroAiBusy) return
+        val userMsg = RetroAiMessage(body = trimmed, isUser = true)
+        val updatedChat = state.retroAiChat + userMsg
+        state = state.copy(retroAiChat = updatedChat, retroAiBusy = true, error = null)
+
+        viewModelScope.launch {
+            bffGamesService.queryRetroAi(trimmed).fold(
+                onSuccess = { res ->
+                    val botMsg = RetroAiMessage(
+                        body = res.body,
+                        isUser = false,
+                        animeSearchQuery = res.animeSearchQuery?.takeIf { it.isNotBlank() }
+                    )
+                    state = state.copy(
+                        retroAiChat = state.retroAiChat + botMsg,
+                        retroAiBusy = false
+                    )
+                },
+                onFailure = { e ->
+                    val errBotMsg = RetroAiMessage(
+                        body = "Sorry, my retro tape got tangled! Please try saying that again.",
+                        isUser = false
+                    )
+                    state = state.copy(
+                        retroAiChat = state.retroAiChat + errBotMsg,
+                        retroAiBusy = false,
+                        error = e.message
+                    )
+                }
+            )
+        }
+    }
+
+    fun resetRetroAi() {
+        state = state.copy(retroAiChat = emptyList(), retroAiBusy = false)
+    }
+
     private fun fail(message: String?) {
         state = state.copy(busyAction = null, error = message ?: "Request failed")
     }
@@ -481,4 +520,12 @@ data class GamesUiState(
     val animeGuessResult: BffAnimeGuessAnswerResponse? = null,
     val triviaState: TriviaGameState? = null,
     val triviaResult: BffTriviaAnswerResponse? = null,
+    val retroAiChat: List<RetroAiMessage> = emptyList(),
+    val retroAiBusy: Boolean = false,
+)
+
+data class RetroAiMessage(
+    val body: String,
+    val isUser: Boolean,
+    val animeSearchQuery: String? = null
 )

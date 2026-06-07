@@ -180,4 +180,8 @@ object AppComponent {
     val bffGamesService: to.kuudere.anisuge.data.services.BffGamesService by lazy {
         to.kuudere.anisuge.data.services.BffGamesService(sessionStore, httpClient)
     }
+
+    val aiChatService: to.kuudere.anisuge.data.services.AiChatService by lazy {
+        to.kuudere.anisuge.data.services.AiChatService(sessionStore, httpClient)
+    }
 }

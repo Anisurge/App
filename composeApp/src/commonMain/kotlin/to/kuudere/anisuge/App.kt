@@ -40,6 +40,8 @@ import to.kuudere.anisuge.screens.w2g.W2gPlayerScreen
 import to.kuudere.anisuge.screens.w2g.W2gViewModel
 import to.kuudere.anisuge.screens.games.GamesScreen
 import to.kuudere.anisuge.screens.games.GamesViewModel
+import to.kuudere.anisuge.screens.aichat.AiChatScreen
+import to.kuudere.anisuge.screens.aichat.AiChatViewModel
 import to.kuudere.anisuge.screens.search.SearchScreen
 import to.kuudere.anisuge.screens.search.SearchViewModel
 import to.kuudere.anisuge.screens.search.KUUDERE_GENRES
@@ -195,6 +197,7 @@ fun App(
             )
         }
         val gamesVm = remember { GamesViewModel() }
+        val aiChatVm = remember { AiChatViewModel() }
         val w2gVm = remember {
             W2gViewModel(
                 AppComponent.sessionStore,
@@ -532,6 +535,7 @@ fun App(
                                 onAnnouncementsClick = { navController.navigate(Screen.Announcements.route) },
                                 onW2gClick = { navController.navigate(Screen.W2gRoomList.route) },
                                 onGamesClick = { navController.navigate(Screen.Games.route) },
+                                onAiChatClick = { navController.navigate(Screen.AiChat.route) },
                                 onLiveChatSignIn = {
                                     navController.navigate(Screen.Auth.route) {
                                         popUpTo(Screen.Home().route) { inclusive = false }
@@ -715,6 +719,13 @@ fun App(
                             onBuyBerries = {
                                 settingsVm.startBerryPurchase(uriHandler::openUri)
                             },
+                        )
+                    }
+
+                    composable(Screen.AiChat.route) {
+                        AiChatScreen(
+                            viewModel = aiChatVm,
+                            onBack = { navController.popBackStack() },
                         )
                     }
 

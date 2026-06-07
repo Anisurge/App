@@ -139,14 +139,18 @@ class WatchViewModel(
         viewModelScope.launch { settingsStore.subtitleSizeFlow.collect { v -> _uiState.update { it.copy(subtitleSize = v) } } }
         viewModelScope.launch { settingsStore.videoScaleModeFlow.collect { v -> _uiState.update { it.copy(videoScaleMode = v) } } }
         viewModelScope.launch {
-            serverRepository.servers.collect { list ->
+            kotlinx.coroutines.flow.combine(
+                serverRepository.servers,
+                serverRepository.userPriority
+            ) { list, priority ->
                 val expanded = list.expandForSelection()
-                val priority = serverRepository.getFallbackPriority()
                 val sorted = expanded.sortedBy { s ->
                     val idx = priority.indexOf(s.id)
                     if (idx == -1) Int.MAX_VALUE else idx
                 }
-                _uiState.update { it.copy(servers = sorted) }
+                sorted
+            }.collect { sortedList ->
+                _uiState.update { it.copy(servers = sortedList) }
             }
         }
     }
@@ -704,6 +708,10 @@ class WatchViewModel(
                 _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
             }
         }
+    }
+
+    fun saveCurrentPosition(position: Double) {
+        _uiState.update { it.copy(savedWatchPosition = position) }
     }
 
     fun setQuality(quality: String) {

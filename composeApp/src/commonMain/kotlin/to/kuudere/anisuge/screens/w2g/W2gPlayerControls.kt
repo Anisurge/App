@@ -734,7 +734,7 @@ fun W2gPlayerControls(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            if (playerState.isPaused || !playerState.isPlaying) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                            if (playerState.pauseRequested || !playerState.isPlaying) Icons.Default.PlayArrow else Icons.Default.Pause,
                                             null,
                                             tint = Color.Black,
                                             modifier = Modifier.size(32.dp)

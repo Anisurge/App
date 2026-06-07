@@ -118,6 +118,7 @@ fun LiveChatScreen(
     onAnnouncementsClick: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
+    val displayMessages = state.messages
     val listState = rememberLazyListState()
     val isUserScrolling by remember { derivedStateOf { listState.isScrollInProgress } }
     val visibleMessageIds by remember {
@@ -142,16 +143,16 @@ fun LiveChatScreen(
         onDispose { viewModel.onScreenHidden() }
     }
 
-    LaunchedEffect(state.isLoading, state.messages.size) {
-        if (!state.isLoading && state.messages.isNotEmpty() && !didInitialScroll) {
-            listState.scrollToItem(state.messages.lastIndex)
+    LaunchedEffect(state.isLoading, displayMessages.size) {
+        if (!state.isLoading && displayMessages.isNotEmpty() && !didInitialScroll) {
+            listState.scrollToItem(displayMessages.lastIndex)
             didInitialScroll = true
         }
     }
 
-    LaunchedEffect(state.messages.lastOrNull()?.id) {
-        if (!didInitialScroll || state.messages.isEmpty()) return@LaunchedEffect
-        val lastIndex = state.messages.lastIndex
+    LaunchedEffect(displayMessages.lastOrNull()?.id) {
+        if (!didInitialScroll || displayMessages.isEmpty()) return@LaunchedEffect
+        val lastIndex = displayMessages.lastIndex
         val nearBottom = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
             ?.let { it >= lastIndex - 1 } ?: true
         if (nearBottom) {
@@ -161,13 +162,13 @@ fun LiveChatScreen(
 
     LaunchedEffect(state.isLoadingOlder) {
         if (state.isLoadingOlder) {
-            messageCountBeforeOlder = state.messages.size
+            messageCountBeforeOlder = displayMessages.size
         }
     }
 
-    LaunchedEffect(state.isLoadingOlder, state.messages.size) {
+    LaunchedEffect(state.isLoadingOlder, displayMessages.size) {
         if (!state.isLoadingOlder && messageCountBeforeOlder > 0) {
-            val added = state.messages.size - messageCountBeforeOlder
+            val added = displayMessages.size - messageCountBeforeOlder
             if (added > 0) {
                 listState.scrollToItem(
                     listState.firstVisibleItemIndex + added,
@@ -186,7 +187,7 @@ fun LiveChatScreen(
                 !state.isLoadingOlder &&
                     state.hasMoreOlder &&
                     index <= 1 &&
-                    state.messages.isNotEmpty()
+                    displayMessages.isNotEmpty()
             }
             .collect {
                 viewModel.loadOlderMessages()
@@ -409,7 +410,7 @@ fun LiveChatScreen(
                             }
                         }
 
-                        if (state.messages.isEmpty()) {
+                        if (displayMessages.isEmpty()) {
                             item {
                                 Box(
                                     Modifier.fillMaxWidth().padding(32.dp),
@@ -424,12 +425,12 @@ fun LiveChatScreen(
                             }
                         } else {
                             itemsIndexed(
-                                state.messages,
+                                displayMessages,
                                 key = { _, msg -> msg.id },
                                 contentType = { _, _ -> "chat-message" },
                             ) { index, message ->
-                                val prevMessage = state.messages.getOrNull(index - 1)
-                                val nextMessage = state.messages.getOrNull(index + 1)
+                                val prevMessage = displayMessages.getOrNull(index - 1)
+                                val nextMessage = displayMessages.getOrNull(index + 1)
                                 val isFirstInGroup = prevMessage?.userId != message.userId
                                 val isLastInGroup = nextMessage?.userId != message.userId
 

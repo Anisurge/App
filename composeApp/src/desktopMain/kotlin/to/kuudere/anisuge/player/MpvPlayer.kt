@@ -330,7 +330,9 @@ internal class MpvPlayer(
                     if (pausePtr != null) {
                         val isPaused = pausePtr.getString(0) == "yes"
                         mpv.mpv_free(pausePtr)
-                        withContext(Dispatchers.Main) { state.isPaused = isPaused }
+                        withContext(Dispatchers.Main) {
+                            state.isPaused = isPaused
+                        }
                     }
                 }
                 kotlinx.coroutines.delay(50)

@@ -2118,7 +2118,7 @@ fun WatchVideoPlayer(
             )
 
             if (uiState.showSettingsOverlay) {
-                val servers = viewModel.getAvailableServers()
+                val servers = uiState.servers
                 SettingsOverlay(
                     uiState = uiState,
                     servers = servers,
@@ -2981,13 +2981,16 @@ fun WatchVideoPlayer(
 
             if (uiState.showSettingsOverlay) {
                 val isOffline = uiState.offlinePath != null
-                val servers = if (isOffline) emptyList() else viewModel.getAvailableServers()
+                val servers = if (isOffline) emptyList() else uiState.servers
                 Box(Modifier.fillMaxSize().zIndex(50f)) {
                     SettingsOverlay(
                         uiState = uiState,
                         servers = servers,
                         onDismiss = { viewModel.toggleSettingsOverlay() },
-                        onQualitySelected = { viewModel.setQuality(it) },
+                        onQualitySelected = { quality ->
+                            viewModel.saveCurrentPosition(playerState.position)
+                            viewModel.setQuality(quality)
+                        },
                         onSubtitleSelected = { url ->
                             val selectedSub = uiState.availableSubtitles.firstOrNull { it.url == url }
                             val lang = selectedSub?.title ?: selectedSub?.resolvedLang
@@ -3070,7 +3073,7 @@ fun WatchVideoPlayer(
             }
 
             if (uiState.showSettingsOverlay) {
-                val servers = viewModel.getAvailableServers()
+                val servers = uiState.servers
                 SettingsOverlay(
                     uiState = uiState,
                     servers = servers,

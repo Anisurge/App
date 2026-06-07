@@ -71,6 +71,7 @@ sealed class Screen(val route: String) {
         const val displayName = "Community Chat"
     }
     data object Games : Screen("games")
+    data object AiChat : Screen("ai-chat")
     data object Announcements : Screen("announcements")
     data object W2gRoomList : Screen("w2g")
     data class W2gRoom(val inviteCode: String) : Screen("w2g-room/$inviteCode") {

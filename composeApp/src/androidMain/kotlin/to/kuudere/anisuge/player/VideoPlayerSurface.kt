@@ -695,17 +695,19 @@ actual fun VideoPlayerSurface(
         }
     }
 
-    AndroidView(
-        factory = {
-            surfaceView.apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            }
-        },
-        modifier = modifier.background(Color.Black)
-    )
+    key(resolvedUrl) {
+        AndroidView(
+            factory = {
+                surfaceView.apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                }
+            },
+            modifier = modifier.background(Color.Black)
+        )
+    }
 }
 
 // Ensure MPV natively creates only once for app stability

@@ -14,6 +14,8 @@ import to.kuudere.anisuge.data.models.HomeData
 import to.kuudere.anisuge.data.models.LatestAiredResponse
 import to.kuudere.anisuge.data.models.RecommendationsResponse
 import to.kuudere.anisuge.data.models.TopAnimeResponse
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 class HomeService(
     private val sessionStore: SessionStore,
@@ -60,18 +62,29 @@ class HomeService(
     }
 
     /** Loads every saved continue row from the BFF (not capped like ReAnime's list). */
-    suspend fun fetchAllContinueWatching(): List<ContinueWatchingItem> {
+    suspend fun fetchAllContinueWatching(): List<ContinueWatchingItem> = kotlinx.coroutines.coroutineScope {
         val pageSize = 100
-        var offset = 0
+        val firstPage = fetchContinueWatchingPage(limit = pageSize, offset = 0) ?: return@coroutineScope emptyList<ContinueWatchingItem>()
+        val total = firstPage.total
         val all = mutableListOf<ContinueWatchingItem>()
-        while (true) {
-            val page = fetchContinueWatchingPage(limit = pageSize, offset = offset) ?: break
-            all.addAll(page.data)
-            if (page.data.isEmpty() || all.size >= page.total) break
-            offset += page.data.size
-            if (page.data.size < pageSize) break
+        all.addAll(firstPage.data)
+        if (firstPage.data.isEmpty() || all.size >= total || firstPage.data.size < pageSize) {
+            return@coroutineScope all
         }
-        return all
+
+        val remainingCount = total - firstPage.data.size
+        val pagesToFetch = (remainingCount + pageSize - 1) / pageSize
+        val deferreds = (1..pagesToFetch).map { pageIdx ->
+            async {
+                fetchContinueWatchingPage(limit = pageSize, offset = pageIdx * pageSize)
+            }
+        }
+        deferreds.forEach { deferred ->
+            deferred.await()?.let { page ->
+                all.addAll(page.data)
+            }
+        }
+        all
     }
 
     suspend fun deleteContinueWatching(animeId: String, episodeId: String): Boolean {

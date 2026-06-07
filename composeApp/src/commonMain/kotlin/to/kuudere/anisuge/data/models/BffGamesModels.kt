@@ -294,3 +294,14 @@ data class BffTriviaAnswerRequest(val gameId: String, val choiceIndex: Int)
 
 @Serializable
 data object BffEmptyGameRequest
+
+@Serializable
+data class BffRetroAiRequest(
+    val message: String
+)
+
+@Serializable
+data class BffRetroAiResponse(
+    val body: String,
+    val animeSearchQuery: String? = null
+)

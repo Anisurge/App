@@ -37,6 +37,8 @@ import to.kuudere.anisuge.data.models.BffTriviaAnswerResponse
 import to.kuudere.anisuge.data.models.BffTriviaStartResponse
 import to.kuudere.anisuge.data.models.BffWheelSpinRequest
 import to.kuudere.anisuge.data.models.BffWheelSpinResponse
+import to.kuudere.anisuge.data.models.BffRetroAiRequest
+import to.kuudere.anisuge.data.models.BffRetroAiResponse
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
 
 class BffGamesService(
@@ -102,6 +104,9 @@ class BffGamesService(
 
     suspend fun answerTrivia(gameId: String, choiceIndex: Int): Result<BffTriviaAnswerResponse> =
         postJson("/games/trivia/answer", BffTriviaAnswerRequest(gameId = gameId, choiceIndex = choiceIndex))
+
+    suspend fun queryRetroAi(message: String): Result<BffRetroAiResponse> =
+        postJson("/games/retro-ai", to.kuudere.anisuge.data.models.BffRetroAiRequest(message = message))
 
     private suspend inline fun <reified Request : Any, reified Response : Any> postJson(
         path: String,

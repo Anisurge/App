@@ -107,6 +107,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.WifiOff
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.WatchLater
@@ -224,6 +225,7 @@ fun HomeScreen(
     onLiveChatClick: () -> Unit = {},
     onAnnouncementsClick: () -> Unit = {},
     onGamesClick: () -> Unit = {},
+    onAiChatClick: () -> Unit = {},
     onW2gClick: () -> Unit = {},
     onLiveChatSignIn: () -> Unit = {},
     onChatAction: (String) -> Unit = {},
@@ -338,6 +340,7 @@ fun HomeScreen(
                     onLiveChatClick = { showDesktopLiveChat = true },
                     onAnnouncementsClick = onAnnouncementsClick,
                     onGamesClick = onGamesClick,
+                    onAiChatClick = onAiChatClick,
                     onW2gClick = onW2gClick,
                     chatUnreadCount = chatUnreadCount,
                     announcementUnreadCount = announcementUnreadCount,
@@ -484,6 +487,7 @@ fun HomeScreen(
                         onLiveChatClick = onLiveChatClick,
                         onAnnouncementsClick = onAnnouncementsClick,
                         onGamesClick = onGamesClick,
+                        onAiChatClick = onAiChatClick,
                         onW2gClick = onW2gClick,
                         chatUnreadCount = chatUnreadCount,
                         announcementUnreadCount = announcementUnreadCount,
@@ -1944,6 +1948,7 @@ private fun AnisugSidebar(
     onLiveChatClick: () -> Unit,
     onAnnouncementsClick: () -> Unit = {},
     onGamesClick: () -> Unit = {},
+    onAiChatClick: () -> Unit = {},
     onW2gClick: () -> Unit = {},
     chatUnreadCount: Int = 0,
     announcementUnreadCount: Int = 0,
@@ -2026,6 +2031,11 @@ private fun AnisugSidebar(
                     Icons.Filled.Star,
                     isSelected = false,
                     onClick = onGamesClick,
+                )
+                SidebarIcon(
+                    Icons.Default.AutoAwesome,
+                    isSelected = false,
+                    onClick = onAiChatClick,
                 )
                 SidebarIcon(
                     Icons.Outlined.Group,
@@ -2212,6 +2222,7 @@ private fun MobileTopBar(
     onLiveChatClick: () -> Unit,
     onAnnouncementsClick: () -> Unit = {},
     onGamesClick: () -> Unit = {},
+    onAiChatClick: () -> Unit = {},
     onW2gClick: () -> Unit = {},
     chatUnreadCount: Int = 0,
     announcementUnreadCount: Int = 0,
@@ -2295,6 +2306,14 @@ private fun MobileTopBar(
                                     onClick = {
                                         quickMenuExpanded = false
                                         onGamesClick()
+                                    },
+                                )
+                                QuickMenuItem(
+                                    text = "surge ai",
+                                    icon = Icons.Default.AutoAwesome,
+                                    onClick = {
+                                        quickMenuExpanded = false
+                                        onAiChatClick()
                                     },
                                 )
                                 QuickMenuItem(
