@@ -338,6 +338,26 @@ fun W2gPlayerScreen(
                                     modifier = Modifier.fillMaxSize(),
                                 )
 
+                                // Load external/soft subtitles from the streaming response
+                                val currentPlayback = playback
+                                LaunchedEffect(currentPlayback.subtitles, playbackIdentity) {
+                                    if (currentPlayback.subtitles.isNotEmpty()) {
+                                        val subs = currentPlayback.subtitles
+                                        val hasDefault = subs.any { it.is_default == true }
+                                        videoState.allSubUrls = subs.mapNotNull { sub ->
+                                            sub.url?.let { url ->
+                                                Triple(
+                                                    url,
+                                                    sub.title ?: sub.resolvedLang ?: "Subtitle",
+                                                    sub.is_default == true || (!hasDefault && subs.first().url == url),
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        videoState.allSubUrls = null
+                                    }
+                                }
+
                                 // Host: periodic position broadcast so non-hosts can correct drift
                                 if (state.isHost) {
                                     LaunchedEffect(playbackIdentity) {

@@ -26,8 +26,10 @@ import to.kuudere.anisuge.data.models.W2gPlayerState
 import to.kuudere.anisuge.data.models.W2gRoomDetail
 import to.kuudere.anisuge.data.models.W2gRoomMember
 import to.kuudere.anisuge.data.models.W2gRoomSummary
+import to.kuudere.anisuge.data.models.SubtitleData
 import to.kuudere.anisuge.data.models.W2gRoomUpdateRequest
 import to.kuudere.anisuge.data.models.asHttpHeaderMap
+import to.kuudere.anisuge.utils.BatchSubtitleExtract
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.services.SearchService
@@ -50,6 +52,7 @@ data class W2gChatMessage(
 data class W2gPlaybackSource(
     val url: String,
     val headers: Map<String, String> = emptyMap(),
+    val subtitles: List<SubtitleData> = emptyList(),
 )
 
 data class W2gHostPickerState(
@@ -206,11 +209,21 @@ class W2gViewModel(
             return
         }
 
-        // Non-host with shared stream URL: use it directly
+        // Non-host with shared stream URL: use it directly, fetch subtitles from the API
         if (!isCurrentUserHost(room.hostUserId) && roomStreamUrl != null) {
+            val nonHostIds = resolveStreamingIds(animeId, initialAnilistId, initialMalId)
+            val nonHostSubtitles = if (nonHostIds.anilistId != null) {
+                val apiSource = if (server.endsWith("-dub", ignoreCase = true)) server.dropLast(4) else server
+                val subResponse = runCatching { infoService.getVideoStream(nonHostIds.anilistId, episode, apiSource) }.getOrNull()
+                val wantsDub = server.endsWith("-dub", ignoreCase = true) || language == "dub"
+                val subSection = (if (wantsDub) subResponse?.dub else subResponse?.sub)
+                    ?.takeIf { it.streams.isNotEmpty() }
+                    ?: (if (wantsDub) subResponse?.sub else subResponse?.dub)?.takeIf { it.streams.isNotEmpty() }
+                if (subSection != null) BatchSubtitleExtract.forPlayback(subSection, room?.quality) else emptyList()
+            } else emptyList()
             _state.value = _state.value.copy(
                 isLoadingPlayback = false,
-                playbackSource = W2gPlaybackSource(roomStreamUrl, room.streamHeaders ?: emptyMap()),
+                playbackSource = W2gPlaybackSource(roomStreamUrl, room.streamHeaders ?: emptyMap(), nonHostSubtitles),
                 error = null,
             )
             return
@@ -286,9 +299,10 @@ class W2gViewModel(
         val stream = section?.streams?.firstOrNull { it.url.isNotBlank() }
         val resolvedUrl = stream?.url
         val resolvedHeaders = stream?.headers.asHttpHeaderMap()
+        val resolvedSubtitles = if (section != null) BatchSubtitleExtract.forPlayback(section, room?.quality) else emptyList()
         _state.value = _state.value.copy(
             isLoadingPlayback = false,
-            playbackSource = resolvedUrl?.let { W2gPlaybackSource(it, resolvedHeaders) },
+            playbackSource = resolvedUrl?.let { W2gPlaybackSource(it, resolvedHeaders, resolvedSubtitles) },
             error = if (stream == null) "No stream found for this episode/server" else null,
         )
 
@@ -312,26 +326,30 @@ class W2gViewModel(
         }
     }
 
+    private suspend fun refreshRooms() {
+        _state.value = _state.value.copy(isLoadingRooms = true, error = null)
+        val response = roomService.listRooms(query = _state.value.searchQuery.takeIf { it.isNotBlank() })
+        println("[W2gViewModel] loaded rooms count=${response?.rooms?.size ?: -1}")
+        _state.value = _state.value.copy(
+            rooms = response?.rooms ?: emptyList(),
+            isLoadingRooms = false,
+            error = if (response == null) "Failed to load rooms" else null,
+        )
+    }
+
     fun loadRooms() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoadingRooms = true, error = null)
-            val response = roomService.listRooms(query = _state.value.searchQuery.takeIf { it.isNotBlank() })
-            println("[W2gViewModel] loaded rooms count=${response?.rooms?.size ?: -1}")
-            _state.value = _state.value.copy(
-                rooms = response?.rooms ?: emptyList(),
-                isLoadingRooms = false,
-                error = if (response == null) "Failed to load rooms" else null,
-            )
+            refreshRooms()
         }
     }
 
     fun startRoomAutoRefresh() {
         roomsRefreshJob?.cancel()
         roomsRefreshJob = viewModelScope.launch {
-            loadRooms()
+            refreshRooms()
             while (true) {
                 delay(15_000)
-                loadRooms()
+                refreshRooms()
             }
         }
     }
@@ -629,7 +647,8 @@ class W2gViewModel(
         }
         disconnect()
         clearActiveRoom()
-        loadRooms()
+        _state.value = _state.value.copy(searchQuery = "")
+        refreshRooms()
         return left
     }
 
