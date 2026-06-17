@@ -18,6 +18,7 @@ import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.StreamingData
 import to.kuudere.anisuge.data.models.WatchInfoResponse
 import to.kuudere.anisuge.data.models.expandForSelection
+import to.kuudere.anisuge.data.models.orderSelectableServerIds
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.services.HomeService
@@ -144,8 +145,13 @@ class WatchViewModel(
                 serverRepository.userPriority
             ) { list, priority ->
                 val expanded = list.expandForSelection()
+                val order = orderSelectableServerIds(
+                    list,
+                    priority,
+                    ServerRepository.DEFAULT_STREAM_SOURCE_ORDER,
+                )
                 val sorted = expanded.sortedBy { s ->
-                    val idx = priority.indexOf(s.id)
+                    val idx = order.indexOf(s.id)
                     if (idx == -1) Int.MAX_VALUE else idx
                 }
                 sorted
@@ -337,9 +343,11 @@ class WatchViewModel(
             it.copy(
                 isLoading = true,
                 loadingMessage = "Fetching episode data...",
-                targetLang = streamLang
+                targetLang = streamLang,
+                currentServer = streamServer,
             )
         }
+        println("[WatchVM] selected stream server=$streamServer lang=$streamLang anime=$currentAnimeId ep=$episodeNumber")
 
         val data = infoService.getWatchInfo(currentAnimeId, ep = episodeNumber.toString())
 
@@ -349,12 +357,18 @@ class WatchViewModel(
 
         if (data != null) {
             val slug = data.anime?.animeId?.takeIf { it.isNotBlank() } ?: currentAnimeId
+            val initialEpisodes = data.episodes
+                ?.takeIf { it.isNotEmpty() }
+                ?: cachedEpisodeList?.takeIf { cachedEpisodeListKey == slug && it.isNotEmpty() }
+                ?: synthesizeEpisodesFromCount(data.anime?.epCount ?: data.anime?.episodes)
+            val initialData = data.copy(episodes = initialEpisodes.takeIf { it.isNotEmpty() })
             _uiState.update { state ->
                 val mergedResume = mergeResumeHint(data.currentTime, state.savedWatchPosition)
                 state.copy(
                     isLoading = false,
                     loadingMessage = "Fetching streaming URL...",
                     savedWatchPosition = mergedResume,
+                    episodeData = initialData,
                 )
             }
 
@@ -574,7 +588,7 @@ class WatchViewModel(
             // because the batch_scrape URLs have IP-bound tokens that expire
             if (apiSource.equals("suzu", ignoreCase = true)) {
                 val embedUrl = subStreams?.episodeId ?: dubStreams?.episodeId
-                if (!embedUrl.isNullOrBlank()) {
+                if (!embedUrl.isNullOrBlank() && embedUrl.startsWith("http", ignoreCase = true)) {
                     val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
                     if (embedStreams != null && embedStreams.isNotEmpty()) {
                         val referer = try {
@@ -609,7 +623,15 @@ class WatchViewModel(
                                 streams = dubEmbedStreams
                             )
                         }
+                        println(
+                            "[WatchVM] suzu embed refresh ok urlHost=${embedUrl.substringAfter("://").substringBefore("/")} " +
+                                "sub=${subEmbedStreams.size} dub=${dubEmbedStreams.size}"
+                        )
+                    } else {
+                        println("[WatchVM] suzu embed refresh empty; using batch_scrape streams embed=$embedUrl")
                     }
+                } else {
+                    println("[WatchVM] suzu using batch_scrape streams episodeId=${embedUrl.orEmpty()}")
                 }
             }
 
@@ -630,6 +652,10 @@ class WatchViewModel(
                 }
 
                 cachedStreamSection = streamSection
+                println(
+                    "[WatchVM] stream ready server=$serverName apiSource=$apiSource lang=${if (streamSection === dubStreams) "dub" else "sub"} " +
+                        "qualities=${qualities.joinToString { it.first }}"
+                )
                 val requestedQuality = pendingQualitySelection
                 val defaultQuality = when {
                     requestedQuality != null && qualities.any { it.first == requestedQuality } -> requestedQuality
@@ -795,6 +821,7 @@ class WatchViewModel(
         lastAutoServerFallbackKey = null
         _uiState.update {
             it.copy(
+                currentServer = server,
                 showSettingsOverlay = false,
                 isLoadingVideo = true,
                 loadingMessage = "Fetching streaming URL...",
@@ -863,7 +890,44 @@ class WatchViewModel(
     }
 
     fun tryNextServerAfterPlaybackFailure(position: Double) {
-        println("[WatchVM] playback failed; auto server switching is disabled")
+        val state = _uiState.value
+        val current = state.currentServer.ifBlank { userPinnedStreamServer.orEmpty() }
+        if (current.isBlank()) return
+        val key = "${state.animeId}|${state.currentEpisodeNumber}|$current"
+        if (lastAutoServerFallbackKey == key) return
+
+        val currentLang = state.targetLang ?: if (current.endsWith("-dub", ignoreCase = true)) "dub" else "sub"
+        fun supports(server: ServerInfo): Boolean = when (currentLang) {
+            "dub" -> server.supportsDub
+            "sub" -> server.supportsSub
+            else -> true
+        }
+
+        val selectable = state.servers
+            .filter { supports(it) && !it.id.equals(current, ignoreCase = true) }
+        if (selectable.isEmpty()) {
+            println("[WatchVM] playback failed on $current; no fallback server available")
+            return
+        }
+
+        val currentIndex = state.servers.indexOfFirst { it.id.equals(current, ignoreCase = true) }
+        val next = if (currentIndex >= 0) {
+            selectable.firstOrNull { candidate ->
+                state.servers.indexOfFirst { it.id.equals(candidate.id, ignoreCase = true) } > currentIndex
+            } ?: selectable.first()
+        } else {
+            selectable.first()
+        }
+
+        lastAutoServerFallbackKey = key
+        println("[WatchVM] playback failed on $current; trying fallback server=${next.id}")
+        changeServerWithState(
+            newServer = next.id,
+            position = position.takeIf { it >= 5.0 } ?: 0.0,
+            targetAudioLang = currentLang,
+            targetSubtitleLang = state.targetSubtitleLang,
+            targetSubtitleLangCode = state.targetSubtitleLangCode,
+        )
     }
 
     /**

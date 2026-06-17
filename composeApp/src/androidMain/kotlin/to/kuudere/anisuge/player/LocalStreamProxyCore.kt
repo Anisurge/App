@@ -27,6 +27,7 @@ internal class LocalStreamProxy {
     private companion object {
         const val DEFAULT_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        const val RELEASE_GRACE_SECONDS = 60L
     }
 
     private data class Session(val headers: Map<String, String>)
@@ -67,7 +68,7 @@ internal class LocalStreamProxy {
                 sessions.remove(sessionId)
                 targets.keys.removeAll { it.startsWith("$sessionId:") }
             }
-        }, 3, TimeUnit.SECONDS)
+        }, RELEASE_GRACE_SECONDS, TimeUnit.SECONDS)
         // Do not stop the local server here — mpv may still be reading the previous
         // session's proxied URLs; stopping changes the port and causes HLS open failures.
     }
@@ -262,7 +263,11 @@ internal class LocalStreamProxy {
             }
             output.flush()
         } catch (_: SocketException) {
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            println(
+                "[LocalStreamProxy] upstream failed host=${targetUrl.substringAfter("://").substringBefore("/")} " +
+                    "path=${targetUrl.substringBefore('?').takeLast(80)} error=${e.javaClass.simpleName}: ${e.message}"
+            )
             try {
                 writeStatus(output, 502, "Bad Gateway")
             } catch (_: Exception) {

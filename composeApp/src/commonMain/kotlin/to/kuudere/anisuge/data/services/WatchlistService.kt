@@ -4,14 +4,15 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.http.encodeURLPathPart
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.Serializable
-import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
+import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.services.AnisurgeApi.applyProjectRAuth
 import to.kuudere.anisuge.data.models.WatchlistResponse
 import to.kuudere.anisuge.data.models.WatchlistUpdateResponse
 
@@ -34,11 +35,11 @@ class WatchlistService(
         minScore: Int? = null,
     ): WatchlistResponse? {
         val stored = sessionStore.get() ?: return null
-        val response = httpClient.get("${AnisurgeApi.v1Base}/watchlist") {
-            applyAnisurgeAuth(stored)
+        val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/watchlist") {
+            applyProjectRAuth(stored)
             parameter("limit", limit)
             if (offset > 0) parameter("offset", offset)
-            folder?.let { parameter("folder", it) }
+            folder?.let { parameter("folder", it.toProjectRFolder()) }
             q?.takeIf { it.isNotBlank() }?.let { parameter("q", it) }
             sort?.let { parameter("sort", it) }
             format?.let { parameter("format", it) }
@@ -70,13 +71,17 @@ class WatchlistService(
     ): WatchlistUpdateResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
-            val response = httpClient.post("${AnisurgeApi.v1Base}/watchlist") {
-                applyAnisurgeAuth(stored)
+            val normalizedFolder = folder.toProjectRFolder()
+            if (normalizedFolder == "REMOVE") {
+                return if (removeFromWatchlist(animeId)) WatchlistUpdateResponse(success = true) else null
+            }
+            val response = httpClient.post("${AppComponent.PROJECT_R_BASE_URL}/watchlist") {
+                applyProjectRAuth(stored)
                 contentType(ContentType.Application.Json)
                 setBody(
                     UpdateWatchlistRequest(
                         animeId = animeId,
-                        folder = folder,
+                        folder = normalizedFolder,
                         notes = notes,
                         anilistId = anilistId?.takeIf { it > 0 },
                         malId = malId?.takeIf { it > 0 },
@@ -95,13 +100,23 @@ class WatchlistService(
     suspend fun removeFromWatchlist(animeId: String): Boolean {
         return try {
             val stored = sessionStore.get() ?: return false
-            val response = httpClient.delete("${AnisurgeApi.v1Base}/watchlist/$animeId") {
-                applyAnisurgeAuth(stored)
+            val response = httpClient.delete("${AppComponent.PROJECT_R_BASE_URL}/watchlist/${animeId.encodeURLPathPart()}") {
+                applyProjectRAuth(stored)
             }
             response.status.value in 200..299
         } catch (e: Exception) {
             println("[WatchlistService] removeFromWatchlist error: ${e.message}")
             false
         }
+    }
+
+    private fun String.toProjectRFolder(): String = when (trim().uppercase()) {
+        "CURRENT", "WATCHING" -> "WATCHING"
+        "PLAN TO WATCH", "PLAN_TO_WATCH", "PLANNING" -> "PLANNING"
+        "ON HOLD", "ON_HOLD", "PAUSED" -> "PAUSED"
+        "COMPLETED" -> "COMPLETED"
+        "DROPPED" -> "DROPPED"
+        "REMOVE" -> "REMOVE"
+        else -> trim().uppercase()
     }
 }

@@ -150,21 +150,22 @@ class WatchlistViewModel : ViewModel() {
                     status = statusParam
                 )
                 if (response != null) {
-                    val mapped = response.results.map { e ->
+                    val entries = response.entries
+                    val mapped = entries.map { e ->
                         val id = e.effectiveAnimeId
                         val base = e.anime.let { anime ->
                             if (anime.animeId.isBlank() && id.isNotBlank()) anime.copy(animeId = id) else anime
                         }
-                        base.copy(folder = e.effectiveFolder)
+                        base.copy(folder = e.displayFolder)
                     }
                     _uiState.update { it.copy(
                         items = if (append) it.items + mapped else mapped,
                         isLoading = false,
                         isPaginating = false,
                         isOffline = false,
-                        currentOffset = offset + response.results.size,
+                        currentOffset = offset + entries.size,
                         total = response.total,
-                        hasMore = response.results.size >= 20
+                        hasMore = response.hasMore || entries.size >= 20
                     ) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, isPaginating = false, isOffline = false, error = "Failed to load watchlist") }

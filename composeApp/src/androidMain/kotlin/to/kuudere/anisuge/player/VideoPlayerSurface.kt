@@ -357,6 +357,7 @@ actual fun VideoPlayerSurface(
             override fun event(eventId: Int) {
                 when (eventId) {
                     MPVLib.MPV_EVENT_FILE_LOADED -> {
+                        state.hasLoadedMedia = true
                         state.isPlaying = true
                         state.error = null
 
@@ -445,6 +446,12 @@ actual fun VideoPlayerSurface(
                             .getOrNull()?.coerceAtLeast(0.0) ?: state.position
                         val dur = runCatching { MPVLib.getPropertyDouble("duration") }
                             .getOrNull()?.coerceAtLeast(0.0) ?: state.duration
+                        if (!state.hasLoadedMedia) {
+                            state.error = "Stream failed to start — trying another server"
+                            state.isBuffering = false
+                            println("[VideoPlayerSurface] END_FILE before FILE_LOADED (pos=$pos dur=$dur)")
+                            return
+                        }
                         state.position = pos
                         state.duration = dur
                         val stableDuration = maxOf(dur, state.peakPlaybackDuration)

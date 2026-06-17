@@ -58,6 +58,8 @@ import to.kuudere.anisuge.player.StreamProxy
 import to.kuudere.anisuge.player.VideoPlayerState
 import to.kuudere.anisuge.player.VideoPlayerSurface
 import to.kuudere.anisuge.player.rememberVideoPlayerState
+import to.kuudere.anisuge.utils.HlsPngTsStrip
+import to.kuudere.anisuge.utils.ProgressiveStreamAccel
 import coil3.compose.AsyncImage
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -2172,7 +2174,11 @@ fun WatchVideoPlayer(
                     .orEmpty()
             }
             val playbackUrl = remember(currentUrl, streamHeaderKey) {
-                StreamProxy.proxyUrl(currentUrl, streamHeaders)
+                if (shouldUseLocalStreamProxy(currentUrl)) {
+                    StreamProxy.proxyUrl(currentUrl, streamHeaders)
+                } else {
+                    currentUrl
+                }
             }
 
             // Desktop: We now use our custom Compose PlayerControls instead of mpv's OSC
@@ -2209,7 +2215,9 @@ fun WatchVideoPlayer(
                             trackLang,
                         )
                     }
-                    StreamProxy.release(currentUrl)
+                    if (shouldUseLocalStreamProxy(currentUrl)) {
+                        StreamProxy.release(currentUrl)
+                    }
                 }
             }
 
@@ -2252,6 +2260,7 @@ fun WatchVideoPlayer(
                 val error = playerState.error ?: return@LaunchedEffect
                 if (error.contains("trying another server", ignoreCase = true)) {
                     playerState.error = "Stream failed to start — choose another server in Settings"
+                    viewModel.tryNextServerAfterPlaybackFailure(0.0)
                 }
             }
 
@@ -3112,6 +3121,17 @@ fun WatchVideoPlayer(
             }
         }
     }
+}
+
+private fun shouldUseLocalStreamProxy(url: String): Boolean {
+    val lower = url.substringBefore('#').lowercase()
+    val path = lower.substringBefore('?')
+    return HlsPngTsStrip.isDisguisedTsCdnHost(url) ||
+        HlsPngTsStrip.isVibeplayerHlsHost(url) ||
+        HlsPngTsStrip.isAnikageHlsHost(url) ||
+        ProgressiveStreamAccel.shouldAccelerate(url) ||
+        path.endsWith(".jpg") ||
+        path.endsWith(".jpeg")
 }
 
 private fun formatTime(seconds: Double): String {

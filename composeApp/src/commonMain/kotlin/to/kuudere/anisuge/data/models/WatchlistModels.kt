@@ -5,18 +5,26 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class WatchlistResponse(
+    val data: List<WatchlistEntry> = emptyList(),
+    val items: List<WatchlistEntry> = emptyList(),
     val results: List<WatchlistEntry> = emptyList(),
+    val watchlist: List<WatchlistEntry> = emptyList(),
     val total: Int = 0,
     val limit: Int = 20,
     val offset: Int = 0,
     @SerialName("totalPages") val totalPages: Int = 0,
+    @SerialName("has_more") val hasMore: Boolean = false,
     val query: String? = null,
-)
+) {
+    val entries: List<WatchlistEntry>
+        get() = results.ifEmpty { data.ifEmpty { items.ifEmpty { watchlist } } }
+}
 
 @Serializable
 data class WatchlistEntry(
     val anime: AnimeItem = AnimeItem(),
     @SerialName("animeId") val animeIdStr: String = "",
+    @SerialName("itemId") val itemId: String = "",
     val folder: String? = null,
     @SerialName("viewerFolder") val viewerFolder: String? = null,
     val notes: String? = null,
@@ -24,8 +32,14 @@ data class WatchlistEntry(
     @SerialName("createdAt") val createdAt: String? = null,
     @SerialName("lastUpdated") val lastUpdated: String? = null,
 ) {
-    val effectiveAnimeId: String get() = animeIdStr.ifBlank { anime.animeId }
+    val effectiveAnimeId: String get() = anime.animeId.ifBlank { animeIdStr.ifBlank { itemId } }
     val effectiveFolder: String? get() = viewerFolder ?: folder
+    val displayFolder: String? get() = when (effectiveFolder?.uppercase()) {
+        "CURRENT", "WATCHING" -> "WATCHING"
+        "PLAN_TO_WATCH" -> "PLANNING"
+        "ON_HOLD" -> "PAUSED"
+        else -> effectiveFolder
+    }
 }
 
 @Serializable

@@ -38,6 +38,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Schedule
@@ -79,9 +80,11 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import to.kuudere.anisuge.data.models.ScheduleAnime
+import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.OfflineState
+import to.kuudere.anisuge.ui.WatchlistBottomSheet
 import to.kuudere.anisuge.ui.tvFocusableClick
 
 private val BG: Color get() = AppColors.background
@@ -147,8 +150,29 @@ fun ScheduleScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val strings = LocalAppStrings.current
+    val watchlistScope = rememberCoroutineScope()
+    var watchlistAnime by remember { mutableStateOf<ScheduleAnime?>(null) }
 
     Box(Modifier.fillMaxSize().background(BG)) {
+        watchlistAnime?.let { anime ->
+            WatchlistBottomSheet(
+                currentFolder = null,
+                onSelect = { folder ->
+                    val selected = watchlistAnime ?: return@WatchlistBottomSheet
+                    watchlistAnime = null
+                    watchlistScope.launch {
+                        AppComponent.watchlistService.updateStatus(
+                            animeId = selected.activeSlug,
+                            folder = folder,
+                            anilistId = selected.anilistId,
+                            malId = selected.malId,
+                        )
+                    }
+                },
+                onDismiss = { watchlistAnime = null },
+            )
+        }
+
         when {
             state.isLoading && state.schedule.isEmpty() -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -171,6 +195,7 @@ fun ScheduleScreen(
                         timezone = state.timezone,
                         isRefreshing = state.isLoading,
                         onAnimeClick = onAnimeClick,
+                        onWatchlistClick = { watchlistAnime = it },
                         onExit = onExit,
                     )
                     return@Box
@@ -278,6 +303,7 @@ fun ScheduleScreen(
                                             ScheduleReleaseCard(
                                                 anime = anime,
                                                 onClick = { onAnimeClick(anime.activeSlug) },
+                                                onWatchlistClick = { watchlistAnime = anime },
                                                 modifier = Modifier.weight(1f),
                                                 compact = isCompact,
                                             )
@@ -329,6 +355,7 @@ private fun LegacyScheduleContent(
     timezone: String,
     isRefreshing: Boolean,
     onAnimeClick: (String) -> Unit,
+    onWatchlistClick: (ScheduleAnime) -> Unit,
     onExit: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -403,6 +430,7 @@ private fun LegacyScheduleContent(
                         LegacyScheduleRow(
                             anime = anime,
                             onClick = { onAnimeClick(anime.activeSlug) },
+                            onWatchlistClick = { onWatchlistClick(anime) },
                         )
                     }
                 }
@@ -421,6 +449,7 @@ private fun LegacyScheduleContent(
 private fun LegacyScheduleRow(
     anime: ScheduleAnime,
     onClick: () -> Unit,
+    onWatchlistClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -468,6 +497,16 @@ private fun LegacyScheduleRow(
                 Spacer(Modifier.height(7.dp))
                 Text(format, color = DIM, fontSize = 12.sp, maxLines = 1)
             }
+        }
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.08f))
+                .clickable(onClick = onWatchlistClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Outlined.BookmarkBorder, null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -598,6 +637,7 @@ private fun DayChip(
 private fun ScheduleReleaseCard(
     anime: ScheduleAnime,
     onClick: () -> Unit,
+    onWatchlistClick: () -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
@@ -665,6 +705,20 @@ private fun ScheduleReleaseCard(
                 }
             }
 
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(12.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.62f))
+                    .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
+                    .clickable(onClick = onWatchlistClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.BookmarkBorder, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+
             Text(
                 anime.resolveDisplayTitle(),
                 color = Color.White,
@@ -673,7 +727,7 @@ private fun ScheduleReleaseCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 lineHeight = if (compact) 22.sp else 25.sp,
-                modifier = Modifier.align(Alignment.BottomStart).padding(14.dp),
+                modifier = Modifier.align(Alignment.BottomStart).padding(14.dp).padding(end = 46.dp),
             )
         }
 
