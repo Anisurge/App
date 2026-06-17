@@ -251,6 +251,88 @@ internal fun remuxToMkvWithRxFfmpeg(
     }
 }
 
+internal fun remuxRemoteHlsToMkvWithRxFfmpeg(
+    playlistUrl: String,
+    headers: Map<String, String>?,
+    subtitles: List<Pair<String, String>>,
+    outputPath: String,
+): Boolean {
+    val context = androidAppContext
+    if (!playlistUrl.startsWith("http", ignoreCase = true)) return false
+
+    val ext = if (outputPath.endsWith(".mkv", ignoreCase = true)) "mkv" else "mp4"
+    val tempFile = File(context.cacheDir, "hls_mux_temp_${System.currentTimeMillis()}.$ext")
+    tempFile.parentFile?.mkdirs()
+    if (tempFile.exists()) tempFile.delete()
+
+    val headerText = headers
+        ?.filter { (key, value) -> key.isNotBlank() && value.isNotBlank() }
+        ?.entries
+        ?.joinToString(separator = "\r\n", postfix = "\r\n") { (key, value) -> "$key: $value" }
+        .orEmpty()
+
+    val cmd = mutableListOf("ffmpeg", "-y")
+    if (headerText.isNotBlank()) {
+        cmd.addAll(listOf("-headers", headerText))
+    }
+    cmd.addAll(
+        listOf(
+            "-allowed_extensions",
+            "ALL",
+            "-protocol_whitelist",
+            "file,http,https,tcp,tls,crypto",
+            "-i",
+            playlistUrl,
+        )
+    )
+
+    val validSubs = subtitles.mapNotNull { (path, label) ->
+        val realPath = resolveContentUriToFilePath(path)
+        val ext2 = realPath.substringAfterLast('.', "").lowercase()
+        if (ext2 == "vtt") {
+            println("[RxFFmpeg] skipping VTT subtitle (saved alongside MKV): $label")
+            return@mapNotNull null
+        }
+        val f = File(realPath)
+        if (f.exists() && f.length() > 0L) f to label else null
+    }
+    validSubs.forEach { (file, _) ->
+        cmd.addAll(listOf("-i", file.absolutePath))
+    }
+
+    cmd.addAll(listOf("-map", "0:v:0", "-map", "0:a?"))
+    validSubs.forEachIndexed { index, _ ->
+        cmd.addAll(listOf("-map", "${index + 1}:s:0"))
+    }
+    cmd.addAll(listOf("-c", "copy", "-bsf:a", "aac_adtstoasc"))
+    validSubs.forEachIndexed { index, (_, label) ->
+        cmd.addAll(listOf("-metadata:s:s:$index", "title=$label"))
+    }
+    cmd.add(tempFile.absolutePath)
+
+    return try {
+        val rc = RxFFmpegInvoke.getInstance().runCommand(cmd.toTypedArray(), null)
+        val muxOk = tempFile.exists() && tempFile.length() > 1024L
+        if (!muxOk) {
+            println("[RxFFmpeg] remote HLS remux failed rc=$rc url=${playlistUrl.substringAfter("://").substringBefore('/')} tempBytes=${tempFile.length()}")
+            tempFile.delete()
+            return false
+        }
+
+        val copyOk = publishTempDownloadOutput(tempFile.absolutePath, outputPath)
+        tempFile.delete()
+        if (!copyOk) {
+            println("[RxFFmpeg] failed to copy remote HLS mux result to final path: $outputPath")
+        }
+        copyOk
+    } catch (e: Exception) {
+        println("[RxFFmpeg] remote HLS remux error: ${e.message}")
+        e.printStackTrace()
+        tempFile.delete()
+        false
+    }
+}
+
 /** Maps a content:// SAF tree URI back to its real filesystem path so native
  *  tools (RxFFmpeg / ffmpeg) can read and write the file directly.
  *  Falls back to the original string for non-content paths or if resolution fails. */

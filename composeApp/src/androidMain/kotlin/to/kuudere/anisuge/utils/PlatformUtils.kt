@@ -413,13 +413,24 @@ actual suspend fun muxToMkv(
 
         var exportOk = false
         val masterUrl = masterPlaylistUrl?.takeIf { it.startsWith("http") }
-        if (masterUrl != null && !skipRemoteHlsExport) {
-            exportOk = exportHlsPlaylistToFile(
-                context = context,
-                playlistUrl = urlForHlsExport(masterUrl),
-                outputPath = tempOutputPath,
+        if (masterUrl != null) {
+            exportOk = remuxRemoteHlsToMkvWithRxFfmpeg(
+                playlistUrl = masterUrl,
                 headers = inputHeaders,
+                subtitles = subtitles,
+                outputPath = tempOutputPath,
             )
+        }
+
+        if (masterUrl != null && !skipRemoteHlsExport) {
+            if (!exportOk) {
+                exportOk = exportHlsPlaylistToFile(
+                    context = context,
+                    playlistUrl = urlForHlsExport(masterUrl),
+                    outputPath = tempOutputPath,
+                    headers = inputHeaders,
+                )
+            }
         }
 
         if (!exportOk && videoPath.startsWith("http") && !skipRemoteHlsExport) {
