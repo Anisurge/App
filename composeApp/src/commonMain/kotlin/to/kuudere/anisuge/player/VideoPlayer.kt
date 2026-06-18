@@ -75,6 +75,7 @@ class VideoPlayerState(config: VideoPlayerConfig) {
 @Composable
 fun rememberVideoPlayerState(
     url:          String,
+    mediaKey:     Any? = null,
     loop:         Boolean = false,
     muted:        Boolean = false,
     showControls: Boolean = true,
@@ -87,7 +88,7 @@ fun rememberVideoPlayerState(
     speed:        Double  = 1.0,
     subtitleSize: Int     = 100,
     headers:      Map<String, String>? = null
-): VideoPlayerState = remember(url) {
+): VideoPlayerState = remember(url, mediaKey) {
     VideoPlayerState(
         VideoPlayerConfig(
             url           = url,

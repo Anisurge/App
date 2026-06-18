@@ -363,7 +363,10 @@ class WatchViewModel(
                 ?: synthesizeEpisodesFromCount(data.anime?.epCount ?: data.anime?.episodes)
             val initialData = data.copy(episodes = initialEpisodes.takeIf { it.isNotEmpty() })
             _uiState.update { state ->
-                val mergedResume = mergeResumeHint(data.currentTime, state.savedWatchPosition)
+                val apiResume = data.progress
+                    ?.takeIf { progressMatchesEpisode(it.episodeId, episodeNumber) }
+                    ?.currentTime
+                val mergedResume = mergeResumeHint(apiResume, state.savedWatchPosition)
                 state.copy(
                     isLoading = false,
                     loadingMessage = "Fetching streaming URL...",
@@ -1230,6 +1233,16 @@ class WatchViewModel(
     private fun mergeResumeHint(fromApi: Double?, retained: Double): Double {
         val api = fromApi ?: 0.0
         return if (api > 1.0) api else retained
+    }
+
+    private fun progressMatchesEpisode(episodeId: String?, episodeNumber: Int): Boolean {
+        val normalized = episodeId
+            ?.trim()
+            ?.removePrefix("ep-")
+            ?.removePrefix("episode-")
+            ?.toDoubleOrNull()
+            ?: return false
+        return normalized.toInt() == episodeNumber
     }
 
     /** Refetch Aniskip when the player reports a real duration (improves interval matching). */

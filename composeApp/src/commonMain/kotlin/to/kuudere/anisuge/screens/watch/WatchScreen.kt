@@ -2188,6 +2188,7 @@ fun WatchVideoPlayer(
             val useEmbeddedFonts = uiState.offlinePath != null
             val playerState = rememberVideoPlayerState(
                 url = playbackUrl,
+                mediaKey = "${uiState.animeId}:${uiState.currentEpisodeNumber}",
                 startPosition = uiState.savedWatchPosition,
                 fontsDir = uiState.currentFontsDir,
                 embeddedFonts = useEmbeddedFonts,
