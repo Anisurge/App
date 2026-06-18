@@ -133,6 +133,8 @@ actual suspend fun muxToMkv(
     inputHeaders: Map<String, String>?,
     masterPlaylistUrl: String?,
     preferLocalTsRemux: Boolean,
+    remoteHlsDurationSeconds: Double?,
+    onRemoteHlsProgress: ((progressTimeMs: Long, durationSeconds: Double?) -> Unit)?,
 ): Boolean {
     // TODO: iOS FFmpeg integration
     return false

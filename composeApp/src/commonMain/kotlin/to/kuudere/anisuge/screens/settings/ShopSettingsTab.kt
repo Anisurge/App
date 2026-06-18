@@ -179,7 +179,7 @@ private fun ShopHeader(
         )
         Text(
             if (isStickers) {
-                "Buy stickers for Community Chat, episode comments, and Watch2gether."
+                "Buy stickers for Community Chat, episode comments, and Surge2Gether."
             } else {
                 "Animated profile frames — spend Berries from Settings → Berries tab."
             },

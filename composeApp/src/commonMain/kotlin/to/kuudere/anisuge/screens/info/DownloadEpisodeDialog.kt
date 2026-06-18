@@ -257,10 +257,12 @@ fun DownloadEpisodeDialog(
             val streams = streamSection?.streams ?: emptyList()
             var qualities = emptyList<Triple<String, String, Map<String, String>>>()
 
-            // For suzu server, fetch fresh stream URLs from the embed page
-            if (apiSource.equals("suzu", ignoreCase = true)) {
+            // Modern Suzu returns direct ninstream HLS with required senshi.live
+            // headers from batch_scrape. Keep those streams unless the API gives
+            // no playable choices, then try the old embed refresh fallback.
+            if (apiSource.equals("suzu", ignoreCase = true) && streams.isEmpty()) {
                 val embedUrl = streamSection?.episodeId
-                if (!embedUrl.isNullOrBlank()) {
+                if (!embedUrl.isNullOrBlank() && embedUrl.startsWith("http", ignoreCase = true)) {
                     val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
                     if (embedStreams != null && embedStreams.isNotEmpty()) {
                         val referer = try {
@@ -1033,11 +1035,14 @@ fun preferredDownloadQualityIndex(qualities: List<Triple<String, String, Map<Str
 fun isDirectProgressiveMp4Url(url: String): Boolean {
     val lower = url.lowercase()
     if (lower.contains(".m3u8") || lower.contains(".mpd")) return false
-    val path = url.substringAfter('?', "")
+    val path = url.substringBefore('?').substringBefore('#').lowercase()
     if (path.contains(".m3u8") || path.contains(".mpd")) return false
     val host = urlHost(url).orEmpty()
-    if (lower.endsWith(".mp4") || host.endsWith("ibyteimg.com") || host.endsWith("byteimg.com")) return false
-    return true
+    if (host.endsWith("ibyteimg.com") || host.endsWith("byteimg.com")) return false
+    if (host.endsWith("swiftstream.top")) return false
+    return path.endsWith(".mp4") ||
+            host.contains("fast4speed", ignoreCase = true) ||
+            host.endsWith("animeheaven.me")
 }
 
 fun formatFileSize(bytes: Long): String {

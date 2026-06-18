@@ -83,7 +83,7 @@ class WatchlistViewModel : ViewModel() {
         searchJob = viewModelScope.launch {
             kotlinx.coroutines.delay(500)
             _uiState.update { it.copy(items = emptyList(), currentOffset = 0, total = 0) }
-            fetchWatchlist()
+            loadWatchlistPage(append = false)
         }
     }
 
@@ -135,22 +135,55 @@ class WatchlistViewModel : ViewModel() {
             try {
                 val state = _uiState.value
                 val folderParam = if (state.selectedFolder == "All" || state.selectedFolder == "All lists") null else state.selectedFolder
-                val genreParam = if (state.selectedGenres.isEmpty()) null else state.selectedGenres.joinToString(",")
                 val formatParam = if (state.format == "All formats") null else state.format
                 val statusParam = if (state.status == "All statuses") null else state.status
+                val needsClientFiltering = state.searchQuery.isNotBlank() ||
+                    state.selectedGenres.isNotEmpty() ||
+                    formatParam != null ||
+                    statusParam != null
 
                 val response = watchlistService.getWatchlist(
-                    limit = 20,
+                    limit = if (needsClientFiltering) 100 else 20,
                     offset = offset,
                     folder = folderParam,
-                    q = state.searchQuery.ifBlank { null },
-                    sort = state.sort,
-                    genre = genreParam,
-                    format = formatParam,
-                    status = statusParam
+                    sort = state.sort
                 )
                 if (response != null) {
-                    val entries = response.entries
+                    val allEntries = response.entries.toMutableList()
+                    if (needsClientFiltering) {
+                        var nextOffset = allEntries.size
+                        while (nextOffset < response.total) {
+                            val nextPage = watchlistService.getWatchlist(
+                                limit = 100,
+                                offset = nextOffset,
+                                folder = folderParam,
+                                sort = state.sort,
+                            ) ?: break
+                            if (nextPage.entries.isEmpty()) break
+                            allEntries += nextPage.entries
+                            nextOffset += nextPage.entries.size
+                        }
+                    }
+                    val query = state.searchQuery.trim()
+                    val entries = allEntries.filter { entry ->
+                        val anime = entry.anime
+                        val matchesQuery = query.isBlank() || listOf(
+                            anime.title.english,
+                            anime.title.romaji,
+                            anime.title.native,
+                            anime.title.userPreferred,
+                            entry.effectiveAnimeId,
+                        ).any { it.contains(query, ignoreCase = true) }
+                        val matchesGenres = state.selectedGenres.isEmpty() ||
+                            state.selectedGenres.all { selected ->
+                                anime.genres.any { it.equals(selected, ignoreCase = true) }
+                            }
+                        val matchesFormat = formatParam == null ||
+                            anime.format.equals(formatParam, ignoreCase = true)
+                        val matchesStatus = statusParam == null ||
+                            anime.status.equals(statusParam, ignoreCase = true)
+                        matchesQuery && matchesGenres && matchesFormat && matchesStatus
+                    }
                     val mapped = entries.map { e ->
                         val id = e.effectiveAnimeId
                         val base = e.anime.let { anime ->
@@ -164,8 +197,8 @@ class WatchlistViewModel : ViewModel() {
                         isPaginating = false,
                         isOffline = false,
                         currentOffset = offset + entries.size,
-                        total = response.total,
-                        hasMore = response.hasMore || entries.size >= 20
+                        total = if (needsClientFiltering) entries.size else response.total,
+                        hasMore = !needsClientFiltering && (response.hasMore || response.entries.size >= 20)
                     ) }
                 } else {
                     _uiState.update { it.copy(isLoading = false, isPaginating = false, isOffline = false, error = "Failed to load watchlist") }

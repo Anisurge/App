@@ -68,12 +68,28 @@ class AnimeInfoViewModel(
                 val details = infoService.getAnimeDetails(id)
                 
                 if (details != null) {
+                    val watchlistEntry = try {
+                        watchlistService.getWatchlist(limit = 100)?.entries?.firstOrNull { entry ->
+                            val entryId = entry.effectiveAnimeId
+                            val anime = entry.anime
+                            entryId.equals(id, ignoreCase = true) ||
+                                entryId.equals(details.animeId, ignoreCase = true) ||
+                                (details.anilistId != null && anime.anilistId == details.anilistId) ||
+                                (details.malId != null && anime.malId == details.malId)
+                        }
+                    } catch (e: Exception) {
+                        println("[AnimeInfoVM] watchlist lookup error: ${e.message}")
+                        null
+                    }
+                    val resolvedFolder = watchlistEntry?.displayFolder
+                        ?: details.folder
+                        ?: details.watchlist?.folder
                     _uiState.update {
                         it.copy(
                             isLoading = false,
                             details = details,
-                            inWatchlist = details.inWatchlist || details.watchlist != null,
-                            folder = details.folder ?: details.watchlist?.folder,
+                            inWatchlist = resolvedFolder != null,
+                            folder = resolvedFolder,
                             episodes = details.episodes ?: emptyList(),
                             episodeProgress = emptyMap(),
                         )

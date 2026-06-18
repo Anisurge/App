@@ -388,6 +388,8 @@ actual suspend fun muxToMkv(
     inputHeaders: Map<String, String>?,
     masterPlaylistUrl: String?,
     preferLocalTsRemux: Boolean,
+    remoteHlsDurationSeconds: Double?,
+    onRemoteHlsProgress: ((progressTimeMs: Long, durationSeconds: Double?) -> Unit)?,
 ): Boolean = withContext(Dispatchers.IO) {
     val proxiedUrls = mutableListOf<Pair<String, String>>() // proxied -> original (for release)
     val context = androidAppContext
@@ -407,18 +409,22 @@ actual suspend fun muxToMkv(
             return proxied
         }
 
+        val localVideoInput = !videoPath.startsWith("http", ignoreCase = true)
         val skipRemoteHlsExport = preferLocalTsRemux ||
+                localVideoInput ||
                 HlsPngTsStrip.isDisguisedTsCdnHost(videoPath) ||
                 masterPlaylistUrl?.let { HlsPngTsStrip.isVibeplayerHlsHost(it) } == true
 
         var exportOk = false
         val masterUrl = masterPlaylistUrl?.takeIf { it.startsWith("http") }
-        if (masterUrl != null) {
+        if (masterUrl != null && !skipRemoteHlsExport) {
             exportOk = remuxRemoteHlsToMkvWithRxFfmpeg(
                 playlistUrl = masterUrl,
                 headers = inputHeaders,
                 subtitles = subtitles,
                 outputPath = tempOutputPath,
+                durationSeconds = remoteHlsDurationSeconds,
+                onProgress = onRemoteHlsProgress,
             )
         }
 
@@ -447,7 +453,7 @@ actual suspend fun muxToMkv(
             )
         }
 
-        if (!exportOk && !videoPath.startsWith("http")) {
+        if (!exportOk && localVideoInput) {
             val realVideo = resolveContentUriToFilePath(videoPath)
             val realAudio = audioPath?.let { resolveContentUriToFilePath(it) }
             val realSubs = subtitles.map { (p, l) -> resolveContentUriToFilePath(p) to l }

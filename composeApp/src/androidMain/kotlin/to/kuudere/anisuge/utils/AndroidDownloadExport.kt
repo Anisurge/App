@@ -18,6 +18,7 @@ import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ExoPlayerAssetLoader
 import androidx.media3.transformer.Transformer
+import io.microshow.rxffmpeg.RxFFmpegInvoke.IFFmpegListener
 import to.kuudere.anisuge.platform.androidAppContext
 import java.io.File
 import kotlin.coroutines.resume
@@ -256,6 +257,8 @@ internal fun remuxRemoteHlsToMkvWithRxFfmpeg(
     headers: Map<String, String>?,
     subtitles: List<Pair<String, String>>,
     outputPath: String,
+    durationSeconds: Double?,
+    onProgress: ((progressTimeMs: Long, durationSeconds: Double?) -> Unit)?,
 ): Boolean {
     val context = androidAppContext
     if (!playlistUrl.startsWith("http", ignoreCase = true)) return false
@@ -279,6 +282,10 @@ internal fun remuxRemoteHlsToMkvWithRxFfmpeg(
         listOf(
             "-allowed_extensions",
             "ALL",
+            "-allowed_segment_extensions",
+            "ALL",
+            "-extension_picky",
+            "0",
             "-protocol_whitelist",
             "file,http,https,tcp,tls,crypto",
             "-i",
@@ -311,7 +318,20 @@ internal fun remuxRemoteHlsToMkvWithRxFfmpeg(
     cmd.add(tempFile.absolutePath)
 
     return try {
-        val rc = RxFFmpegInvoke.getInstance().runCommand(cmd.toTypedArray(), null)
+        println("[RxFFmpeg] remote HLS remux start url=${playlistUrl.substringAfter("://").substringBefore('/')} headers=${headers?.keys?.joinToString(",").orEmpty()}")
+        val listener = if (onProgress != null) {
+            object : IFFmpegListener {
+                override fun onFinish() = Unit
+                override fun onProgress(progress: Int, progressTime: Long) {
+                    onProgress(progressTime, durationSeconds)
+                }
+                override fun onCancel() = Unit
+                override fun onError(message: String?) {
+                    println("[RxFFmpeg] remote HLS listener error: $message")
+                }
+            }
+        } else null
+        val rc = RxFFmpegInvoke.getInstance().runCommand(cmd.toTypedArray(), listener)
         val muxOk = tempFile.exists() && tempFile.length() > 1024L
         if (!muxOk) {
             println("[RxFFmpeg] remote HLS remux failed rc=$rc url=${playlistUrl.substringAfter("://").substringBefore('/')} tempBytes=${tempFile.length()}")
@@ -321,6 +341,7 @@ internal fun remuxRemoteHlsToMkvWithRxFfmpeg(
 
         val copyOk = publishTempDownloadOutput(tempFile.absolutePath, outputPath)
         tempFile.delete()
+        println("[RxFFmpeg] remote HLS remux ${if (copyOk) "ok" else "copy failed"} url=${playlistUrl.substringAfter("://").substringBefore('/')}")
         if (!copyOk) {
             println("[RxFFmpeg] failed to copy remote HLS mux result to final path: $outputPath")
         }

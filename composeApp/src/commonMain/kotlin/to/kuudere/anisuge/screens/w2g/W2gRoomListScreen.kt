@@ -122,7 +122,7 @@ fun W2gRoomListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Watch2gether") },
+                title = { Text("Surge2Gether") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")

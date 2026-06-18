@@ -1372,7 +1372,7 @@ private fun AppearanceTab(
                     label = "Use quick action menu"
                 )
                 Text(
-                    text = if (uiState.quickActionMenu) "Top bar uses the compact menu for Watch2gether, downloads, and notifications." else "Top bar uses the old separate Watch2gether and downloads buttons.",
+                    text = if (uiState.quickActionMenu) "Top bar uses the compact menu for Surge2Gether, downloads, and notifications." else "Top bar uses the old separate Surge2Gether and downloads buttons.",
                     color = MUTED,
                     fontSize = 12.sp,
                     lineHeight = 16.sp

@@ -1,6 +1,7 @@
 package to.kuudere.anisuge.utils
 
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.request.head
 import io.ktor.client.request.header
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import okio.buffer
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -78,7 +80,10 @@ object DownloadManager {
 
     private val persistenceFile = "${getCacheDirectory()}/tasks.json"
     private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
-    private const val MP4_BUFFER_SIZE = 8 * 1024
+    private const val MP4_BUFFER_SIZE = 256 * 1024
+    private const val DIRECT_MP4_PROBE_TIMEOUT_MS = 8_000L
+    private const val DIRECT_MP4_USER_AGENT =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     private const val ANDROID_HLS_PARALLELISM = 4
     private const val DESKTOP_HLS_PARALLELISM = 6
     private const val SEASON_BATCH_DOWNLOAD_CONCURRENCY = 3
@@ -411,11 +416,19 @@ object DownloadManager {
 
     private fun executeMp4Download(task: DownloadTask, mp4Url: String, qualityLabel: String) {
         val taskId = task.id
-        val hdrs = task.headers ?: emptyMap()
+        val hdrs = directMp4Headers(task.headers ?: emptyMap())
         val job = scope.launch {
             try {
                 val workDir = prepareTaskWorkDir(taskId, task.workDir)
                 val outputPath = "$workDir/${buildCompletedFileName(task.title, task.episodeNumber, "mp4")}"
+                updateTask(taskId) {
+                    it.copy(
+                        status = "Checking direct MP4...",
+                        progress = 0f,
+                        headers = hdrs,
+                    )
+                }
+                downloadLog(taskId, "direct MP4 probe host=${urlHost(mp4Url)} headers=${hdrs.keys.joinToString(",")}")
                 val probe = probeDirectMp4(mp4Url, hdrs)
                 if (!probe.isDirectMp4) {
                     abortDownload(taskId, "not a direct MP4 stream")
@@ -438,17 +451,6 @@ object DownloadManager {
         updateTask(taskId) { it.copy(job = job) }
     }
 
-    private fun premiumDownloadFallbackServers(currentApiServer: String): List<String> {
-        val current = currentApiServer.lowercase()
-        val available = AppComponent.serverRepository.getAvailableServers()
-            .map { it.id.lowercase().removeSuffix("-dub") }
-            .filter { it.isNotBlank() && it != current }
-            .distinct()
-        val preferred = listOf("anitaku-1", "anitaku", "anikage")
-        return (preferred.filter { it in available } + available.filter { it !in preferred })
-            .distinct()
-    }
-
     private fun executeDownload(
         task: DownloadTask,
         anilistId: Int,
@@ -461,7 +463,6 @@ object DownloadManager {
     ) {
         val taskId = task.id
         val taskHeaders = task.headers
-        var resolvedServer = server
         val job = scope.launch {
             try {
                 val m3u8Url: String
@@ -505,13 +506,15 @@ object DownloadManager {
 
                     val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
 
-                    var streamData = if (useDub) response?.dub else response?.sub
+                    val streamData = if (useDub) response?.dub else response?.sub
                     var streamInfo = streamData?.streams?.firstOrNull()
 
-                    // For suzu server, fetch fresh stream URLs from the embed page
-                    if (apiServer.equals("suzu", ignoreCase = true)) {
+                    // Modern Suzu returns direct ninstream HLS with required senshi.live
+                    // headers from batch_scrape. Only fall back to the old embed refresh
+                    // when the API did not provide a playable stream.
+                    if (apiServer.equals("suzu", ignoreCase = true) && streamInfo == null) {
                         val embedUrl = streamData?.episodeId
-                        if (!embedUrl.isNullOrBlank()) {
+                        if (!embedUrl.isNullOrBlank() && embedUrl.startsWith("http", ignoreCase = true)) {
                             val embedStreams = infoService.fetchSuzuEmbedStreams(embedUrl)
                             if (embedStreams != null && embedStreams.isNotEmpty()) {
                                 val referer = try {
@@ -543,23 +546,6 @@ object DownloadManager {
                         }
                     }
 
-                    if (streamInfo == null && task.useParallelSegments) {
-                        for (candidate in premiumDownloadFallbackServers(apiServer)) {
-                            val fallbackResponse = runCatching {
-                                infoService.getVideoStream(anilistId, task.episodeNumber, candidate)
-                            }.getOrNull()
-                            val fallbackData = if (useDub) fallbackResponse?.dub else fallbackResponse?.sub
-                            val fallbackInfo = fallbackData?.streams?.firstOrNull()
-                            if (fallbackInfo != null) {
-                                resolvedServer = candidate
-                                streamData = fallbackData
-                                streamInfo = fallbackInfo
-                                updateTask(taskId) { it.copy(status = "Switched to $candidate") }
-                                break
-                            }
-                        }
-                    }
-
                     if (streamInfo == null) {
                         abortDownload(taskId, "no stream")
                         return@launch
@@ -581,24 +567,17 @@ object DownloadManager {
                 updateTask(taskId) {
                     it.copy(
                         streamUrl = m3u8Url,
-                        serverId = resolvedServer,
+                        serverId = server,
                         anilistId = anilistId,
                         selectedSubtitleLabels = subtitleLabels,
                         audioLang = audioLang,
                         preferBatchDub = preferBatchDub,
                         headers = currentHeaders,
-                        fallbackAttemptedServers = if (resolvedServer.equals(server, ignoreCase = true)) {
-                            it.fallbackAttemptedServers
-                        } else {
-                            (it.fallbackAttemptedServers + server)
-                                .map { attempted -> attempted.lowercase().removeSuffix("-dub") }
-                                .distinct()
-                        },
                     )
                 }
                 downloadLog(
                     taskId,
-                    "stream server=$resolvedServer urlHost=${urlHost(m3u8Url)} parallel=${task.useParallelSegments} headers=${
+                    "stream server=$server urlHost=${urlHost(m3u8Url)} parallel=${task.useParallelSegments} headers=${
                         currentHeaders.keys.joinToString(
                             ","
                         )
@@ -751,9 +730,16 @@ object DownloadManager {
                     )
                 }
 
-                // 4. Muxing
-                val muxStatus = if (isAndroidPlatform) "Finalizing download..." else "Muxing into MKV..."
-                updateTask(taskId) { it.copy(status = muxStatus, progress = 0.99f, downloadSpeed = "", eta = "") }
+                // 4. Muxing. On Android, encrypted/remote HLS is downloaded by FFmpeg during
+                // this step, so do not present it as nearly finished before bytes are pulled.
+                val remoteHlsExport = isAndroidPlatform && (isEncrypted || useHlsUrlRemux)
+                val muxStatus = when {
+                    remoteHlsExport -> "Downloading encrypted stream..."
+                    isAndroidPlatform -> "Finalizing download..."
+                    else -> "Muxing into MKV..."
+                }
+                val muxProgress = if (remoteHlsExport) 0.55f else 0.99f
+                updateTask(taskId) { it.copy(status = muxStatus, progress = muxProgress, downloadSpeed = "", eta = "") }
 
                 val muxVideoSource = when {
                     isEncrypted || useHlsUrlRemux -> videoPlaylistUrl
@@ -765,6 +751,9 @@ object DownloadManager {
                     } else if (audioSegments.isNotEmpty()) {
                         rawAudioPath
                     } else null
+                val remoteHlsDurationSeconds = if (remoteHlsExport) {
+                    playlistDurationSeconds(videoPlaylistText).takeIf { it > 0.0 }
+                } else null
 
                 val preferLocalTsRemux = HlsPngTsStrip.prefersLocalSegmentMux(
                     masterUrl = m3u8Url,
@@ -791,6 +780,19 @@ object DownloadManager {
                     inputHeaders = currentHeaders,
                     masterPlaylistUrl = m3u8Url,
                     preferLocalTsRemux = preferLocalTsRemux,
+                    remoteHlsDurationSeconds = remoteHlsDurationSeconds,
+                    onRemoteHlsProgress = if (remoteHlsExport) { progressTimeMs, durationSeconds ->
+                        val durationMs = ((durationSeconds ?: 0.0) * 1000.0).toLong().coerceAtLeast(1L)
+                        val fraction = (progressTimeMs.toDouble() / durationMs.toDouble()).toFloat().coerceIn(0f, 1f)
+                        val progress = 0.55f + (fraction * 0.43f)
+                        val percent = (progress * 100).toInt().coerceIn(55, 98)
+                        updateTask(taskId, persist = false) {
+                            it.copy(
+                                status = "Downloading encrypted stream: $percent%",
+                                progress = progress.coerceIn(0.55f, 0.98f),
+                            )
+                        }
+                    } else null,
                 )
 
                 if (muxSuccess) {
@@ -918,21 +920,28 @@ object DownloadManager {
         return normalized.endsWith(".mp4")
     }
 
+    private fun directMp4Headers(headers: Map<String, String>): Map<String, String> {
+        if (headers.keys.any { it.equals("User-Agent", ignoreCase = true) }) return headers
+        return headers + ("User-Agent" to DIRECT_MP4_USER_AGENT)
+    }
+
     private suspend fun probeDirectMp4(url: String, headers: Map<String, String>): DirectMp4Probe {
         val byPath = urlPathEndsWithMp4(url)
         return try {
-            val response = httpClient.head(url) {
-                headers.forEach { (k, v) -> header(k, v) }
-            }
-            val contentType = response.headers["Content-Type"]
-                ?.substringBefore(';')
-                ?.trim()
-                ?.lowercase()
-                .orEmpty()
-            val byContentType =
-                contentType == "video/mp4" || contentType == "application/octet-stream"
-            val contentLength = response.headers["Content-Length"]?.toLongOrNull()?.takeIf { it > 0L } ?: -1L
-            DirectMp4Probe(isDirectMp4 = byPath || byContentType, contentLength = contentLength)
+            withTimeoutOrNull(DIRECT_MP4_PROBE_TIMEOUT_MS) {
+                val response = httpClient.head(url) {
+                    headers.forEach { (k, v) -> header(k, v) }
+                }
+                val contentType = response.headers["Content-Type"]
+                    ?.substringBefore(';')
+                    ?.trim()
+                    ?.lowercase()
+                    .orEmpty()
+                val byContentType =
+                    contentType == "video/mp4" || contentType == "application/octet-stream"
+                val contentLength = response.headers["Content-Length"]?.toLongOrNull()?.takeIf { it > 0L } ?: -1L
+                DirectMp4Probe(isDirectMp4 = byPath || byContentType, contentLength = contentLength)
+            } ?: DirectMp4Probe(isDirectMp4 = byPath, contentLength = -1L)
         } catch (_: Exception) {
             DirectMp4Probe(isDirectMp4 = byPath, contentLength = -1L)
         }
@@ -948,9 +957,14 @@ object DownloadManager {
         updateTask(taskId) { it.copy(status = "Preparing direct MP4...", progress = 0f) }
         return try {
             var httpOk = false
+            downloadLog(taskId, "direct MP4 GET start host=${urlHost(url)}")
             httpClient.prepareGet(url) {
+                timeout {
+                    requestTimeoutMillis = Long.MAX_VALUE
+                }
                 headers.forEach { (k, v) -> header(k, v) }
             }.execute { response ->
+                downloadLog(taskId, "direct MP4 GET status=${response.status.value}")
                 if (!response.status.isSuccess()) {
                     abortDownload(taskId, "HTTP ${response.status.value}")
                     return@execute
@@ -1047,6 +1061,18 @@ object DownloadManager {
             }
         }
         return baseUrl
+    }
+
+    private fun playlistDurationSeconds(content: String): Double {
+        return content.lineSequence()
+            .map { it.trim() }
+            .filter { it.startsWith("#EXTINF:", ignoreCase = true) }
+            .sumOf { line ->
+                line.substringAfter(':')
+                    .substringBefore(',')
+                    .trim()
+                    .toDoubleOrNull() ?: 0.0
+            }
     }
 
     private suspend fun fetchHlsSegmentBytes(
@@ -1344,54 +1370,10 @@ object DownloadManager {
     /** Drop failed task from UI/storage and delete partial files so the next download starts clean. */
     private fun abortDownload(taskId: String, reason: String) {
         val task = tasks.value.find { it.id == taskId } ?: return
-        val nextServer = nextPremiumDownloadFallback(task)
-        if (nextServer != null && task.anilistId != null) {
-            scope.launch {
-                cleanupPartialDownloadFiles(task)
-                updateTask(taskId) {
-                    it.copy(
-                        status = "Retrying on $nextServer...",
-                        progress = 0f,
-                        downloadSpeed = "",
-                        eta = "",
-                        localPath = null,
-                        streamUrl = null,
-                        headers = null,
-                        serverId = nextServer,
-                        fallbackAttemptedServers =
-                            (it.fallbackAttemptedServers + listOfNotNull(task.serverId))
-                                .map { server -> server.lowercase().removeSuffix("-dub") }
-                                .distinct(),
-                    )
-                }
-                val retryTask = tasks.value.find { it.id == taskId } ?: return@launch
-                executeDownload(
-                    retryTask,
-                    task.anilistId,
-                    nextServer,
-                    task.selectedSubtitleLabels,
-                    task.audioLang,
-                    downloadFonts = true,
-                    preResolvedM3u8 = null,
-                    preferBatchDub = task.preferBatchDub,
-                )
-                println("[Download] premium fallback for $taskId: $reason -> $nextServer")
-            }
-            return
-        }
         scope.launch {
             removeFailedTaskSync(task)
             println("[Download] removed failed task $taskId: $reason")
         }
-    }
-
-    private fun nextPremiumDownloadFallback(task: DownloadTask): String? {
-        if (!task.useParallelSegments) return null
-        val current = task.serverId?.lowercase()?.removeSuffix("-dub") ?: return null
-        val tried = (task.fallbackAttemptedServers + current)
-            .map { it.lowercase().removeSuffix("-dub") }
-            .toSet()
-        return premiumDownloadFallbackServers(current).firstOrNull { it !in tried }
     }
 
     private suspend fun removeFailedTaskSync(task: DownloadTask) {

@@ -135,6 +135,8 @@ actual suspend fun muxToMkv(
     inputHeaders: Map<String, String>?,
     masterPlaylistUrl: String?,
     preferLocalTsRemux: Boolean,
+    remoteHlsDurationSeconds: Double?,
+    onRemoteHlsProgress: ((progressTimeMs: Long, durationSeconds: Double?) -> Unit)?,
 ): Boolean = withContext(Dispatchers.IO) {
     try {
         val ffmpegPath = findBundledFfmpeg() ?: try {

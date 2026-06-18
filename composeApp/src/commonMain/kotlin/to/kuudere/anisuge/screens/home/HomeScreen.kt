@@ -2317,7 +2317,7 @@ private fun MobileTopBar(
                                     },
                                 )
                                 QuickMenuItem(
-                                    text = "watch2gether",
+                                    text = "Surge2Gether",
                                     icon = Icons.Outlined.Group,
                                     onClick = {
                                         quickMenuExpanded = false
@@ -2353,7 +2353,7 @@ private fun MobileTopBar(
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Group,
-                                contentDescription = "Watch Together",
+                                contentDescription = "Surge2Gether",
                                 tint = Color.White,
                                 modifier = Modifier.size(24.dp),
                             )

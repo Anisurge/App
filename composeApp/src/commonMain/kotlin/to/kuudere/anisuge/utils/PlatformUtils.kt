@@ -55,4 +55,6 @@ expect suspend fun muxToMkv(
     masterPlaylistUrl: String? = null,
     /** When true (vibeplayer / PNG-wrapped segments), remux the local `.ts` file instead of exporting the master URL. */
     preferLocalTsRemux: Boolean = false,
+    remoteHlsDurationSeconds: Double? = null,
+    onRemoteHlsProgress: ((progressTimeMs: Long, durationSeconds: Double?) -> Unit)? = null,
 ): Boolean
