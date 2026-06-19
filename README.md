@@ -22,6 +22,10 @@
   Get the latest version of Anisurge for your platform from the <b><a href="https://github.com/Anisurge/App/releases">Releases</a></b> page.
 </p>
 
+## Visitors
+
+<img src="https://count.getloli.com/@anisurge?name=App&theme=rule34&padding=8&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" />
+
 ---
 
 ## Features
