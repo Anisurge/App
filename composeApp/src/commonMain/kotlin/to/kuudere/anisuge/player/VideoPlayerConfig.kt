@@ -33,5 +33,12 @@ data class VideoPlayerConfig(
     /** Subtitle scale percentage. 100 keeps mpv defaults. */
     val subtitleSize: Int = 100,
     /** Custom HTTP headers (Referer, User-Agent, etc) */
-    val headers: Map<String, String>? = null
+    val headers: Map<String, String>? = null,
+    /** Cosmetic mpv rendering defaults. Unsupported platforms ignore these. */
+    val enhancements: PlayerEnhancementSettings = PlayerEnhancementSettings.DEFAULT,
+    /** Local player utilities and subtitle rendering defaults. */
+    val utilities: PlayerUtilitySettings = PlayerUtilitySettings.DEFAULT,
+    /** Human-readable metadata used when naming screenshots. */
+    val screenshotAnimeTitle: String = "Anime",
+    val screenshotEpisodeNumber: Int = 1,
 )

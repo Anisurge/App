@@ -26,8 +26,114 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import android.util.Log
 import java.io.File
+import kotlin.coroutines.resume
 
 private const val SUB_TAG = "AnisugeSubs"
+
+private fun ensureAndroidShaderFiles(context: android.content.Context, preset: ShaderPreset): List<String> {
+    if (preset.files.isEmpty()) return emptyList()
+    val shaderDir = File(context.filesDir, "mpv/Shaders").apply { mkdirs() }
+    return preset.files.mapNotNull { name ->
+        runCatching {
+            val output = File(shaderDir, name)
+            if (!output.exists() || output.length() == 0L) {
+                context.assets.open("shaders/$name").use { input ->
+                    output.outputStream().use(input::copyTo)
+                }
+            }
+            output.absolutePath
+        }.onFailure {
+            Log.e("AnisugeShaders", "Failed to install $name", it)
+        }.getOrNull()
+    }
+}
+
+private fun applyAndroidEnhancements(context: android.content.Context, settings: PlayerEnhancementSettings) {
+    val safe = settings.sanitized()
+    safe.mpvProperties().forEach { (property, value) ->
+        runCatching { MPVLib.setPropertyString(property, value) }
+            .onFailure { Log.w("AnisugeShaders", "mpv rejected $property=$value", it) }
+    }
+    val preset = ShaderPreset.fromId(safe.shaderPreset)
+    val paths = ensureAndroidShaderFiles(context, preset)
+    runCatching { MPVLib.setPropertyString("glsl-shaders", paths.joinToString(":")) }
+        .onFailure { Log.e("AnisugeShaders", "Failed to apply ${preset.label}", it) }
+}
+
+private fun applyAndroidUtilities(settings: PlayerUtilitySettings) {
+    settings.sanitized().mpvProperties().forEach { (property, value) ->
+        runCatching { MPVLib.setPropertyString(property, value) }
+            .onFailure { Log.w("AnisugePlayer", "mpv rejected $property=$value", it) }
+    }
+}
+
+private suspend fun captureAndroidScreenshot(
+    context: android.content.Context,
+    surfaceView: SurfaceView,
+    fileName: String,
+): String {
+    val tempFile = File(context.cacheDir, fileName)
+    val width = surfaceView.width.takeIf { it > 0 } ?: error("Video surface is not ready")
+    val height = surfaceView.height.takeIf { it > 0 } ?: error("Video surface is not ready")
+    val bitmap = android.graphics.Bitmap.createBitmap(
+        width,
+        height,
+        android.graphics.Bitmap.Config.ARGB_8888,
+    )
+    kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        android.view.PixelCopy.request(
+            surfaceView,
+            bitmap,
+            { result ->
+                if (result == android.view.PixelCopy.SUCCESS) {
+                    continuation.resume(Unit)
+                } else {
+                    bitmap.recycle()
+                    continuation.resumeWith(
+                        Result.failure(IllegalStateException("PixelCopy failed ($result)")),
+                    )
+                }
+            },
+            Handler(Looper.getMainLooper()),
+        )
+    }
+    tempFile.outputStream().use { output ->
+        if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)) {
+            bitmap.recycle()
+            error("PNG encoding failed")
+        }
+    }
+    bitmap.recycle()
+
+    val resolver = context.contentResolver
+    val values = android.content.ContentValues().apply {
+        put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+        put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/png")
+        put(
+            android.provider.MediaStore.MediaColumns.RELATIVE_PATH,
+            "${android.os.Environment.DIRECTORY_DOWNLOADS}/Anisurge/Screenshots",
+        )
+        put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+    }
+    val uri = resolver.insert(
+        android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+        values,
+    ) ?: error("Could not create screenshot")
+    try {
+        resolver.openOutputStream(uri)?.use { output ->
+            tempFile.inputStream().use { it.copyTo(output) }
+        } ?: error("Could not write screenshot")
+        values.clear()
+        values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+    } catch (e: Exception) {
+        resolver.delete(uri, null, null)
+        throw e
+    } finally {
+        tempFile.delete()
+    }
+    return "Saved to Downloads/Anisurge/Screenshots/$fileName"
+}
 
 @Composable
 @UnstableApi
@@ -316,6 +422,8 @@ actual fun VideoPlayerSurface(
                 isMPVInited = true
             }
         }
+        applyAndroidEnhancements(context, state.enhancements)
+        applyAndroidUtilities(state.utilities)
 
         var isPausedForCache = false
         val observer = object : MPVLib.EventObserver {
@@ -699,6 +807,38 @@ actual fun VideoPlayerSurface(
     LaunchedEffect(state.subtitleSize) {
         withContext(Dispatchers.IO) {
             MPVLib.setPropertyString("sub-scale", (state.subtitleSize / 100.0).toString())
+        }
+    }
+
+    LaunchedEffect(state.enhancements) {
+        withContext(Dispatchers.IO) {
+            applyAndroidEnhancements(context, state.enhancements)
+        }
+    }
+
+    LaunchedEffect(state.utilities) {
+        withContext(Dispatchers.IO) {
+            applyAndroidUtilities(state.utilities)
+        }
+    }
+
+    LaunchedEffect(state.screenshotRequestCount) {
+        if (state.screenshotRequestCount <= 0) return@LaunchedEffect
+        state.screenshotResult = withContext(Dispatchers.IO) {
+            runCatching {
+                withContext(Dispatchers.Main) {
+                    captureAndroidScreenshot(
+                        context = context,
+                        surfaceView = surfaceView,
+                        fileName = screenshotFileName(
+                            animeTitle = state.config.screenshotAnimeTitle,
+                            episodeNumber = state.config.screenshotEpisodeNumber,
+                            playbackSeconds = state.position,
+                        ),
+                    )
+                }
+            }
+                .getOrElse { "Screenshot failed: ${it.message ?: "unknown error"}" }
         }
     }
 

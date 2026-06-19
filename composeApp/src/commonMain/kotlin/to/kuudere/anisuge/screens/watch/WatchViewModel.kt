@@ -30,6 +30,8 @@ import to.kuudere.anisuge.platform.KmpFileSystem
 import to.kuudere.anisuge.utils.DownloadManager
 import to.kuudere.anisuge.player.VideoPlayerConfig
 import to.kuudere.anisuge.player.VideoPlayerState
+import to.kuudere.anisuge.player.PlayerEnhancementSettings
+import to.kuudere.anisuge.player.PlayerUtilitySettings
 
 import to.kuudere.anisuge.screens.watch.SettingsMenuPage
 
@@ -73,6 +75,11 @@ data class WatchUiState(
     val defaultLang: Boolean = false,
     val syncPercentage: Int = 80,
     val subtitleSize: Int = 100,
+    val playerEnhancements: PlayerEnhancementSettings = PlayerEnhancementSettings.DEFAULT,
+    val playerUtilities: PlayerUtilitySettings = PlayerUtilitySettings.DEFAULT,
+    val sleepTimerMinutes: Int? = null,
+    val sleepTimerDeadlineMs: Long? = null,
+    val sleepAfterEpisode: Boolean = false,
     val didMarkWatched: Boolean = false,
     val offlinePath: String? = null,
     // Offline metadata
@@ -129,6 +136,8 @@ class WatchViewModel(
 
     /** Server explicitly chosen in player settings (not the Settings → priority list default). */
     private var userPinnedStreamServer: String? = null
+    private var hasSessionEnhancementOverride = false
+    private var hasSessionUtilityOverride = false
 
     init {
         viewModelScope.launch { settingsStore.autoPlayFlow.collect { v -> _uiState.update { it.copy(autoPlay = v) } } }
@@ -139,6 +148,20 @@ class WatchViewModel(
         viewModelScope.launch { settingsStore.syncPercentageFlow.collect { v -> _uiState.update { it.copy(syncPercentage = v) } } }
         viewModelScope.launch { settingsStore.subtitleSizeFlow.collect { v -> _uiState.update { it.copy(subtitleSize = v) } } }
         viewModelScope.launch { settingsStore.videoScaleModeFlow.collect { v -> _uiState.update { it.copy(videoScaleMode = v) } } }
+        viewModelScope.launch {
+            settingsStore.playerEnhancementsFlow.collect { value ->
+                if (!hasSessionEnhancementOverride) {
+                    _uiState.update { it.copy(playerEnhancements = value) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.playerUtilitiesFlow.collect { value ->
+                if (!hasSessionUtilityOverride) {
+                    _uiState.update { it.copy(playerUtilities = value) }
+                }
+            }
+        }
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
                 serverRepository.servers,
@@ -810,6 +833,38 @@ class WatchViewModel(
         }
         _uiState.update { it.copy(videoScaleMode = normalized) }
         viewModelScope.launch { settingsStore.setVideoScaleMode(normalized) }
+    }
+
+    fun setSessionPlayerEnhancements(settings: PlayerEnhancementSettings) {
+        hasSessionEnhancementOverride = true
+        _uiState.update { it.copy(playerEnhancements = settings.sanitized()) }
+    }
+
+    fun setSessionPlayerUtilities(settings: PlayerUtilitySettings) {
+        hasSessionUtilityOverride = true
+        _uiState.update { it.copy(playerUtilities = settings.sanitized()) }
+    }
+
+    fun setSleepTimer(minutes: Int?) {
+        _uiState.update {
+            it.copy(
+                sleepTimerMinutes = minutes,
+                sleepTimerDeadlineMs = minutes?.let { value ->
+                    kotlinx.datetime.Clock.System.now().toEpochMilliseconds() + value * 60_000L
+                },
+                sleepAfterEpisode = false,
+            )
+        }
+    }
+
+    fun setSleepAfterEpisode(enabled: Boolean) {
+        _uiState.update {
+            it.copy(
+                sleepTimerMinutes = null,
+                sleepTimerDeadlineMs = null,
+                sleepAfterEpisode = enabled,
+            )
+        }
     }
 
     fun setBoostSpeedActive(active: Boolean) {

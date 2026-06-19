@@ -19,6 +19,7 @@
 #api.md
 AniSurge/
 services/anisurge-api/
+/diff-app/
 # Signing & Secrets
 key.properties
 local.properties

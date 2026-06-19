@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -100,6 +101,15 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import to.kuudere.anisuge.player.ColorPreset
+import to.kuudere.anisuge.player.PlayerEnhancementOptions
+import to.kuudere.anisuge.player.PlayerEnhancementSettings
+import to.kuudere.anisuge.player.ShaderCost
+import to.kuudere.anisuge.player.ShaderPreset
+import to.kuudere.anisuge.player.PlayerUtilitySettings
+import to.kuudere.anisuge.platform.isAndroidPlatform
+import to.kuudere.anisuge.platform.isDesktopPlatform
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -1029,6 +1039,10 @@ private fun MobileSettingsDetail(
                     onSubtitleSizeChange = viewModel::setSubtitleSize,
                     onDownloadPathChange = viewModel::setDownloadPath,
                     onAppLocaleChange = viewModel::setAppLocale,
+                    onPlayerEnhancementsChange = viewModel::setPlayerEnhancements,
+                    onResetPlayerEnhancements = viewModel::resetPlayerEnhancements,
+                    onPlayerUtilitiesChange = viewModel::setPlayerUtilities,
+                    onResetPlayerUtilities = viewModel::resetPlayerUtilities,
                     onSave = viewModel::saveSettings
                 )
 
@@ -1188,6 +1202,10 @@ private fun SettingsContent(
                 onSubtitleSizeChange = viewModel::setSubtitleSize,
                 onDownloadPathChange = viewModel::setDownloadPath,
                 onAppLocaleChange = viewModel::setAppLocale,
+                onPlayerEnhancementsChange = viewModel::setPlayerEnhancements,
+                onResetPlayerEnhancements = viewModel::resetPlayerEnhancements,
+                onPlayerUtilitiesChange = viewModel::setPlayerUtilities,
+                onResetPlayerUtilities = viewModel::resetPlayerUtilities,
                 onSave = viewModel::saveSettings
             )
 
@@ -2256,6 +2274,10 @@ private fun PreferencesTab(
     onSubtitleSizeChange: (Int) -> Unit,
     onDownloadPathChange: (String) -> Unit,
     onAppLocaleChange: (AppLocale) -> Unit,
+    onPlayerEnhancementsChange: (PlayerEnhancementSettings) -> Unit,
+    onResetPlayerEnhancements: () -> Unit,
+    onPlayerUtilitiesChange: (PlayerUtilitySettings) -> Unit,
+    onResetPlayerUtilities: () -> Unit,
     onSave: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -2426,6 +2448,34 @@ private fun PreferencesTab(
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        if (isAndroidPlatform || isDesktopPlatform) {
+            SettingCard(
+                title = "Player enhancements",
+                description = "Global defaults for Anime4K, color, and mpv rendering. Player changes remain session-only.",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                GlobalEnhancementSettings(
+                    settings = uiState.playerEnhancements,
+                    onChange = onPlayerEnhancementsChange,
+                    onReset = onResetPlayerEnhancements,
+                )
+            }
+            Spacer(modifier = Modifier.height(32.dp))
+
+            SettingCard(
+                title = "Player utilities",
+                description = "Global subtitle styling, sync, and double-tap seek defaults.",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                GlobalPlayerUtilitySettings(
+                    settings = uiState.playerUtilities,
+                    onChange = onPlayerUtilitiesChange,
+                    onReset = onResetPlayerUtilities,
+                )
+            }
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+
         // Download Path Section - Full Width
         SettingCard(
             title = strings.downloadPath,
@@ -2571,6 +2621,315 @@ private fun SettingToggle(
                 uncheckedTrackColor = BORDER
             )
         )
+    }
+}
+
+@Composable
+private fun GlobalEnhancementSettings(
+    settings: PlayerEnhancementSettings,
+    onChange: (PlayerEnhancementSettings) -> Unit,
+    onReset: () -> Unit,
+) {
+    var pendingShader by remember { mutableStateOf<ShaderPreset?>(null) }
+    var showAdvanced by remember { mutableStateOf(false) }
+
+    pendingShader?.let { preset ->
+        AlertDialog(
+            onDismissRequest = { pendingShader = null },
+            title = { Text("Use ${preset.cost.label} shader?") },
+            text = { Text("This mode can increase heat and battery use and may drop frames on some devices.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onChange(settings.copy(shaderPreset = preset.id))
+                    pendingShader = null
+                }) { Text("Use shader") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingShader = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SettingsChoice(
+            label = "Anime4K shader",
+            selected = ShaderPreset.fromId(settings.shaderPreset).label,
+            values = ShaderPreset.entries.map { it.id to "${it.label} • ${it.cost.label}" },
+        ) { id ->
+            val preset = ShaderPreset.fromId(id)
+            if (preset.cost == ShaderCost.HEAVY || preset.cost == ShaderCost.VERY_HEAVY) {
+                pendingShader = preset
+            } else {
+                onChange(settings.copy(shaderPreset = preset.id))
+            }
+        }
+
+        SettingsChoice(
+            label = "Color preset",
+            selected = ColorPreset.fromId(settings.colorPreset).label,
+            values = ColorPreset.entries.filter { it != ColorPreset.CUSTOM }.map { it.id to it.label },
+        ) { id ->
+            onChange(settings.withColorPreset(ColorPreset.fromId(id)))
+        }
+
+        listOf(
+            "Brightness" to settings.brightness,
+            "Contrast" to settings.contrast,
+            "Saturation" to settings.saturation,
+            "Gamma" to settings.gamma,
+            "Hue" to settings.hue,
+        ).forEach { (label, current) ->
+            Column {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(label, color = TEXT, fontSize = 13.sp)
+                    Text(current.toString(), color = MUTED, fontSize = 12.sp)
+                }
+                Slider(
+                    value = current.toFloat(),
+                    onValueChange = { raw ->
+                        val value = raw.toInt()
+                        val updated = when (label) {
+                            "Brightness" -> settings.copy(brightness = value)
+                            "Contrast" -> settings.copy(contrast = value)
+                            "Saturation" -> settings.copy(saturation = value)
+                            "Gamma" -> settings.copy(gamma = value)
+                            else -> settings.copy(hue = value)
+                        }
+                        onChange(updated.copy(colorPreset = ColorPreset.CUSTOM.id))
+                    },
+                    valueRange = -100f..100f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = AppColors.accent,
+                        activeTrackColor = AppColors.accent,
+                        inactiveTrackColor = BORDER,
+                    ),
+                )
+            }
+        }
+
+        SettingToggle(settings.deband, { onChange(settings.copy(deband = it)) }, "Debanding")
+        SettingToggle(settings.interpolation, { onChange(settings.copy(interpolation = it)) }, "Frame interpolation")
+        SettingToggle(settings.temporalDither, { onChange(settings.copy(temporalDither = it)) }, "Temporal dithering")
+
+        TextButton(onClick = { showAdvanced = !showAdvanced }) {
+            Icon(
+                if (showAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("Advanced rendering")
+        }
+
+        if (showAdvanced) {
+            SettingsChoice("Upscaling", settings.scale, PlayerEnhancementOptions.scalers.map { it to it }) {
+                onChange(settings.copy(scale = it))
+            }
+            SettingsChoice("Chroma scaling", settings.cscale, PlayerEnhancementOptions.scalers.map { it to it }) {
+                onChange(settings.copy(cscale = it))
+            }
+            SettingsChoice("Downscaling", settings.dscale, PlayerEnhancementOptions.downscalers.map { it to it }) {
+                onChange(settings.copy(dscale = it))
+            }
+            SettingsChoice("Dither depth", settings.ditherDepth, PlayerEnhancementOptions.ditherDepths.map { it to it }) {
+                onChange(settings.copy(ditherDepth = it))
+            }
+            SettingsChoice("Tone mapping", settings.toneMapping, PlayerEnhancementOptions.toneMappings.map { it to it }) {
+                onChange(settings.copy(toneMapping = it))
+            }
+            SettingsChoice("Video sync", settings.videoSync, PlayerEnhancementOptions.videoSyncModes.map { it to it }) {
+                onChange(settings.copy(videoSync = it))
+            }
+            SettingsChoice(
+                "Decoder",
+                if (settings.decoder == "no") "Software" else "Auto",
+                listOf("auto" to "Auto", "no" to "Software"),
+            ) {
+                onChange(settings.copy(decoder = it))
+            }
+        }
+
+        OutlinedButton(onClick = onReset, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.RestartAlt, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Reset enhancements")
+        }
+    }
+}
+
+@Composable
+private fun GlobalPlayerUtilitySettings(
+    settings: PlayerUtilitySettings,
+    onChange: (PlayerUtilitySettings) -> Unit,
+    onReset: () -> Unit,
+) {
+    var showSubtitleStyle by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SettingsUtilityDelaySlider("Subtitle delay", settings.subtitleDelaySeconds) {
+            onChange(settings.copy(subtitleDelaySeconds = it))
+        }
+        SettingsUtilityDelaySlider("Audio delay", settings.audioDelaySeconds) {
+            onChange(settings.copy(audioDelaySeconds = it))
+        }
+        SettingsChoice(
+            label = "Double-tap seek",
+            selected = "${settings.doubleTapSeekSeconds} seconds",
+            values = PlayerUtilitySettings.seekDurations.map { it.toString() to "$it seconds" },
+        ) { onChange(settings.copy(doubleTapSeekSeconds = it.toInt())) }
+
+        TextButton(onClick = { showSubtitleStyle = !showSubtitleStyle }) {
+            Icon(
+                if (showSubtitleStyle) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("Subtitle style")
+        }
+
+        if (showSubtitleStyle) {
+            SettingsChoice(
+                "Font",
+                settings.subtitleFont,
+                PlayerUtilitySettings.fonts.map { it to it },
+            ) { onChange(settings.copy(subtitleFont = it)) }
+            SettingsChoice(
+                "Text color",
+                PlayerUtilitySettings.colors.firstOrNull { it.first == settings.subtitleColor }?.second
+                    ?: settings.subtitleColor,
+                PlayerUtilitySettings.colors,
+            ) { onChange(settings.copy(subtitleColor = it)) }
+            SettingsChoice(
+                "Outline color",
+                PlayerUtilitySettings.colors.firstOrNull { it.first == settings.subtitleOutlineColor }?.second
+                    ?: settings.subtitleOutlineColor,
+                PlayerUtilitySettings.colors,
+            ) { onChange(settings.copy(subtitleOutlineColor = it)) }
+            SettingsChoice(
+                "Background color",
+                PlayerUtilitySettings.colors.firstOrNull { it.first == settings.subtitleBackgroundColor }?.second
+                    ?: settings.subtitleBackgroundColor,
+                PlayerUtilitySettings.colors,
+            ) { onChange(settings.copy(subtitleBackgroundColor = it)) }
+            SettingsUtilityIntSlider("Outline width", settings.subtitleOutlineWidth, 0..10) {
+                onChange(settings.copy(subtitleOutlineWidth = it))
+            }
+            SettingsUtilityIntSlider("Subtitle opacity", settings.subtitleOpacity, 10..100) {
+                onChange(settings.copy(subtitleOpacity = it))
+            }
+            SettingsUtilityIntSlider("Background opacity", settings.subtitleBackgroundOpacity, 0..100) {
+                onChange(settings.copy(subtitleBackgroundOpacity = it))
+            }
+            SettingsUtilityIntSlider("Bottom margin", settings.subtitleBottomMargin, 0..25) {
+                onChange(settings.copy(subtitleBottomMargin = it))
+            }
+        }
+
+        OutlinedButton(onClick = onReset, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.RestartAlt, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Reset player utilities")
+        }
+    }
+}
+
+@Composable
+private fun SettingsUtilityDelaySlider(
+    label: String,
+    value: Double,
+    onValueChange: (Double) -> Unit,
+) {
+    Column {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, color = TEXT, fontSize = 13.sp)
+            Text(
+                "${if (value > 0) "+" else ""}${((value * 10).toInt() / 10.0)}s",
+                color = MUTED,
+                fontSize = 12.sp,
+            )
+        }
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange((it * 10).toInt() / 10.0) },
+            valueRange = -10f..10f,
+            steps = 199,
+            colors = SliderDefaults.colors(
+                thumbColor = AppColors.accent,
+                activeTrackColor = AppColors.accent,
+                inactiveTrackColor = BORDER,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun SettingsUtilityIntSlider(
+    label: String,
+    value: Int,
+    range: IntRange,
+    onValueChange: (Int) -> Unit,
+) {
+    Column {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, color = TEXT, fontSize = 13.sp)
+            Text(value.toString(), color = MUTED, fontSize = 12.sp)
+        }
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.toInt()) },
+            valueRange = range.first.toFloat()..range.last.toFloat(),
+            steps = (range.last - range.first - 1).coerceAtLeast(0),
+            colors = SliderDefaults.colors(
+                thumbColor = AppColors.accent,
+                activeTrackColor = AppColors.accent,
+                inactiveTrackColor = BORDER,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun SettingsChoice(
+    label: String,
+    selected: String,
+    values: List<Pair<String, String>>,
+    onSelected: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, BORDER),
+        ) {
+            Text(
+                label,
+                color = TEXT,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Start,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                selected,
+                color = MUTED,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 180.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = MUTED)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            values.forEach { (id, title) ->
+                DropdownMenuItem(
+                    text = { Text(title) },
+                    onClick = {
+                        onSelected(id)
+                        expanded = false
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -2757,6 +3116,10 @@ private fun MobilePreferencesContent(
     onSubtitleSizeChange: (Int) -> Unit,
     onDownloadPathChange: (String) -> Unit,
     onAppLocaleChange: (AppLocale) -> Unit,
+    onPlayerEnhancementsChange: (PlayerEnhancementSettings) -> Unit,
+    onResetPlayerEnhancements: () -> Unit,
+    onPlayerUtilitiesChange: (PlayerUtilitySettings) -> Unit,
+    onResetPlayerUtilities: () -> Unit,
     onSave: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -2819,6 +3182,35 @@ private fun MobilePreferencesContent(
         )
 
         HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
+
+        if (isAndroidPlatform || isDesktopPlatform) {
+            Text("Player enhancements", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "Global Anime4K and mpv rendering defaults",
+                color = MUTED,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
+            )
+            GlobalEnhancementSettings(
+                settings = uiState.playerEnhancements,
+                onChange = onPlayerEnhancementsChange,
+                onReset = onResetPlayerEnhancements,
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            Text("Player utilities", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "Global subtitle styling, sync, and seek defaults",
+                color = MUTED,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
+            )
+            GlobalPlayerUtilitySettings(
+                settings = uiState.playerUtilities,
+                onChange = onPlayerUtilitiesChange,
+                onReset = onResetPlayerUtilities,
+            )
+            HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
+        }
 
         Text(
             strings.watchProgressSync,

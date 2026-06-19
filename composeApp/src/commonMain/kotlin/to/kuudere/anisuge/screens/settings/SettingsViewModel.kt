@@ -53,6 +53,8 @@ import to.kuudere.anisuge.ui.isAnimatedFrameAssetUrl
 import to.kuudere.anisuge.ui.resolveProfileMediaUrl
 import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.theme.AppThemeId
+import to.kuudere.anisuge.player.PlayerEnhancementSettings
+import to.kuudere.anisuge.player.PlayerUtilitySettings
 
 data class SettingsUiState(
     val isLoading: Boolean = false,
@@ -88,6 +90,8 @@ data class SettingsUiState(
     val isOffline: Boolean = false,
     val downloadPath: String = "",
     val subtitleSize: Int = 100,
+    val playerEnhancements: PlayerEnhancementSettings = PlayerEnhancementSettings.DEFAULT,
+    val playerUtilities: PlayerUtilitySettings = PlayerUtilitySettings.DEFAULT,
     val floatingBottomNav: Boolean = true,
     val liquidGlassBottomNav: Boolean = false,
     val expandedHeroCarousel: Boolean = false,
@@ -351,6 +355,16 @@ class SettingsViewModel(
 
         viewModelScope.launch { settingsStore.downloadPathFlow.collect { v -> _uiState.update { it.copy(downloadPath = v) } } }
         viewModelScope.launch { settingsStore.subtitleSizeFlow.collect { v -> _uiState.update { it.copy(subtitleSize = v) } } }
+        viewModelScope.launch {
+            settingsStore.playerEnhancementsFlow.collect { value ->
+                _uiState.update { it.copy(playerEnhancements = value) }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.playerUtilitiesFlow.collect { value ->
+                _uiState.update { it.copy(playerUtilities = value) }
+            }
+        }
         viewModelScope.launch {
             settingsStore.floatingBottomNavFlow.collect { v ->
                 _uiState.update {
@@ -1437,6 +1451,22 @@ class SettingsViewModel(
 
     fun setSubtitleSize(sizePercent: Int) {
         viewModelScope.launch { settingsStore.setSubtitleSize(sizePercent) }
+    }
+
+    fun setPlayerEnhancements(settings: PlayerEnhancementSettings) {
+        viewModelScope.launch { settingsStore.setPlayerEnhancements(settings) }
+    }
+
+    fun resetPlayerEnhancements() {
+        setPlayerEnhancements(PlayerEnhancementSettings.DEFAULT)
+    }
+
+    fun setPlayerUtilities(settings: PlayerUtilitySettings) {
+        viewModelScope.launch { settingsStore.setPlayerUtilities(settings) }
+    }
+
+    fun resetPlayerUtilities() {
+        setPlayerUtilities(PlayerUtilitySettings.DEFAULT)
     }
 
     // Password Change

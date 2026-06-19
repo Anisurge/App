@@ -70,6 +70,10 @@ class VideoPlayerState(config: VideoPlayerConfig) {
     // Commands from UI → player
     var playbackSpeed   by mutableStateOf(config.speed)
     var subtitleSize    by mutableStateOf(config.subtitleSize)
+    var enhancements    by mutableStateOf(config.enhancements)
+    var utilities       by mutableStateOf(config.utilities)
+    var screenshotRequestCount by mutableStateOf(0)
+    var screenshotResult by mutableStateOf<String?>(null)
 }
 
 @Composable
@@ -87,7 +91,11 @@ fun rememberVideoPlayerState(
     autoPlay:     Boolean = true,
     speed:        Double  = 1.0,
     subtitleSize: Int     = 100,
-    headers:      Map<String, String>? = null
+    headers:      Map<String, String>? = null,
+    enhancements: PlayerEnhancementSettings = PlayerEnhancementSettings.DEFAULT,
+    utilities:    PlayerUtilitySettings = PlayerUtilitySettings.DEFAULT,
+    screenshotAnimeTitle: String = "Anime",
+    screenshotEpisodeNumber: Int = 1,
 ): VideoPlayerState = remember(url, mediaKey) {
     VideoPlayerState(
         VideoPlayerConfig(
@@ -103,7 +111,11 @@ fun rememberVideoPlayerState(
             autoPlay      = autoPlay,
             speed         = speed,
             subtitleSize  = subtitleSize,
-            headers       = headers
+            headers       = headers,
+            enhancements  = enhancements,
+            utilities     = utilities,
+            screenshotAnimeTitle = screenshotAnimeTitle,
+            screenshotEpisodeNumber = screenshotEpisodeNumber,
         )
     ).apply {
         pauseRequested = !autoPlay

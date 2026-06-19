@@ -66,6 +66,23 @@ actual fun VideoPlayerSurface(
         withContext(Dispatchers.IO) { p.initAndPlay(resolvedUrl) }
     }
 
+    LaunchedEffect(state.screenshotRequestCount) {
+        if (state.screenshotRequestCount <= 0) return@LaunchedEffect
+        val p = player ?: return@LaunchedEffect
+        state.screenshotResult = withContext(Dispatchers.IO) {
+            runCatching {
+                p.captureScreenshot(
+                    screenshotFileName(
+                        animeTitle = state.config.screenshotAnimeTitle,
+                        episodeNumber = state.config.screenshotEpisodeNumber,
+                        playbackSeconds = state.position,
+                    ),
+                )
+            }
+                .getOrElse { "Screenshot failed: ${it.message ?: "unknown error"}" }
+        }
+    }
+
     // ── Global Media Keys (Earphones/Headphones) ─────────────────────────────
     val hasNextEpisode by rememberUpdatedState(state.hasNextEpisode)
     val hasPrevEpisode by rememberUpdatedState(state.hasPrevEpisode)

@@ -42,6 +42,50 @@ internal class MpvPlayer(
 
     private var renderCtx: com.sun.jna.ptr.PointerByReference? = null
 
+    private fun ensureDesktopShaderFiles(preset: ShaderPreset): List<String> {
+        if (preset.files.isEmpty()) return emptyList()
+        val shaderDir = java.io.File(System.getProperty("user.home"), ".anisurge/mpv/Shaders").apply { mkdirs() }
+        return preset.files.mapNotNull { name ->
+            runCatching {
+                val output = java.io.File(shaderDir, name)
+                if (!output.exists() || output.length() == 0L) {
+                    val input = javaClass.classLoader.getResourceAsStream("shaders/$name")
+                        ?: error("Missing bundled shader $name")
+                    input.use { source -> output.outputStream().use(source::copyTo) }
+                }
+                output.absolutePath
+            }.onFailure { println("[MpvPlayer] shader install failed for $name: ${it.message}") }
+                .getOrNull()
+        }
+    }
+
+    private fun applyEnhancements(
+        mpv: LibMpv,
+        handle: Pointer,
+        settings: PlayerEnhancementSettings,
+    ) {
+        val safe = settings.sanitized()
+        safe.mpvProperties().forEach { (property, value) ->
+            val result = mpv.mpv_set_property_string(handle, property, value)
+            if (result < 0) println("[MpvPlayer] rejected enhancement $property=$value ($result)")
+        }
+        val preset = ShaderPreset.fromId(safe.shaderPreset)
+        val separator = if (System.getProperty("os.name").lowercase().contains("win")) ";" else ":"
+        val paths = ensureDesktopShaderFiles(preset).joinToString(separator)
+        mpv.mpv_set_property_string(handle, "glsl-shaders", paths)
+    }
+
+    private fun applyUtilities(
+        mpv: LibMpv,
+        handle: Pointer,
+        settings: PlayerUtilitySettings,
+    ) {
+        settings.sanitized().mpvProperties().forEach { (property, value) ->
+            val result = mpv.mpv_set_property_string(handle, property, value)
+            if (result < 0) println("[MpvPlayer] rejected utility $property=$value ($result)")
+        }
+    }
+
     /**
      * Create the mpv handle, set ALL options BEFORE initialising,
      * then start playback. This is the correct libmpv lifecycle.
@@ -192,6 +236,8 @@ internal class MpvPlayer(
         if (config.speed != 1.0) {
             mpv.mpv_set_property_string(handle, "speed", config.speed.toString())
         }
+        applyEnhancements(mpv, handle, state.enhancements)
+        applyUtilities(mpv, handle, state.utilities)
 
         startEventLoop()
 
@@ -347,6 +393,8 @@ internal class MpvPlayer(
             var lastSentSubTrack: Int? = null
             var lastSentVolume: Double? = null
             var lastSentBrightness: Double? = null
+            var lastSentEnhancements: PlayerEnhancementSettings? = null
+            var lastSentUtilities: PlayerUtilitySettings? = null
             var lastSentMute: Boolean? = null
             var lastSentAspectRatio: String? = null
             var lastSentSpeed: Double? = null
@@ -589,6 +637,16 @@ internal class MpvPlayer(
                     lastSentSubtitleSize = state.subtitleSize
                 }
 
+                if (state.enhancements != lastSentEnhancements) {
+                    applyEnhancements(mpv, handle, state.enhancements)
+                    lastSentEnhancements = state.enhancements
+                }
+
+                if (state.utilities != lastSentUtilities) {
+                    applyUtilities(mpv, handle, state.utilities)
+                    lastSentUtilities = state.utilities
+                }
+
                 // Handle all-subs load (on new episode/server change before file ready)
                 state.allSubUrls?.let { subs ->
                     if (state.isPlaying) {
@@ -639,6 +697,22 @@ internal class MpvPlayer(
         // Clean up the last subtitle temp file
         activeTempFile?.delete()
         activeTempFile = null
+    }
+
+    fun captureScreenshot(fileName: String): String {
+        val handle = ctx ?: error("Player is not ready")
+        val mpv = lib ?: error("libmpv is unavailable")
+        val outputDir = java.io.File(
+            System.getProperty("user.home"),
+            "Downloads/Anisurge/Screenshots",
+        ).apply { mkdirs() }
+        val output = java.io.File(outputDir, fileName)
+        val result = mpv.mpv_command(
+            handle,
+            arrayOf("screenshot-to-file", output.absolutePath, "subtitles", null),
+        )
+        if (result < 0 || !output.exists()) error("Screenshot capture failed ($result)")
+        return "Saved to ${output.absolutePath}"
     }
 
     fun renderFrame(width: Int, height: Int): ByteArray? {

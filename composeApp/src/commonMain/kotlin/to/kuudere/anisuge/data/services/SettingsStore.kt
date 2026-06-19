@@ -17,6 +17,8 @@ import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.data.models.LayoutConfig
 import to.kuudere.anisuge.data.models.AiChatUiMessage
 import to.kuudere.anisuge.platform.randomInstallUuid
+import to.kuudere.anisuge.player.PlayerEnhancementSettings
+import to.kuudere.anisuge.player.PlayerUtilitySettings
 
 class SettingsStore(private val dataStore: DataStore<Preferences>) {
     companion object {
@@ -47,6 +49,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val LEGACY_SCHEDULE_UI_KEY = booleanPreferencesKey("legacy_schedule_ui")
         val HOME_LAYOUT_KEY = stringPreferencesKey("home_layout_v1")
         val AI_CHAT_HISTORY_KEY = stringPreferencesKey("ai_chat_history")
+        val PLAYER_ENHANCEMENTS_KEY = stringPreferencesKey("player_enhancements_v1")
+        val PLAYER_UTILITIES_KEY = stringPreferencesKey("player_utilities_v1")
 
         // MAL tokens
         val MAL_ACCESS_TOKEN_KEY = stringPreferencesKey("mal_access_token")
@@ -90,6 +94,16 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val videoScaleModeFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[VIDEO_SCALE_MODE_KEY]?.takeIf { it == "Fit" || it == "Zoom" || it == "Stretch" } ?: "Fit"
     }
+    val playerEnhancementsFlow: Flow<PlayerEnhancementSettings> = dataStore.data.map { preferences ->
+        preferences[PLAYER_ENHANCEMENTS_KEY]
+            ?.let { raw -> runCatching { json.decodeFromString<PlayerEnhancementSettings>(raw).sanitized() }.getOrNull() }
+            ?: PlayerEnhancementSettings.DEFAULT
+    }.distinctUntilChanged()
+    val playerUtilitiesFlow: Flow<PlayerUtilitySettings> = dataStore.data.map { preferences ->
+        preferences[PLAYER_UTILITIES_KEY]
+            ?.let { raw -> runCatching { json.decodeFromString<PlayerUtilitySettings>(raw).sanitized() }.getOrNull() }
+            ?: PlayerUtilitySettings.DEFAULT
+    }.distinctUntilChanged()
     val themeIdFlow: Flow<String> = dataStore.data.map { it[THEME_ID_KEY] ?: "default" }
     val legacyScheduleUiFlow: Flow<Boolean> = dataStore.data.map { it[LEGACY_SCHEDULE_UI_KEY] ?: false }
     val homeLayoutFlow: Flow<LayoutConfig> = dataStore.data
@@ -232,6 +246,18 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
                 "Stretch" -> "Stretch"
                 else -> "Fit"
             }
+        }
+    }
+
+    suspend fun setPlayerEnhancements(settings: PlayerEnhancementSettings) {
+        dataStore.edit {
+            it[PLAYER_ENHANCEMENTS_KEY] = json.encodeToString(settings.sanitized())
+        }
+    }
+
+    suspend fun setPlayerUtilities(settings: PlayerUtilitySettings) {
+        dataStore.edit {
+            it[PLAYER_UTILITIES_KEY] = json.encodeToString(settings.sanitized())
         }
     }
 

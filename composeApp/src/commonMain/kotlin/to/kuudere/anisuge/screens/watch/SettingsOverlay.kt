@@ -36,9 +36,19 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import to.kuudere.anisuge.player.ColorPreset
+import to.kuudere.anisuge.player.PlayerEnhancementOptions
+import to.kuudere.anisuge.player.PlayerEnhancementSettings
+import to.kuudere.anisuge.player.ShaderCost
+import to.kuudere.anisuge.player.ShaderPreset
+import to.kuudere.anisuge.player.PlayerUtilitySettings
+import to.kuudere.anisuge.platform.isAndroidPlatform
+import to.kuudere.anisuge.platform.isDesktopPlatform
 
 enum class SettingsMenuPage {
-    MAIN, SERVER, QUALITY, SUBTITLES, SPEED, SCALE, WATCHLIST, AUTOPLAY
+    MAIN, SERVER, QUALITY, SUBTITLES, SPEED, SCALE, WATCHLIST, AUTOPLAY,
+    ENHANCEMENTS, SHADERS, COLOR_PRESETS, VISUAL, ADVANCED,
+    UTILITIES, AV_SYNC, SUBTITLE_STYLE, SLEEP_TIMER, SEEK_DURATION
 }
 
 @Composable
@@ -64,9 +74,16 @@ fun SettingsOverlay(
     onAutoSkipIntroToggle: (Boolean) -> Unit = {},
     onAutoSkipOutroToggle: (Boolean) -> Unit = {},
     onVideoScaleModeSelected: (String) -> Unit = {},
+    onPlayerEnhancementsChanged: (PlayerEnhancementSettings) -> Unit = {},
+    onPlayerUtilitiesChanged: (PlayerUtilitySettings) -> Unit = {},
+    onScreenshot: () -> Unit = {},
+    onSleepTimerChanged: (Int?) -> Unit = {},
+    onSleepAfterEpisodeChanged: (Boolean) -> Unit = {},
 ) {
     var currentPage by remember { mutableStateOf(uiState.initialSettingsPage ?: SettingsMenuPage.MAIN) }
     var isSubtitleSizeDragging by remember { mutableStateOf(false) }
+    var pendingHeavyShader by remember { mutableStateOf<ShaderPreset?>(null) }
+    val enhancementsSupported = isAndroidPlatform || isDesktopPlatform
     val scrimAlpha by animateFloatAsState(
         targetValue = if (isSubtitleSizeDragging && currentPage == SettingsMenuPage.SUBTITLES) 0.12f else 0.7f,
         animationSpec = tween(durationMillis = 150)
@@ -87,6 +104,24 @@ fun SettingsOverlay(
             ),
         contentAlignment = Alignment.Center
     ) {
+        pendingHeavyShader?.let { preset ->
+            AlertDialog(
+                onDismissRequest = { pendingHeavyShader = null },
+                title = { Text("Use ${preset.cost.label} shader?") },
+                text = {
+                    Text("This Anime4K mode can increase heat and battery use, and may drop frames on some devices.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        onPlayerEnhancementsChanged(uiState.playerEnhancements.copy(shaderPreset = preset.id))
+                        pendingHeavyShader = null
+                    }) { Text("Use shader") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingHeavyShader = null }) { Text("Cancel") }
+                },
+            )
+        }
         Box(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
@@ -253,6 +288,34 @@ fun SettingsOverlay(
                                     },
                                     onClick = { currentPage = SettingsMenuPage.SCALE }
                                 )
+
+                                if (enhancementsSupported) {
+                                    val activeShader = ShaderPreset.fromId(uiState.playerEnhancements.shaderPreset)
+                                    SettingsMenuItem(
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.AutoFixHigh,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                            )
+                                        },
+                                        title = "Enhancements",
+                                        subtitle = activeShader.label,
+                                        onClick = { currentPage = SettingsMenuPage.ENHANCEMENTS },
+                                    )
+                                    SettingsMenuItem(
+                                        icon = {
+                                            Icon(
+                                                Icons.Default.Build,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                            )
+                                        },
+                                        title = "Player utilities",
+                                        subtitle = "${uiState.playerUtilities.doubleTapSeekSeconds}s seek",
+                                        onClick = { currentPage = SettingsMenuPage.UTILITIES },
+                                    )
+                                }
 
                                 // 8. Watchlist
                                 if (servers.isNotEmpty()) {
@@ -567,7 +630,449 @@ fun SettingsOverlay(
                             }
                         }
                     }
+
+                    SettingsMenuPage.ENHANCEMENTS -> {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Enhancements", { currentPage = SettingsMenuPage.MAIN }, onDismiss)
+                            Column(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)
+                                    .verticalScroll(rememberScrollState()),
+                            ) {
+                                SettingsMenuItem(
+                                    icon = { Icon(Icons.Default.Visibility, null, tint = Color.White) },
+                                    title = "Shaders",
+                                    subtitle = ShaderPreset.fromId(uiState.playerEnhancements.shaderPreset).cost.label,
+                                    onClick = { currentPage = SettingsMenuPage.SHADERS },
+                                )
+                                SettingsMenuItem(
+                                    icon = { Icon(Icons.Default.Palette, null, tint = Color.White) },
+                                    title = "Color presets",
+                                    subtitle = ColorPreset.fromId(uiState.playerEnhancements.colorPreset).label,
+                                    onClick = { currentPage = SettingsMenuPage.COLOR_PRESETS },
+                                )
+                                SettingsMenuItem(
+                                    icon = { Icon(Icons.Default.Tune, null, tint = Color.White) },
+                                    title = "Visual",
+                                    subtitle = "Color controls",
+                                    onClick = { currentPage = SettingsMenuPage.VISUAL },
+                                )
+                                SettingsMenuItem(
+                                    icon = { Icon(Icons.Default.SettingsSuggest, null, tint = Color.White) },
+                                    title = "Advanced",
+                                    subtitle = "mpv rendering",
+                                    onClick = { currentPage = SettingsMenuPage.ADVANCED },
+                                )
+                                TextButton(
+                                    onClick = { onPlayerEnhancementsChanged(PlayerEnhancementSettings.DEFAULT) },
+                                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                                ) {
+                                    Icon(Icons.Default.RestartAlt, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Reset session")
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsMenuPage.SHADERS -> {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Anime4K shaders", { currentPage = SettingsMenuPage.ENHANCEMENTS }, onDismiss)
+                            LazyColumn(modifier = Modifier.heightIn(max = 360.dp).fillMaxWidth()) {
+                                items(ShaderPreset.entries) { preset ->
+                                    SubMenuItem(
+                                        title = "${preset.label}  •  ${preset.cost.label}",
+                                        isSelected = preset.id == uiState.playerEnhancements.shaderPreset,
+                                        onClick = {
+                                            if (preset.cost == ShaderCost.HEAVY || preset.cost == ShaderCost.VERY_HEAVY) {
+                                                pendingHeavyShader = preset
+                                            } else {
+                                                onPlayerEnhancementsChanged(
+                                                    uiState.playerEnhancements.copy(shaderPreset = preset.id),
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsMenuPage.COLOR_PRESETS -> {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Color presets", { currentPage = SettingsMenuPage.ENHANCEMENTS }, onDismiss)
+                            LazyColumn(modifier = Modifier.heightIn(max = 340.dp).fillMaxWidth()) {
+                                items(ColorPreset.entries.filter { it != ColorPreset.CUSTOM }) { preset ->
+                                    SubMenuItem(
+                                        title = preset.label,
+                                        isSelected = preset.id == uiState.playerEnhancements.colorPreset,
+                                        onClick = {
+                                            onPlayerEnhancementsChanged(uiState.playerEnhancements.withColorPreset(preset))
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsMenuPage.VISUAL -> {
+                        val value = uiState.playerEnhancements
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Visual", { currentPage = SettingsMenuPage.ENHANCEMENTS }, onDismiss)
+                            Column(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 18.dp, vertical = 4.dp),
+                            ) {
+                                EnhancementSlider("Brightness", value.brightness) {
+                                    onPlayerEnhancementsChanged(value.copy(brightness = it, colorPreset = ColorPreset.CUSTOM.id))
+                                }
+                                EnhancementSlider("Contrast", value.contrast) {
+                                    onPlayerEnhancementsChanged(value.copy(contrast = it, colorPreset = ColorPreset.CUSTOM.id))
+                                }
+                                EnhancementSlider("Saturation", value.saturation) {
+                                    onPlayerEnhancementsChanged(value.copy(saturation = it, colorPreset = ColorPreset.CUSTOM.id))
+                                }
+                                EnhancementSlider("Gamma", value.gamma) {
+                                    onPlayerEnhancementsChanged(value.copy(gamma = it, colorPreset = ColorPreset.CUSTOM.id))
+                                }
+                                EnhancementSlider("Hue", value.hue) {
+                                    onPlayerEnhancementsChanged(value.copy(hue = it, colorPreset = ColorPreset.CUSTOM.id))
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsMenuPage.ADVANCED -> {
+                        val value = uiState.playerEnhancements
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Advanced", { currentPage = SettingsMenuPage.ENHANCEMENTS }, onDismiss)
+                            Column(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 390.dp)
+                                    .verticalScroll(rememberScrollState()),
+                            ) {
+                                EnhancementToggle("Debanding", value.deband) {
+                                    onPlayerEnhancementsChanged(value.copy(deband = it))
+                                }
+                                EnhancementToggle("Frame interpolation", value.interpolation) {
+                                    onPlayerEnhancementsChanged(value.copy(interpolation = it))
+                                }
+                                EnhancementToggle("Temporal dithering", value.temporalDither) {
+                                    onPlayerEnhancementsChanged(value.copy(temporalDither = it))
+                                }
+                                EnhancementChoice("Upscaling", value.scale, PlayerEnhancementOptions.scalers) {
+                                    onPlayerEnhancementsChanged(value.copy(scale = it))
+                                }
+                                EnhancementChoice("Chroma scaling", value.cscale, PlayerEnhancementOptions.scalers) {
+                                    onPlayerEnhancementsChanged(value.copy(cscale = it))
+                                }
+                                EnhancementChoice("Downscaling", value.dscale, PlayerEnhancementOptions.downscalers) {
+                                    onPlayerEnhancementsChanged(value.copy(dscale = it))
+                                }
+                                EnhancementChoice("Dither depth", value.ditherDepth, PlayerEnhancementOptions.ditherDepths) {
+                                    onPlayerEnhancementsChanged(value.copy(ditherDepth = it))
+                                }
+                                EnhancementChoice("Tone mapping", value.toneMapping, PlayerEnhancementOptions.toneMappings) {
+                                    onPlayerEnhancementsChanged(value.copy(toneMapping = it))
+                                }
+                                EnhancementChoice("Video sync", value.videoSync, PlayerEnhancementOptions.videoSyncModes) {
+                                    onPlayerEnhancementsChanged(value.copy(videoSync = it))
+                                }
+                                EnhancementChoice("Decoder", value.decoder, PlayerEnhancementOptions.decoders) {
+                                    onPlayerEnhancementsChanged(value.copy(decoder = it))
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsMenuPage.UTILITIES -> {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Player utilities", { currentPage = SettingsMenuPage.MAIN }, onDismiss)
+                            Column(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)
+                                    .verticalScroll(rememberScrollState()),
+                            ) {
+                                SettingsMenuItem(
+                                    icon = { Icon(Icons.Default.Sync, null, tint = Color.White) },
+                                    title = "Audio & subtitle sync",
+                                    subtitle = "${signedDelay(uiState.playerUtilities.subtitleDelaySeconds)}s",
+                                    onClick = { currentPage = SettingsMenuPage.AV_SYNC },
+                                )
+                                SettingsMenuItem(
+                                    icon = { Icon(Icons.Default.Subtitles, null, tint = Color.White) },
+                                    title = "Subtitle style",
+                                    subtitle = uiState.playerUtilities.subtitleFont,
+                                    onClick = { currentPage = SettingsMenuPage.SUBTITLE_STYLE },
+                                )
+                                SettingsMenuItem(
+                                    icon = { Icon(Icons.Default.TouchApp, null, tint = Color.White) },
+                                    title = "Double-tap seek",
+                                    subtitle = "${uiState.playerUtilities.doubleTapSeekSeconds} seconds",
+                                    onClick = { currentPage = SettingsMenuPage.SEEK_DURATION },
+                                )
+                                SettingsMenuItem(
+                                    icon = { Icon(Icons.Default.Bedtime, null, tint = Color.White) },
+                                    title = "Sleep timer",
+                                    subtitle = when {
+                                        uiState.sleepAfterEpisode -> "End of episode"
+                                        uiState.sleepTimerMinutes != null -> "${uiState.sleepTimerMinutes} minutes"
+                                        else -> "Off"
+                                    },
+                                    onClick = { currentPage = SettingsMenuPage.SLEEP_TIMER },
+                                )
+                                SettingsMenuItem(
+                                    icon = { Icon(Icons.Default.PhotoCamera, null, tint = Color.White) },
+                                    title = "Screenshot",
+                                    subtitle = "Video + subtitles",
+                                    onClick = {
+                                        onScreenshot()
+                                        onDismiss()
+                                    },
+                                )
+                                TextButton(
+                                    onClick = { onPlayerUtilitiesChanged(PlayerUtilitySettings.DEFAULT) },
+                                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                                ) {
+                                    Icon(Icons.Default.RestartAlt, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Reset session utilities")
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsMenuPage.AV_SYNC -> {
+                        val value = uiState.playerUtilities
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Audio & subtitle sync", { currentPage = SettingsMenuPage.UTILITIES }, onDismiss)
+                            Column(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 330.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 18.dp),
+                            ) {
+                                UtilityDelaySlider("Subtitle delay", value.subtitleDelaySeconds) {
+                                    onPlayerUtilitiesChanged(value.copy(subtitleDelaySeconds = it))
+                                }
+                                UtilityDelaySlider("Audio delay", value.audioDelaySeconds) {
+                                    onPlayerUtilitiesChanged(value.copy(audioDelaySeconds = it))
+                                }
+                                Text(
+                                    "Positive values delay the track; negative values play it earlier.",
+                                    color = Color.Gray,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    SettingsMenuPage.SUBTITLE_STYLE -> {
+                        val value = uiState.playerUtilities
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Subtitle style", { currentPage = SettingsMenuPage.UTILITIES }, onDismiss)
+                            Column(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 390.dp)
+                                    .verticalScroll(rememberScrollState()),
+                            ) {
+                                EnhancementChoice("Font", value.subtitleFont, PlayerUtilitySettings.fonts) {
+                                    onPlayerUtilitiesChanged(value.copy(subtitleFont = it))
+                                }
+                                EnhancementChoice(
+                                    "Text color",
+                                    PlayerUtilitySettings.colors.firstOrNull { it.first == value.subtitleColor }?.second
+                                        ?: value.subtitleColor,
+                                    PlayerUtilitySettings.colors.map { it.first },
+                                ) { onPlayerUtilitiesChanged(value.copy(subtitleColor = it)) }
+                                EnhancementChoice(
+                                    "Outline color",
+                                    PlayerUtilitySettings.colors.firstOrNull { it.first == value.subtitleOutlineColor }?.second
+                                        ?: value.subtitleOutlineColor,
+                                    PlayerUtilitySettings.colors.map { it.first },
+                                ) { onPlayerUtilitiesChanged(value.copy(subtitleOutlineColor = it)) }
+                                EnhancementChoice(
+                                    "Background color",
+                                    PlayerUtilitySettings.colors.firstOrNull { it.first == value.subtitleBackgroundColor }?.second
+                                        ?: value.subtitleBackgroundColor,
+                                    PlayerUtilitySettings.colors.map { it.first },
+                                ) { onPlayerUtilitiesChanged(value.copy(subtitleBackgroundColor = it)) }
+                                UtilityIntSlider("Outline width", value.subtitleOutlineWidth, 0..10) {
+                                    onPlayerUtilitiesChanged(value.copy(subtitleOutlineWidth = it))
+                                }
+                                UtilityIntSlider("Subtitle opacity", value.subtitleOpacity, 10..100) {
+                                    onPlayerUtilitiesChanged(value.copy(subtitleOpacity = it))
+                                }
+                                UtilityIntSlider("Background opacity", value.subtitleBackgroundOpacity, 0..100) {
+                                    onPlayerUtilitiesChanged(value.copy(subtitleBackgroundOpacity = it))
+                                }
+                                UtilityIntSlider("Bottom margin", value.subtitleBottomMargin, 0..25) {
+                                    onPlayerUtilitiesChanged(value.copy(subtitleBottomMargin = it))
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsMenuPage.SLEEP_TIMER -> {
+                        val timers = listOf<Int?>(null, 15, 30, 45, 60, 90)
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Sleep timer", { currentPage = SettingsMenuPage.UTILITIES }, onDismiss)
+                            LazyColumn(modifier = Modifier.heightIn(max = 340.dp).fillMaxWidth()) {
+                                items(timers) { minutes ->
+                                    SubMenuItem(
+                                        title = minutes?.let { "$it minutes" } ?: "Off",
+                                        isSelected = !uiState.sleepAfterEpisode && uiState.sleepTimerMinutes == minutes,
+                                        onClick = {
+                                            onSleepTimerChanged(minutes)
+                                            onDismiss()
+                                        },
+                                    )
+                                }
+                                item {
+                                    SubMenuItem(
+                                        title = "End of episode",
+                                        isSelected = uiState.sleepAfterEpisode,
+                                        onClick = {
+                                            onSleepAfterEpisodeChanged(true)
+                                            onDismiss()
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    SettingsMenuPage.SEEK_DURATION -> {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            SubMenuHeader("Double-tap seek", { currentPage = SettingsMenuPage.UTILITIES }, onDismiss)
+                            LazyColumn(modifier = Modifier.heightIn(max = 300.dp).fillMaxWidth()) {
+                                items(PlayerUtilitySettings.seekDurations) { seconds ->
+                                    SubMenuItem(
+                                        title = "$seconds seconds",
+                                        isSelected = seconds == uiState.playerUtilities.doubleTapSeekSeconds,
+                                        onClick = {
+                                            onPlayerUtilitiesChanged(
+                                                uiState.playerUtilities.copy(doubleTapSeekSeconds = seconds),
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+        }
+    }
+}
+
+private fun signedDelay(value: Double): String =
+    if (value > 0) "+${value.formatOneDecimal()}" else value.formatOneDecimal()
+
+private fun Double.formatOneDecimal(): String =
+    ((this * 10).toInt() / 10.0).toString()
+
+@Composable
+private fun UtilityDelaySlider(label: String, value: Double, onValueChange: (Double) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, color = Color.White, fontSize = 14.sp)
+            Text("${signedDelay(value)}s", color = Color.Gray, fontSize = 13.sp)
+        }
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange((it * 10).toInt() / 10.0) },
+            valueRange = -10f..10f,
+            steps = 199,
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = AppColors.accent,
+                inactiveTrackColor = Color.White.copy(alpha = 0.18f),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun UtilityIntSlider(
+    label: String,
+    value: Int,
+    range: IntRange,
+    onValueChange: (Int) -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, color = Color.White, fontSize = 14.sp)
+            Text(value.toString(), color = Color.Gray, fontSize = 13.sp)
+        }
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.toInt()) },
+            valueRange = range.first.toFloat()..range.last.toFloat(),
+            steps = (range.last - range.first - 1).coerceAtLeast(0),
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = AppColors.accent,
+                inactiveTrackColor = Color.White.copy(alpha = 0.18f),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun EnhancementSlider(label: String, value: Int, onValueChange: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, color = Color.White, fontSize = 14.sp)
+            Text(value.toString(), color = Color.Gray, fontSize = 13.sp)
+        }
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.toInt()) },
+            valueRange = -100f..100f,
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = AppColors.accent,
+                inactiveTrackColor = Color.White.copy(alpha = 0.18f),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun EnhancementToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    ToggleMenuItem(
+        icon = { Icon(Icons.Default.Tune, null, tint = Color.White) },
+        title = label,
+        isChecked = checked,
+        onToggle = onCheckedChange,
+    )
+}
+
+@Composable
+private fun EnhancementChoice(
+    label: String,
+    selected: String,
+    values: List<String>,
+    onSelected: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        SettingsMenuItem(
+            icon = { Icon(Icons.Default.Tune, null, tint = Color.White) },
+            title = label,
+            subtitle = selected,
+            onClick = { expanded = true },
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            values.forEach { value ->
+                DropdownMenuItem(
+                    text = { Text(value) },
+                    leadingIcon = if (value == selected) {
+                        { Icon(Icons.Default.Check, null) }
+                    } else null,
+                    onClick = {
+                        onSelected(value)
+                        expanded = false
+                    },
+                )
             }
         }
     }
@@ -608,7 +1113,14 @@ private fun SettingsMenuItem(
             icon()
             Spacer(modifier = Modifier.width(16.dp))
             Text(title, color = Color.White, fontSize = 16.sp, maxLines = 1, modifier = Modifier.weight(1f))
-            Text(subtitle, color = Color.Gray, fontSize = 14.sp, maxLines = 1)
+            Text(
+                subtitle,
+                color = Color.Gray,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 150.dp),
+            )
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,

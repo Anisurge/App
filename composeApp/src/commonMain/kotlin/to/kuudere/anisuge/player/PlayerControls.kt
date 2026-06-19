@@ -255,10 +255,11 @@ fun PlayerControls(
                         else "center"
 
                         if (side == "left") {
+                            val seekSeconds = playerState.utilities.doubleTapSeekSeconds
                             doubleTapSide = "left"
-                            doubleTapAmount += 10
+                            doubleTapAmount += seekSeconds
                             doubleTapCounter++
-                            val newPos = (playerState.position - 10.0).coerceAtLeast(0.0)
+                            val newPos = (playerState.position - seekSeconds).coerceAtLeast(0.0)
                             playerState.seekTarget = newPos
                             expectedPosition = newPos
 
@@ -269,10 +270,11 @@ fun PlayerControls(
                                 doubleTapAmount = 0
                             }
                         } else if (side == "right") {
+                            val seekSeconds = playerState.utilities.doubleTapSeekSeconds
                             doubleTapSide = "right"
-                            doubleTapAmount += 10
+                            doubleTapAmount += seekSeconds
                             doubleTapCounter++
-                            val newPos = (playerState.position + 10.0).coerceAtMost(playerState.duration)
+                            val newPos = (playerState.position + seekSeconds).coerceAtMost(playerState.duration)
                             playerState.seekTarget = newPos
                             expectedPosition = newPos
 

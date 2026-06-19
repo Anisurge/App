@@ -2156,6 +2156,11 @@ fun WatchVideoPlayer(
                     onAutoSkipIntroToggle = { viewModel.setAutoSkipIntro(it) },
                     onAutoSkipOutroToggle = { viewModel.setAutoSkipOutro(it) },
                     onVideoScaleModeSelected = { viewModel.setVideoScaleMode(it) },
+                    onPlayerEnhancementsChanged = viewModel::setSessionPlayerEnhancements,
+                    onPlayerUtilitiesChanged = viewModel::setSessionPlayerUtilities,
+                    onScreenshot = { },
+                    onSleepTimerChanged = viewModel::setSleepTimer,
+                    onSleepAfterEpisodeChanged = viewModel::setSleepAfterEpisode,
                 )
             }
         }
@@ -2196,8 +2201,47 @@ fun WatchVideoPlayer(
                 autoPlay = uiState.autoPlay,
                 speed = if (uiState.isBoostSpeedActive) 2.0 else uiState.playbackSpeed,
                 subtitleSize = uiState.subtitleSize,
-                headers = streamHeaders
+                headers = streamHeaders,
+                enhancements = uiState.playerEnhancements,
+                utilities = uiState.playerUtilities,
+                screenshotAnimeTitle = uiState.episodeData?.title?.resolveDisplayTitle()
+                    ?: uiState.offlineTitle
+                    ?: "Anime",
+                screenshotEpisodeNumber = uiState.currentEpisodeNumber,
             )
+
+            LaunchedEffect(uiState.playerEnhancements) {
+                playerState.enhancements = uiState.playerEnhancements
+            }
+
+            LaunchedEffect(uiState.playerUtilities) {
+                playerState.utilities = uiState.playerUtilities
+            }
+
+            LaunchedEffect(uiState.sleepTimerDeadlineMs) {
+                val deadline = uiState.sleepTimerDeadlineMs ?: return@LaunchedEffect
+                val remaining = deadline - Clock.System.now().toEpochMilliseconds()
+                if (remaining > 0) kotlinx.coroutines.delay(remaining)
+                playerState.pauseRequested = true
+                val currentAudioLabel =
+                    playerState.audioTracks.firstOrNull { it.first == playerState.selectedAudioTrack }
+                        ?.second?.lowercase().orEmpty()
+                viewModel.flushWatchProgress(
+                    playerState.position,
+                    playerState.duration.takeIf { it > 0 } ?: (playerState.position + 120.0),
+                    if (currentAudioLabel.contains("eng")) "dub" else "sub",
+                )
+                viewModel.setSleepTimer(null)
+                playerState.indicatorText = "Sleep timer finished"
+            }
+
+            LaunchedEffect(playerState.screenshotResult) {
+                val result = playerState.screenshotResult ?: return@LaunchedEffect
+                playerState.indicatorText = result
+                kotlinx.coroutines.delay(3000)
+                if (playerState.indicatorText == result) playerState.indicatorText = null
+                playerState.screenshotResult = null
+            }
 
             DisposableEffect(playbackUrl, uiState.currentEpisodeNumber) {
                 onDispose {
@@ -2755,12 +2799,26 @@ fun WatchVideoPlayer(
                     state = playerState,
                     modifier = Modifier.fillMaxSize(),
                     onFinished = {
-                        viewModel.tryAutoAdvanceToNextEpisode(
-                            playerState.position,
-                            maxOf(playerState.duration, playerState.peakPlaybackDuration),
-                            playerState.peakPlaybackPosition,
-                            playerState.lastUserSeekAtMs,
-                        )
+                        if (uiState.sleepAfterEpisode) {
+                            playerState.pauseRequested = true
+                            viewModel.setSleepAfterEpisode(false)
+                            playerState.indicatorText = "Sleep timer finished"
+                            val currentAudioLabel =
+                                playerState.audioTracks.firstOrNull { it.first == playerState.selectedAudioTrack }
+                                    ?.second?.lowercase().orEmpty()
+                            viewModel.flushWatchProgress(
+                                playerState.position,
+                                maxOf(playerState.duration, playerState.peakPlaybackDuration),
+                                if (currentAudioLabel.contains("eng")) "dub" else "sub",
+                            )
+                        } else {
+                            viewModel.tryAutoAdvanceToNextEpisode(
+                                playerState.position,
+                                maxOf(playerState.duration, playerState.peakPlaybackDuration),
+                                playerState.peakPlaybackPosition,
+                                playerState.lastUserSeekAtMs,
+                            )
+                        }
                     }
                 )
 
@@ -3041,6 +3099,11 @@ fun WatchVideoPlayer(
                         onAutoSkipIntroToggle = { viewModel.setAutoSkipIntro(it) },
                         onAutoSkipOutroToggle = { viewModel.setAutoSkipOutro(it) },
                         onVideoScaleModeSelected = { viewModel.setVideoScaleMode(it) },
+                        onPlayerEnhancementsChanged = viewModel::setSessionPlayerEnhancements,
+                        onPlayerUtilitiesChanged = viewModel::setSessionPlayerUtilities,
+                        onScreenshot = { playerState.screenshotRequestCount++ },
+                        onSleepTimerChanged = viewModel::setSleepTimer,
+                        onSleepAfterEpisodeChanged = viewModel::setSleepAfterEpisode,
                     )
                 }
             }
@@ -3118,6 +3181,11 @@ fun WatchVideoPlayer(
                     onAutoSkipIntroToggle = { viewModel.setAutoSkipIntro(it) },
                     onAutoSkipOutroToggle = { viewModel.setAutoSkipOutro(it) },
                     onVideoScaleModeSelected = { viewModel.setVideoScaleMode(it) },
+                    onPlayerEnhancementsChanged = viewModel::setSessionPlayerEnhancements,
+                    onPlayerUtilitiesChanged = viewModel::setSessionPlayerUtilities,
+                    onScreenshot = { },
+                    onSleepTimerChanged = viewModel::setSleepTimer,
+                    onSleepAfterEpisodeChanged = viewModel::setSleepAfterEpisode,
                 )
             }
         }
