@@ -80,7 +80,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import to.kuudere.anisuge.data.models.ScheduleAnime
-import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.OfflineState
@@ -150,8 +149,14 @@ fun ScheduleScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val strings = LocalAppStrings.current
-    val watchlistScope = rememberCoroutineScope()
     var watchlistAnime by remember { mutableStateOf<ScheduleAnime?>(null) }
+    val visibleSchedule = remember(
+        state.schedule,
+        state.myListOnly,
+        state.watchlistAnimeIds,
+        state.watchlistAnilistIds,
+        state.watchlistMalIds,
+    ) { viewModel.visibleSchedule() }
 
     Box(Modifier.fillMaxSize().background(BG)) {
         watchlistAnime?.let { anime ->
@@ -160,14 +165,7 @@ fun ScheduleScreen(
                 onSelect = { folder ->
                     val selected = watchlistAnime ?: return@WatchlistBottomSheet
                     watchlistAnime = null
-                    watchlistScope.launch {
-                        AppComponent.watchlistService.updateStatus(
-                            animeId = selected.activeSlug,
-                            folder = folder,
-                            anilistId = selected.anilistId,
-                            malId = selected.malId,
-                        )
-                    }
+                    viewModel.updateWatchlist(selected, folder)
                 },
                 onDismiss = { watchlistAnime = null },
             )
@@ -191,9 +189,12 @@ fun ScheduleScreen(
             else -> {
                 if (useLegacyUi) {
                     LegacyScheduleContent(
-                        schedule = state.schedule,
+                        schedule = visibleSchedule,
                         timezone = state.timezone,
                         isRefreshing = state.isLoading,
+                        myListOnly = state.myListOnly,
+                        isLoadingWatchlist = state.isLoadingWatchlist,
+                        onFilterChange = viewModel::setMyListOnly,
                         onAnimeClick = onAnimeClick,
                         onWatchlistClick = { watchlistAnime = it },
                         onExit = onExit,
@@ -202,12 +203,12 @@ fun ScheduleScreen(
                 }
 
                 val today = remember(state.timezone) { todayString(state.timezone) }
-                val sortedDates = remember(state.schedule) { state.schedule.keys.sorted() }
+                val sortedDates = remember(visibleSchedule) { visibleSchedule.keys.sorted() }
                 val visibleDates = remember(sortedDates, today) {
                     sortedDates.filter { it >= today }.ifEmpty { sortedDates }
                 }
                 var selectedDate by remember(visibleDates) { mutableStateOf(visibleDates.firstOrNull() ?: today) }
-                val selectedEpisodes = state.schedule[selectedDate].orEmpty()
+                val selectedEpisodes = visibleSchedule[selectedDate].orEmpty()
                 val listState = rememberLazyListState()
                 val coroutineScope = rememberCoroutineScope()
 
@@ -237,9 +238,17 @@ fun ScheduleScreen(
                                 selectedDate = selectedDate,
                                 today = today,
                                 totalDays = visibleDates.size,
-                                totalEpisodes = visibleDates.sumOf { state.schedule[it].orEmpty().size },
+                                totalEpisodes = visibleDates.sumOf { visibleSchedule[it].orEmpty().size },
                                 timezone = state.timezone,
                                 onExit = onExit,
+                            )
+                        }
+
+                        item(key = "filter") {
+                            ScheduleFilter(
+                                myListOnly = state.myListOnly,
+                                loading = state.isLoadingWatchlist,
+                                onChange = viewModel::setMyListOnly,
                             )
                         }
 
@@ -252,7 +261,7 @@ fun ScheduleScreen(
                                     DayChip(
                                         date = date,
                                         today = today,
-                                        count = state.schedule[date].orEmpty().size,
+                                        count = visibleSchedule[date].orEmpty().size,
                                         selected = date == selectedDate,
                                         onClick = {
                                             selectedDate = date
@@ -290,7 +299,7 @@ fun ScheduleScreen(
 
                         if (selectedEpisodes.isEmpty()) {
                             item(key = "empty-day") {
-                                EmptyDayCard()
+                                EmptyDayCard(myListOnly = state.myListOnly)
                             }
                         } else {
                             selectedEpisodes.chunked(columns).forEachIndexed { rowIndex, row ->
@@ -354,6 +363,9 @@ private fun LegacyScheduleContent(
     schedule: Map<String, List<ScheduleAnime>>,
     timezone: String,
     isRefreshing: Boolean,
+    myListOnly: Boolean,
+    isLoadingWatchlist: Boolean,
+    onFilterChange: (Boolean) -> Unit,
     onAnimeClick: (String) -> Unit,
     onWatchlistClick: (ScheduleAnime) -> Unit,
     onExit: () -> Unit,
@@ -383,6 +395,14 @@ private fun LegacyScheduleContent(
                     }
                     to.kuudere.anisuge.platform.WindowManagementButtons(onClose = onExit)
                 }
+            }
+
+            item(key = "legacy-filter") {
+                ScheduleFilter(
+                    myListOnly = myListOnly,
+                    loading = isLoadingWatchlist,
+                    onChange = onFilterChange,
+                )
             }
 
             if (isRefreshing) {
@@ -421,7 +441,7 @@ private fun LegacyScheduleContent(
                     }
                 }
                 if (episodes.isEmpty()) {
-                    item(key = "legacy-empty-$date") { EmptyDayCard() }
+                    item(key = "legacy-empty-$date") { EmptyDayCard(myListOnly = myListOnly) }
                 } else {
                     itemsIndexed(
                         episodes,
@@ -438,7 +458,7 @@ private fun LegacyScheduleContent(
 
             if (dates.isEmpty()) {
                 item(key = "legacy-empty-all") {
-                    EmptyDayCard()
+                    EmptyDayCard(myListOnly = myListOnly)
                 }
             }
         }
@@ -828,7 +848,7 @@ private fun EmptyScheduleError(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun EmptyDayCard() {
+private fun EmptyDayCard(myListOnly: Boolean = false) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -842,8 +862,53 @@ private fun EmptyDayCard() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Outlined.CalendarToday, null, tint = MUTED, modifier = Modifier.size(36.dp))
             Spacer(Modifier.height(10.dp))
-            Text("No releases scheduled", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text("Pick another day from the timeline above.", color = MUTED, fontSize = 13.sp)
+            Text(
+                if (myListOnly) "Nothing from My List airs today" else "No releases scheduled",
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                if (myListOnly) "Switch to All to see every scheduled release." else "Pick another day from the timeline above.",
+                color = MUTED,
+                fontSize = 13.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScheduleFilter(
+    myListOnly: Boolean,
+    loading: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.07f))
+            .padding(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(false to "All", true to "My List").forEach { (value, label) ->
+            Text(
+                label,
+                color = if (myListOnly == value) Color.Black else Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (myListOnly == value) Color.White else Color.Transparent)
+                    .clickable(enabled = !loading || !value) { onChange(value) }
+                    .padding(horizontal = 18.dp, vertical = 9.dp),
+            )
+        }
+        if (loading) {
+            CircularProgressIndicator(
+                color = Color.White,
+                strokeWidth = 2.dp,
+                modifier = Modifier.padding(horizontal = 8.dp).size(14.dp),
+            )
         }
     }
 }

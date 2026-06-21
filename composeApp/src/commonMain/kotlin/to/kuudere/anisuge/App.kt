@@ -161,7 +161,9 @@ fun App(
             )
         }
         val watchlistVm = remember { WatchlistViewModel() }
-        val scheduleVm = remember { ScheduleViewModel(AppComponent.scheduleService) }
+        val scheduleVm = remember {
+            ScheduleViewModel(AppComponent.scheduleService, AppComponent.watchlistService)
+        }
         val settingsVm = remember {
             SettingsViewModel(
                 AppComponent.settingsService,
@@ -178,6 +180,7 @@ fun App(
                 AppComponent.bffShopService,
                 AppComponent.stickerService,
                 AppComponent.bffRewardsService,
+                AppComponent.notificationService,
             )
         }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }
@@ -212,8 +215,32 @@ fun App(
         val isWatchScreen = navBackStackEntry?.destination?.route?.startsWith("watch/") == true
         val updateState by updateVm.state.collectAsState()
         val authState by AppComponent.authService.authState.collectAsState()
+        val notificationsEnabled by AppComponent.settingsStore.notificationsEnabledFlow.collectAsState(initial = true)
+        val notificationsNewEpisodes by AppComponent.settingsStore.notificationsNewEpisodeFlow.collectAsState(initial = true)
+        val notificationReminderMinutes by AppComponent.settingsStore.notificationReminderMinutesFlow.collectAsState(initial = 0)
         val currentUserProfile = (authState as? SessionCheckResult.Valid)?.user
         val announcementsState by announcementsVm.uiState.collectAsState()
+
+        LaunchedEffect(
+            authState is SessionCheckResult.Valid,
+            notificationsEnabled,
+            notificationsNewEpisodes,
+            notificationReminderMinutes,
+        ) {
+            if (authState is SessionCheckResult.Valid) {
+                scheduleVm.refreshWatchlist()
+                if (notificationsEnabled) {
+                    to.kuudere.anisuge.platform.startNotificationListenerService()
+                } else {
+                    to.kuudere.anisuge.platform.stopNotificationListenerService()
+                }
+                AppComponent.notificationService.sync(
+                    enabled = notificationsEnabled,
+                    newEpisodes = notificationsNewEpisodes,
+                    reminderMinutes = notificationReminderMinutes,
+                )
+            }
+        }
 
         LaunchedEffect(authState) {
             if (authState is SessionCheckResult.NoSession || authState is SessionCheckResult.Expired) {

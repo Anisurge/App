@@ -45,6 +45,7 @@ class AuthService(
     private val httpClient: HttpClient,
     private val integrationsSyncService: IntegrationsSyncService,
     private val librarySyncService: LibrarySyncService,
+    private val notificationService: NotificationService,
 ) {
     private val _authState = MutableStateFlow<SessionCheckResult>(SessionCheckResult.Checking)
     val authState: StateFlow<SessionCheckResult> = _authState.asStateFlow()
@@ -213,6 +214,7 @@ class AuthService(
         try {
             val stored = sessionStore.get()
             if (stored != null && !stored.anisurgeToken.isNullOrBlank()) {
+                notificationService.unregisterCurrentDevice()
                 httpClient.post("${AnisurgeApi.v1Base}/auth/logout") {
                     applyAnisurgeAuth(stored)
                 }

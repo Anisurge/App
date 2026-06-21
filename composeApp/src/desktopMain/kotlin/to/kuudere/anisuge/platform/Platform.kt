@@ -233,6 +233,8 @@ actual fun stopNotificationListenerService() {
     // No-op on desktop
 }
 
+actual suspend fun getPushNotificationToken(): String? = null
+
 actual fun randomInstallUuid(): String = UUID.randomUUID().toString()
 
 actual fun analyticsPingOs(): String? =

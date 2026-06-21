@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -37,6 +38,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("notifications_enabled")
         val NOTIFICATIONS_NEW_EPISODE_KEY = booleanPreferencesKey("notifications_new_episode")
         val NOTIFICATIONS_ANNOUNCEMENT_KEY = booleanPreferencesKey("notifications_announcement")
+        val NOTIFICATION_REMINDER_MINUTES_KEY = intPreferencesKey("notification_reminder_minutes")
         val FLOATING_BOTTOM_NAV_KEY = booleanPreferencesKey("floating_bottom_nav")
         val LIQUID_GLASS_BOTTOM_NAV_KEY = booleanPreferencesKey("liquid_glass_bottom_nav")
         val EXPANDED_HERO_CAROUSEL_KEY = booleanPreferencesKey("expanded_hero_carousel")
@@ -84,6 +86,9 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val notificationsEnabledFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_ENABLED_KEY] ?: true }
     val notificationsNewEpisodeFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_NEW_EPISODE_KEY] ?: true }
     val notificationsAnnouncementFlow: Flow<Boolean> = dataStore.data.map { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] ?: true }
+    val notificationReminderMinutesFlow: Flow<Int> = dataStore.data.map {
+        it[NOTIFICATION_REMINDER_MINUTES_KEY]?.takeIf { value -> value in setOf(0, 10, 30, 60) } ?: 0
+    }
     val floatingBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[FLOATING_BOTTOM_NAV_KEY] ?: true }
     val liquidGlassBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[LIQUID_GLASS_BOTTOM_NAV_KEY] ?: false }
     val expandedHeroCarouselFlow: Flow<Boolean> = dataStore.data.map { it[EXPANDED_HERO_CAROUSEL_KEY] ?: false }
@@ -211,6 +216,11 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[NOTIFICATIONS_ANNOUNCEMENT_KEY] = enabled }
     }
 
+    suspend fun setNotificationReminderMinutes(minutes: Int) {
+        val normalized = minutes.takeIf { it in setOf(0, 10, 30, 60) } ?: 0
+        dataStore.edit { it[NOTIFICATION_REMINDER_MINUTES_KEY] = normalized }
+    }
+
     suspend fun setFloatingBottomNav(enabled: Boolean) {
         dataStore.edit { it[FLOATING_BOTTOM_NAV_KEY] = enabled }
     }
@@ -308,6 +318,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     fun notificationsEnabledBlocking(): Boolean {
         return kotlinx.coroutines.runBlocking { notificationsEnabledFlow.first() }
+    }
+
+    fun notificationsNewEpisodeBlocking(): Boolean {
+        return kotlinx.coroutines.runBlocking { notificationsNewEpisodeFlow.first() }
     }
 
     // ── MAL Tokens ─────────────────────────────────────────────────────────────

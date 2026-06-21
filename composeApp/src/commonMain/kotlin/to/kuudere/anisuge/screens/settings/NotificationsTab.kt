@@ -14,6 +14,8 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -35,8 +37,12 @@ import to.kuudere.anisuge.i18n.LocalAppStrings
 @Composable
 fun NotificationsTab(
     enabled: Boolean,
+    newEpisodes: Boolean,
+    reminderMinutes: Int,
     hasChanges: Boolean,
     onEnabledChange: (Boolean) -> Unit,
+    onNewEpisodesChange: (Boolean) -> Unit,
+    onReminderMinutesChange: (Int) -> Unit,
     onSave: () -> Unit
 ) {
     val strings = LocalAppStrings.current
@@ -102,6 +108,83 @@ fun NotificationsTab(
                         checkedThumbColor = MaterialTheme.colorScheme.onPrimary
                     )
                 )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "New episode alerts",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Only anime saved outside the Dropped folder",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                }
+                Switch(
+                    checked = newEpisodes,
+                    enabled = enabled,
+                    onCheckedChange = onNewEpisodesChange,
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Notify me",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                listOf(
+                    0 to "At release",
+                    10 to "10 min",
+                    30 to "30 min",
+                    60 to "1 hour",
+                ).chunked(2).forEach { options ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        options.forEach { (minutes, label) ->
+                            FilterChip(
+                                selected = reminderMinutes == minutes,
+                                onClick = { onReminderMinutesChange(minutes) },
+                                enabled = enabled && newEpisodes,
+                                label = { Text(label) },
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                ),
+                            )
+                        }
+                    }
+                }
             }
         }
 

@@ -92,7 +92,17 @@ object AppComponent {
     }
 
     val authService: AuthService by lazy {
-        AuthService(sessionStore, httpClient, integrationsSyncService, librarySyncService)
+        AuthService(
+            sessionStore,
+            httpClient,
+            integrationsSyncService,
+            librarySyncService,
+            notificationService,
+        )
+    }
+
+    val notificationService: to.kuudere.anisuge.data.services.NotificationService by lazy {
+        to.kuudere.anisuge.data.services.NotificationService(sessionStore, httpClient)
     }
 
     val homeService: HomeService by lazy {

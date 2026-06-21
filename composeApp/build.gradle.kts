@@ -262,6 +262,10 @@ android {
         }
     }
 
+    sourceSets.getByName("phone").manifest.srcFile(
+        "src/androidPhoneMain/AndroidManifest.xml"
+    )
+
     buildFeatures {
         compose = true
     }

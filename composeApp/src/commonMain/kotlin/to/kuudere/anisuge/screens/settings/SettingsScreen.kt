@@ -341,6 +341,7 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
+        add(SettingsNavItem(SettingsTab.Backup, "Backup & Restore", Icons.Default.Storage))
         add(SettingsNavItem(SettingsTab.Connect, "Connect", Icons.Default.Link))
         // Community — not ready yet
         // add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
@@ -490,15 +491,19 @@ fun SettingsScreen(
                 }
             }
 
-            IconButton(
-                onClick = { showSettingsSearch = true },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 10.dp, end = if (isLargeScreen) 68.dp else 12.dp)
-                    .clip(CircleShape)
-                    .background(BG_CARD),
-            ) {
-                Icon(Icons.Default.Search, contentDescription = "Search settings", tint = TEXT)
+            val onMobileSettingsList =
+                !uiState.showProfileAccount && uiState.mobileSettingsDetailTab == null
+            if (isLargeScreen || onMobileSettingsList) {
+                IconButton(
+                    onClick = { showSettingsSearch = true },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 10.dp, end = if (isLargeScreen) 68.dp else 12.dp)
+                        .clip(CircleShape)
+                        .background(BG_CARD),
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = "Search settings", tint = TEXT)
+                }
             }
             if (!isLargeScreen) {
                 highlightedSearchEntry?.let { entry ->
@@ -1226,6 +1231,10 @@ private fun MobileSettingsDetail(
                     onImportFromAniList = viewModel::importLibraryFromAniList,
                     onSyncToMAL = viewModel::syncAllToMAL,
                     onSyncToAniList = viewModel::syncAllToAniList,
+                )
+
+                is SettingsTab.Backup -> BackupTab(
+                    uiState = uiState,
                     onCreateBackup = viewModel::createBackup,
                     onRestoreBackup = viewModel::restoreBackup,
                     onBackupError = viewModel::reportBackupError,
@@ -1291,8 +1300,12 @@ private fun MobileSettingsDetail(
 
                 is SettingsTab.Notifications -> NotificationsTab(
                     enabled = uiState.notificationsEnabled,
+                    newEpisodes = uiState.notificationsNewEpisode,
+                    reminderMinutes = uiState.notificationReminderMinutes,
                     hasChanges = uiState.hasNotificationPrefsChanges,
                     onEnabledChange = viewModel::setNotificationsEnabled,
+                    onNewEpisodesChange = viewModel::setNotificationsNewEpisode,
+                    onReminderMinutesChange = viewModel::setNotificationReminderMinutes,
                     onSave = viewModel::saveNotificationPreferences
                 )
             }
@@ -1392,6 +1405,10 @@ private fun SettingsContent(
                 onImportFromAniList = viewModel::importLibraryFromAniList,
                 onSyncToMAL = viewModel::syncAllToMAL,
                 onSyncToAniList = viewModel::syncAllToAniList,
+            )
+
+            is SettingsTab.Backup -> BackupTab(
+                uiState = uiState,
                 onCreateBackup = viewModel::createBackup,
                 onRestoreBackup = viewModel::restoreBackup,
                 onBackupError = viewModel::reportBackupError,
@@ -1456,8 +1473,12 @@ private fun SettingsContent(
 
             is SettingsTab.Notifications -> NotificationsTab(
                 enabled = uiState.notificationsEnabled,
+                newEpisodes = uiState.notificationsNewEpisode,
+                reminderMinutes = uiState.notificationReminderMinutes,
                 hasChanges = uiState.hasNotificationPrefsChanges,
                 onEnabledChange = viewModel::setNotificationsEnabled,
+                onNewEpisodesChange = viewModel::setNotificationsNewEpisode,
+                onReminderMinutesChange = viewModel::setNotificationReminderMinutes,
                 onSave = viewModel::saveNotificationPreferences
             )
         }
@@ -1670,15 +1691,8 @@ private fun SyncTab(
     onImportFromAniList: () -> Unit,
     onSyncToMAL: () -> Unit,
     onSyncToAniList: () -> Unit,
-    onCreateBackup: ((String, String) -> Unit) -> Unit,
-    onRestoreBackup: (String) -> Unit,
-    onBackupError: (String) -> Unit,
 ) {
     val strings = LocalAppStrings.current
-    val backupFiles = to.kuudere.anisuge.platform.rememberBackupFileActions(
-        onImport = onRestoreBackup,
-        onError = onBackupError,
-    )
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             strings.sync,
@@ -1777,43 +1791,72 @@ private fun SyncTab(
             }
         }
 
-        if (backupFiles.supported) {
-            Spacer(modifier = Modifier.height(24.dp))
-            SettingCard(
-                title = "Backup & restore",
-                description = "Export settings, watchlist, and progress. Login tokens are never included.",
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = {
-                            onCreateBackup { fileName, content ->
-                                backupFiles.export(fileName, content)
-                            }
-                        },
-                        enabled = !uiState.isBackupBusy,
+    }
+}
+
+@Composable
+private fun BackupTab(
+    uiState: SettingsUiState,
+    onCreateBackup: ((String, String) -> Unit) -> Unit,
+    onRestoreBackup: (String) -> Unit,
+    onBackupError: (String) -> Unit,
+) {
+    val backupFiles = to.kuudere.anisuge.platform.rememberBackupFileActions(
+        onImport = onRestoreBackup,
+        onError = onBackupError,
+    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Backup & Restore",
+            color = TEXT,
+            fontSize = 42.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        Text(
+            "Keep a portable copy of your settings, watchlist, and watch progress.",
+            color = MUTED,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 32.dp),
+        )
+        if (!backupFiles.supported) {
+            Text("Backup files are not supported on this platform yet.", color = MUTED)
+            return@Column
+        }
+        SettingCard(
+            title = "Your Anisurge data",
+            description = "Login sessions and integration tokens are never included.",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = {
+                        onCreateBackup { fileName, content ->
+                            backupFiles.export(fileName, content)
+                        }
+                    },
+                    enabled = !uiState.isBackupBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Storage, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Create backup")
+                }
+                OutlinedButton(
+                    onClick = backupFiles.import,
+                    enabled = !uiState.isBackupBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Sync, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Restore backup")
+                }
+                if (uiState.isBackupBusy) {
+                    LinearProgressIndicator(
                         modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Default.Storage, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Create backup")
-                    }
-                    OutlinedButton(
-                        onClick = backupFiles.import,
-                        enabled = !uiState.isBackupBusy,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Default.Sync, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Restore backup")
-                    }
-                    if (uiState.isBackupBusy) {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = AppColors.accent,
-                            trackColor = BORDER,
-                        )
-                    }
+                        color = AppColors.accent,
+                        trackColor = BORDER,
+                    )
                 }
             }
         }

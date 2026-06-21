@@ -551,6 +551,26 @@ actual fun stopNotificationListenerService() {
     to.kuudere.anisuge.notifications.NotificationTopicManager.unsubscribeFromAllTopics()
 }
 
+actual suspend fun getPushNotificationToken(): String? =
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        runCatching {
+            val messagingClass = Class.forName("com.google.firebase.messaging.FirebaseMessaging")
+            val messaging = messagingClass.getMethod("getInstance").invoke(null)
+            val task = messagingClass.getMethod("getToken").invoke(messaging)
+            val taskClass = Class.forName("com.google.android.gms.tasks.Task")
+            val tasksClass = Class.forName("com.google.android.gms.tasks.Tasks")
+            (tasksClass.getMethod("await", taskClass).invoke(null, task) as? String)
+                .also { token ->
+                    android.util.Log.d(
+                        "AnisurgeFCM",
+                        "FCM token lookup completed: ${if (token.isNullOrBlank()) "empty" else "available"}",
+                    )
+                }
+        }.onFailure { error ->
+            android.util.Log.w("AnisurgeFCM", "Failed to obtain FCM token", error)
+        }.getOrNull()
+    }
+
 actual fun randomInstallUuid(): String = UUID.randomUUID().toString()
 
 actual fun analyticsPingOs(): String? = Build.VERSION.RELEASE

@@ -37,7 +37,8 @@ object NotificationDisplayManager {
         if (!hasNotificationPermission()) return
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channelId = when (type) {
+        val normalizedType = type.uppercase()
+        val channelId = when (normalizedType) {
             "NEW_EPISODE" -> NotificationChannels.NEW_EPISODE
             "DONATION" -> NotificationChannels.DONATION
             "ANNOUNCEMENT" -> NotificationChannels.ANNOUNCEMENT
@@ -45,7 +46,7 @@ object NotificationDisplayManager {
             else -> NotificationChannels.ANNOUNCEMENT
         }
 
-        val deepLink = buildDeepLink(type, animeId, episodeNumber, actionUrl)
+        val deepLink = buildDeepLink(normalizedType, animeId, episodeNumber, actionUrl)
         val notifId = NOTIF_ID_BASE + (title.hashCode() and 0xFFFF)
 
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(deepLink), context, MainActivity::class.java).apply {
@@ -89,7 +90,7 @@ object NotificationDisplayManager {
             )
         }
 
-        when (type) {
+        when (normalizedType) {
             "NEW_EPISODE" -> {
                 builder.setPriority(NotificationCompat.PRIORITY_HIGH)
                 if (animeId != null) {

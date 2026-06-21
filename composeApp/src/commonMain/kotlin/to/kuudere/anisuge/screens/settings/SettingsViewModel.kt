@@ -106,6 +106,8 @@ data class SettingsUiState(
     val layoutSaveError: String? = null,
 
     val notificationsEnabled: Boolean = true,
+    val notificationsNewEpisode: Boolean = true,
+    val notificationReminderMinutes: Int = 0,
     val hasNotificationPrefsChanges: Boolean = false,
 
     // Tracking
@@ -217,6 +219,7 @@ sealed class SettingsTab {
     data object Storage : SettingsTab()
     data object Appearance : SettingsTab()
     data object Sync : SettingsTab()
+    data object Backup : SettingsTab()
     data object Connect : SettingsTab()
     data object Community : SettingsTab()
     data object Servers : SettingsTab()
@@ -240,6 +243,7 @@ class SettingsViewModel(
     private val bffShopService: to.kuudere.anisuge.data.services.BffShopService,
     private val stickerService: to.kuudere.anisuge.data.services.StickerService,
     private val bffRewardsService: to.kuudere.anisuge.data.services.BffRewardsService,
+    private val notificationService: to.kuudere.anisuge.data.services.NotificationService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
 
@@ -546,6 +550,7 @@ class SettingsViewModel(
                 }
             }
 
+            is SettingsTab.Backup -> Unit
             is SettingsTab.Connect -> {
                 if (_uiState.value.userProfile == null && authService.authState.value is SessionCheckResult.Valid) {
                     loadUserProfile()
@@ -1593,7 +1598,16 @@ class SettingsViewModel(
     fun loadNotificationPreferences() {
         viewModelScope.launch {
             val enabled = settingsStore.notificationsEnabledFlow.first()
-            _uiState.update { it.copy(notificationsEnabled = enabled, hasNotificationPrefsChanges = false) }
+            val newEpisodes = settingsStore.notificationsNewEpisodeFlow.first()
+            val reminderMinutes = settingsStore.notificationReminderMinutesFlow.first()
+            _uiState.update {
+                it.copy(
+                    notificationsEnabled = enabled,
+                    notificationsNewEpisode = newEpisodes,
+                    notificationReminderMinutes = reminderMinutes,
+                    hasNotificationPrefsChanges = false,
+                )
+            }
         }
     }
 
@@ -1601,15 +1615,33 @@ class SettingsViewModel(
         _uiState.update { it.copy(notificationsEnabled = enabled, hasNotificationPrefsChanges = true) }
     }
 
+    fun setNotificationsNewEpisode(enabled: Boolean) {
+        _uiState.update { it.copy(notificationsNewEpisode = enabled, hasNotificationPrefsChanges = true) }
+    }
+
+    fun setNotificationReminderMinutes(minutes: Int) {
+        _uiState.update {
+            it.copy(
+                notificationReminderMinutes = minutes.takeIf { value -> value in setOf(0, 10, 30, 60) } ?: 0,
+                hasNotificationPrefsChanges = true,
+            )
+        }
+    }
+
     fun saveNotificationPreferences() {
         viewModelScope.launch {
             val enabled = _uiState.value.notificationsEnabled
+            val newEpisodes = _uiState.value.notificationsNewEpisode
+            val reminderMinutes = _uiState.value.notificationReminderMinutes
             settingsStore.setNotificationsEnabled(enabled)
+            settingsStore.setNotificationsNewEpisode(newEpisodes)
+            settingsStore.setNotificationReminderMinutes(reminderMinutes)
             if (enabled) {
                 to.kuudere.anisuge.platform.startNotificationListenerService()
             } else {
                 to.kuudere.anisuge.platform.stopNotificationListenerService()
             }
+            notificationService.sync(enabled, newEpisodes, reminderMinutes)
             _uiState.update {
                 it.copy(
                     hasNotificationPrefsChanges = false,

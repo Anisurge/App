@@ -3,6 +3,11 @@ package to.kuudere.anisuge.notifications
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import to.kuudere.anisuge.AppComponent
 
 class AnisurgeMessagingService : FirebaseMessagingService() {
 
@@ -12,8 +17,14 @@ class AnisurgeMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         Log.d(TAG, "FCM token refreshed: ${token.take(10)}...")
-        // Token is managed by FCM — no need to send it to a server
-        // since we use topics for broadcast notifications.
+        CoroutineScope(Dispatchers.IO).launch {
+            AppComponent.notificationService.sync(
+                enabled = AppComponent.settingsStore.notificationsEnabledFlow.first(),
+                newEpisodes = AppComponent.settingsStore.notificationsNewEpisodeFlow.first(),
+                reminderMinutes = AppComponent.settingsStore.notificationReminderMinutesFlow.first(),
+                knownToken = token,
+            )
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -23,11 +34,15 @@ class AnisurgeMessagingService : FirebaseMessagingService() {
         val type = data["type"] ?: return
         val title = data["title"] ?: message.notification?.title ?: "Anisurge"
         val body = data["body"] ?: message.notification?.body ?: return
-
-        // Check if notifications are enabled (master toggle).
-        val settingsStore = to.kuudere.anisuge.AppComponent.settingsStore
+        val settingsStore = AppComponent.settingsStore
         if (!settingsStore.notificationsEnabledBlocking()) {
             Log.d(TAG, "Notifications disabled, skipping")
+            return
+        }
+        if (type.equals("new_episode", ignoreCase = true) &&
+            !settingsStore.notificationsNewEpisodeBlocking()
+        ) {
+            Log.d(TAG, "New episode notifications disabled, skipping")
             return
         }
 
@@ -44,7 +59,7 @@ class AnisurgeMessagingService : FirebaseMessagingService() {
             mediaUrl = data["mediaUrl"],
             imageUrl = data["imageUrl"],
             referenceId = data["referenceId"],
-            campaign = data["campaign"]
+            campaign = data["campaign"],
         )
     }
 }

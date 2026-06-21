@@ -36,6 +36,7 @@ class BackupService(
             notificationsEnabled = settingsStore.notificationsEnabledFlow.first(),
             notificationsNewEpisode = settingsStore.notificationsNewEpisodeFlow.first(),
             notificationsAnnouncement = settingsStore.notificationsAnnouncementFlow.first(),
+            notificationReminderMinutes = settingsStore.notificationReminderMinutesFlow.first(),
             floatingBottomNav = settingsStore.floatingBottomNavFlow.first(),
             liquidGlassBottomNav = settingsStore.liquidGlassBottomNavFlow.first(),
             expandedHeroCarousel = settingsStore.expandedHeroCarouselFlow.first(),
@@ -155,6 +156,7 @@ class BackupService(
         settingsStore.setNotificationsEnabled(value.notificationsEnabled)
         settingsStore.setNotificationsNewEpisode(value.notificationsNewEpisode)
         settingsStore.setNotificationsAnnouncement(value.notificationsAnnouncement)
+        settingsStore.setNotificationReminderMinutes(value.notificationReminderMinutes)
         settingsStore.setFloatingBottomNav(value.floatingBottomNav)
         settingsStore.setLiquidGlassBottomNav(value.liquidGlassBottomNav)
         settingsStore.setExpandedHeroCarousel(value.expandedHeroCarousel)

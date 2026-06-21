@@ -135,3 +135,6 @@ expect fun startNotificationListenerService()
 
 /** Unsubscribes from FCM notification topics (Android only, no-op on desktop). */
 expect fun stopNotificationListenerService()
+
+/** Current FCM token on Android phone; null on unsupported platforms. */
+expect suspend fun getPushNotificationToken(): String?
