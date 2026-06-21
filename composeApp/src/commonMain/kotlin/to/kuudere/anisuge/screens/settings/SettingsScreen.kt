@@ -71,6 +71,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -300,6 +301,8 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val uriHandler = LocalUriHandler.current
     var selectedTab by remember { mutableStateOf<SettingsTab>(initialTab ?: SettingsTab.Preferences) }
+    var showSettingsSearch by remember { mutableStateOf(false) }
+    var highlightedSearchEntry by remember { mutableStateOf<SettingsSearchEntry?>(null) }
 
     LaunchedEffect(initialTab) {
         if (initialTab != null) {
@@ -405,6 +408,15 @@ fun SettingsScreen(
                                     modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 16.dp)
                                 )
                             }
+                            highlightedSearchEntry?.takeIf { it.tab == selectedTab }?.let { entry ->
+                                SettingsSearchHighlight(
+                                    entry = entry,
+                                    onDismiss = { highlightedSearchEntry = null },
+                                    modifier = Modifier
+                                        .widthIn(max = 804.dp)
+                                        .padding(horizontal = 48.dp, vertical = 8.dp),
+                                )
+                            }
                             SettingsContent(
                                 selectedTab = selectedTab,
                                 uiState = uiState,
@@ -477,6 +489,46 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            IconButton(
+                onClick = { showSettingsSearch = true },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 10.dp, end = if (isLargeScreen) 68.dp else 12.dp)
+                    .clip(CircleShape)
+                    .background(BG_CARD),
+            ) {
+                Icon(Icons.Default.Search, contentDescription = "Search settings", tint = TEXT)
+            }
+            if (!isLargeScreen) {
+                highlightedSearchEntry?.let { entry ->
+                    SettingsSearchHighlight(
+                        entry = entry,
+                        onDismiss = { highlightedSearchEntry = null },
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 62.dp, start = 16.dp, end = 16.dp)
+                            .zIndex(4f),
+                    )
+                }
+            }
+        }
+
+        if (showSettingsSearch) {
+            SettingsSearchDialog(
+                onDismiss = { showSettingsSearch = false },
+                onSelect = { entry ->
+                    showSettingsSearch = false
+                    highlightedSearchEntry = entry
+                    selectedTab = entry.tab
+                    viewModel.onTabSelected(entry.tab)
+                    if (entry.tab == SettingsTab.Profile) {
+                        viewModel.openProfileAccount()
+                    } else {
+                        viewModel.openMobileSettingsDetail(entry.tab)
+                    }
+                },
+            )
         }
 
         // Confirmation Dialogs
@@ -508,6 +560,33 @@ fun SettingsScreen(
     }
 }
 
+@Composable
+private fun SettingsSearchHighlight(
+    entry: SettingsSearchEntry,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(AppColors.accent.copy(alpha = 0.14f))
+            .border(1.dp, AppColors.accent.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Search, contentDescription = null, tint = AppColors.accent)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(entry.title, color = TEXT, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("Opened in ${entry.category}", color = MUTED, fontSize = 11.sp)
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = MUTED)
+        }
+    }
+}
+
 private fun localizedSettingsMessage(message: String, strings: AppStrings): String = when (message) {
     "Settings saved successfully" -> strings.preferencesSavedSuccessfully
     "Failed to save settings" -> strings.failedToSavePreferences
@@ -516,6 +595,84 @@ private fun localizedSettingsMessage(message: String, strings: AppStrings): Stri
     "Server priority saved" -> strings.serverPrioritySaved
     "Reset to default priority" -> strings.resetToDefaultPriority
     else -> message
+}
+
+@Composable
+private fun SettingsSearchDialog(
+    onDismiss: () -> Unit,
+    onSelect: (SettingsSearchEntry) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val results = remember(query) { searchSettings(query) }
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 620.dp)
+                .fillMaxWidth()
+                .heightIn(max = 620.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(BG)
+                .border(1.dp, BORDER, RoundedCornerShape(8.dp))
+                .padding(16.dp),
+        ) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = MUTED)
+                },
+                trailingIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = MUTED)
+                    }
+                },
+                placeholder = { Text("Search settings", color = MUTED) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = TEXT,
+                    unfocusedTextColor = TEXT,
+                    focusedBorderColor = AppColors.accent,
+                    unfocusedBorderColor = BORDER,
+                ),
+            )
+            Spacer(Modifier.height(12.dp))
+            if (query.isBlank()) {
+                Text(
+                    "Try player, downloads, backup, theme, notifications, or servers.",
+                    color = MUTED,
+                    fontSize = 13.sp,
+                )
+            } else if (results.isEmpty()) {
+                Text("No matching settings", color = MUTED, fontSize = 13.sp)
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(results, key = { it.id }) { entry ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onSelect(entry) }
+                                .padding(horizontal = 12.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = null, tint = AppColors.accent)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(entry.title, color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                Text(entry.category, color = MUTED, fontSize = 11.sp)
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MUTED,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1069,6 +1226,9 @@ private fun MobileSettingsDetail(
                     onImportFromAniList = viewModel::importLibraryFromAniList,
                     onSyncToMAL = viewModel::syncAllToMAL,
                     onSyncToAniList = viewModel::syncAllToAniList,
+                    onCreateBackup = viewModel::createBackup,
+                    onRestoreBackup = viewModel::restoreBackup,
+                    onBackupError = viewModel::reportBackupError,
                 )
 
                 is SettingsTab.Connect -> ConnectTab(
@@ -1232,6 +1392,9 @@ private fun SettingsContent(
                 onImportFromAniList = viewModel::importLibraryFromAniList,
                 onSyncToMAL = viewModel::syncAllToMAL,
                 onSyncToAniList = viewModel::syncAllToAniList,
+                onCreateBackup = viewModel::createBackup,
+                onRestoreBackup = viewModel::restoreBackup,
+                onBackupError = viewModel::reportBackupError,
             )
 
             is SettingsTab.Connect -> ConnectTab(
@@ -1507,8 +1670,15 @@ private fun SyncTab(
     onImportFromAniList: () -> Unit,
     onSyncToMAL: () -> Unit,
     onSyncToAniList: () -> Unit,
+    onCreateBackup: ((String, String) -> Unit) -> Unit,
+    onRestoreBackup: (String) -> Unit,
+    onBackupError: (String) -> Unit,
 ) {
     val strings = LocalAppStrings.current
+    val backupFiles = to.kuudere.anisuge.platform.rememberBackupFileActions(
+        onImport = onRestoreBackup,
+        onError = onBackupError,
+    )
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             strings.sync,
@@ -1601,6 +1771,47 @@ private fun SyncTab(
                             fontSize = 12.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (backupFiles.supported) {
+            Spacer(modifier = Modifier.height(24.dp))
+            SettingCard(
+                title = "Backup & restore",
+                description = "Export settings, watchlist, and progress. Login tokens are never included.",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = {
+                            onCreateBackup { fileName, content ->
+                                backupFiles.export(fileName, content)
+                            }
+                        },
+                        enabled = !uiState.isBackupBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Storage, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Create backup")
+                    }
+                    OutlinedButton(
+                        onClick = backupFiles.import,
+                        enabled = !uiState.isBackupBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Sync, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Restore backup")
+                    }
+                    if (uiState.isBackupBusy) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = AppColors.accent,
+                            trackColor = BORDER,
                         )
                     }
                 }

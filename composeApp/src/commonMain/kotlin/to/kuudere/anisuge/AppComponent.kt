@@ -131,6 +131,15 @@ object AppComponent {
         to.kuudere.anisuge.data.services.SettingsService(sessionStore, httpClient)
     }
 
+    val backupService: to.kuudere.anisuge.data.services.BackupService by lazy {
+        to.kuudere.anisuge.data.services.BackupService(
+            settingsStore,
+            watchlistService,
+            homeService,
+            infoService,
+        )
+    }
+
     val serverRepository: ServerRepository by lazy {
         ServerRepository(httpClient, dataStore, settingsStore)
     }

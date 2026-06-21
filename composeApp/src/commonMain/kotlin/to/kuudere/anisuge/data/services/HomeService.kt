@@ -46,6 +46,7 @@ class HomeService(
     suspend fun fetchContinueWatchingPage(
         limit: Int = 100,
         offset: Int = 0,
+        latestPerAnime: Boolean = false,
     ): ContinueWatchingResponse? {
         val stored = sessionStore.get() ?: return null
         return try {
@@ -53,6 +54,7 @@ class HomeService(
                 applyAnisurgeAuth(stored)
                 parameter("limit", limit)
                 if (offset > 0) parameter("offset", offset)
+                if (latestPerAnime) parameter("latestPerAnime", true)
             }
             response.body<ContinueWatchingResponse>()
         } catch (e: Exception) {
@@ -60,6 +62,9 @@ class HomeService(
             null
         }
     }
+
+    suspend fun fetchHomeContinueWatching(limit: Int = 20): List<ContinueWatchingItem> =
+        fetchContinueWatchingPage(limit = limit, latestPerAnime = true)?.data.orEmpty()
 
     /** Loads every saved continue row from the BFF (not capped like ReAnime's list). */
     suspend fun fetchAllContinueWatching(): List<ContinueWatchingItem> = kotlinx.coroutines.coroutineScope {
@@ -85,6 +90,43 @@ class HomeService(
             }
         }
         all
+    }
+
+    /**
+     * Publishes the newest page immediately, then loads older history only when needed.
+     * Home can render from the first callback instead of waiting for every saved episode.
+     */
+    suspend fun fetchContinueWatchingProgressively(
+        onFirstPage: (List<ContinueWatchingItem>) -> Unit,
+    ): List<ContinueWatchingItem> = kotlinx.coroutines.coroutineScope {
+        val initialPageSize = 30
+        val remainingPageSize = 100
+        val firstPage = fetchContinueWatchingPage(limit = initialPageSize, offset = 0)
+            ?: return@coroutineScope emptyList()
+        onFirstPage(firstPage.data)
+
+        if (
+            firstPage.data.isEmpty() ||
+            firstPage.data.size >= firstPage.total ||
+            firstPage.data.size < initialPageSize
+        ) {
+            return@coroutineScope firstPage.data
+        }
+
+        val remainingCount = firstPage.total - firstPage.data.size
+        val pagesToFetch = (remainingCount + remainingPageSize - 1) / remainingPageSize
+        val olderPages = (0 until pagesToFetch).map { pageIdx ->
+            async {
+                fetchContinueWatchingPage(
+                    limit = remainingPageSize,
+                    offset = initialPageSize + pageIdx * remainingPageSize,
+                )
+                    ?.data
+                    .orEmpty()
+            }
+        }.flatMap { it.await() }
+
+        firstPage.data + olderPages
     }
 
     suspend fun deleteContinueWatching(animeId: String, episodeId: String): Boolean {

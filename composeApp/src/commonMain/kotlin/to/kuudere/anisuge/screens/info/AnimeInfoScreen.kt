@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -49,6 +50,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import to.kuudere.anisuge.data.models.AnimeDetails
+import to.kuudere.anisuge.data.models.AnimeThemeItem
+import to.kuudere.anisuge.data.models.FranchiseEntry
+import to.kuudere.anisuge.player.VideoPlayerSurface
+import to.kuudere.anisuge.player.rememberVideoPlayerState
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.WatchlistBottomSheet
@@ -367,6 +372,16 @@ private data class RelatedSeasonItem(
     val isCurrent: Boolean,
 )
 
+private fun FranchiseEntry.toRelatedSeasonItem(): RelatedSeasonItem = RelatedSeasonItem(
+    animeId = animeId,
+    title = title,
+    coverUrl = coverUrl,
+    relationType = relationType,
+    format = format,
+    seasonYear = startDate?.year?.takeIf { it > 0 },
+    isCurrent = isCurrent,
+)
+
 private fun AnimeDetails.relatedSeasonItems(): List<RelatedSeasonItem> {
     val currentId = animeId.ifBlank { id }
     return relations.orEmpty()
@@ -432,22 +447,30 @@ private fun JsonObject.intValue(key: String): Int? =
     (this[key] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
 
 @Composable
-private fun RelatedSeasonsSection(
-    anime: AnimeDetails,
+private fun FranchiseOrderSection(
+    state: AnimeInfoUiState,
     onAnimeClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val items = remember(anime.relations, anime.animeId) { anime.relatedSeasonItems() }
-    if (items.isEmpty()) return
+    val items = state.franchiseOrder.map { it.toRelatedSeasonItem() }
+    if (items.isEmpty() && !state.isLoadingFranchise) return
 
     Column(modifier) {
         Text(
-            text = "Seasons & related",
+            text = "Franchise Order",
             color = AppColors.text,
             fontSize = 20.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(12.dp))
+        if (state.isLoadingFranchise && items.size <= 1) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = AppColors.accent,
+                trackColor = AppColors.surface,
+            )
+            return@Column
+        }
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth(),
@@ -457,6 +480,163 @@ private fun RelatedSeasonsSection(
                     item = item,
                     onClick = { if (!item.isCurrent) onAnimeClick(item.animeId) },
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnimeThemesSection(
+    state: AnimeInfoUiState,
+    modifier: Modifier = Modifier,
+) {
+    var selectedTheme by remember { mutableStateOf<AnimeThemeItem?>(null) }
+    val grouped = state.themes.groupBy { it.type.uppercase() }
+    if (grouped.isEmpty() && !state.isLoadingThemes) return
+
+    Column(modifier) {
+        Text(
+            text = "Openings & Endings",
+            color = AppColors.text,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(12.dp))
+        if (state.isLoadingThemes) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = AppColors.accent,
+                trackColor = AppColors.surface,
+            )
+        } else {
+            listOf("OP", "ED", "IN").forEach { type ->
+                val themes = grouped[type].orEmpty()
+                if (themes.isEmpty()) return@forEach
+                Text(
+                    text = themes.first().displayType + "s",
+                    color = AppColors.textMuted,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(themes, key = { it.id }) { theme ->
+                        ThemeCard(theme = theme, onClick = { selectedTheme = theme })
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+            }
+        }
+    }
+
+    selectedTheme?.let { theme ->
+        ThemePreviewDialog(theme = theme, onDismiss = { selectedTheme = null })
+    }
+}
+
+@Composable
+private fun ThemeCard(theme: AnimeThemeItem, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(220.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(AppColors.surface)
+            .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = AppColors.accent)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "${theme.displayType} ${theme.sequence ?: ""}".trim(),
+                color = AppColors.text,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = theme.songTitle,
+            color = AppColors.text,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (theme.artists.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = theme.artists.joinToString(),
+                color = AppColors.textMuted,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (theme.spoiler || theme.nsfw) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = listOfNotNull(
+                    "Spoiler".takeIf { theme.spoiler },
+                    "Sensitive".takeIf { theme.nsfw },
+                ).joinToString(" • "),
+                color = Color(0xFFFFC857),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemePreviewDialog(theme: AnimeThemeItem, onDismiss: () -> Unit) {
+    val url = theme.playableUrl ?: return
+    val playerState = rememberVideoPlayerState(
+        url = url,
+        mediaKey = theme.id,
+        showControls = true,
+        enableSubs = false,
+        autoPlay = true,
+    )
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 920.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(AppColors.background)
+                .border(1.dp, AppColors.border, RoundedCornerShape(8.dp)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .background(Color.Black),
+            ) {
+                VideoPlayerSurface(state = playerState, modifier = Modifier.fillMaxSize())
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                }
+            }
+            Column(Modifier.padding(16.dp)) {
+                Text(theme.songTitle, color = AppColors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (theme.artists.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(theme.artists.joinToString(), color = AppColors.textMuted, fontSize = 13.sp)
+                }
+                val warning = listOfNotNull(
+                    "May contain spoilers".takeIf { theme.spoiler },
+                    "Sensitive content".takeIf { theme.nsfw },
+                    theme.resolution?.let { "${it}p" },
+                ).joinToString(" • ")
+                if (warning.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(warning, color = Color(0xFFFFC857), fontSize = 12.sp)
+                }
             }
         }
     }
@@ -1132,15 +1312,15 @@ private fun MobileLayout(
 
                     Spacer(Modifier.height(16.dp))
 
-                    RelatedSeasonsSection(
-                        anime = anime,
+                    FranchiseOrderSection(
+                        state = state,
                         onAnimeClick = onAnimeClick,
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
 
-                    if (anime.relatedSeasonItems().isNotEmpty()) {
-                        Spacer(Modifier.height(18.dp))
-                    }
+                    Spacer(Modifier.height(18.dp))
+                    AnimeThemesSection(state = state, modifier = Modifier.padding(horizontal = 16.dp))
+                    Spacer(Modifier.height(18.dp))
 
                     // Custom Tabs
                     Row(
@@ -1649,15 +1829,15 @@ private fun DesktopLayout(
                             .fillMaxWidth()
                             .padding(start = 48.dp, bottom = 48.dp, end = 48.dp)
                     ) {
-                        RelatedSeasonsSection(
-                            anime = anime,
+                        FranchiseOrderSection(
+                            state = state,
                             onAnimeClick = onAnimeClick,
                             modifier = Modifier.fillMaxWidth(),
                         )
 
-                        if (anime.relatedSeasonItems().isNotEmpty()) {
-                            Spacer(Modifier.height(30.dp))
-                        }
+                        Spacer(Modifier.height(24.dp))
+                        AnimeThemesSection(state = state, modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(30.dp))
 
                         val episodesPerPage = 100
                         val totalEpisodes = state.episodes.size

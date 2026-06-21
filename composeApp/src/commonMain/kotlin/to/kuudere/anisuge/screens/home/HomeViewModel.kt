@@ -219,6 +219,17 @@ class HomeViewModel(
         fetchPersonalizedData()
     }
 
+    fun refreshAllContinueWatching() {
+        scope.launch {
+            try {
+                val all = homeService.fetchAllContinueWatching().sortedByRecent()
+                applyContinueWatching(all)
+            } catch (e: Exception) {
+                println("[HomeVM] Failed to fetch full continue history: ${e.message}")
+            }
+        }
+    }
+
     private suspend fun loadContinueWatching() {
         val session = sessionStore.get() ?: return
         if (!sessionStore.isValid(session) || authService.authState.value !is SessionCheckResult.Valid) {
@@ -226,8 +237,8 @@ class HomeViewModel(
         }
 
         try {
-            val all = homeService.fetchAllContinueWatching().sortedByRecent()
-            applyContinueWatching(all)
+            val latest = homeService.fetchHomeContinueWatching().sortedByRecent()
+            applyContinueWatching(latest)
         } catch (e: Exception) {
             println("[HomeVM] Failed to fetch continue watching: ${e.message}")
         }
@@ -248,14 +259,19 @@ class HomeViewModel(
         }
     }
 
-    private fun applyContinueWatching(all: List<ContinueWatchingItem>) {
+    private fun applyContinueWatching(
+        all: List<ContinueWatchingItem>,
+        loadRecommendations: Boolean = true,
+    ) {
         _uiState.update {
             it.copy(
                 continueWatchingAll = all,
                 continueWatching = all.latestPerAnime(),
             )
         }
-        scope.launch { loadRecommendations() }
+        if (loadRecommendations) {
+            scope.launch { loadRecommendations() }
+        }
     }
 
     fun removeContinueItem(item: ContinueWatchingItem) {

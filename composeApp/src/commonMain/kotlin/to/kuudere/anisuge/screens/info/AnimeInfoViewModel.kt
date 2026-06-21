@@ -7,9 +7,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.data.models.RecommendationItem
 import to.kuudere.anisuge.data.models.EpisodeItem
+import to.kuudere.anisuge.data.models.AnimeThemeItem
+import to.kuudere.anisuge.data.models.FranchiseEntry
+import to.kuudere.anisuge.data.models.franchiseRelationRefs
+import to.kuudere.anisuge.data.models.toFranchiseEntry
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.services.WatchlistService
 import to.kuudere.anisuge.data.services.HomeService
@@ -35,6 +42,10 @@ data class AnimeInfoUiState(
     val inWatchlist: Boolean = false,
     val folder: String? = null,
     val episodeProgress: Map<Int, EpisodeProgress> = emptyMap(),
+    val isLoadingFranchise: Boolean = false,
+    val franchiseOrder: List<FranchiseEntry> = emptyList(),
+    val isLoadingThemes: Boolean = false,
+    val themes: List<AnimeThemeItem> = emptyList(),
 )
 
 class AnimeInfoViewModel(
@@ -99,6 +110,8 @@ class AnimeInfoViewModel(
                         refreshWatchProgress()
                     }
                     loadRecommendations(id)
+                    loadFranchiseOrder(details)
+                    loadAnimeThemes(details.anilistId)
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "Failed to load anime details.") }
                 }
@@ -107,6 +120,64 @@ class AnimeInfoViewModel(
                 e.printStackTrace()
                 _uiState.update { it.copy(isLoading = false, error = "Error: ${(e::class.simpleName ?: "Exception")}: ${e.message}") }
             }
+        }
+    }
+
+    private fun loadAnimeThemes(anilistId: Int?) {
+        if (anilistId == null || anilistId <= 0) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingThemes = true) }
+            val themes = infoService.getAnimeThemes(anilistId)?.themes.orEmpty()
+            _uiState.update { it.copy(isLoadingThemes = false, themes = themes) }
+        }
+    }
+
+    private fun loadFranchiseOrder(root: AnimeDetails) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingFranchise = true) }
+            val rootId = root.animeId.ifBlank { root.id }
+            val visited = linkedSetOf(rootId)
+            val entries = linkedMapOf(rootId to root.toFranchiseEntry(isCurrent = true))
+            var frontier = root.franchiseRelationRefs().map { it.animeId to it.relationType }
+
+            repeat(3) {
+                if (frontier.isEmpty() || entries.size >= 30) return@repeat
+                val current = frontier
+                    .filter { (id, _) -> id !in visited }
+                    .distinctBy { it.first }
+                    .take(30 - entries.size)
+                current.forEach { visited += it.first }
+                val loaded = coroutineScope {
+                    current.map { (id, relationType) ->
+                        async {
+                            Triple(id, relationType, infoService.getAnimeDetails(id, includeEpisodes = false))
+                        }
+                    }.awaitAll()
+                }
+                val next = mutableListOf<Pair<String, String?>>()
+                loaded.forEach { (requestedId, relationType, details) ->
+                    details ?: return@forEach
+                    val resolvedId = details.animeId.ifBlank { requestedId }
+                    entries[resolvedId] = details.toFranchiseEntry(
+                        relationType = relationType,
+                        isCurrent = resolvedId == rootId,
+                    )
+                    details.franchiseRelationRefs().forEach { relation ->
+                        if (relation.animeId !in visited) next += relation.animeId to relation.relationType
+                    }
+                }
+                frontier = next
+            }
+
+            val sorted = entries.values.sortedWith(
+                compareBy<FranchiseEntry>(
+                    { it.startDate?.year?.takeIf { year -> year > 0 } ?: Int.MAX_VALUE },
+                    { it.startDate?.month?.takeIf { month -> month > 0 } ?: Int.MAX_VALUE },
+                    { it.startDate?.day?.takeIf { day -> day > 0 } ?: Int.MAX_VALUE },
+                    { it.title.lowercase() },
+                )
+            )
+            _uiState.update { it.copy(isLoadingFranchise = false, franchiseOrder = sorted) }
         }
     }
 

@@ -78,6 +78,7 @@ data class SettingsUiState(
     val storageInfo: StorageInfo? = null,
     val downloadStorageInfo: DownloadStorageInfo? = null,
     val isLoadingStorage: Boolean = false,
+    val isBackupBusy: Boolean = false,
 
     val serverPriority: List<String> = emptyList(),
     val hasServerPriorityChanges: Boolean = false,
@@ -3012,6 +3013,59 @@ class SettingsViewModel(
             success = "Exported Anisurge library to ReAnime.",
             failure = "ReAnime export failed.",
         )
+    }
+
+    fun createBackup(onReady: (fileName: String, content: String) -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBackupBusy = true, errorMessage = null, successMessage = null) }
+            runCatching { AppComponent.backupService.exportJson() }
+                .onSuccess { content ->
+                    val stamp = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                    onReady("Anisurge-backup-$stamp.anisurge-backup.json", content)
+                    _uiState.update {
+                        it.copy(isBackupBusy = false, successMessage = "Backup created")
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            isBackupBusy = false,
+                            errorMessage = error.message ?: "Backup creation failed",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun restoreBackup(content: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBackupBusy = true, errorMessage = null, successMessage = null) }
+            runCatching { AppComponent.backupService.restore(content) }
+                .onSuccess { result ->
+                    _uiState.update {
+                        it.copy(
+                            isBackupBusy = false,
+                            successMessage =
+                                "Restore complete: ${result.watchlistImported} list, " +
+                                    "${result.progressImported} progress, ${result.skipped} skipped, " +
+                                    "${result.failed} failed",
+                        )
+                    }
+                    refresh()
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            isBackupBusy = false,
+                            errorMessage = error.message ?: "Backup restore failed",
+                        )
+                    }
+                }
+        }
+    }
+
+    fun reportBackupError(message: String) {
+        _uiState.update { it.copy(errorMessage = message) }
     }
 
     private fun syncLibraryWithReanimeDirection(

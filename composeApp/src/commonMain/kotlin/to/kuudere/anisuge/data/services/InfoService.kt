@@ -22,6 +22,7 @@ import to.kuudere.anisuge.data.models.EpisodeListResponse
 import to.kuudere.anisuge.data.models.RecommendationsResponse
 import to.kuudere.anisuge.data.models.SuzuEmbedStream
 import to.kuudere.anisuge.data.models.BffWatchProgressResponse
+import to.kuudere.anisuge.data.models.AnimeThemesResponse
 import to.kuudere.anisuge.data.models.WatchInfoResponse
 import to.kuudere.anisuge.utils.currentTimeMillis
 
@@ -29,6 +30,16 @@ class InfoService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
 ) {
+    suspend fun getAnimeThemes(anilistId: Int): AnimeThemesResponse? {
+        if (anilistId <= 0) return null
+        return try {
+            val response = httpClient.get("${AnisurgeApi.v1Base}/anime-themes/$anilistId")
+            if (response.status.value in 200..299) response.body<AnimeThemesResponse>() else null
+        } catch (e: Exception) {
+            println("[InfoService] getAnimeThemes error: ${e.message}")
+            null
+        }
+    }
     private data class CachedVideoStream(
         val storedAtMs: Long,
         val response: BatchScrapeResponse,
@@ -38,11 +49,11 @@ class InfoService(
     private val videoStreamCacheLock = Mutex()
     private val videoStreamCacheTtlMs = 3 * 60 * 1000L
 
-    suspend fun getAnimeDetails(slug: String): AnimeDetails? {
+    suspend fun getAnimeDetails(slug: String, includeEpisodes: Boolean = true): AnimeDetails? {
         return try {
             val stored = sessionStore.get()
             val response = httpClient.get("${AppComponent.PROJECT_R_BASE_URL}/anime/$slug") {
-                parameter("include_episodes", "true")
+                parameter("include_episodes", includeEpisodes)
                 if (stored != null) header("Authorization", "Bearer ${stored.token}")
             }
             response.body<AnimeDetails>()

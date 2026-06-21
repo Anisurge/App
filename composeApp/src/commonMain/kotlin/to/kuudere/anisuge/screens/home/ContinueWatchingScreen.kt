@@ -60,7 +60,7 @@ fun ContinueWatchingScreen(
     val state by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.refreshContinueWatching()
+        viewModel.refreshAllContinueWatching()
     }
 
     Scaffold(
