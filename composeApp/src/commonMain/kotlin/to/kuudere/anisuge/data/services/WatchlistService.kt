@@ -19,6 +19,7 @@ import to.kuudere.anisuge.data.models.WatchlistUpdateResponse
 class WatchlistService(
     private val sessionStore: SessionStore,
     private val httpClient: HttpClient,
+    private val autoTrackingSyncService: AutoTrackingSyncService? = null,
 ) {
     suspend fun getWatchlist(
         limit: Int = 20,
@@ -71,12 +72,19 @@ class WatchlistService(
         notes: String? = null,
         anilistId: Int? = null,
         malId: Int? = null,
+        suppressTrackerSync: Boolean = false,
     ): WatchlistUpdateResponse? {
         return try {
             val stored = sessionStore.get() ?: return null
             val normalizedFolder = folder.toProjectRFolder()
             if (normalizedFolder == "REMOVE") {
-                return if (removeFromWatchlist(animeId)) WatchlistUpdateResponse(success = true) else null
+                return if (removeFromWatchlist(
+                        animeId,
+                        anilistId,
+                        malId,
+                        suppressTrackerSync,
+                    )
+                ) WatchlistUpdateResponse(success = true) else null
             }
             val response = httpClient.post("${AnisurgeApi.v1Base}/watchlist") {
                 applyAnisurgeAuth(stored)
@@ -92,7 +100,18 @@ class WatchlistService(
                 )
             }
             if (response.status.value in 200..299) {
-                response.body<WatchlistUpdateResponse>()
+                response.body<WatchlistUpdateResponse>().also { result ->
+                    if (!suppressTrackerSync) {
+                        autoTrackingSyncService?.enqueueUpsert(
+                            animeId = animeId,
+                            malId = malId,
+                            anilistId = anilistId,
+                            status = normalizedFolder,
+                            startedAt = result.data?.startedAt,
+                            completedAt = result.data?.completedAt,
+                        )
+                    }
+                }
             } else null
         } catch (e: Exception) {
             println("[WatchlistService] updateStatus error: ${e.message}")
@@ -100,13 +119,22 @@ class WatchlistService(
         }
     }
 
-    suspend fun removeFromWatchlist(animeId: String): Boolean {
+    suspend fun removeFromWatchlist(
+        animeId: String,
+        anilistId: Int? = null,
+        malId: Int? = null,
+        suppressTrackerSync: Boolean = false,
+    ): Boolean {
         return try {
             val stored = sessionStore.get() ?: return false
             val response = httpClient.delete("${AnisurgeApi.v1Base}/watchlist/${animeId.encodeURLPathPart()}") {
                 applyAnisurgeAuth(stored)
             }
-            response.status.value in 200..299
+            (response.status.value in 200..299).also { success ->
+                if (success && !suppressTrackerSync) {
+                    autoTrackingSyncService?.enqueueDelete(animeId, malId, anilistId)
+                }
+            }
         } catch (e: Exception) {
             println("[WatchlistService] removeFromWatchlist error: ${e.message}")
             false

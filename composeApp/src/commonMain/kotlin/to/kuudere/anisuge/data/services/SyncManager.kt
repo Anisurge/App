@@ -9,7 +9,10 @@ import kotlinx.coroutines.coroutineScope
  */
 class SyncManager(
     private val trackingService: TrackingService,
+    private val autoTrackingSyncService: AutoTrackingSyncService? = null,
 ) {
+    suspend fun isAutoSyncEnabled(): Boolean = autoTrackingSyncService?.isEnabled() == true
+
     /**
      * @param malId MAL anime ID (null = skip MAL sync)
      * @param anilistId AniList anime ID (null = skip AniList sync)
@@ -24,26 +27,15 @@ class SyncManager(
         animeTitle: String? = null,
     ) {
         if (malId == null && anilistId == null) return
-
-        coroutineScope {
-            if (malId != null) {
-                async {
-                    try {
-                        trackingService.syncMalProgress(malId, episodeNumber, totalEpisodes)
-                    } catch (_: Exception) {
-                        // Silently fail
-                    }
-                }
-            }
-            if (anilistId != null) {
-                async {
-                    try {
-                        trackingService.syncAnilistProgress(anilistId, episodeNumber, totalEpisodes)
-                    } catch (_: Exception) {
-                        // Silently fail
-                    }
-                }
-            }
-        }
+        val autoSync = autoTrackingSyncService ?: return
+        if (!autoSync.isEnabled()) return
+        autoSync.enqueueUpsert(
+            animeId = anilistId?.let { "anilist-$it" } ?: malId?.let { "mal-$it" }.orEmpty(),
+            malId = malId,
+            anilistId = anilistId,
+            status = if (totalEpisodes != null && episodeNumber >= totalEpisodes) "COMPLETED" else "WATCHING",
+            progress = episodeNumber,
+            totalEpisodes = totalEpisodes,
+        )
     }
 }

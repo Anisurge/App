@@ -17,6 +17,7 @@ data class BffIntegrationsPayload(
     val lunarExpiresAt: Long? = null,
     val lunarUserId: String? = null,
     val lunarUsername: String? = null,
+    val trackerAutoSync: Boolean? = null,
 )
 
 @Serializable

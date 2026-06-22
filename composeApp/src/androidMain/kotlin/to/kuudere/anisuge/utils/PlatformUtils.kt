@@ -485,3 +485,74 @@ actual suspend fun muxToMkv(
         proxiedUrls.forEach { (_, original) -> StreamProxy.release(original) }
     }
 }
+
+private const val THEME_DL_CHANNEL = "anisurge_theme_dl"
+private const val THEME_DL_NOTIF_ID = 2000
+
+private fun ensureThemeDlChannel(manager: android.app.NotificationManager) {
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        if (manager.getNotificationChannel(THEME_DL_CHANNEL) == null) {
+            val channel = android.app.NotificationChannel(
+                THEME_DL_CHANNEL, "Theme Downloads",
+                android.app.NotificationManager.IMPORTANCE_LOW
+            ).apply { setSound(null, null); enableVibration(false) }
+            manager.createNotificationChannel(channel)
+        }
+    }
+}
+
+actual fun notifyThemeDownloadProgress(percentage: Int) {
+    try {
+        val manager = androidAppContext.getSystemService(android.app.NotificationManager::class.java) ?: return
+        ensureThemeDlChannel(manager)
+        val notification = androidx.core.app.NotificationCompat.Builder(androidAppContext, THEME_DL_CHANNEL)
+            .setSmallIcon(to.kuudere.anisuge.R.mipmap.ic_launcher_foreground)
+            .setContentTitle("Downloading theme...")
+            .setContentText("$percentage%")
+            .setProgress(100, percentage, false)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        manager.notify(THEME_DL_NOTIF_ID, notification)
+    } catch (_: Exception) { }
+}
+
+actual fun notifyThemeDownloadComplete(title: String, filePath: String) {
+    try {
+        val manager = androidAppContext.getSystemService(android.app.NotificationManager::class.java) ?: run {
+            openDirectory(filePath); return
+        }
+        ensureThemeDlChannel(manager)
+        val file = java.io.File(filePath)
+        val dir = if (file.isDirectory) file else file.parentFile ?: file
+        val extRoot = android.os.Environment.getExternalStorageDirectory().absolutePath
+        val relativePath = dir.absolutePath.removePrefix(extRoot).removePrefix("/")
+        val encodedPath = relativePath.replace("/", "%2F")
+        val documentUri = android.net.Uri.parse(
+            "content://com.android.externalstorage.documents/document/primary%3A$encodedPath"
+        )
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+            setDataAndType(documentUri, android.provider.DocumentsContract.Document.MIME_TYPE_DIR)
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            androidAppContext, THEME_DL_NOTIF_ID, intent,
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M)
+                android.app.PendingIntent.FLAG_IMMUTABLE else 0
+        )
+        val notification = androidx.core.app.NotificationCompat.Builder(androidAppContext, THEME_DL_CHANNEL)
+            .setSmallIcon(to.kuudere.anisuge.R.mipmap.ic_launcher_foreground)
+            .setContentTitle("Downloaded: $title")
+            .setContentText("Tap to open folder")
+            .setProgress(0, 0, false)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+        manager.notify(THEME_DL_NOTIF_ID, notification)
+        openDirectory(filePath)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        openDirectory(filePath)
+    }
+}

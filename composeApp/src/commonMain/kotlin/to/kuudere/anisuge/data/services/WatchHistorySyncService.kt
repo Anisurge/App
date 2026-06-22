@@ -96,6 +96,7 @@ class WatchHistorySyncService(
     }
 
     suspend fun sync(
+        differential: Boolean = false,
         onProgress: (WatchHistorySyncProgress) -> Unit,
     ): Result<WatchHistorySyncOutcome> {
         lastMalAt = 0L
@@ -121,6 +122,19 @@ class WatchHistorySyncService(
             fetchSyncEntries(session, onProgress)
         } catch (e: Exception) {
             return Result.failure(e)
+        }
+
+        val existingMal = if (differential && wantMal) {
+            trackingService.fetchMalList().getOrElse { return Result.failure(it) }
+                .associateBy { it.externalId }
+        } else {
+            emptyMap()
+        }
+        val existingAnilist = if (differential && wantAl) {
+            trackingService.fetchAnilistList().getOrElse { return Result.failure(it) }
+                .associateBy { it.externalId }
+        } else {
+            emptyMap()
         }
 
         if (entries.isEmpty()) {
@@ -162,7 +176,14 @@ class WatchHistorySyncService(
                 )
             )
 
-            if (wantMal && malToken != null && entry.malId != null) {
+            val malNeedsSync = entry.malId?.let { id ->
+                !differential || trackerEntryNeedsSync(
+                    existing = existingMal[id],
+                    expectedStatus = entry.malStatus,
+                    expectedProgress = entry.progress,
+                )
+            } ?: false
+            if (wantMal && malToken != null && entry.malId != null && malNeedsSync) {
                 waitMal()
                 if (settingsStore.getMalIsExpired() && trackingService.refreshMalToken()) {
                     malToken = settingsStore.getMalAccessToken()
@@ -187,6 +208,14 @@ class WatchHistorySyncService(
                 }
                 if (anilistId <= 0) {
                     alFail++
+                } else if (
+                    differential && !trackerEntryNeedsSync(
+                        existing = existingAnilist[anilistId],
+                        expectedStatus = entry.anilistStatus,
+                        expectedProgress = entry.progress,
+                    )
+                ) {
+                    // Already matches, or the tracker has further progress.
                 } else {
                     waitAnilist()
                     if (saveAnilist(alToken, anilistId, entry)) alOk++ else alFail++
@@ -213,6 +242,17 @@ class WatchHistorySyncService(
                 anilistFailed = alFail,
             )
         )
+    }
+
+    private fun trackerEntryNeedsSync(
+        existing: TrackingService.ExternalListEntry?,
+        expectedStatus: String,
+        expectedProgress: Int?,
+    ): Boolean {
+        if (existing == null) return true
+        val statusMatches = existing.status.equals(expectedStatus, ignoreCase = true)
+        val progressNeedsUpdate = expectedProgress?.let { it > existing.progress } ?: false
+        return !statusMatches || progressNeedsUpdate
     }
 
     private suspend fun fetchExportJson(

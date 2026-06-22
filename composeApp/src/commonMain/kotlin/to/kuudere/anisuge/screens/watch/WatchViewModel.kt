@@ -397,6 +397,13 @@ class WatchViewModel(
                     episodeData = initialData,
                 )
             }
+            if (data.folder?.uppercase() in setOf("PLANNING", "PLAN_TO_WATCH")) {
+                viewModelScope.launch {
+                    if (syncManager?.isAutoSyncEnabled() == true) {
+                        updateWatchlistStatus("WATCHING")
+                    }
+                }
+            }
 
             coroutineScope {
                 val streamJob = launch {

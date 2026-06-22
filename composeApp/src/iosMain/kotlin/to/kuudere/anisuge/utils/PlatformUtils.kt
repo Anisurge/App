@@ -139,3 +139,8 @@ actual suspend fun muxToMkv(
     // TODO: iOS FFmpeg integration
     return false
 }
+
+actual fun notifyThemeDownloadProgress(percentage: Int) { }
+actual fun notifyThemeDownloadComplete(title: String, filePath: String) {
+    if (filePath.isNotBlank()) openDirectory(filePath)
+}

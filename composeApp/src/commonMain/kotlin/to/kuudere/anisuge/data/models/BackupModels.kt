@@ -28,6 +28,7 @@ data class BackupSettings(
     val notificationsNewEpisode: Boolean,
     val notificationsAnnouncement: Boolean,
     val notificationReminderMinutes: Int = 0,
+    val trackerAutoSync: Boolean = false,
     val floatingBottomNav: Boolean,
     val liquidGlassBottomNav: Boolean,
     val expandedHeroCarousel: Boolean,

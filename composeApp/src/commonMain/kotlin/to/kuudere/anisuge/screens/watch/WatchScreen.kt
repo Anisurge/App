@@ -2483,6 +2483,19 @@ fun WatchVideoPlayer(
                         val duration = playerState.duration.takeIf { it > 0 }
                             ?: (playerState.position + 120.0)
                         viewModel.saveProgress(playerState.position, duration, language = trackLang)
+                        val watchedPercent = if (duration > 0.0) {
+                            (playerState.position / duration) * 100.0
+                        } else {
+                            0.0
+                        }
+                        if (watchedPercent >= uiState.syncPercentage) {
+                            val anime = uiState.episodeData?.anime
+                            viewModel.markEpisodeWatched(
+                                anilistId = anime?.anilistId ?: uiState.episodeData?.anilistId,
+                                malId = anime?.malId ?: uiState.episodeData?.malId,
+                                totalEpisodes = anime?.epCount,
+                            )
+                        }
                     }
                 }
             }
@@ -2546,6 +2559,13 @@ fun WatchVideoPlayer(
                 onDispose { DiscordRichPresenceManager.clear() }
             }
 
+            val discordPresenceEnabled by AppComponent.settingsStore.discordRichPresenceFlow
+                .collectAsState(initial = false)
+            LaunchedEffect(discordPresenceEnabled) {
+                DiscordRichPresenceManager.configure(discordPresenceEnabled)
+                if (!discordPresenceEnabled) DiscordRichPresenceManager.clear()
+            }
+
             val presencePositionBucket = (playerState.position / 15).toInt()
             LaunchedEffect(
                 animeTitle,
@@ -2556,6 +2576,7 @@ fun WatchVideoPlayer(
                 playerState.duration,
                 presencePositionBucket,
             ) {
+                if (!discordPresenceEnabled) return@LaunchedEffect
                 val presenceTitle = animeTitle?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
                 val episodeLabel = currentEp?.titles?.firstOrNull()?.takeIf { !it.isNullOrBlank() }
                 val state = buildString {

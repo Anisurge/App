@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -45,7 +46,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
 import io.ktor.client.call.body
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.isSuccess
+import io.ktor.utils.io.readAvailable
+import okio.buffer
+import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.platform.KmpFileSystem
+import to.kuudere.anisuge.utils.getDownloadsDirectory
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -301,6 +312,7 @@ fun AnimeInfoScreen(
                         onBack = onBack,
                         onPosterClick = { previewImageUrl = it },
                         showFullAnimeTitles = showFullAnimeTitles,
+                        onExpandThemes = { viewModel.expandThemes() },
                     )
                 } else {
                     MobileLayout(
@@ -326,6 +338,7 @@ fun AnimeInfoScreen(
                         onAnimeClick = onAnimeClick,
                         onPosterClick = { previewImageUrl = it },
                         showFullAnimeTitles = showFullAnimeTitles,
+                        onExpandThemes = { viewModel.expandThemes() },
                     )
                 }
 
@@ -488,54 +501,165 @@ private fun FranchiseOrderSection(
 @Composable
 private fun AnimeThemesSection(
     state: AnimeInfoUiState,
+    onExpand: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var isExpanded by remember { mutableStateOf(false) }
     var selectedTheme by remember { mutableStateOf<AnimeThemeItem?>(null) }
+    var downloadStatus by remember { mutableStateOf<String?>(null) }
     val grouped = state.themes.groupBy { it.type.uppercase() }
-    if (grouped.isEmpty() && !state.isLoadingThemes) return
+
+    LaunchedEffect(downloadStatus) {
+        if (downloadStatus != null) {
+            kotlinx.coroutines.delay(3000)
+            downloadStatus = null
+        }
+    }
 
     Column(modifier) {
-        Text(
-            text = "Openings & Endings",
-            color = AppColors.text,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.height(12.dp))
-        if (state.isLoadingThemes) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
-                color = AppColors.accent,
-                trackColor = AppColors.surface,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    isExpanded = !isExpanded
+                    if (isExpanded) onExpand()
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Openings & Endings",
+                color = AppColors.text,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
             )
-        } else {
-            listOf("OP", "ED", "IN").forEach { type ->
-                val themes = grouped[type].orEmpty()
-                if (themes.isEmpty()) return@forEach
-                Text(
-                    text = themes.first().displayType + "s",
-                    color = AppColors.textMuted,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(8.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(themes, key = { it.id }) { theme ->
-                        ThemeCard(theme = theme, onClick = { selectedTheme = theme })
+            Icon(
+                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (isExpanded) "Collapse" else "Expand",
+                tint = AppColors.textMuted,
+            )
+        }
+
+        AnimatedVisibility(visible = isExpanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            Column {
+                Spacer(Modifier.height(12.dp))
+                if (state.isLoadingThemes) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            color = AppColors.accent,
+                            modifier = Modifier.size(32.dp),
+                            strokeWidth = 3.dp,
+                        )
+                    }
+                } else if (grouped.isNotEmpty()) {
+                    listOf("OP", "ED", "IN").forEach { type ->
+                        val themes = grouped[type].orEmpty()
+                        if (themes.isEmpty()) return@forEach
+                        Text(
+                            text = themes.first().displayType + "s",
+                            color = AppColors.textMuted,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(themes, key = { it.id }) { theme ->
+                                ThemeCard(
+                                    theme = theme,
+                                    onClick = { selectedTheme = theme },
+                                    onDownload = {
+                                        downloadThemeFile(theme.playableUrl, theme.songTitle) { downloadStatus = it }
+                                    },
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
                     }
                 }
-                Spacer(Modifier.height(14.dp))
+                downloadStatus?.let { status ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = status,
+                        color = if (status.startsWith("Downloaded")) Color(0xFF4CAF50) else AppColors.textMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
 
     selectedTheme?.let { theme ->
-        ThemePreviewDialog(theme = theme, onDismiss = { selectedTheme = null })
+        ThemePreviewDialog(
+            theme = theme,
+            onDismiss = { selectedTheme = null },
+            onDownload = { downloadThemeFile(theme.playableUrl, theme.songTitle) { downloadStatus = it } },
+        )
+    }
+}
+
+private fun downloadThemeFile(url: String?, title: String, onStatus: (String) -> Unit) {
+    if (url == null) { onStatus("No URL"); return }
+    AppComponent.appScope.launch {
+        try {
+            onStatus("Downloading...")
+            to.kuudere.anisuge.utils.notifyThemeDownloadProgress(0)
+            var httpOk = false
+            AppComponent.httpClient.prepareGet(url) {
+                timeout { requestTimeoutMillis = Long.MAX_VALUE }
+            }.execute { response ->
+                if (!response.status.isSuccess()) {
+                    onStatus("Download failed (HTTP ${response.status.value})")
+                    return@execute
+                }
+                httpOk = true
+                val contentLength = response.headers["Content-Length"]?.toLongOrNull() ?: -1L
+                val channel = response.bodyAsChannel()
+                val safeName = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(80)
+                val ext = url.substringAfterLast('.', "mp4").take(10)
+                val fileName = "$safeName.$ext"
+                val downloadsDir = getDownloadsDirectory()
+                KmpFileSystem.createDirectories(downloadsDir, mustCreate = false)
+                val outputPath = "$downloadsDir/$fileName"
+                val sink = KmpFileSystem.sink(outputPath).buffer()
+                val buf = ByteArray(64 * 1024)
+                var total = 0L
+                var lastPct = -1
+                try {
+                    while (true) {
+                        val read = channel.readAvailable(buf)
+                        if (read == -1) break
+                        sink.write(buf, offset = 0, byteCount = read)
+                        total += read
+                        if (contentLength > 0L) {
+                            val pct = ((total * 100) / contentLength).toInt().coerceIn(0, 100)
+                            if (pct != lastPct) {
+                                lastPct = pct
+                                onStatus("Downloading... $pct%")
+                                to.kuudere.anisuge.utils.notifyThemeDownloadProgress(pct)
+                            }
+                        }
+                    }
+                } finally {
+                    sink.close()
+                }
+                onStatus("Downloaded ✓")
+                to.kuudere.anisuge.utils.openDirectory(outputPath)
+                to.kuudere.anisuge.utils.notifyThemeDownloadComplete(title, outputPath)
+            }
+            if (!httpOk) return@launch
+        } catch (e: Exception) {
+            onStatus("Download error: ${e.message ?: "Unknown"}")
+            to.kuudere.anisuge.utils.notifyThemeDownloadComplete(title, "")
+        }
     }
 }
 
 @Composable
-private fun ThemeCard(theme: AnimeThemeItem, onClick: () -> Unit) {
+private fun ThemeCard(theme: AnimeThemeItem, onClick: () -> Unit, onDownload: () -> Unit) {
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -545,15 +669,30 @@ private fun ThemeCard(theme: AnimeThemeItem, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = AppColors.accent)
-            Spacer(Modifier.width(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = AppColors.accent, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
             Text(
                 text = "${theme.displayType} ${theme.sequence ?: ""}".trim(),
                 color = AppColors.text,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
             )
+            IconButton(
+                onClick = onDownload,
+                modifier = Modifier.size(24.dp),
+            ) {
+                Icon(
+                    Icons.Default.Download,
+                    contentDescription = "Download",
+                    tint = AppColors.accent,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
         Spacer(Modifier.height(8.dp))
         Text(
@@ -590,7 +729,7 @@ private fun ThemeCard(theme: AnimeThemeItem, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ThemePreviewDialog(theme: AnimeThemeItem, onDismiss: () -> Unit) {
+private fun ThemePreviewDialog(theme: AnimeThemeItem, onDismiss: () -> Unit, onDownload: () -> Unit) {
     val url = theme.playableUrl ?: return
     val playerState = rememberVideoPlayerState(
         url = url,
@@ -615,11 +754,16 @@ private fun ThemePreviewDialog(theme: AnimeThemeItem, onDismiss: () -> Unit) {
                     .background(Color.Black),
             ) {
                 VideoPlayerSurface(state = playerState, modifier = Modifier.fillMaxSize())
-                IconButton(
-                    onClick = onDismiss,
+                Row(
                     modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                    IconButton(onClick = onDownload) {
+                        Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White)
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                    }
                 }
             }
             Column(Modifier.padding(16.dp)) {
@@ -1090,6 +1234,7 @@ private fun MobileLayout(
     onAnimeClick: (String) -> Unit,
     onPosterClick: (String) -> Unit = {},
     showFullAnimeTitles: Boolean = false,
+    onExpandThemes: () -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
 
@@ -1319,7 +1464,7 @@ private fun MobileLayout(
                     )
 
                     Spacer(Modifier.height(18.dp))
-                    AnimeThemesSection(state = state, modifier = Modifier.padding(horizontal = 16.dp))
+                    AnimeThemesSection(state = state, onExpand = onExpandThemes, modifier = Modifier.padding(horizontal = 16.dp))
                     Spacer(Modifier.height(18.dp))
 
                     // Custom Tabs
@@ -1460,6 +1605,7 @@ private fun DesktopLayout(
     onBack: () -> Unit,
     onPosterClick: (String) -> Unit = {},
     showFullAnimeTitles: Boolean = false,
+    onExpandThemes: () -> Unit = {},
 ) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val baseWidth = 1400.dp
@@ -1836,7 +1982,7 @@ private fun DesktopLayout(
                         )
 
                         Spacer(Modifier.height(24.dp))
-                        AnimeThemesSection(state = state, modifier = Modifier.fillMaxWidth())
+                        AnimeThemesSection(state = state, onExpand = onExpandThemes, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(30.dp))
 
                         val episodesPerPage = 100

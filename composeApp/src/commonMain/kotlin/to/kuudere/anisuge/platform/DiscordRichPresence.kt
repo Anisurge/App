@@ -9,8 +9,17 @@ data class DiscordPresenceActivity(
     val smallImageText: String? = null,
 )
 
+data class DiscordPresenceAvailability(
+    val supported: Boolean,
+    val status: String,
+)
+
 expect object DiscordRichPresenceManager {
-    fun configureMobile(enabled: Boolean, token: String)
+    val availability: DiscordPresenceAvailability
+    val isAuthenticated: Boolean
+    fun configure(enabled: Boolean)
+    fun authenticate(token: String)
+    fun logout()
     fun update(activity: DiscordPresenceActivity)
     fun clear()
     fun shutdown()

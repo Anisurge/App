@@ -30,6 +30,9 @@ expect fun deleteDownloadWorkDirectory(path: String): Boolean
 
 expect fun fileSize(path: String): Long
 
+expect fun notifyThemeDownloadProgress(percentage: Int)
+expect fun notifyThemeDownloadComplete(title: String, filePath: String)
+
 @androidx.compose.runtime.Composable
 expect fun rememberDownloadDirectoryPicker(onPicked: (String?) -> Unit): () -> Unit
 

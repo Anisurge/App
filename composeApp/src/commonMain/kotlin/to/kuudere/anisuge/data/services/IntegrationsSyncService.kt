@@ -11,6 +11,7 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.flow.first
 import to.kuudere.anisuge.data.models.BffIntegrationsPayload
 import to.kuudere.anisuge.data.models.BffIntegrationsResponse
 import to.kuudere.anisuge.data.services.AnisurgeApi.applyAnisurgeAuth
@@ -69,6 +70,25 @@ class IntegrationsSyncService(
         )
     }
 
+    suspend fun pushDiscordTokenToServer(token: String): Boolean {
+        val session = sessionStore.get() ?: return false
+        if (!sessionStore.isValid(session)) return false
+        return patch(
+            session,
+            BffIntegrationsPayload(discordToken = token),
+        )
+    }
+
+    suspend fun clearDiscordTokenOnServer(): Boolean {
+        val session = sessionStore.get() ?: return false
+        if (!sessionStore.isValid(session)) return false
+        return patch(
+            session,
+            BffIntegrationsPayload(discordToken = null),
+            json = clearJson,
+        )
+    }
+
     suspend fun clearLunarOnServer(): Boolean {
         val session = sessionStore.get() ?: return false
         if (!sessionStore.isValid(session)) return false
@@ -107,7 +127,7 @@ class IntegrationsSyncService(
             val localHasLunar = !settingsStore.getLunarAccessToken().isNullOrBlank()
             val remoteHasMal = !remote.malAccessToken.isNullOrBlank()
             val remoteHasAnilist = !remote.anilistAccessToken.isNullOrBlank()
-            val remoteHasLunar = !remote.lunarAccessToken.isNullOrBlank()
+        val remoteHasLunar = !remote.lunarAccessToken.isNullOrBlank()
 
             // One-time migration: local links from before server sync → upload instead of wiping.
             if ((localHasMal && !remoteHasMal) || (localHasAnilist && !remoteHasAnilist) || (localHasLunar && !remoteHasLunar)) {
@@ -116,6 +136,11 @@ class IntegrationsSyncService(
             }
 
             applyToLocal(remote)
+            val localDiscord = settingsStore.getDiscordToken().orEmpty()
+            val remoteDiscord = remote.discordToken.orEmpty()
+            if (remoteDiscord.isNotEmpty() && remoteDiscord != localDiscord) {
+                settingsStore.setDiscordToken(remoteDiscord)
+            }
             true
         } catch (e: Exception) {
             println("[IntegrationsSync] restore error: ${e.message}")
@@ -124,6 +149,7 @@ class IntegrationsSyncService(
     }
 
     private suspend fun applyToLocal(remote: BffIntegrationsPayload) {
+        remote.trackerAutoSync?.let { settingsStore.setTrackerAutoSync(it) }
         val malToken = remote.malAccessToken?.trim().orEmpty()
         if (malToken.isEmpty()) {
             settingsStore.clearMalTokens()
@@ -189,6 +215,7 @@ class IntegrationsSyncService(
         val lunExpires = settingsStore.getLunarExpiresAt().takeIf { it > 0 }
         val lunUser = settingsStore.getLunarUsername()
         val lunUserId = settingsStore.getLunarUserId()
+        val trackerAutoSync = settingsStore.trackerAutoSyncFlow.first()
         return BffIntegrationsPayload(
             malAccessToken = malAccess,
             malRefreshToken = malRefresh,
@@ -202,6 +229,7 @@ class IntegrationsSyncService(
             lunarExpiresAt = lunExpires,
             lunarUsername = lunUser,
             lunarUserId = lunUserId,
+            trackerAutoSync = trackerAutoSync,
         )
     }
 

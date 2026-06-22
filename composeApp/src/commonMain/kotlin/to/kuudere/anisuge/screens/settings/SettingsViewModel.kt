@@ -37,6 +37,7 @@ import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.LibrarySyncDirection
 import to.kuudere.anisuge.data.services.MalAnilistIdCache
 import to.kuudere.anisuge.data.services.TrackingService
+import to.kuudere.anisuge.data.services.AutoTrackingSyncService
 import to.kuudere.anisuge.data.services.WatchHistorySyncProgress
 import to.kuudere.anisuge.data.services.WatchHistorySyncService
 import to.kuudere.anisuge.data.models.SessionCheckResult
@@ -109,12 +110,21 @@ data class SettingsUiState(
     val notificationsNewEpisode: Boolean = true,
     val notificationReminderMinutes: Int = 0,
     val hasNotificationPrefsChanges: Boolean = false,
+    val discordRichPresence: Boolean = false,
+    val discordToken: String? = null,
+    val showDiscordLoginDialog: Boolean = false,
 
     // Tracking
     val malConnected: Boolean = false,
     val malUsername: String? = null,
     val anilistConnected: Boolean = false,
     val anilistUsername: String? = null,
+    val trackerAutoSync: Boolean = false,
+    val trackerAutoSyncBusy: Boolean = false,
+    val trackerPendingCount: Int = 0,
+    val trackerLastSuccessAt: Long? = null,
+    val trackerMalError: String? = null,
+    val trackerAnilistError: String? = null,
     val isConnectingMal: Boolean = false,
     val isConnectingAnilist: Boolean = false,
     val isUploadingPfp: Boolean = false,
@@ -221,6 +231,7 @@ sealed class SettingsTab {
     data object Sync : SettingsTab()
     data object Backup : SettingsTab()
     data object Connect : SettingsTab()
+    data object Discord : SettingsTab()
     data object Community : SettingsTab()
     data object Servers : SettingsTab()
     data object Notifications : SettingsTab()
@@ -244,6 +255,7 @@ class SettingsViewModel(
     private val stickerService: to.kuudere.anisuge.data.services.StickerService,
     private val bffRewardsService: to.kuudere.anisuge.data.services.BffRewardsService,
     private val notificationService: to.kuudere.anisuge.data.services.NotificationService,
+    private val autoTrackingSyncService: AutoTrackingSyncService,
     private val storageService: StorageService = StorageService(),
 ) : ViewModel() {
 
@@ -261,11 +273,18 @@ class SettingsViewModel(
 
     private data class ResolvedTrackerImport(
         val entry: TrackingService.ExternalListEntry,
-        val match: AnimeItem,
+        val match: AnimeItem?,
         val animeId: String,
         val malId: Int?,
         val anilistId: Int?,
         val duplicateAnimeId: String? = null,
+    )
+
+    private data class ExistingTrackerImport(
+        val animeId: String,
+        val folder: String,
+        val malId: Int?,
+        val anilistId: Int?,
     )
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -312,6 +331,22 @@ class SettingsViewModel(
             }
         }
         viewModelScope.launch {
+            settingsStore.discordRichPresenceFlow.collect { enabled ->
+                _uiState.update { it.copy(discordRichPresence = enabled) }
+                to.kuudere.anisuge.platform.DiscordRichPresenceManager.configure(enabled)
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.discordTokenFlow.collect { token ->
+                _uiState.update { it.copy(discordToken = token) }
+                if (!token.isNullOrBlank()) {
+                    to.kuudere.anisuge.platform.DiscordRichPresenceManager.authenticate(token)
+                } else {
+                    to.kuudere.anisuge.platform.DiscordRichPresenceManager.logout()
+                }
+            }
+        }
+        viewModelScope.launch {
             settingsStore.autoNextFlow.collect { v ->
                 if (!_uiState.value.hasSettingsChanges) {
                     _uiState.update { it.copy(settings = it.settings.copy(autoNext = v)) }
@@ -343,6 +378,19 @@ class SettingsViewModel(
             settingsStore.syncPercentageFlow.collect { v ->
                 if (!_uiState.value.hasSettingsChanges) {
                     _uiState.update { it.copy(settings = it.settings.copy(syncPercentage = v.toDouble())) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            autoTrackingSyncService.status.collect { value ->
+                _uiState.update {
+                    it.copy(
+                        trackerAutoSync = value.enabled,
+                        trackerPendingCount = value.pendingCount,
+                        trackerLastSuccessAt = value.lastSuccessAt,
+                        trackerMalError = value.malError,
+                        trackerAnilistError = value.anilistError,
+                    )
                 }
             }
         }
@@ -492,6 +540,154 @@ class SettingsViewModel(
 
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, successMessage = null) }
+    }
+
+    fun setTrackerAutoSync(enabled: Boolean) {
+        if (_uiState.value.trackerAutoSyncBusy) return
+        if (!enabled) {
+            viewModelScope.launch {
+                autoTrackingSyncService.setEnabled(false)
+                integrationsSyncService.pushFromLocal()
+                _uiState.update {
+                    it.copy(
+                        trackerAutoSync = false,
+                        successMessage = "Automatic tracker sync disabled.",
+                    )
+                }
+            }
+            return
+        }
+        val snapshot = _uiState.value
+        if (!snapshot.malConnected && !snapshot.anilistConnected) {
+            _uiState.update { it.copy(errorMessage = "Connect MAL or AniList before enabling Auto Sync.") }
+            return
+        }
+        viewModelScope.launch(Dispatchers.Default) {
+            _uiState.update {
+                it.copy(
+                    trackerAutoSyncBusy = true,
+                    isWatchHistorySyncing = true,
+                    watchHistoryCurrent = 0,
+                    watchHistoryTotal = 0,
+                    watchHistoryDetail = "Preparing initial library merge...",
+                    errorMessage = null,
+                    successMessage = null,
+                )
+            }
+            try {
+                if (snapshot.malConnected) {
+                    runTrackerImportAndAwait(fromAnilist = false)
+                }
+                if (snapshot.anilistConnected) {
+                    runTrackerImportAndAwait(fromAnilist = true)
+                }
+                _uiState.update {
+                    it.copy(
+                        isWatchHistorySyncing = true,
+                        watchHistoryDetail = "Pushing the merged library to connected trackers...",
+                    )
+                }
+                val result = watchHistorySyncService.sync(differential = true) { progress ->
+                    _uiState.update {
+                        it.copy(
+                            watchHistoryCurrent = progress.current,
+                            watchHistoryTotal = progress.total,
+                            watchHistoryDetail = progress.detail,
+                            watchHistoryMalDone = progress.malServiceDone,
+                            watchHistoryAnilistDone = progress.anilistServiceDone,
+                        )
+                    }
+                }
+                result.getOrThrow()
+                autoTrackingSyncService.setEnabled(true)
+                integrationsSyncService.pushFromLocal()
+                _uiState.update {
+                    it.copy(
+                        trackerAutoSync = true,
+                        trackerAutoSyncBusy = false,
+                        isWatchHistorySyncing = false,
+                        watchHistoryDetail = null,
+                        successMessage = "Initial merge complete. Auto Sync is now active.",
+                    )
+                }
+            } catch (e: Exception) {
+                autoTrackingSyncService.setEnabled(false)
+                _uiState.update {
+                    it.copy(
+                        trackerAutoSync = false,
+                        trackerAutoSyncBusy = false,
+                        isWatchHistorySyncing = false,
+                        watchHistoryDetail = null,
+                        errorMessage = "Could not enable Auto Sync: ${e.message ?: "initial merge failed"}",
+                    )
+                }
+            }
+        }
+    }
+
+    fun setDiscordRichPresence(enabled: Boolean) {
+        viewModelScope.launch {
+            val manager = to.kuudere.anisuge.platform.DiscordRichPresenceManager
+            if (enabled && !manager.availability.supported) {
+                _uiState.update { it.copy(errorMessage = manager.availability.status) }
+                return@launch
+            }
+            settingsStore.setDiscordRichPresence(enabled)
+            manager.configure(enabled)
+            if (!enabled) manager.clear()
+        }
+    }
+
+    fun startDiscordLogin() {
+        _uiState.update { it.copy(showDiscordLoginDialog = true) }
+    }
+
+    fun dismissDiscordLogin() {
+        _uiState.update { it.copy(showDiscordLoginDialog = false) }
+    }
+
+    fun saveDiscordToken(token: String) {
+        val manager = to.kuudere.anisuge.platform.DiscordRichPresenceManager
+        if (!manager.availability.supported) {
+            _uiState.update { it.copy(errorMessage = manager.availability.status) }
+            return
+        }
+        viewModelScope.launch {
+            settingsStore.setDiscordToken(token)
+            integrationsSyncService.pushDiscordTokenToServer(token)
+            manager.authenticate(token)
+            settingsStore.setDiscordRichPresence(true)
+            manager.configure(true)
+        }
+    }
+
+    fun disconnectDiscord() {
+        viewModelScope.launch {
+            integrationsSyncService.clearDiscordTokenOnServer()
+            settingsStore.setDiscordToken(null)
+            settingsStore.setDiscordRichPresence(false)
+            to.kuudere.anisuge.platform.DiscordRichPresenceManager.logout()
+        }
+    }
+
+    private suspend fun runTrackerImportAndAwait(fromAnilist: Boolean) {
+        importLibraryFromTracker(fromAnilist)
+        // The importer owns its own ViewModel job so wait until it publishes start and completion.
+        repeat(20) {
+            val active = if (fromAnilist) {
+                _uiState.value.isImportingAnilist
+            } else {
+                _uiState.value.isImportingMal
+            }
+            if (active) return@repeat
+            delay(25)
+        }
+        while (
+            if (fromAnilist) _uiState.value.isImportingAnilist
+            else _uiState.value.isImportingMal
+        ) {
+            delay(100)
+        }
     }
 
     fun startPremiumCheckout(openUrl: (String) -> Unit) {
@@ -1816,14 +2012,23 @@ class SettingsViewModel(
                     )
                 }
 
-                val existingAnimeIdByKey = loadTrackerImportExistingKeys()
+                val existingByKey = loadTrackerImportExistingEntries()
                 val seenKeys = mutableSetOf<String>()
                 var imported = 0
                 var completed = 0
                 entries.chunked(TRACKING_IMPORT_CONCURRENCY).forEach { chunk ->
                     val results = chunk.map { entry ->
                         async {
-                            val resolved = resolveImportedTrackerImport(entry, fromAnilist, existingAnimeIdByKey)
+                            val entryKey = trackerImportKey(entry.malId, entry.anilistId)
+                            val existing = entryKey?.let { synchronized(existingByKey) { existingByKey[it] } }
+                            val targetFolder = entry.toAnisurgeFolder(fromAnilist)
+                            if (existing != null && existing.folder == targetFolder) {
+                                return@async TrackerImportResult(
+                                    imported = true,
+                                    detail = entry.title ?: existing.animeId,
+                                )
+                            }
+                            val resolved = resolveImportedTrackerImport(entry, fromAnilist, existingByKey)
                                 ?: return@async TrackerImportResult(
                                     imported = false,
                                     detail = entry.title?.let { "Skipped $it" }
@@ -1839,24 +2044,37 @@ class SettingsViewModel(
                                 }
                                 if (alreadyHandled) return@async TrackerImportResult(
                                     imported = true,
-                                    detail = resolved.entry.title ?: resolved.match.displayTitle,
+                                    detail = resolved.entry.title ?: resolved.match?.displayTitle ?: resolved.animeId,
                                 )
                             }
                             val ok = watchlistService.updateStatus(
                                 animeId = resolved.animeId,
-                                folder = entry.toAnisurgeFolder(fromAnilist),
+                                folder = targetFolder,
                                 anilistId = resolved.anilistId,
                                 malId = resolved.malId,
+                                suppressTrackerSync = true,
                             ) != null
                             if (ok) {
                                 resolved.duplicateAnimeId
                                     ?.takeIf { it.isNotBlank() && it != resolved.animeId }
-                                    ?.let { duplicateId -> watchlistService.removeFromWatchlist(duplicateId) }
-                                key?.let { existingAnimeIdByKey[it] = resolved.animeId }
+                                    ?.let { duplicateId ->
+                                        watchlistService.removeFromWatchlist(
+                                            duplicateId,
+                                            suppressTrackerSync = true,
+                                        )
+                                }
+                                key?.let {
+                                    existingByKey[it] = ExistingTrackerImport(
+                                        animeId = resolved.animeId,
+                                        folder = targetFolder,
+                                        malId = resolved.malId,
+                                        anilistId = resolved.anilistId,
+                                    )
+                                }
                             }
                             TrackerImportResult(
                                 imported = ok,
-                                detail = entry.title ?: resolved.match.displayTitle,
+                                detail = entry.title ?: resolved.match?.displayTitle ?: resolved.animeId,
                             )
                         }
                     }.awaitAll()
@@ -1943,20 +2161,32 @@ class SettingsViewModel(
     private suspend fun resolveImportedTrackerImport(
         entry: TrackingService.ExternalListEntry,
         fromAnilist: Boolean,
-        existingAnimeIdByKey: MutableMap<String, String>,
+        existingByKey: MutableMap<String, ExistingTrackerImport>,
     ): ResolvedTrackerImport? {
+        val initialKey = trackerImportKey(entry.malId, entry.anilistId)
+        val existing = initialKey?.let { synchronized(existingByKey) { existingByKey[it] } }
+        if (existing != null) {
+            return ResolvedTrackerImport(
+                entry = entry,
+                match = null,
+                animeId = existing.animeId,
+                malId = entry.malId ?: existing.malId,
+                anilistId = entry.anilistId ?: existing.anilistId,
+            )
+        }
+
         val match = resolveImportedTrackerAnime(entry, fromAnilist) ?: return null
         val ids = resolveTrackerImportIds(entry, fromAnilist, match)
         val key = trackerImportKey(ids.first, ids.second)
-        val existingAnimeId = key?.let { synchronized(existingAnimeIdByKey) { existingAnimeIdByKey[it] } }
-        val targetAnimeId = existingAnimeId?.takeIf { it.isNotBlank() } ?: match.animeId
+        val resolvedExisting = key?.let { synchronized(existingByKey) { existingByKey[it] } }
+        val targetAnimeId = resolvedExisting?.animeId?.takeIf { it.isNotBlank() } ?: match.animeId
         return ResolvedTrackerImport(
             entry = entry,
             match = match,
             animeId = targetAnimeId,
             malId = ids.first,
             anilistId = ids.second,
-            duplicateAnimeId = match.animeId.takeIf { existingAnimeId != null && it != targetAnimeId },
+            duplicateAnimeId = match.animeId.takeIf { resolvedExisting != null && it != targetAnimeId },
         )
     }
 
@@ -1985,15 +2215,23 @@ class SettingsViewModel(
         return malId to anilistId
     }
 
-    private suspend fun loadTrackerImportExistingKeys(): MutableMap<String, String> {
+    private suspend fun loadTrackerImportExistingEntries(): MutableMap<String, ExistingTrackerImport> {
         val cache = malAnilistIdCache.getAll()
-        val out = mutableMapOf<String, String>()
+        val out = mutableMapOf<String, ExistingTrackerImport>()
         loadAllWatchlistEntries().forEach { item ->
             val animeId = item.effectiveAnimeId.takeIf { it.isNotBlank() } ?: return@forEach
             val malId = item.anime.malId?.takeIf { it > 0 }
             val anilistId = item.anime.anilistId?.takeIf { it > 0 } ?: malId?.let { cache[it] }
+            val existing = ExistingTrackerImport(
+                animeId = animeId,
+                folder = item.effectiveFolder?.uppercase() ?: "WATCHING",
+                malId = malId,
+                anilistId = anilistId,
+            )
+            malId?.let { out.putIfAbsent("mal:$it", existing) }
+            anilistId?.let { out.putIfAbsent("anilist:$it", existing) }
             trackerImportKey(malId, anilistId)?.let { key ->
-                out.putIfAbsent(key, animeId)
+                out.putIfAbsent(key, existing)
             }
         }
         return out

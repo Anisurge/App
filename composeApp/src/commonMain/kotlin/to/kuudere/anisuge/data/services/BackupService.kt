@@ -37,6 +37,7 @@ class BackupService(
             notificationsNewEpisode = settingsStore.notificationsNewEpisodeFlow.first(),
             notificationsAnnouncement = settingsStore.notificationsAnnouncementFlow.first(),
             notificationReminderMinutes = settingsStore.notificationReminderMinutesFlow.first(),
+            trackerAutoSync = settingsStore.trackerAutoSyncFlow.first(),
             floatingBottomNav = settingsStore.floatingBottomNavFlow.first(),
             liquidGlassBottomNav = settingsStore.liquidGlassBottomNavFlow.first(),
             expandedHeroCarousel = settingsStore.expandedHeroCarouselFlow.first(),
@@ -88,6 +89,7 @@ class BackupService(
                     notes = entry.notes,
                     anilistId = entry.anime.anilistId,
                     malId = entry.anime.malId,
+                    suppressTrackerSync = true,
                 )
                 if (result != null) watchlistImported++ else failed++
             }
@@ -157,6 +159,7 @@ class BackupService(
         settingsStore.setNotificationsNewEpisode(value.notificationsNewEpisode)
         settingsStore.setNotificationsAnnouncement(value.notificationsAnnouncement)
         settingsStore.setNotificationReminderMinutes(value.notificationReminderMinutes)
+        settingsStore.setTrackerAutoSync(value.trackerAutoSync)
         settingsStore.setFloatingBottomNav(value.floatingBottomNav)
         settingsStore.setLiquidGlassBottomNav(value.liquidGlassBottomNav)
         settingsStore.setExpandedHeroCarousel(value.expandedHeroCarousel)

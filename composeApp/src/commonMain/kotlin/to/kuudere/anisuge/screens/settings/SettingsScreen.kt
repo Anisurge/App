@@ -72,6 +72,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -157,6 +158,7 @@ import to.kuudere.anisuge.i18n.AppStrings
 import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.screens.settings.SettingsTab
+import to.kuudere.anisuge.platform.DiscordLoginDialog
 import to.kuudere.anisuge.platform.openUrl
 import to.kuudere.anisuge.utils.rememberDownloadDirectoryPicker
 import to.kuudere.anisuge.theme.AppThemeId
@@ -343,6 +345,7 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Backup, "Backup & Restore", Icons.Default.Storage))
         add(SettingsNavItem(SettingsTab.Connect, "Connect", Icons.Default.Link))
+        add(SettingsNavItem(SettingsTab.Discord, "Discord RPC", Icons.Default.PlayArrow))
         // Community — not ready yet
         // add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
@@ -1231,6 +1234,7 @@ private fun MobileSettingsDetail(
                     onImportFromAniList = viewModel::importLibraryFromAniList,
                     onSyncToMAL = viewModel::syncAllToMAL,
                     onSyncToAniList = viewModel::syncAllToAniList,
+                    onAutoSyncChange = viewModel::setTrackerAutoSync,
                 )
 
                 is SettingsTab.Backup -> BackupTab(
@@ -1252,6 +1256,26 @@ private fun MobileSettingsDetail(
                     onImportLunar = viewModel::importLibraryFromLunar,
                     onExportLunar = viewModel::exportLibraryToLunar,
                 )
+
+                is SettingsTab.Discord -> {
+                    DiscordRichPresenceTab(
+                        uiState = uiState,
+                        onConnect = { viewModel.setDiscordRichPresence(true) },
+                        onDisconnect = { viewModel.setDiscordRichPresence(false) },
+                        onSaveToken = viewModel::saveDiscordToken,
+                        onDisconnectAccount = viewModel::disconnectDiscord,
+                        onStartLogin = viewModel::startDiscordLogin,
+                    )
+                    if (uiState.showDiscordLoginDialog) {
+                        DiscordLoginDialog(
+                            onDismiss = viewModel::dismissDiscordLogin,
+                            onToken = {
+                                viewModel.dismissDiscordLogin()
+                                viewModel.saveDiscordToken(it)
+                            },
+                        )
+                    }
+                }
 
                 is SettingsTab.Community -> {
                     // Community tab hidden — not yet ready (restore CommunityTab when shipping)
@@ -1405,6 +1429,7 @@ private fun SettingsContent(
                 onImportFromAniList = viewModel::importLibraryFromAniList,
                 onSyncToMAL = viewModel::syncAllToMAL,
                 onSyncToAniList = viewModel::syncAllToAniList,
+                onAutoSyncChange = viewModel::setTrackerAutoSync,
             )
 
             is SettingsTab.Backup -> BackupTab(
@@ -1426,6 +1451,26 @@ private fun SettingsContent(
                 onImportLunar = viewModel::importLibraryFromLunar,
                 onExportLunar = viewModel::exportLibraryToLunar,
             )
+
+            is SettingsTab.Discord -> {
+                DiscordRichPresenceTab(
+                    uiState = uiState,
+                    onConnect = { viewModel.setDiscordRichPresence(true) },
+                    onDisconnect = { viewModel.setDiscordRichPresence(false) },
+                    onSaveToken = viewModel::saveDiscordToken,
+                    onDisconnectAccount = viewModel::disconnectDiscord,
+                    onStartLogin = viewModel::startDiscordLogin,
+                )
+                if (uiState.showDiscordLoginDialog) {
+                    DiscordLoginDialog(
+                        onDismiss = viewModel::dismissDiscordLogin,
+                        onToken = {
+                            viewModel.dismissDiscordLogin()
+                            viewModel.saveDiscordToken(it)
+                        },
+                    )
+                }
+            }
 
             is SettingsTab.Community -> {
                 Box(Modifier.fillMaxSize())
@@ -1691,6 +1736,7 @@ private fun SyncTab(
     onImportFromAniList: () -> Unit,
     onSyncToMAL: () -> Unit,
     onSyncToAniList: () -> Unit,
+    onAutoSyncChange: (Boolean) -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1715,6 +1761,95 @@ private fun SyncTab(
             onConnectAnilist = onConnectAnilist,
             onDisconnectAnilist = onDisconnectAnilist,
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SettingCard(
+            title = "Automatic tracking sync",
+            description = "Mirror list changes and completed episodes to every connected tracker.",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (uiState.trackerAutoSync) "Auto Sync enabled" else "Auto Sync disabled",
+                            color = TEXT,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            buildString {
+                                append(if (uiState.malConnected) "MAL connected" else "MAL not connected")
+                                append("  •  ")
+                                append(if (uiState.anilistConnected) "AniList connected" else "AniList not connected")
+                            },
+                            color = MUTED,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                        )
+                    }
+                    if (uiState.trackerAutoSyncBusy) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        Switch(
+                            checked = uiState.trackerAutoSync,
+                            onCheckedChange = onAutoSyncChange,
+                            enabled = !uiState.isOffline,
+                        )
+                    }
+                }
+                if (uiState.trackerPendingCount > 0) {
+                    Text(
+                        "${uiState.trackerPendingCount} pending change${if (uiState.trackerPendingCount == 1) "" else "s"} will retry automatically.",
+                        color = Color(0xFFFFC857),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+                uiState.trackerLastSuccessAt?.let { timestamp ->
+                    Text(
+                        "Last successful sync: ${
+                            kotlinx.datetime.Instant.fromEpochMilliseconds(timestamp)
+                        }",
+                        color = MUTED,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                if (uiState.trackerAutoSyncBusy) {
+                    val total = uiState.watchHistoryTotal
+                    val progress = if (total > 0) {
+                        (uiState.watchHistoryCurrent.toFloat() / total).coerceIn(0f, 1f)
+                    } else {
+                        0f
+                    }
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        color = AppColors.accent,
+                        trackColor = BORDER,
+                    )
+                    Text(
+                        uiState.watchHistoryDetail ?: "Merging connected libraries...",
+                        color = MUTED,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+                uiState.trackerMalError?.let {
+                    Text(it, color = Color(0xFFFF8A80), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                }
+                uiState.trackerAnilistError?.let {
+                    Text(it, color = Color(0xFFFF8A80), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -5775,6 +5910,184 @@ private fun ProBadge() {
             fontSize = 9.sp,
             fontWeight = FontWeight.Black,
         )
+    }
+}
+
+@Composable
+private fun DiscordRichPresenceTab(
+    uiState: SettingsUiState,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+    onSaveToken: (String) -> Unit,
+    onDisconnectAccount: () -> Unit,
+    onStartLogin: () -> Unit,
+) {
+    val manager = to.kuudere.anisuge.platform.DiscordRichPresenceManager
+    val availability = manager.availability
+    val loggedIn = !uiState.discordToken.isNullOrBlank()
+    val connected = loggedIn && uiState.discordRichPresence && availability.supported
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+    ) {
+        Text(
+            "Discord Rich Presence",
+            color = TEXT,
+            fontSize = 42.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        Text(
+            "Share what you are watching on your Discord profile.",
+            color = MUTED,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0x332200FF))
+                .padding(12.dp),
+        ) {
+            Text(
+                "You can connect your Discord account, but Rich Presence is not yet available. It will be enabled in a future update.",
+                color = Color(0xFFBB86FC),
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+            )
+        }
+        Spacer(Modifier.height(24.dp))
+
+        if (loggedIn) {
+            SettingCard(
+                title = "Connected to Discord",
+                description = "Your account is linked. Toggle playback activity below.",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Image(
+                            painter = painterResource(Res.drawable.ic_discord),
+                            contentDescription = null,
+                            modifier = Modifier.size(42.dp),
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Connected", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Discord account linked", color = MUTED, fontSize = 12.sp, lineHeight = 17.sp)
+                        }
+                    }
+                    Button(
+                        onClick = onDisconnectAccount,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFED4245), contentColor = Color.White),
+                    ) {
+                        Text("Disconnect from Discord")
+                    }
+                }
+            }
+        } else {
+            SettingCard(
+                title = "Connect with Discord",
+                description = "Log in with your Discord account to share your activity.",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Image(
+                            painter = painterResource(Res.drawable.ic_discord),
+                            contentDescription = null,
+                            modifier = Modifier.size(42.dp),
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Not connected", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text(availability.status, color = MUTED, fontSize = 12.sp, lineHeight = 17.sp)
+                        }
+                    }
+                    Button(
+                        onClick = onStartLogin,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5865F2), contentColor = Color.White),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            painter = painterResource(Res.drawable.ic_discord),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Connect with Discord")
+                    }
+                }
+            }
+        }
+
+        if (loggedIn) {
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SettingCard(
+                title = if (connected) "Playback activity enabled" else "Enable playback activity",
+                description = if (connected) {
+                    "Anisurge will update your activity while an episode is playing."
+                } else {
+                    "Turn on activity updates before starting playback."
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (connected) "Enabled" else "Disabled",
+                                color = TEXT,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(availability.status, color = MUTED, fontSize = 12.sp, lineHeight = 17.sp)
+                        }
+                    }
+                    Button(
+                        onClick = if (connected) onDisconnect else onConnect,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (connected) BG_HOVER else Color(0xFF5865F2),
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Text(if (connected) "Disable activity" else "Enable activity")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SettingCard(
+            title = "Shared activity",
+            description = "Anisurge only publishes playback information while you watch.",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Anime title", color = TEXT, fontSize = 14.sp)
+                Text("Episode number and SUB/DUB language", color = TEXT, fontSize = 14.sp)
+                Text("Playing or paused state and timestamps", color = TEXT, fontSize = 14.sp)
+                Text(
+                    "Stream URLs, authentication headers, local file paths, and account details are never shared.",
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
     }
 }
 

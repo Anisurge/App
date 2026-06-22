@@ -181,6 +181,7 @@ fun App(
                 AppComponent.stickerService,
                 AppComponent.bffRewardsService,
                 AppComponent.notificationService,
+                AppComponent.autoTrackingSyncService,
             )
         }
         val latestVm = remember { LatestViewModel(AppComponent.latestService) }

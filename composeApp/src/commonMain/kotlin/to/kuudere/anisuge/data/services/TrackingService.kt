@@ -7,6 +7,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.request.patch
+import io.ktor.client.request.delete
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -142,6 +143,59 @@ class TrackingService(
         }
     }
 
+    suspend fun updateMalEntry(
+        malId: Int,
+        status: String?,
+        progress: Int?,
+        totalEpisodes: Int?,
+        startedAt: String?,
+        completedAt: String?,
+    ): Boolean {
+        if (malId <= 0) return false
+        if (settingsStore.getMalIsExpired() && !refreshMalToken()) return false
+        val token = settingsStore.getMalAccessToken() ?: return false
+        val normalizedStatus = when (status?.uppercase()) {
+            "WATCHING", "CURRENT" -> "watching"
+            "PLANNING", "PLAN_TO_WATCH" -> "plan_to_watch"
+            "PAUSED", "ON_HOLD" -> "on_hold"
+            "DROPPED" -> "dropped"
+            "COMPLETED" -> "completed"
+            else -> if (progress != null && progress > 0) "watching" else null
+        }
+        val effectiveStatus = if (
+            totalEpisodes != null && progress != null && progress >= totalEpisodes
+        ) "completed" else normalizedStatus
+        val fields = buildList {
+            effectiveStatus?.let { add("status=$it") }
+            progress?.takeIf { it >= 0 }?.let { add("num_watched_episodes=$it") }
+            startedAt?.take(10)?.let { add("start_date=$it") }
+            completedAt?.take(10)?.let { add("finish_date=$it") }
+        }
+        if (fields.isEmpty()) return true
+        return try {
+            httpClient.patch("$MAL_API_BASE/anime/$malId/my_list_status") {
+                header("Authorization", "Bearer $token")
+                header("Content-Type", "application/x-www-form-urlencoded")
+                setBody(fields.joinToString("&"))
+            }.status.isSuccess()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun deleteMalEntry(malId: Int): Boolean {
+        if (malId <= 0) return false
+        if (settingsStore.getMalIsExpired() && !refreshMalToken()) return false
+        val token = settingsStore.getMalAccessToken() ?: return false
+        return try {
+            httpClient.delete("$MAL_API_BASE/anime/$malId/my_list_status") {
+                header("Authorization", "Bearer $token")
+            }.status.isSuccess()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     // ── AniList Sync ────────────────────────────────────────────────────────
 
     /** Public AniList GraphQL: map a MAL anime id → AniList media id (no auth). */
@@ -215,6 +269,117 @@ class TrackingService(
         } catch (e: Exception) {
             println("[TrackingService] AniList sync exception for $anilistId: ${e.message}")
             false
+        }
+    }
+
+    suspend fun updateAnilistEntry(
+        anilistId: Int,
+        status: String?,
+        progress: Int?,
+        totalEpisodes: Int?,
+        startedAt: String?,
+        completedAt: String?,
+    ): Boolean {
+        if (anilistId <= 0) return false
+        val token = settingsStore.getAnilistAccessToken() ?: return false
+        if (settingsStore.getAnilistIsExpired()) return false
+        val normalizedStatus = when (status?.uppercase()) {
+            "WATCHING", "CURRENT" -> "CURRENT"
+            "PLANNING", "PLAN_TO_WATCH" -> "PLANNING"
+            "PAUSED", "ON_HOLD" -> "PAUSED"
+            "DROPPED" -> "DROPPED"
+            "COMPLETED" -> "COMPLETED"
+            else -> if (progress != null && progress > 0) "CURRENT" else null
+        }
+        val effectiveStatus = if (
+            totalEpisodes != null && progress != null && progress >= totalEpisodes
+        ) "COMPLETED" else normalizedStatus
+        val query = """
+            mutation(${'$'}mediaId: Int, ${'$'}progress: Int, ${'$'}status: MediaListStatus,
+                     ${'$'}startedAt: FuzzyDateInput, ${'$'}completedAt: FuzzyDateInput) {
+              SaveMediaListEntry(mediaId: ${'$'}mediaId, progress: ${'$'}progress, status: ${'$'}status,
+                startedAt: ${'$'}startedAt, completedAt: ${'$'}completedAt) { id }
+            }
+        """.trimIndent()
+        return try {
+            val response = httpClient.post(ANILIST_GRAPHQL) {
+                header("Authorization", "Bearer $token")
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("query", query)
+                    put("variables", buildJsonObject {
+                        put("mediaId", anilistId)
+                        progress?.takeIf { it >= 0 }?.let { put("progress", it) }
+                        effectiveStatus?.let { put("status", it) }
+                        parseFuzzyDate(startedAt)?.let { put("startedAt", it) }
+                        parseFuzzyDate(completedAt)?.let { put("completedAt", it) }
+                    })
+                })
+            }
+            response.status.isSuccess() &&
+                anilistJson.parseToJsonElement(response.bodyAsText()).jsonObject["errors"] == null
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun deleteAnilistEntry(anilistId: Int): Boolean {
+        if (anilistId <= 0) return false
+        val token = settingsStore.getAnilistAccessToken() ?: return false
+        if (settingsStore.getAnilistIsExpired()) return false
+        return try {
+            val viewer = anilistRequest(token, "query { Viewer { id } }")
+                ?.get("data")?.jsonObject?.get("Viewer")?.jsonObject
+                ?.get("id")?.jsonPrimitive?.intOrNull ?: return false
+            val listQuery = """
+                query(${'$'}userId: Int, ${'$'}mediaId: Int) {
+                  MediaList(userId: ${'$'}userId, mediaId: ${'$'}mediaId, type: ANIME) { id }
+                }
+            """.trimIndent()
+            val listId = anilistRequest(
+                token,
+                listQuery,
+                buildJsonObject { put("userId", viewer); put("mediaId", anilistId) },
+            )?.get("data")?.jsonObject?.get("MediaList")?.jsonObject
+                ?.get("id")?.jsonPrimitive?.intOrNull ?: return true
+            val deleteQuery = """
+                mutation(${'$'}id: Int) { DeleteMediaListEntry(id: ${'$'}id) { deleted } }
+            """.trimIndent()
+            val result = anilistRequest(token, deleteQuery, buildJsonObject { put("id", listId) })
+                ?: return false
+            result["errors"] == null
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private suspend fun anilistRequest(
+        token: String,
+        query: String,
+        variables: JsonObject = buildJsonObject {},
+    ): JsonObject? {
+        val response = httpClient.post(ANILIST_GRAPHQL) {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                put("query", query)
+                put("variables", variables)
+            })
+        }
+        if (!response.status.isSuccess()) return null
+        return anilistJson.parseToJsonElement(response.bodyAsText()).jsonObject
+    }
+
+    private fun parseFuzzyDate(value: String?): JsonObject? {
+        val parts = value?.take(10)?.split("-") ?: return null
+        if (parts.size != 3) return null
+        val year = parts[0].toIntOrNull() ?: return null
+        val month = parts[1].toIntOrNull() ?: return null
+        val day = parts[2].toIntOrNull() ?: return null
+        return buildJsonObject {
+            put("year", year)
+            put("month", month)
+            put("day", day)
         }
     }
 

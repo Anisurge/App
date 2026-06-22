@@ -53,6 +53,11 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val AI_CHAT_HISTORY_KEY = stringPreferencesKey("ai_chat_history")
         val PLAYER_ENHANCEMENTS_KEY = stringPreferencesKey("player_enhancements_v1")
         val PLAYER_UTILITIES_KEY = stringPreferencesKey("player_utilities_v1")
+        val TRACKER_AUTO_SYNC_KEY = booleanPreferencesKey("tracker_auto_sync")
+        val TRACKER_SYNC_QUEUE_KEY = stringPreferencesKey("tracker_sync_queue_v1")
+        val TRACKER_SYNC_LAST_SUCCESS_KEY = longPreferencesKey("tracker_sync_last_success")
+        val DISCORD_RICH_PRESENCE_KEY = booleanPreferencesKey("discord_rich_presence")
+        val DISCORD_TOKEN_KEY = stringPreferencesKey("discord_token")
 
         // MAL tokens
         val MAL_ACCESS_TOKEN_KEY = stringPreferencesKey("mal_access_token")
@@ -109,6 +114,23 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
             ?.let { raw -> runCatching { json.decodeFromString<PlayerUtilitySettings>(raw).sanitized() }.getOrNull() }
             ?: PlayerUtilitySettings.DEFAULT
     }.distinctUntilChanged()
+    val trackerAutoSyncFlow: Flow<Boolean> = dataStore.data.map { it[TRACKER_AUTO_SYNC_KEY] ?: false }
+    val trackerSyncQueueFlow: Flow<List<to.kuudere.anisuge.data.models.TrackerSyncJob>> =
+        dataStore.data.map { preferences ->
+            preferences[TRACKER_SYNC_QUEUE_KEY]
+                ?.let { raw ->
+                    runCatching {
+                        json.decodeFromString<List<to.kuudere.anisuge.data.models.TrackerSyncJob>>(raw)
+                    }.getOrNull()
+                }
+                ?: emptyList()
+        }.distinctUntilChanged()
+    val trackerSyncLastSuccessFlow: Flow<Long?> =
+        dataStore.data.map { it[TRACKER_SYNC_LAST_SUCCESS_KEY] }.distinctUntilChanged()
+    val discordRichPresenceFlow: Flow<Boolean> =
+        dataStore.data.map { it[DISCORD_RICH_PRESENCE_KEY] ?: false }.distinctUntilChanged()
+    val discordTokenFlow: Flow<String?> =
+        dataStore.data.map { it[DISCORD_TOKEN_KEY] }.distinctUntilChanged()
     val themeIdFlow: Flow<String> = dataStore.data.map { it[THEME_ID_KEY] ?: "default" }
     val legacyScheduleUiFlow: Flow<Boolean> = dataStore.data.map { it[LEGACY_SCHEDULE_UI_KEY] ?: false }
     val homeLayoutFlow: Flow<LayoutConfig> = dataStore.data
@@ -194,6 +216,28 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setSyncPercentage(percentage: Int) {
         dataStore.edit { it[SYNC_PERCENTAGE_KEY] = percentage }
+    }
+
+    suspend fun setTrackerAutoSync(enabled: Boolean) {
+        dataStore.edit { it[TRACKER_AUTO_SYNC_KEY] = enabled }
+    }
+
+    suspend fun setTrackerSyncQueue(jobs: List<to.kuudere.anisuge.data.models.TrackerSyncJob>) {
+        dataStore.edit { it[TRACKER_SYNC_QUEUE_KEY] = json.encodeToString(jobs) }
+    }
+
+    suspend fun setTrackerSyncLastSuccess(timestamp: Long) {
+        dataStore.edit { it[TRACKER_SYNC_LAST_SUCCESS_KEY] = timestamp }
+    }
+
+    suspend fun setDiscordRichPresence(enabled: Boolean) {
+        dataStore.edit { it[DISCORD_RICH_PRESENCE_KEY] = enabled }
+    }
+
+    suspend fun getDiscordToken(): String? = dataStore.data.first()[DISCORD_TOKEN_KEY]
+
+    suspend fun setDiscordToken(token: String?) {
+        dataStore.edit { if (token != null) it[DISCORD_TOKEN_KEY] = token else it.remove(DISCORD_TOKEN_KEY) }
     }
 
     suspend fun setSubtitleSize(sizePercent: Int) {

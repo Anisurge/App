@@ -26,13 +26,27 @@ actual object DiscordRichPresenceManager {
     private val clientId = BuildConfig.DISCORD_CLIENT_ID.trim()
     private val largeImageKey = BuildConfig.DISCORD_LARGE_IMAGE_KEY.trim().ifBlank { "logo" }
     private val smallImageKey = BuildConfig.DISCORD_SMALL_IMAGE_KEY.trim().ifBlank { "play" }
-    private val enabled = clientId.isNotBlank()
+    actual val availability = DiscordPresenceAvailability(
+        supported = clientId.isNotBlank(),
+        status = if (clientId.isNotBlank()) "Uses the Discord desktop app" else "Discord application ID is not configured",
+    )
+    actual val isAuthenticated: Boolean get() = true
+    private var enabled = false
 
     private var connection: DiscordIpcConnection? = null
     private var lastPayload: String? = null
     private val connecting = AtomicBoolean(false)
 
-    actual fun configureMobile(enabled: Boolean, token: String) = Unit
+    actual fun configure(enabled: Boolean) {
+        this.enabled = enabled && availability.supported
+        if (!this.enabled) clear()
+    }
+
+    actual fun authenticate(token: String) = Unit
+
+    actual fun logout() {
+        shutdown()
+    }
 
     actual fun update(activity: DiscordPresenceActivity) {
         if (!enabled) return

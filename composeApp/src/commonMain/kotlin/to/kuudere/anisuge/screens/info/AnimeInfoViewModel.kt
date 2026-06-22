@@ -111,7 +111,6 @@ class AnimeInfoViewModel(
                     }
                     loadRecommendations(id)
                     loadFranchiseOrder(details)
-                    loadAnimeThemes(details.anilistId)
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "Failed to load anime details.") }
                 }
@@ -123,8 +122,11 @@ class AnimeInfoViewModel(
         }
     }
 
-    private fun loadAnimeThemes(anilistId: Int?) {
-        if (anilistId == null || anilistId <= 0) return
+    fun expandThemes() {
+        val state = _uiState.value
+        if (state.isLoadingThemes || state.themes.isNotEmpty()) return
+        val anilistId = state.details?.anilistId ?: return
+        if (anilistId <= 0) return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingThemes = true) }
             val themes = infoService.getAnimeThemes(anilistId)?.themes.orEmpty()
@@ -248,7 +250,12 @@ class AnimeInfoViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdatingWatchlist = true) }
             if (folder == "Remove") {
-                val success = watchlistService.removeFromWatchlist(animeId)
+                val details = _uiState.value.details
+                val success = watchlistService.removeFromWatchlist(
+                    animeId = animeId,
+                    anilistId = details?.anilistId,
+                    malId = details?.malId,
+                )
                 if (success) {
                     _uiState.update {
                         it.copy(

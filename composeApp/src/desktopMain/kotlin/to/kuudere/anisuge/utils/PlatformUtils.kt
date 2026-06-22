@@ -302,3 +302,8 @@ private fun runFfmpeg(args: List<String>): Int {
     outputReader.join(1000)
     return exitCode
 }
+
+actual fun notifyThemeDownloadProgress(percentage: Int) { }
+actual fun notifyThemeDownloadComplete(title: String, filePath: String) {
+    if (filePath.isNotBlank()) openDirectory(filePath)
+}

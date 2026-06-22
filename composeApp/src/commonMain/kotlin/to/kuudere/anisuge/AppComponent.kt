@@ -7,6 +7,9 @@ import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.data.repository.ServerRepository
@@ -18,6 +21,7 @@ import to.kuudere.anisuge.data.services.HomeService
 import to.kuudere.anisuge.data.services.SearchService
 
 object AppComponent {
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     /** Project-R catalog, social, notifications, settings writes. */
     const val PROJECT_R_BASE_URL = "https://api.reanime.to/api/v1"
     @Deprecated("Use PROJECT_R_BASE_URL", ReplaceWith("PROJECT_R_BASE_URL"))
@@ -117,10 +121,6 @@ object AppComponent {
         to.kuudere.anisuge.data.services.InfoService(sessionStore, httpClient)
     }
 
-    val watchlistService: to.kuudere.anisuge.data.services.WatchlistService by lazy {
-        to.kuudere.anisuge.data.services.WatchlistService(sessionStore, httpClient)
-    }
-
     val librarySyncService: to.kuudere.anisuge.data.services.LibrarySyncService by lazy {
         to.kuudere.anisuge.data.services.LibrarySyncService(sessionStore, httpClient)
     }
@@ -174,6 +174,22 @@ object AppComponent {
         to.kuudere.anisuge.data.services.MalAnilistIdCache(dataStore)
     }
 
+    val autoTrackingSyncService: to.kuudere.anisuge.data.services.AutoTrackingSyncService by lazy {
+        to.kuudere.anisuge.data.services.AutoTrackingSyncService(
+            settingsStore,
+            trackingService,
+            malAnilistIdCache,
+        )
+    }
+
+    val watchlistService: to.kuudere.anisuge.data.services.WatchlistService by lazy {
+        to.kuudere.anisuge.data.services.WatchlistService(
+            sessionStore,
+            httpClient,
+            autoTrackingSyncService,
+        )
+    }
+
     val aniskipService: to.kuudere.anisuge.data.services.AniskipService by lazy {
         to.kuudere.anisuge.data.services.AniskipService(httpClient, malAnilistIdCache)
     }
@@ -197,7 +213,7 @@ object AppComponent {
     }
 
     val syncManager: to.kuudere.anisuge.data.services.SyncManager by lazy {
-        to.kuudere.anisuge.data.services.SyncManager(trackingService)
+        to.kuudere.anisuge.data.services.SyncManager(trackingService, autoTrackingSyncService)
     }
 
     val bffGamesService: to.kuudere.anisuge.data.services.BffGamesService by lazy {
