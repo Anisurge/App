@@ -2,6 +2,7 @@ package to.kuudere.anisuge.platform
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.os.Build
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -130,6 +131,16 @@ actual fun DiscordLoginDialog(
                                             errorMessage = "Failed to load login page"
                                             isLoading = false
                                         }
+                                    }
+
+                                    @Deprecated("Deprecated in Java")
+                                    override fun onRenderProcessGone(
+                                        view: WebView,
+                                        detail: WebViewRenderProcessGoneDetail?,
+                                    ): Boolean {
+                                        errorMessage = "WebView process crashed. Please try again."
+                                        isLoading = false
+                                        return true
                                     }
                                 }
 

@@ -61,10 +61,12 @@ object CrashReporter {
         previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             val report = buildCrashReport(this.appContext!!, throwable)
-            runCatching { postCrashBlocking(report) }
 
-            // Save for the crash screen and restart the activity
+            // Save crash file FIRST so crash screen can show on relaunch
             runCatching { latestCrashFile?.writeText(report) }
+
+            // Fire-and-forget network report
+            runCatching { postCrashAsync(report) { } }
 
             val intent = this.appContext!!.packageManager
                 .getLaunchIntentForPackage(this.appContext!!.packageName)
@@ -74,7 +76,11 @@ object CrashReporter {
             if (intent != null) {
                 this.appContext!!.startActivity(intent)
             }
-            Process.killProcess(Process.myPid())
+
+            previousHandler?.uncaughtException(thread, throwable)
+            if (previousHandler == null) {
+                Process.killProcess(Process.myPid())
+            }
         }
     }
 
