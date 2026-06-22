@@ -8,6 +8,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceError
 import android.webkit.WebView
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -133,10 +134,9 @@ actual fun DiscordLoginDialog(
                                         }
                                     }
 
-                                    @Deprecated("Deprecated in Java")
                                     override fun onRenderProcessGone(
                                         view: WebView,
-                                        detail: WebViewRenderProcessGoneDetail?,
+                                        detail: RenderProcessGoneDetail?,
                                     ): Boolean {
                                         errorMessage = "WebView process crashed. Please try again."
                                         isLoading = false

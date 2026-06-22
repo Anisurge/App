@@ -479,3 +479,31 @@ tasks.register<Zip>("createPortableZip") {
     // Ensure this runs after other packaging tasks if they are in the graph to avoid implicit dependency warnings
     mustRunAfter(tasks.matching { it.name.startsWith("package") })
 }
+
+val linux = System.getProperty("os.name").lowercase().let { "linux" in it }
+
+if (linux) {
+    tasks.register("prepareAppImageDir") {
+        group = "compose desktop"
+        description = "Copies AppRun, .desktop, and icon into the jpackage app-image directory for manual appimagetool conversion"
+
+        dependsOn("createDistributable")
+
+        doLast {
+            val outputDir = layout.buildDirectory.dir("compose/binaries/main/app/Anisurge").get().asFile
+
+            copy {
+                from(projectDir.resolve("linux-appimage")) {
+                    include("AppRun", "Anisurge.desktop")
+                }
+                from(project.file("src/desktopMain/resources/logo.png")) {
+                    rename { "Anisurge.png" }
+                }
+                into(outputDir)
+            }
+
+            // Ensure AppRun is executable
+            outputDir.resolve("AppRun").setExecutable(true, false)
+        }
+    }
+}
