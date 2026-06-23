@@ -2,6 +2,8 @@ package to.kuudere.anisuge.screens.home
 
 import to.kuudere.anisuge.ui.OfflineState
 import to.kuudere.anisuge.theme.AppColors
+import to.kuudere.anisuge.data.models.UserProfile
+import androidx.compose.material.icons.outlined.Person
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -628,6 +630,9 @@ private fun TabContent(
                                 onWatchClick,
                                 onWatchlistClick = onWatchlistClick,
                                 expandedHeroCarousel = settingsState.expandedHeroCarousel,
+                                dantotsuHomeHeader = settingsState.dantotsuHomeHeader,
+                                compactCards = settingsState.compactCards,
+                                showScoreBadges = settingsState.showScoreBadges,
                                 onRefresh = { homeViewModel.refresh(force = true) },
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onViewLatestEpisodesMore = onViewLatestEpisodesMore,
@@ -675,6 +680,9 @@ private fun HomeContent(
     onWatchClick: (String, String, Int, String?, Double?) -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
     expandedHeroCarousel: Boolean = false,
+    dantotsuHomeHeader: Boolean = false,
+    compactCards: Boolean = false,
+    showScoreBadges: Boolean = true,
     onRefresh: () -> Unit = {},
     onViewContinueWatchingMore: () -> Unit = {},
     onViewLatestEpisodesMore: () -> Unit = {},
@@ -688,6 +696,16 @@ private fun HomeContent(
 
     val innerContent: @Composable () -> Unit = {
         Column(Modifier.fillMaxSize().verticalScroll(scrollState)) {
+            if (dantotsuHomeHeader) {
+                DantotsuHomeHeader(
+                    userProfile = state.userProfile,
+                    latestForBanner = state.latestAired.firstOrNull(),
+                    onProfileClick = {},
+                    onSearchClick = {},
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
             Box(Modifier.fillMaxWidth()) {
                 // ── Hero Carousel ──────────────────────────────────────────────
                 if (state.latestAired.isNotEmpty()) {
@@ -731,6 +749,8 @@ private fun HomeContent(
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showLatestLangBadge = true,
                             onViewMoreClick = onViewLatestEpisodesMore,
+                            compact = compactCards,
+                            showScore = showScoreBadges,
                         )
 
                         RowId.TRENDING_WEEK -> AnimeSection(
@@ -738,6 +758,8 @@ private fun HomeContent(
                             items = state.trendingWeek,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
+                            compact = compactCards,
+                            showScore = showScoreBadges,
                         )
 
                         RowId.NEW_SEASONS -> AnimeSection(
@@ -745,6 +767,8 @@ private fun HomeContent(
                             items = state.newSeasons,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
+                            compact = compactCards,
+                            showScore = showScoreBadges,
                         )
 
                         RowId.NEW_ON_APP -> AnimeSection(
@@ -752,6 +776,8 @@ private fun HomeContent(
                             items = state.newOnSite,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             onViewMoreClick = onViewNewOnAppMore,
+                            compact = compactCards,
+                            showScore = showScoreBadges,
                         )
 
                         RowId.RECOMMENDED -> AnimeSection(
@@ -759,6 +785,8 @@ private fun HomeContent(
                             items = state.recommended,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
+                            compact = compactCards,
+                            showScore = showScoreBadges,
                         )
 
                         RowId.UPCOMING -> AnimeSection(
@@ -766,6 +794,8 @@ private fun HomeContent(
                             items = state.upcoming,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
+                            compact = compactCards,
+                            showScore = showScoreBadges,
                         )
 
                         RowId.HIDDEN_GEMS -> AnimeSection(
@@ -773,6 +803,8 @@ private fun HomeContent(
                             items = state.hiddenGems,
                             onItemClick = { item -> onAnimeClick(item.activeSlug) },
                             showViewMore = false,
+                            compact = compactCards,
+                            showScore = showScoreBadges,
                         )
                     }
                 }
@@ -1771,9 +1803,12 @@ private fun AnimeSection(
     showViewMore: Boolean = true,
     showLatestLangBadge: Boolean = false,
     onViewMoreClick: () -> Unit = {},
+    compact: Boolean = false,
+    showScore: Boolean = true,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val isXlScreen = maxWidth >= 1280.dp
+        val cardWidth = if (compact) (if (isXlScreen) 110.dp else 102.dp) else (if (isXlScreen) 200.dp else 155.dp)
         Column {
             SectionHeader(title = title, onViewMore = if (showViewMore) onViewMoreClick else null)
             val listState = rememberLazyListState()
@@ -1794,8 +1829,10 @@ private fun AnimeSection(
                 itemsIndexed(items) { _, item ->
                     to.kuudere.anisuge.ui.AnimeCard(
                         item = item,
-                        modifier = Modifier.width(if (isXlScreen) 200.dp else 155.dp),
+                        modifier = Modifier.width(cardWidth),
                         showLatestLangBadge = showLatestLangBadge,
+                        showScore = showScore,
+                        compact = compact,
                         onClick = { onItemClick(item) }
                     )
                 }
@@ -1918,6 +1955,173 @@ private fun resolveProfileImageUrl(raw: String?): String? =
     to.kuudere.anisuge.ui.resolveProfileMediaUrl(raw)
         ?: raw?.takeIf { it.isNotBlank() && !it.startsWith("http", ignoreCase = true) }
             ?.let { "https://api.reanime.to${if (it.startsWith("/")) it else "/$it"}" }
+
+// ── Dantotsu-inspired home header (extra design toggle) ──────────────────────
+@Composable
+private fun DantotsuHomeHeader(
+    userProfile: UserProfile?,
+    latestForBanner: AnimeItem?,
+    onProfileClick: () -> Unit,
+    onSearchClick: () -> Unit,
+) {
+    val bannerUrl = latestForBanner?.bannerUrl ?: latestForBanner?.imageUrl?.let {
+        if (it.startsWith("http")) it else "https://api.reanime.to/img/banner/$it"
+    } ?: ""
+    val avatarUrl = userProfile?.effectiveAvatar ?: userProfile?.avatar
+    val username = userProfile?.username ?: "User"
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(210.dp)
+            .padding(horizontal = 12.dp)
+            .clip(RoundedCornerShape(18.dp))
+    ) {
+        // Background image or solid gradient fallback (Dantotsu KenBurns vibe)
+        if (bannerUrl.isNotBlank()) {
+            AsyncImage(
+                model = bannerUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF1F1B2E), Color(0xFF2C2540))
+                        )
+                    )
+            )
+        }
+
+        // Dark gradient overlay like Dantotsu
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.25f),
+                        0.45f to Color.Black.copy(alpha = 0.45f),
+                        1f to Color.Black.copy(alpha = 0.65f)
+                    )
+                )
+        )
+
+        // Top user row: name + stats + avatar + search (mimics top of Dantotsu header)
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column {
+                    Text(
+                        username,
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Default // Poppins-ish via system
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            "EP 128",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            "CH 42",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Search pill like Dantotsu
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x33FFFFFF))
+                            .clickable { onSearchClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Search, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                    }
+                    // Avatar
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(AppColors.surfaceVariant)
+                            .clickable { onProfileClick() }
+                            .border(2.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                    ) {
+                        if (!avatarUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = avatarUrl,
+                                contentDescription = username,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(Icons.Outlined.Person, null, tint = Color.White, modifier = Modifier.size(26.dp).align(Alignment.Center))
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            // Quick list access cards (Anime List / Manga style)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Anime list card
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .clickable { /* could navigate to watchlist or search */ }
+                        .border(1.dp, Color.White.copy(0.15f), RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("ANIME", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Box(Modifier.width(36.dp).height(2.dp).background(AppColors.accent))
+                    }
+                }
+                // Watchlist / planning card
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .clickable { /* navigate bookmarks */ }
+                        .border(1.dp, Color.White.copy(0.15f), RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("WATCHLIST", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Box(Modifier.width(36.dp).height(2.dp).background(AppColors.accent))
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun SmallBadge(text: String, color: Color = Color.White) {

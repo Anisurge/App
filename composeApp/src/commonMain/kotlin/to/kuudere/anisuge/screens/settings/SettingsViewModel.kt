@@ -103,6 +103,10 @@ data class SettingsUiState(
     val liquidGlassBottomNav: Boolean = false,
     val expandedHeroCarousel: Boolean = false,
     val quickActionMenu: Boolean = true,
+    // Dantotsu / extra UI design tweaks
+    val dantotsuHomeHeader: Boolean = false,
+    val compactCards: Boolean = false,
+    val showScoreBadges: Boolean = true,
     val appLocale: AppLocale = AppLocale.default,
     val preferRomajiAnimeTitles: Boolean = false,
     val showFullAnimeTitles: Boolean = false,
@@ -468,6 +472,21 @@ class SettingsViewModel(
             }
         }
         viewModelScope.launch {
+            settingsStore.dantotsuHomeHeaderFlow.collect { v ->
+                _uiState.update { it.copy(dantotsuHomeHeader = v) }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.compactCardsFlow.collect { v ->
+                _uiState.update { it.copy(compactCards = v) }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.showScoreBadgesFlow.collect { v ->
+                _uiState.update { it.copy(showScoreBadges = v) }
+            }
+        }
+        viewModelScope.launch {
             settingsStore.appLocaleFlow.collect { code ->
                 _uiState.update {
                     it.copy(
@@ -794,6 +813,18 @@ class SettingsViewModel(
 
     fun setQuickActionMenu(enabled: Boolean) {
         viewModelScope.launch { settingsStore.setQuickActionMenu(enabled) }
+    }
+
+    fun setDantotsuHomeHeader(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setDantotsuHomeHeader(enabled) }
+    }
+
+    fun setCompactCards(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setCompactCards(enabled) }
+    }
+
+    fun setShowScoreBadges(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setShowScoreBadges(enabled) }
     }
 
     fun setAppLocale(locale: AppLocale) {

@@ -61,6 +61,10 @@ fun AnimeCard(
     showLatestLangBadge: Boolean = false,
     /** When true, wraps the title instead of clamping it to one line. */
     showFullTitle: Boolean = false,
+    /** Dantotsu compact mode: smaller visual, corner score. */
+    compact: Boolean = false,
+    /** Control visibility of score/rating badges. */
+    showScore: Boolean = true,
     onClick: () -> Unit,
 ) {
     val inter   = remember { MutableInteractionSource() }
@@ -119,23 +123,30 @@ fun AnimeCard(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-            } else if ((item.score ?: 0) > 0) {
-                Row(
-                    modifier = Modifier
+            } else if (showScore && (item.score ?: 0) > 0) {
+                val scoreModifier = if (compact) {
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                } else {
+                    Modifier
                         .align(Alignment.TopStart)
                         .padding(8.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color.Black.copy(alpha = 0.8f))
-                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(3.dp))
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                }
+                Row(
+                    modifier = scoreModifier
+                        .clip(RoundedCornerShape(if (compact) 6.dp else 3.dp))
+                        .background(Color.Black.copy(alpha = 0.75f))
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(if (compact) 6.dp else 3.dp))
+                        .padding(horizontal = if (compact) 5.dp else 4.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Icon(
                         Icons.Default.Star,
                         contentDescription = null,
-                        tint = Color(0xFFfbbf24),       // .star-icon { color: #fbbf24 }
-                        modifier = Modifier.size(12.dp)  // .material-icons { font-size: 12px }
+                        tint = Color(0xFFfbbf24),
+                        modifier = Modifier.size(if (compact) 11.dp else 12.dp)
                     )
                     Text(
                         text = (item.score?.toDouble() ?: 0.0).let { d ->
@@ -143,8 +154,8 @@ fun AnimeCard(
                             if (d == i.toDouble()) "$i.0" else "${(d * 10).toInt() / 10.0}"
                         },
                         color = Color.White,
-                        fontSize = 10.sp,                // font-size: 10px
-                        fontWeight = FontWeight.SemiBold  // font-weight: 600
+                        fontSize = if (compact) 9.sp else 10.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }

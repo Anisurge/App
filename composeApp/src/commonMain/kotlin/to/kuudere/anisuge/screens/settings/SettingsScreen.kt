@@ -1249,6 +1249,9 @@ private fun MobileSettingsDetail(
                     onThemeSelected = viewModel::setThemeId,
                     onUiStyleSelected = viewModel::setUiStyle,
                     onOpenHomeLayout = onOpenHomeLayout,
+                    onDantotsuHomeHeaderChange = viewModel::setDantotsuHomeHeader,
+                    onCompactCardsChange = viewModel::setCompactCards,
+                    onShowScoreBadgesChange = viewModel::setShowScoreBadges,
                 )
 
                 is SettingsTab.Sync -> SyncTab(
@@ -1469,6 +1472,9 @@ private fun SettingsContent(
                 onThemeSelected = viewModel::setThemeId,
                 onUiStyleSelected = viewModel::setUiStyle,
                 onOpenHomeLayout = onOpenHomeLayout,
+                onDantotsuHomeHeaderChange = viewModel::setDantotsuHomeHeader,
+                onCompactCardsChange = viewModel::setCompactCards,
+                onShowScoreBadgesChange = viewModel::setShowScoreBadges,
             )
 
             is SettingsTab.Sync -> SyncTab(
@@ -1599,6 +1605,9 @@ private fun AppearanceTab(
     onThemeSelected: (AppThemeId) -> Unit,
     onUiStyleSelected: (AppUiStyle) -> Unit,
     onOpenHomeLayout: () -> Unit,
+    onDantotsuHomeHeaderChange: (Boolean) -> Unit,
+    onCompactCardsChange: (Boolean) -> Unit,
+    onShowScoreBadgesChange: (Boolean) -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1717,6 +1726,44 @@ private fun AppearanceTab(
                     color = MUTED,
                     fontSize = 12.sp,
                     lineHeight = 16.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SettingCard(
+            title = "Dantotsu design tweaks",
+            description = "Extra appearance options inspired by Dantotsu / ReDantotsu for a richer home UX.",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SettingToggle(
+                    checked = uiState.dantotsuHomeHeader,
+                    onCheckedChange = onDantotsuHomeHeaderChange,
+                    label = "Dantotsu-style home header"
+                )
+                Text(
+                    text = "Show prominent user banner header (KenBurns-style background, stats, quick list cards) on Home.",
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+                SettingToggle(
+                    checked = uiState.compactCards,
+                    onCheckedChange = onCompactCardsChange,
+                    label = "Compact media cards"
+                )
+                Text(
+                    text = "Use smaller rounded poster cards with corner score badge (Dantotsu compact style) in rows.",
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+                SettingToggle(
+                    checked = uiState.showScoreBadges,
+                    onCheckedChange = onShowScoreBadgesChange,
+                    label = "Show score badges on cards"
                 )
             }
         }
