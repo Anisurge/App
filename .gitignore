@@ -1,4 +1,6 @@
 # Gradle
+
+
 .gradle
 /build
 /composeApp/build/
@@ -51,3 +53,5 @@ google-services.json
 .externalNativeBuild
 .cxx
 /captures/
+
+/ref/

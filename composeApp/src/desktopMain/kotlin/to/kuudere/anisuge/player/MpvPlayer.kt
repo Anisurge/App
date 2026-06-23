@@ -80,7 +80,7 @@ internal class MpvPlayer(
         handle: Pointer,
         settings: PlayerUtilitySettings,
     ) {
-        settings.sanitized().mpvProperties().forEach { (property, value) ->
+        settings.sanitized().mpvProperties(defaultBufferMb = 100).forEach { (property, value) ->
             val result = mpv.mpv_set_property_string(handle, property, value)
             if (result < 0) println("[MpvPlayer] rejected utility $property=$value ($result)")
         }

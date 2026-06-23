@@ -106,6 +106,7 @@ class WatchViewModel(
     private val settingsStore: to.kuudere.anisuge.data.services.SettingsStore,
     private val settingsService: to.kuudere.anisuge.data.services.SettingsService,
     private val serverRepository: ServerRepository,
+    private val extensionManager: to.kuudere.anisuge.extensions.ExtensionManager,
     private val aniskipService: to.kuudere.anisuge.data.services.AniskipService,
     private val syncManager: SyncManager? = null,
     private val trackingService: TrackingService? = null,
@@ -590,6 +591,11 @@ class WatchViewModel(
 
         val episodeNum = currState.currentEpisodeNumber
 
+        if (to.kuudere.anisuge.extensions.parseExtensionServerId(serverName) != null) {
+            loadExtensionStream(serverName, episodeNum, generation)
+            return
+        }
+
         val legacyDub = serverName.endsWith("-dub", ignoreCase = true)
         val apiSource = if (legacyDub) serverName.dropLast(4) else serverName
         val meta = serverRepository.getServerById(serverName)
@@ -765,6 +771,70 @@ class WatchViewModel(
             e.printStackTrace()
             if (generation == streamLoadGeneration) {
                 _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
+            }
+        }
+    }
+
+    private suspend fun loadExtensionStream(serverName: String, episodeNum: Int, generation: Int) {
+        val state = _uiState.value
+        val title = state.episodeData?.title
+        val titles = buildList {
+            title?.english?.takeIf { it.isNotBlank() }?.let(::add)
+            title?.romaji?.takeIf { it.isNotBlank() }?.let(::add)
+            title?.native?.takeIf { it.isNotBlank() }?.let(::add)
+            title?.userPreferred?.takeIf { it.isNotBlank() }?.let(::add)
+        }.distinct()
+        try {
+            _uiState.update {
+                it.copy(
+                    isLoadingVideo = true,
+                    currentServer = serverName,
+                    loadingMessage = "Searching extension source...",
+                )
+            }
+            val result = extensionManager.resolveStream(
+                animeId = currentAnimeId,
+                titles = titles.ifEmpty { listOf(currentAnimeId) },
+                episodeNumber = episodeNum,
+                serverId = serverName,
+            )
+            if (!coroutineContext.isActive || generation != streamLoadGeneration) return
+            val streamingData = result.toStreamingData()
+            val qualities = streamingData.sources.orEmpty().mapNotNull { source ->
+                source.url?.takeIf { it.isNotBlank() }?.let { (source.quality ?: "Auto") to it }
+            }
+            val subtitles = streamingData.subtitles.orEmpty()
+            val defaultQuality = qualities.firstOrNull()?.first ?: "Auto"
+            cachedStreamSection = null
+            _uiState.update {
+                it.copy(
+                    isLoadingVideo = false,
+                    loadingMessage = null,
+                    streamingData = streamingData,
+                    availableQualities = qualities,
+                    currentQuality = defaultQuality,
+                    availableSubtitles = subtitles,
+                    currentSubtitleUrl = subtitles.firstOrNull()?.url,
+                    subtitlesDisabled = false,
+                    offlinePath = null,
+                )
+            }
+            qualities.firstOrNull()?.second?.let { url ->
+                viewModelScope.launch { infoService.prewarmStreamUrl(url) }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("[WatchVM] extension stream error server=$serverName: ${e.message}")
+            if (generation == streamLoadGeneration) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingVideo = false,
+                        loadingMessage = null,
+                        offlinePath = null,
+                        berriesToast = e.message ?: "Extension stream failed",
+                    )
+                }
             }
         }
     }

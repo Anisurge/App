@@ -16,6 +16,7 @@ class BackupService(
     private val watchlistService: WatchlistService,
     private val homeService: HomeService,
     private val infoService: InfoService,
+    private val extensionManager: to.kuudere.anisuge.extensions.ExtensionManager,
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -59,14 +60,16 @@ class BackupService(
                 settings = settings,
                 watchlist = fetchAllWatchlist(),
                 continueWatching = homeService.fetchAllContinueWatching(),
+                extensions = extensionManager.exportConfig(),
             )
         )
     }
 
     suspend fun restore(raw: String): BackupRestoreResult {
         val backup = json.decodeFromString<AnisurgeBackup>(raw)
-        require(backup.formatVersion == 1) { "Unsupported backup format ${backup.formatVersion}" }
+        require(backup.formatVersion in 1..2) { "Unsupported backup format ${backup.formatVersion}" }
         restoreSettings(backup.settings)
+        extensionManager.restoreConfig(backup.extensions)
 
         val existingWatchlist = fetchAllWatchlist().associateBy { it.effectiveAnimeId }
         var watchlistImported = 0

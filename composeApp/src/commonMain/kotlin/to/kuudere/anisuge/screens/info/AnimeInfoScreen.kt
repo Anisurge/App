@@ -164,6 +164,13 @@ fun AnimeInfoScreen(
                         .take(to.kuudere.anisuge.utils.DownloadManager.MAX_SEASON_BATCH_EPISODES)
                     val audioLabel = if (preferDub) "Dub" else "Sub"
                     val server = preflightBatchDownloadServer(
+                        animeId = details.animeId,
+                        titles = listOf(
+                            details.title.english,
+                            details.title.romaji,
+                            details.title.native,
+                            details.title.userPreferred,
+                        ) + details.synonyms,
                         anilistId = anilistId,
                         episodes = batch,
                         preferredServer = chosenServer,
@@ -884,6 +891,8 @@ private fun RelatedSeasonCard(
 private val BATCH_RECOMMENDED_SERVERS = listOf("anikage", "anitaku-1", "anitaku", "anidb", "miruro")
 
 private suspend fun preflightBatchDownloadServer(
+    animeId: String,
+    titles: List<String>,
     anilistId: Int,
     episodes: List<to.kuudere.anisuge.data.models.EpisodeItem>,
     preferredServer: String,
@@ -892,7 +901,13 @@ private suspend fun preflightBatchDownloadServer(
     onFailure: (server: String, failedEpisodes: List<to.kuudere.anisuge.data.models.EpisodeItem>) -> Unit,
 ): String? {
     // User's choice first, then the recommended fallbacks in order, de-duplicated.
-    val candidates = (listOf(preferredServer) + BATCH_RECOMMENDED_SERVERS)
+    val candidates = (
+        if (to.kuudere.anisuge.extensions.parseExtensionServerId(preferredServer) != null) {
+            listOf(preferredServer)
+        } else {
+            listOf(preferredServer) + BATCH_RECOMMENDED_SERVERS
+        }
+    )
         .map { it.trim() }
         .filter { it.isNotBlank() }
         .distinctBy { it.lowercase() }
@@ -903,12 +918,20 @@ private suspend fun preflightBatchDownloadServer(
             episodes.map { episode ->
                 async {
                     val usable = runCatching {
-                        val response = to.kuudere.anisuge.AppComponent.infoService
-                            .getVideoStream(anilistId, episode.number, server)
-                        val subOk = response?.sub?.streams?.any { !it.url.isNullOrBlank() } == true
-                        val dubOk = response?.dub?.streams?.any { !it.url.isNullOrBlank() } == true
-                        // Try to use the requested audio; fall back to the other if needed
-                        if (preferDub) dubOk || subOk else subOk || dubOk
+                        if (to.kuudere.anisuge.extensions.parseExtensionServerId(server) != null) {
+                            to.kuudere.anisuge.AppComponent.extensionManager.resolveStream(
+                                animeId = animeId,
+                                titles = titles.filter { it.isNotBlank() },
+                                episodeNumber = episode.number,
+                                serverId = server,
+                            ).videos.isNotEmpty()
+                        } else {
+                            val response = to.kuudere.anisuge.AppComponent.infoService
+                                .getVideoStream(anilistId, episode.number, server)
+                            val subOk = response?.sub?.streams?.any { !it.url.isNullOrBlank() } == true
+                            val dubOk = response?.dub?.streams?.any { !it.url.isNullOrBlank() } == true
+                            if (preferDub) dubOk || subOk else subOk || dubOk
+                        }
                     }.getOrDefault(false)
                     if (usable) null else episode
                 }

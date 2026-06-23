@@ -61,7 +61,7 @@ private fun applyAndroidEnhancements(context: android.content.Context, settings:
 }
 
 private fun applyAndroidUtilities(settings: PlayerUtilitySettings) {
-    settings.sanitized().mpvProperties().forEach { (property, value) ->
+    settings.sanitized().mpvProperties(defaultBufferMb = 64).forEach { (property, value) ->
         runCatching { MPVLib.setPropertyString(property, value) }
             .onFailure { Log.w("AnisugePlayer", "mpv rejected $property=$value", it) }
     }

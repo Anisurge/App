@@ -65,6 +65,12 @@
         />
 
         <activity
+            android:name=".extensions.CloudflareBypassActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+        />
+
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"

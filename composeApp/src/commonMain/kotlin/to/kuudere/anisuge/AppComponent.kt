@@ -147,11 +147,24 @@ object AppComponent {
             watchlistService,
             homeService,
             infoService,
+            extensionManager,
         )
     }
 
     val serverRepository: ServerRepository by lazy {
-        ServerRepository(httpClient, dataStore, settingsStore)
+        ServerRepository(httpClient, dataStore, settingsStore, extensionManager)
+    }
+
+    val extensionStore: to.kuudere.anisuge.extensions.ExtensionStore by lazy {
+        to.kuudere.anisuge.extensions.ExtensionStore(dataStore)
+    }
+
+    val extensionRuntime: to.kuudere.anisuge.extensions.ExtensionRuntime by lazy {
+        to.kuudere.anisuge.extensions.ExtensionRuntime()
+    }
+
+    val extensionManager: to.kuudere.anisuge.extensions.ExtensionManager by lazy {
+        to.kuudere.anisuge.extensions.ExtensionManager(httpClient, extensionStore, extensionRuntime)
     }
 
     val latestService: to.kuudere.anisuge.data.services.LatestService by lazy {

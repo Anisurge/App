@@ -27,11 +27,13 @@ import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.expandForSelection
 import to.kuudere.anisuge.data.models.orderSelectableServerIds
 import to.kuudere.anisuge.data.services.SettingsStore
+import to.kuudere.anisuge.extensions.ExtensionManager
 
 class ServerRepository(
     private val httpClient: HttpClient,
     private val dataStore: DataStore<Preferences>,
-    private val settingsStore: SettingsStore
+    private val settingsStore: SettingsStore,
+    private val extensionManager: ExtensionManager,
 ) {
     companion object {
         private const val CACHE_KEY_SERVERS = "cached_servers"
@@ -73,6 +75,7 @@ class ServerRepository(
 
     private val _userPriority = MutableStateFlow<List<String>>(emptyList())
     val userPriority: StateFlow<List<String>> = _userPriority.asStateFlow()
+    private var apiServers: List<ServerInfo> = emptyList()
 
     init {
         scope.launch {
@@ -84,7 +87,14 @@ class ServerRepository(
             loadCachedServers()
             fetchServers()
         }
+        scope.launch {
+            extensionManager.installed.collect { publishServers() }
+        }
         startBackgroundRefresh()
+    }
+
+    private fun publishServers() {
+        _servers.value = apiServers + extensionManager.servers()
     }
 
     val serverIds: List<String>
@@ -140,12 +150,14 @@ class ServerRepository(
             val list = response.body<List<ServerInfo>>()
             val activeServers = list.filter { it.active }
                 .ifEmpty { FALLBACK_SERVERS.filter { it.active } }
-            _servers.value = activeServers
+            apiServers = activeServers
+            publishServers()
             cacheServers(activeServers)
             true
         } catch (e: Exception) {
-            if (_servers.value.isEmpty()) {
-                _servers.value = FALLBACK_SERVERS
+            if (apiServers.isEmpty()) {
+                apiServers = FALLBACK_SERVERS
+                publishServers()
             }
             false
         } finally {
@@ -163,20 +175,24 @@ class ServerRepository(
             if (cachedJson != null && (now - cacheTimestamp) < CACHE_VALIDITY_MS) {
                 val cachedServers = json.decodeFromString<List<ServerInfo>>(cachedJson)
                 if (cachedServers.isNotEmpty()) {
-                    _servers.value = cachedServers
+                    apiServers = cachedServers.filterNot { it.id.startsWith("ext:") }
+                    publishServers()
                 }
             } else {
-                _servers.value = FALLBACK_SERVERS
+                apiServers = FALLBACK_SERVERS
+                publishServers()
             }
         } catch (e: Exception) {
-            _servers.value = FALLBACK_SERVERS
+            apiServers = FALLBACK_SERVERS
+            publishServers()
         }
     }
 
     private suspend fun cacheServers(servers: List<ServerInfo>) {
         try {
             dataStore.edit { preferences ->
-                preferences[stringPreferencesKey(CACHE_KEY_SERVERS)] = json.encodeToString(servers)
+                preferences[stringPreferencesKey(CACHE_KEY_SERVERS)] =
+                    json.encodeToString(servers.filterNot { it.id.startsWith("ext:") })
                 preferences[longPreferencesKey(CACHE_KEY_TIMESTAMP)] = to.kuudere.anisuge.utils.currentTimeMillis()
             }
         } catch (e: Exception) {

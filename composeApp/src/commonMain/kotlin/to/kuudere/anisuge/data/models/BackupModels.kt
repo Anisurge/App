@@ -3,15 +3,17 @@ package to.kuudere.anisuge.data.models
 import kotlinx.serialization.Serializable
 import to.kuudere.anisuge.player.PlayerEnhancementSettings
 import to.kuudere.anisuge.player.PlayerUtilitySettings
+import to.kuudere.anisuge.extensions.ExtensionBackupConfig
 
 @Serializable
 data class AnisurgeBackup(
-    val formatVersion: Int = 1,
+    val formatVersion: Int = 2,
     val createdAt: String,
     val appVersion: String,
     val settings: BackupSettings,
     val watchlist: List<WatchlistEntry>,
     val continueWatching: List<ContinueWatchingItem>,
+    val extensions: ExtensionBackupConfig = ExtensionBackupConfig(),
 )
 
 @Serializable

@@ -809,6 +809,22 @@ fun SettingsOverlay(
                                     subtitle = "${uiState.playerUtilities.doubleTapSeekSeconds} seconds",
                                     onClick = { currentPage = SettingsMenuPage.SEEK_DURATION },
                                 )
+                                EnhancementChoice(
+                                    label = "Playback buffer",
+                                    selected = PlayerUtilitySettings.bufferLabel(
+                                        uiState.playerUtilities.playbackBufferMb,
+                                    ),
+                                    values = PlayerUtilitySettings.bufferSizesMb.map(
+                                        PlayerUtilitySettings::bufferLabel,
+                                    ),
+                                ) { label ->
+                                    val size = PlayerUtilitySettings.bufferSizesMb.first {
+                                        PlayerUtilitySettings.bufferLabel(it) == label
+                                    }
+                                    onPlayerUtilitiesChanged(
+                                        uiState.playerUtilities.copy(playbackBufferMb = size),
+                                    )
+                                }
                                 SettingsMenuItem(
                                     icon = { Icon(Icons.Default.Bedtime, null, tint = Color.White) },
                                     title = "Sleep timer",

@@ -493,6 +493,19 @@ object DownloadManager {
                     } catch (_: Exception) {
                     }
                 } else {
+                    if (to.kuudere.anisuge.extensions.parseExtensionServerId(server) != null) {
+                        val extensionResult = AppComponent.extensionManager.resolveStream(
+                            animeId = task.animeId,
+                            titles = listOf(task.title),
+                            episodeNumber = task.episodeNumber,
+                            serverId = server,
+                        )
+                        val selected = extensionResult.videos.firstOrNull()
+                            ?: throw IllegalStateException("Extension returned no downloadable stream")
+                        m3u8Url = selected.url
+                        currentHeaders = selected.headers.toMutableMap()
+                        apiSubtitleTracks = selected.subtitles.map { it.label to it.url }
+                    } else {
                     val legacyDub = server.endsWith("-dub", ignoreCase = true)
                     val apiServer = if (legacyDub) server.dropLast(4) else server
                     val meta = AppComponent.serverRepository.getServerById(server)
@@ -562,6 +575,7 @@ object DownloadManager {
                     streamInfo.headers?.userAgent?.let { currentHeaders["User-Agent"] = it }
                     streamInfo.headers?.Origin?.let { currentHeaders["Origin"] = it }
                     apiSubtitleTracks = BatchSubtitleExtract.trackUrls(streamData, m3u8Url = m3u8Url)
+                    }
                 }
 
                 updateTask(taskId) {

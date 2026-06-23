@@ -100,6 +100,63 @@ fun WatchScreen(
     onExit: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val pendingExtensionMatch by AppComponent.extensionManager.pendingMatch.collectAsState()
+
+    pendingExtensionMatch?.let { pending ->
+        AlertDialog(
+            onDismissRequest = {
+                AppComponent.extensionManager.choosePendingMatch(pending.requestId, null)
+            },
+            title = { Text("Choose the correct anime") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "${pending.sourceName} returned multiple matches for ${pending.animeTitle}.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    pending.candidates.forEach { (media, confidence) ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                AppComponent.extensionManager.choosePendingMatch(pending.requestId, media)
+                            },
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                media.thumbnailUrl?.let {
+                                    AsyncImage(
+                                        model = it,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(46.dp, 64.dp).clip(RoundedCornerShape(4.dp)),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text(media.title, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${(confidence * 100).toInt()}% match",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = {
+                    AppComponent.extensionManager.choosePendingMatch(pending.requestId, null)
+                }) { Text("Cancel") }
+            },
+        )
+    }
 
     LaunchedEffect(animeId, episodeNumber, offlinePath, server, lang, offlineTitle, resumeAtSeconds) {
         viewModel.initialize(

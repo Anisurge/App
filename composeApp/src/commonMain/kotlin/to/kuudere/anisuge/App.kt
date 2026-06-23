@@ -155,6 +155,7 @@ fun App(
                 AppComponent.settingsStore,
                 AppComponent.settingsService,
                 AppComponent.serverRepository,
+                AppComponent.extensionManager,
                 AppComponent.aniskipService,
                 AppComponent.syncManager,
                 AppComponent.trackingService,

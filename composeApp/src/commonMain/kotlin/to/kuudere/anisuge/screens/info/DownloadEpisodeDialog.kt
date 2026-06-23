@@ -236,6 +236,30 @@ fun DownloadEpisodeDialog(
         availableQualities = emptyList()
         selectedQualityIndex = 0
         try {
+            if (to.kuudere.anisuge.extensions.parseExtensionServerId(server) != null) {
+                val details = infoService.getAnimeDetails(animeId)
+                val titles = buildList {
+                    details?.title?.english?.takeIf { it.isNotBlank() }?.let(::add)
+                    details?.title?.romaji?.takeIf { it.isNotBlank() }?.let(::add)
+                    details?.title?.native?.takeIf { it.isNotBlank() }?.let(::add)
+                    details?.synonyms?.filter { it.isNotBlank() }?.let(::addAll)
+                }
+                val result = to.kuudere.anisuge.AppComponent.extensionManager.resolveStream(
+                    animeId = animeId,
+                    titles = titles.ifEmpty { listOf(animeId) },
+                    episodeNumber = episodeNumber,
+                    serverId = server,
+                )
+                availableQualities = result.videos.map {
+                    Triple(it.quality, it.url, it.headers)
+                }
+                availableSubtitles = result.videos.flatMap { it.subtitles }
+                    .map { it.label }
+                    .distinct()
+                selectedSubtitleLabels = availableSubtitles.toSet()
+                estimatedSizeBytes = 0L
+                return@LaunchedEffect
+            }
             val legacyDub = server.endsWith("-dub", ignoreCase = true)
             val apiSource = if (legacyDub) server.dropLast(4) else server
             val meta = serverRepository.getServerById(server)

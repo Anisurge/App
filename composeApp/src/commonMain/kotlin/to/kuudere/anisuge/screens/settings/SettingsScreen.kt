@@ -73,6 +73,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -349,6 +350,7 @@ fun SettingsScreen(
         // Community — not ready yet
         // add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
+        add(SettingsNavItem(SettingsTab.Extensions, "Extensions", Icons.Default.Extension))
         add(SettingsNavItem(SettingsTab.Storage, strings.storage, Icons.Default.Storage))
         if (!isDesktopPlatform) {
             add(SettingsNavItem(SettingsTab.Notifications, strings.notifications, Icons.Default.Notifications))
@@ -1126,7 +1128,7 @@ private fun MobileSettingsDetail(
             .fillMaxSize()
             .background(BG)
             .then(
-                if (!isShopTab) Modifier.verticalScroll(rememberScrollState()) else Modifier,
+                if (!isShopTab && tab !is SettingsTab.Extensions) Modifier.verticalScroll(rememberScrollState()) else Modifier,
             ),
     ) {
         // Header with back
@@ -1152,19 +1154,22 @@ private fun MobileSettingsDetail(
         HorizontalDivider(thickness = 1.dp, color = BORDER)
 
         // Content
+        val isExtensionsTab = tab is SettingsTab.Extensions
         Box(
             modifier = Modifier
                 .then(
-                    if (isShopTab) {
-                        Modifier
+                    when {
+                        isShopTab || isExtensionsTab -> Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                    } else {
-                        Modifier.fillMaxWidth()
+                        else -> Modifier.fillMaxWidth()
                     },
                 )
                 .padding(horizontal = 20.dp)
-                .padding(top = 8.dp, bottom = if (isShopTab) 24.dp else 156.dp),
+                .padding(top = 8.dp, bottom = when {
+                    isShopTab || isExtensionsTab -> 24.dp
+                    else -> 156.dp
+                }),
         ) {
             when (tab) {
                 is SettingsTab.Profile -> MobileProfileContent(
@@ -1321,6 +1326,8 @@ private fun MobileSettingsDetail(
                     onSave = viewModel::saveServerPriority,
                     onReset = viewModel::resetServerPriority
                 )
+
+        is SettingsTab.Extensions -> ExtensionsSettings(Modifier.fillMaxSize())
 
                 is SettingsTab.Notifications -> NotificationsTab(
                     enabled = uiState.notificationsEnabled,
@@ -1515,6 +1522,8 @@ private fun SettingsContent(
                 onSave = viewModel::saveServerPriority,
                 onReset = viewModel::resetServerPriority
             )
+
+            is SettingsTab.Extensions -> ExtensionsSettings()
 
             is SettingsTab.Notifications -> NotificationsTab(
                 enabled = uiState.notificationsEnabled,
@@ -3164,6 +3173,19 @@ private fun GlobalPlayerUtilitySettings(
             selected = "${settings.doubleTapSeekSeconds} seconds",
             values = PlayerUtilitySettings.seekDurations.map { it.toString() to "$it seconds" },
         ) { onChange(settings.copy(doubleTapSeekSeconds = it.toInt())) }
+        SettingsChoice(
+            label = "Playback buffer",
+            selected = PlayerUtilitySettings.bufferLabel(settings.playbackBufferMb),
+            values = PlayerUtilitySettings.bufferSizesMb.map {
+                it.toString() to PlayerUtilitySettings.bufferLabel(it)
+            },
+        ) { onChange(settings.copy(playbackBufferMb = it.toInt())) }
+        Text(
+            "A larger buffer can reduce interruptions on unstable connections, but uses more memory.",
+            color = MUTED,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+        )
 
         TextButton(onClick = { showSubtitleStyle = !showSubtitleStyle }) {
             Icon(
