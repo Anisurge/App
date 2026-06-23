@@ -13,7 +13,9 @@ enum class AppThemeId(val id: String, val label: String, val description: String
     Red("red", "Cinema Red", "Streaming-style red accent"),
     Ocean("ocean", "Ocean", "Deep blue with cyan accent"),
     Midnight("midnight", "Midnight", "Indigo night with soft violet accent"),
-    HighContrast("high_contrast", "High Contrast", "Brighter borders and controls");
+    HighContrast("high_contrast", "High Contrast", "Brighter borders and controls"),
+    Dantotsu("dantotsu", "Dantotsu Blue", "Poppins-forward anime app with violet accent"),
+    ReDantotsu("redantotsu", "Liquid Glass", "Frosted dark UI with iOS-blue highlights");
 
     companion object {
         fun fromId(id: String?): AppThemeId = entries.firstOrNull { it.id == id } ?: Default

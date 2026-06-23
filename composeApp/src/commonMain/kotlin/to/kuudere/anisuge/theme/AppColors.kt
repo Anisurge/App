@@ -184,6 +184,34 @@ private val MidnightPalette = AppPalette(
     error = Color(0xFFFF8A80),
 )
 
+private val DantotsuPalette = AppPalette(
+    isDark = true,
+    background = Color(0xFF0E1117),
+    surface = Color(0xFF1A1F2B),
+    surfaceVariant = Color(0xFF252B3A),
+    border = Color(0xFF3A4558),
+    text = Color(0xFFFFFFFF),
+    textMuted = Color(0xFFB0BAC9),
+    textDim = Color(0xFF7A8699),
+    accent = Color(0xFF91A6FF),
+    onAccent = Color(0xFF0E1117),
+    error = Color(0xFFFF8A80),
+)
+
+private val ReDantotsuPalette = AppPalette(
+    isDark = true,
+    background = Color(0xFF05060A),
+    surface = Color(0xFF141820),
+    surfaceVariant = Color(0xFF1E2430),
+    border = Color(0x33FFFFFF),
+    text = Color(0xFFFFFFFF),
+    textMuted = Color(0xFFB8C0CC),
+    textDim = Color(0xFF7E8796),
+    accent = Color(0xFF0091FF),
+    onAccent = Color(0xFFFFFFFF),
+    error = Color(0xFFFF8A80),
+)
+
 private val HighContrastPalette = AppPalette(
     isDark = true,
     background = Color(0xFF000000),
@@ -208,6 +236,8 @@ fun paletteFor(themeId: AppThemeId): AppPalette = when (themeId) {
     AppThemeId.Ocean -> OceanPalette
     AppThemeId.Midnight -> MidnightPalette
     AppThemeId.HighContrast -> HighContrastPalette
+    AppThemeId.Dantotsu -> DantotsuPalette
+    AppThemeId.ReDantotsu -> ReDantotsuPalette
 }
 
 /** Build a Material3 [ColorScheme] from an [AppPalette] so Material controls stay in sync. */

@@ -96,6 +96,7 @@ fun PlayerControls(
     val scope = rememberCoroutineScope()
     var lastInteractionAt by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     var lastPointerMoveWakeAt by remember { mutableStateOf(0L) }
+    var suppressPointerWakeUntil by remember { mutableStateOf(0L) }
 
     val isLoading =
         playerState.isBuffering || (!playerState.isPlaying && playerState.duration <= 0.0) || expectedPosition != null
@@ -195,11 +196,13 @@ fun PlayerControls(
             .fillMaxSize()
             .background(Color.Transparent)
             .pointerInput("hover") {
+                if (!to.kuudere.anisuge.platform.isDesktopPlatform) return@pointerInput
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Main)
                         if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Move) {
                             val now = Clock.System.now().toEpochMilliseconds()
+                            if (now < suppressPointerWakeUntil) continue
                             if (now - lastPointerMoveWakeAt >= pointerMoveThrottleMillis) {
                                 lastPointerMoveWakeAt = now
                                 recordInteraction(forceShow = !controlsVisible)
@@ -225,18 +228,15 @@ fun PlayerControls(
                         }
                     },
                     onTap = {
+                        val now = Clock.System.now().toEpochMilliseconds()
                         if (playerState.isLocked) {
                             controlsVisible = !controlsVisible
-                            if (controlsVisible) recordInteraction(forceShow = false)
+                            if (controlsVisible) {
+                                recordInteraction(forceShow = false)
+                            } else {
+                                suppressPointerWakeUntil = now + 400L
+                            }
                             return@detectTapGestures
-                        }
-
-                        // If double tap is "warm", treat tap on same side as additional seek
-                        val warmSide = doubleTapSide
-                        if (warmSide != null) {
-                            // Tapping while animation is active?
-                            // detectTapGestures doesn't easily let us capture individual taps after double tap
-                            // But for now, we'll keep the standard behavior.
                         }
 
                         if (isLoading) {
@@ -244,7 +244,11 @@ fun PlayerControls(
                             recordInteraction(forceShow = false)
                         } else {
                             controlsVisible = !controlsVisible
-                            if (controlsVisible) recordInteraction(forceShow = false)
+                            if (controlsVisible) {
+                                recordInteraction(forceShow = false)
+                            } else {
+                                suppressPointerWakeUntil = now + 400L
+                            }
                         }
                     },
                     onDoubleTap = { offset ->

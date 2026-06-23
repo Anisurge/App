@@ -62,6 +62,8 @@ import to.kuudere.anisuge.screens.tv.TvAppShell
 import to.kuudere.anisuge.theme.AnisugTheme
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.theme.AppThemeId
+import to.kuudere.anisuge.theme.AppUiStyle
+import to.kuudere.anisuge.theme.applyUiStyleMetrics
 import androidx.navigation.NamedNavArgument
 import androidx.navigation.navArgument
 import androidx.compose.runtime.getValue
@@ -123,6 +125,8 @@ fun App(
     onAppRestart: () -> Unit = {},
 ) {
     val themeId by AppComponent.settingsStore.themeIdFlow.collectAsState(initial = "default")
+    val uiStyleId by AppComponent.settingsStore.uiStyleFlow.collectAsState(initial = "anisurge")
+    applyUiStyleMetrics(AppUiStyle.fromId(uiStyleId))
     AnisugTheme(themeId = AppThemeId.fromId(themeId)) {
         val navController = rememberNavController()
         val splashVm = remember {

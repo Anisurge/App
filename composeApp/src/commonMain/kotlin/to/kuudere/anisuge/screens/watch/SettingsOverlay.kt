@@ -2,7 +2,9 @@ package to.kuudere.anisuge.screens.watch
 
 import androidx.compose.animation.*
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.*
+import to.kuudere.anisuge.theme.AppUiMetrics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -49,6 +51,25 @@ enum class SettingsMenuPage {
     MAIN, SERVER, QUALITY, SUBTITLES, SPEED, SCALE, WATCHLIST, AUTOPLAY,
     ENHANCEMENTS, SHADERS, COLOR_PRESETS, VISUAL, ADVANCED,
     UTILITIES, AV_SYNC, SUBTITLE_STYLE, SLEEP_TIMER, SEEK_DURATION
+}
+
+private val settingsOverlayAnim = tween<Float>(durationMillis = 160, easing = FastOutSlowInEasing)
+private val settingsOverlayExitAnim = tween<Float>(durationMillis = 130, easing = FastOutSlowInEasing)
+
+@Composable
+fun AnimatedWatchSettingsOverlay(
+    visible: Boolean,
+    content: @Composable () -> Unit,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = scaleIn(initialScale = 0.9f, animationSpec = settingsOverlayAnim) +
+            fadeIn(animationSpec = tween(120)),
+        exit = scaleOut(targetScale = 0.9f, animationSpec = settingsOverlayExitAnim) +
+            fadeOut(animationSpec = tween(100)),
+    ) {
+        content()
+    }
 }
 
 @Composable
@@ -127,13 +148,17 @@ fun SettingsOverlay(
                 .padding(horizontal = 16.dp)
                 .widthIn(max = 400.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
+                .graphicsLayer {
+                    scaleX = 1f
+                    scaleY = 1f
+                }
+                .clip(RoundedCornerShape(AppUiMetrics.sheetRadius))
                 .background(Color.Black.copy(alpha = panelAlpha))
-                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(24.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(AppUiMetrics.sheetRadius))
                 .clickable(enabled = false, onClick = {}) // block touch propagation
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(vertical = 12.dp)
-                .animateContentSize(animationSpec = tween(durationMillis = 300)) // smooth size change
+                .animateContentSize(animationSpec = tween(durationMillis = 180))
         ) {
             AnimatedContent(
                 modifier = Modifier.fillMaxWidth(),

@@ -55,6 +55,9 @@ import to.kuudere.anisuge.ui.isAnimatedFrameAssetUrl
 import to.kuudere.anisuge.ui.resolveProfileMediaUrl
 import to.kuudere.anisuge.i18n.AppLocale
 import to.kuudere.anisuge.theme.AppThemeId
+import to.kuudere.anisuge.theme.AppUiStyle
+import to.kuudere.anisuge.theme.applyUiStyleMetrics
+import to.kuudere.anisuge.theme.bundleForStyle
 import to.kuudere.anisuge.player.PlayerEnhancementSettings
 import to.kuudere.anisuge.player.PlayerUtilitySettings
 
@@ -104,6 +107,7 @@ data class SettingsUiState(
     val preferRomajiAnimeTitles: Boolean = false,
     val showFullAnimeTitles: Boolean = false,
     val themeId: AppThemeId = AppThemeId.Default,
+    val uiStyle: AppUiStyle = AppUiStyle.Anisurge,
     val legacyScheduleUi: Boolean = false,
     val homeLayout: LayoutConfig = LayoutConfig.DEFAULT,
     val layoutSaveError: String? = null,
@@ -486,6 +490,13 @@ class SettingsViewModel(
             }
         }
         viewModelScope.launch {
+            settingsStore.uiStyleFlow.collect { id ->
+                val style = AppUiStyle.fromId(id)
+                applyUiStyleMetrics(style)
+                _uiState.update { it.copy(uiStyle = style) }
+            }
+        }
+        viewModelScope.launch {
             settingsStore.preferRomajiAnimeTitlesFlow.collect { v ->
                 _uiState.update { it.copy(preferRomajiAnimeTitles = v) }
             }
@@ -799,6 +810,27 @@ class SettingsViewModel(
 
     fun setThemeId(themeId: AppThemeId) {
         viewModelScope.launch { settingsStore.setThemeId(themeId.id) }
+    }
+
+    fun setUiStyle(style: AppUiStyle) {
+        viewModelScope.launch {
+            settingsStore.setUiStyle(style.id)
+            applyUiStyleMetrics(style)
+            _uiState.update { it.copy(uiStyle = style) }
+            if (style != AppUiStyle.Anisurge) {
+                val bundle = bundleForStyle(style)
+                settingsStore.setThemeId(bundle.themeId.id)
+                settingsStore.setFloatingBottomNav(bundle.floatingBottomNav)
+                settingsStore.setLiquidGlassBottomNav(bundle.liquidGlassBottomNav)
+                _uiState.update {
+                    it.copy(
+                        themeId = bundle.themeId,
+                        floatingBottomNav = bundle.floatingBottomNav,
+                        liquidGlassBottomNav = bundle.liquidGlassBottomNav,
+                    )
+                }
+            }
+        }
     }
 
     fun setLegacyScheduleUi(enabled: Boolean) {

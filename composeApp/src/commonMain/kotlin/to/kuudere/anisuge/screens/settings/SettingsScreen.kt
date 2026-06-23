@@ -171,6 +171,8 @@ import to.kuudere.anisuge.platform.DiscordLoginDialog
 import to.kuudere.anisuge.platform.openUrl
 import to.kuudere.anisuge.utils.rememberDownloadDirectoryPicker
 import to.kuudere.anisuge.theme.AppThemeId
+import to.kuudere.anisuge.theme.AppUiMetrics
+import to.kuudere.anisuge.theme.AppUiStyle
 import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -1245,6 +1247,7 @@ private fun MobileSettingsDetail(
                     onShowFullAnimeTitlesChange = viewModel::setShowFullAnimeTitles,
                     onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                     onThemeSelected = viewModel::setThemeId,
+                    onUiStyleSelected = viewModel::setUiStyle,
                     onOpenHomeLayout = onOpenHomeLayout,
                 )
 
@@ -1464,6 +1467,7 @@ private fun SettingsContent(
                 onShowFullAnimeTitlesChange = viewModel::setShowFullAnimeTitles,
                 onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                 onThemeSelected = viewModel::setThemeId,
+                onUiStyleSelected = viewModel::setUiStyle,
                 onOpenHomeLayout = onOpenHomeLayout,
             )
 
@@ -1593,6 +1597,7 @@ private fun AppearanceTab(
     onShowFullAnimeTitlesChange: (Boolean) -> Unit,
     onLegacyScheduleUiChange: (Boolean) -> Unit,
     onThemeSelected: (AppThemeId) -> Unit,
+    onUiStyleSelected: (AppUiStyle) -> Unit,
     onOpenHomeLayout: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -1600,10 +1605,31 @@ private fun AppearanceTab(
         Text(
             strings.appearance,
             color = TEXT,
-            fontSize = 42.sp,
+            fontSize = AppUiMetrics.settingsTitleSize.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 32.dp)
         )
+
+        SettingCard(
+            title = "UI style",
+            description = "Pick a reference-inspired layout package. Dantotsu uses rounded cards and a solid pill nav; ReDantotsu enables liquid glass and softer sheets.",
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AppUiStyle.entries.forEach { style ->
+                    UiStyleChip(
+                        style = style,
+                        selected = uiState.uiStyle == style,
+                        onClick = { onUiStyleSelected(style) },
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         SettingCard(
             title = "Theme presets",
@@ -1774,6 +1800,45 @@ private fun themePreviewColor(theme: AppThemeId): Color = when (theme) {
     AppThemeId.Ocean -> Color(0xFF38BDF8)
     AppThemeId.Midnight -> Color(0xFF818CF8)
     AppThemeId.HighContrast -> Color(0xFFFFFF00)
+    AppThemeId.Dantotsu -> Color(0xFF91A6FF)
+    AppThemeId.ReDantotsu -> Color(0xFF0091FF)
+}
+
+@Composable
+private fun UiStyleChip(
+    style: AppUiStyle,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .widthIn(min = 148.dp)
+            .clip(RoundedCornerShape(AppUiMetrics.cardRadius))
+            .background(if (selected) AppColors.accent.copy(alpha = 0.18f) else BG_HOVER)
+            .border(
+                width = 1.dp,
+                color = if (selected) AppColors.accent else BORDER,
+                shape = RoundedCornerShape(AppUiMetrics.cardRadius),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            style.label,
+            color = if (selected) AppColors.accent else TEXT,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            style.description,
+            color = MUTED,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Composable
@@ -3023,7 +3088,7 @@ private fun SettingCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(AppUiMetrics.cardRadius))
                 .background(BG_CARD)
                 .padding(16.dp)
         ) {

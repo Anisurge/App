@@ -2478,7 +2478,7 @@ private fun AnisugBottomBar(
         return
     }
 
-    val navShape = RoundedCornerShape(if (liquidGlass) 30.dp else 28.dp)
+    val navShape = RoundedCornerShape(to.kuudere.anisuge.theme.AppUiMetrics.navPillRadius)
     val navMaterial = if (liquidGlass) {
         Modifier
             .hazeEffect(

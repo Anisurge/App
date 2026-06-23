@@ -49,6 +49,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val SHOW_FULL_ANIME_TITLES_KEY = booleanPreferencesKey("show_full_anime_titles")
         val VIDEO_SCALE_MODE_KEY = stringPreferencesKey("video_scale_mode")
         val THEME_ID_KEY = stringPreferencesKey("theme_id")
+        val UI_STYLE_KEY = stringPreferencesKey("ui_style")
         val LEGACY_SCHEDULE_UI_KEY = booleanPreferencesKey("legacy_schedule_ui")
         val HOME_LAYOUT_KEY = stringPreferencesKey("home_layout_v1")
         val AI_CHAT_HISTORY_KEY = stringPreferencesKey("ai_chat_history")
@@ -133,6 +134,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val discordTokenFlow: Flow<String?> =
         dataStore.data.map { it[DISCORD_TOKEN_KEY] }.distinctUntilChanged()
     val themeIdFlow: Flow<String> = dataStore.data.map { it[THEME_ID_KEY] ?: "default" }
+    val uiStyleFlow: Flow<String> = dataStore.data.map { it[UI_STYLE_KEY] ?: "anisurge" }
     val legacyScheduleUiFlow: Flow<Boolean> = dataStore.data.map { it[LEGACY_SCHEDULE_UI_KEY] ?: false }
     val homeLayoutFlow: Flow<LayoutConfig> = dataStore.data
         .catch { e ->
@@ -349,6 +351,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setThemeId(themeId: String) {
         dataStore.edit { it[THEME_ID_KEY] = themeId }
+    }
+
+    suspend fun setUiStyle(styleId: String) {
+        dataStore.edit { it[UI_STYLE_KEY] = styleId }
     }
 
     suspend fun setLegacyScheduleUi(enabled: Boolean) {

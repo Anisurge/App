@@ -2487,7 +2487,7 @@ fun WatchVideoPlayer(
                 modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
             )
 
-            if (uiState.showSettingsOverlay) {
+            AnimatedWatchSettingsOverlay(visible = uiState.showSettingsOverlay) {
                 val servers = uiState.servers
                 SettingsOverlay(
                     uiState = uiState,
@@ -3436,7 +3436,7 @@ fun WatchVideoPlayer(
                 }
             }
 
-            if (uiState.showSettingsOverlay) {
+            AnimatedWatchSettingsOverlay(visible = uiState.showSettingsOverlay) {
                 val isOffline = uiState.offlinePath != null
                 val servers = if (isOffline) emptyList() else uiState.servers
                 Box(Modifier.fillMaxSize().zIndex(50f)) {
@@ -3534,7 +3534,7 @@ fun WatchVideoPlayer(
                 }
             }
 
-            if (uiState.showSettingsOverlay) {
+            AnimatedWatchSettingsOverlay(visible = uiState.showSettingsOverlay) {
                 val servers = uiState.servers
                 SettingsOverlay(
                     uiState = uiState,

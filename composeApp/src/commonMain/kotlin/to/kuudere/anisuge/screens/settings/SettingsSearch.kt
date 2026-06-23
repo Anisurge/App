@@ -19,6 +19,7 @@ val SETTINGS_SEARCH_ENTRIES = listOf(
     SettingsSearchEntry("player-enhancements", "Player enhancements", "Preferences", listOf("anime4k", "shader", "brightness", "contrast"), SettingsTab.Preferences),
     SettingsSearchEntry("player-utilities", "Player utilities", "Preferences", listOf("screenshot", "sleep timer", "subtitle delay"), SettingsTab.Preferences),
     SettingsSearchEntry("download-path", "Download path", "Preferences", listOf("folder", "offline"), SettingsTab.Preferences),
+    SettingsSearchEntry("ui-style", "UI style", "Appearance", listOf("dantotsu", "redantotsu", "layout", "glass"), SettingsTab.Appearance),
     SettingsSearchEntry("theme", "App theme", "Appearance", listOf("color", "amoled", "light"), SettingsTab.Appearance),
     SettingsSearchEntry("navigation", "Navigation style", "Appearance", listOf("bottom bar", "liquid glass"), SettingsTab.Appearance),
     SettingsSearchEntry("home-layout", "Home layout", "Appearance", listOf("rows", "reorder"), SettingsTab.Appearance),
