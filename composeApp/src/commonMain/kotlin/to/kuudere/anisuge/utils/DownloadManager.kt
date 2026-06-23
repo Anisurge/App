@@ -25,6 +25,9 @@ import okio.buffer
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.extensions.pickExtensionDownloadVideo
+import to.kuudere.anisuge.extensions.resolveBridgeProxyStreamUrl
+import to.kuudere.anisuge.extensions.resolvedForDownload
 import to.kuudere.anisuge.platform.KmpFileSystem
 import to.kuudere.anisuge.platform.isAndroidPlatform
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
@@ -470,41 +473,55 @@ object DownloadManager {
                 var apiSubtitleTracks = emptyList<Pair<String, String>>()
 
                 if (!preResolvedM3u8.isNullOrBlank()) {
-                    // Use pre-resolved M3U8 URL (quality was selected in dialog)
-                    m3u8Url = preResolvedM3u8
-                    currentHeaders = (taskHeaders ?: emptyMap()).toMutableMap()
-                    try {
-                        val legacyDub = server.endsWith("-dub", ignoreCase = true)
-                        val apiServer = if (legacyDub) server.dropLast(4) else server
-                        val meta = AppComponent.serverRepository.getServerById(server)
-                            ?: AppComponent.serverRepository.getServerById(apiServer)
-                        val useDub = when {
-                            legacyDub -> true
-                            meta?.type == "dub" -> true
-                            meta?.type == "sub" -> false
-                            else -> preferBatchDub
-                        }
-                        val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
-                        val streamData = if (useDub) response?.dub else response?.sub
-                        apiSubtitleTracks = BatchSubtitleExtract.trackUrls(
-                            streamData,
-                            m3u8Url = preResolvedM3u8,
+                    val extensionServer = to.kuudere.anisuge.extensions.parseExtensionServerId(server) != null
+                    if (extensionServer) {
+                        val resolved = resolveExtensionDownloadStream(
+                            task = task,
+                            server = server,
+                            preResolvedUrl = preResolvedM3u8,
+                            taskHeaders = taskHeaders,
                         )
-                    } catch (_: Exception) {
+                        m3u8Url = resolved.url
+                        currentHeaders = resolved.headers
+                        apiSubtitleTracks = resolved.subtitleTracks
+                    } else {
+                        val unwrapped = to.kuudere.anisuge.extensions.resolveBridgeProxyStreamUrl(
+                            preResolvedM3u8,
+                            taskHeaders ?: emptyMap(),
+                        )
+                        m3u8Url = unwrapped.url
+                        currentHeaders = unwrapped.headers.toMutableMap()
+                        try {
+                            val legacyDub = server.endsWith("-dub", ignoreCase = true)
+                            val apiServer = if (legacyDub) server.dropLast(4) else server
+                            val meta = AppComponent.serverRepository.getServerById(server)
+                                ?: AppComponent.serverRepository.getServerById(apiServer)
+                            val useDub = when {
+                                legacyDub -> true
+                                meta?.type == "dub" -> true
+                                meta?.type == "sub" -> false
+                                else -> preferBatchDub
+                            }
+                            val response = infoService.getVideoStream(anilistId, task.episodeNumber, apiServer)
+                            val streamData = if (useDub) response?.dub else response?.sub
+                            apiSubtitleTracks = BatchSubtitleExtract.trackUrls(
+                                streamData,
+                                m3u8Url = m3u8Url,
+                            )
+                        } catch (_: Exception) {
+                        }
                     }
                 } else {
                     if (to.kuudere.anisuge.extensions.parseExtensionServerId(server) != null) {
-                        val extensionResult = AppComponent.extensionManager.resolveStream(
-                            animeId = task.animeId,
-                            titles = listOf(task.title),
-                            episodeNumber = task.episodeNumber,
-                            serverId = server,
+                        val resolved = resolveExtensionDownloadStream(
+                            task = task,
+                            server = server,
+                            preResolvedUrl = null,
+                            taskHeaders = taskHeaders,
                         )
-                        val selected = extensionResult.videos.firstOrNull()
-                            ?: throw IllegalStateException("Extension returned no downloadable stream")
-                        m3u8Url = selected.url
-                        currentHeaders = selected.headers.toMutableMap()
-                        apiSubtitleTracks = selected.subtitles.map { it.label to it.url }
+                        m3u8Url = resolved.url
+                        currentHeaders = resolved.headers
+                        apiSubtitleTracks = resolved.subtitleTracks
                     } else {
                     val legacyDub = server.endsWith("-dub", ignoreCase = true)
                     val apiServer = if (legacyDub) server.dropLast(4) else server
@@ -1204,6 +1221,59 @@ object DownloadManager {
             results.add(HlsPngTsStrip.resolvePlaylistUrl(baseUrl, uri) to name)
         }
         return results
+    }
+
+    private data class ExtensionDownloadStream(
+        val url: String,
+        val headers: MutableMap<String, String>,
+        val subtitleTracks: List<Pair<String, String>>,
+    )
+
+    private suspend fun resolveExtensionDownloadStream(
+        task: DownloadTask,
+        server: String,
+        preResolvedUrl: String?,
+        taskHeaders: Map<String, String>?,
+    ): ExtensionDownloadStream {
+        val details = runCatching { infoService.getAnimeDetails(task.animeId) }.getOrNull()
+        val titles = buildList {
+            details?.title?.english?.takeIf { it.isNotBlank() }?.let(::add)
+            details?.title?.romaji?.takeIf { it.isNotBlank() }?.let(::add)
+            details?.title?.native?.takeIf { it.isNotBlank() }?.let(::add)
+            details?.synonyms?.filter { it.isNotBlank() }?.let(::addAll)
+            if (isEmpty()) add(task.title)
+        }
+        val synonyms = details?.synonyms?.filter { it.isNotBlank() }.orEmpty()
+        val extensionResult = AppComponent.extensionManager.resolveStreamForEpisode(
+            animeId = task.animeId,
+            titles = titles.ifEmpty { listOf(task.animeId) },
+            synonyms = synonyms,
+            episodeNumber = task.episodeNumber,
+            serverId = server,
+        )
+        val resolvedVideos = extensionResult.videos.map { it.resolvedForDownload() }
+        val selected = when {
+            !preResolvedUrl.isNullOrBlank() -> {
+                val unwrapped = resolveBridgeProxyStreamUrl(preResolvedUrl, taskHeaders ?: emptyMap())
+                resolvedVideos.firstOrNull { video ->
+                    video.url == unwrapped.url || video.url == preResolvedUrl
+                } ?: pickExtensionDownloadVideo(resolvedVideos)
+            }
+            else -> pickExtensionDownloadVideo(resolvedVideos)
+        } ?: throw IllegalStateException("Extension returned no downloadable stream")
+
+        val mergedHeaders = selected.headers.toMutableMap()
+        taskHeaders?.forEach { (key, value) -> mergedHeaders.putIfAbsent(key, value) }
+        val subtitleTracks = extensionResult.videos
+            .flatMap { it.subtitles }
+            .distinctBy { it.label }
+            .map { it.label to it.url }
+
+        return ExtensionDownloadStream(
+            url = selected.url,
+            headers = mergedHeaders,
+            subtitleTracks = subtitleTracks,
+        )
     }
 
     private suspend fun collectDownloadedSubtitles(

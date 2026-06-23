@@ -8,6 +8,7 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,11 @@ actual class ExtensionRuntime actual constructor() {
     private val logLines = ArrayDeque<String>()
     private var bridge: Any? = null
     private var bridgeClass: Class<*>? = null
+    private var bridgeSourceRegistry = emptyMap<String, String>()
+    private var cachedLoadedSources: List<ExtensionSource> = emptyList()
+    private var cachedLoadedSourcesAt = 0L
+    private var lastAnimeBridgeReloadAt = 0L
+    private var lastMangaBridgeReloadAt = 0L
     private val runtimeFile get() = File(ExtensionPlatformFiles.rootDir(), "runtime/anymex_runtime_host.apk")
 
     init {
@@ -71,24 +77,56 @@ actual class ExtensionRuntime actual constructor() {
     actual suspend fun installExtension(path: String, isAnime: Boolean): Boolean = withContext(Dispatchers.IO) {
         ensureReady()
         val ctx = androidAppContext
-        val pm = ctx.packageManager
-        val pkgInfo = pm.getPackageArchiveInfo(path, 0)
-            ?: return@withContext false
-        val pkgName = pkgInfo.packageName
-
         val dirName = if (isAnime) "exts" else "exts_manga"
         val privateDir = File(ctx.filesDir, dirName).apply { mkdirs() }
+        if (!privateDir.exists() || !privateDir.canWrite()) {
+            log("Install failed: bridge dir not writable: ${privateDir.absolutePath}")
+            return@withContext false
+        }
+
+        val srcFile = File(path)
+        if (!srcFile.exists() || !srcFile.canRead()) {
+            log("Install failed: cannot read staged file $path (exists=${srcFile.exists()})")
+            return@withContext false
+        }
+
+        if (path.endsWith(".dart", ignoreCase = true) || path.endsWith(".js", ignoreCase = true)) {
+            val dstFile = File(privateDir, srcFile.name)
+            if (srcFile.absolutePath != dstFile.absolutePath) {
+                makeWritableForReplace(dstFile)
+                srcFile.inputStream().use { input ->
+                    dstFile.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            finalizeInstalledArtifact(dstFile)
+            log("Installed manga extension source: ${dstFile.name} → ${dstFile.absolutePath}")
+            reloadInstalledSources(isAnime)
+            return@withContext true
+        }
+
+        val pm = ctx.packageManager
+        val pkgInfo = pm.getPackageArchiveInfo(srcFile.absolutePath, 0)
+            ?: run {
+                log("Install failed: not a valid APK at $path")
+                return@withContext false
+            }
+        val pkgName = pkgInfo.packageName
+
         val dstFile = File(privateDir, "$pkgName.apk")
         val tmpFile = File(privateDir, "$pkgName.apk.tmp")
+        makeWritableForReplace(dstFile)
+        makeWritableForReplace(tmpFile)
+        tmpFile.delete()
 
-        File(path).inputStream().use { input ->
+        srcFile.inputStream().use { input ->
             tmpFile.outputStream().use { output -> input.copyTo(output) }
         }
         if (!tmpFile.renameTo(dstFile)) {
+            makeWritableForReplace(dstFile)
+            srcFile.copyTo(dstFile, overwrite = true)
             tmpFile.delete()
-            return@withContext false
         }
-        dstFile.setReadOnly()
+        finalizeInstalledArtifact(dstFile)
         log("Installed extension APK: $pkgName → ${dstFile.absolutePath}")
 
         reloadInstalledSources(isAnime)
@@ -99,54 +137,208 @@ actual class ExtensionRuntime actual constructor() {
         ensureReady()
         val dirName = if (isAnime) "exts" else "exts_manga"
         val privateDir = File(androidAppContext.filesDir, dirName)
-        val apkFile = File(privateDir, "$packageName.apk")
-        if (apkFile.exists()) apkFile.delete()
+        var deleted = false
+        File(privateDir, "$packageName.apk").takeIf { it.exists() }?.let { file ->
+            makeWritableForReplace(file)
+            deleted = !file.exists() || deleted
+        }
+        privateDir.listFiles()
+            ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) && it.nameWithoutExtension == packageName }
+            ?.forEach { file ->
+                makeWritableForReplace(file)
+                deleted = !file.exists() || deleted
+            }
         val iconFile = File(androidAppContext.cacheDir, "${packageName}_icon.png")
         if (iconFile.exists()) iconFile.delete()
-        log("Uninstalled extension: $packageName")
+        log("Uninstalled extension: $packageName (apkDeleted=$deleted)")
 
         reloadInstalledSources(isAnime)
         true
     }
 
+    actual suspend fun invalidateInstalledSourcesCache() = withContext(Dispatchers.IO) {
+        cachedLoadedSources = emptyList()
+        cachedLoadedSourcesAt = 0L
+        lastAnimeBridgeReloadAt = 0L
+        lastMangaBridgeReloadAt = 0L
+        bridgeSourceRegistry = emptyMap()
+    }
+
+    private fun appFilesDir(): String = androidAppContext.filesDir.absolutePath
+
+    private fun animeExtensionsDir(): File =
+        File(androidAppContext.filesDir, "exts").apply { mkdirs() }
+
+    private fun mangaExtensionsDir(): File =
+        File(androidAppContext.filesDir, "exts_manga").apply { mkdirs() }
+
     private fun reloadInstalledSources(isAnime: Boolean) {
-        val dirName = if (isAnime) "exts" else "exts_manga"
-        val privateDir = File(androidAppContext.filesDir, dirName)
+        cachedLoadedSources = emptyList()
+        cachedLoadedSourcesAt = 0L
         if (isAnime) {
-            invoke("getInstalledAnimeExtensions", androidAppContext, privateDir.absolutePath)
+            lastAnimeBridgeReloadAt = 0L
+            ensureBridgeDirArtifactsReadOnly(animeExtensionsDir(), ::log)
+            invoke("getInstalledAnimeExtensions", androidAppContext, appFilesDir())
         } else {
-            invoke("getInstalledMangaExtensions", androidAppContext, privateDir.absolutePath)
+            lastMangaBridgeReloadAt = 0L
+            ensureBridgeDirArtifactsReadOnly(mangaExtensionsDir(), ::log)
+            invoke("getInstalledMangaExtensions", androidAppContext, appFilesDir())
+        }
+    }
+
+
+
+    private fun updateBridgeRegistry(sources: List<ExtensionSource>) {
+        bridgeSourceRegistry = buildMap {
+            for (source in sources) {
+                val bridgeId = source.runtimeId?.takeIf { it.isNotBlank() } ?: continue
+                source.pkgName?.takeIf { it.isNotBlank() }?.let { put(it, bridgeId) }
+                put(source.id, bridgeId)
+                put(source.name.lowercase(), bridgeId)
+            }
+        }
+    }
+
+    private fun resolveBridgeSourceId(source: ExtensionSource): String {
+        if (source.engine == ExtensionEngine.CLOUDSTREAM) {
+            return source.runtimeId?.takeIf { it.isNotBlank() } ?: source.id
+        }
+        source.runtimeId?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }?.let { return it }
+        val keys = listOfNotNull(
+            source.pkgName?.takeIf { it.isNotBlank() },
+            source.id.takeIf { it.isNotBlank() },
+            source.name.takeIf { it.isNotBlank() }?.lowercase(),
+        )
+        for (key in keys) {
+            bridgeSourceRegistry[key]?.let { return it }
+        }
+        return source.runtimeId ?: source.id
+    }
+
+    private fun bridgeIsAnime(source: ExtensionSource): Boolean =
+        when (source.engine) {
+            ExtensionEngine.MANGAYOMI -> false
+            else -> source.isAnime
+        }
+
+    private fun mangayomiUsesMangaBridge(source: ExtensionSource): Boolean =
+        source.engine == ExtensionEngine.MANGAYOMI &&
+            source.installedPath?.endsWith(".apk", ignoreCase = true) == true
+
+    private fun reloadBridgeForSource(source: ExtensionSource, force: Boolean = false) {
+        when (source.engine) {
+            ExtensionEngine.MANGAYOMI -> {
+                if (!mangayomiUsesMangaBridge(source)) return
+                val now = System.currentTimeMillis()
+                if (!force && now - lastMangaBridgeReloadAt < BRIDGE_RELOAD_COOLDOWN_MS) return
+                lastMangaBridgeReloadAt = now
+                val raw = invoke("getInstalledMangaExtensions", androidAppContext, appFilesDir())
+                updateBridgeRegistry(parseSources(raw, ExtensionEngine.MANGAYOMI, emptyList()))
+                Log.i(TAG, "reloadBridge: manga APK extensions for ${source.name}")
+            }
+            ExtensionEngine.CLOUDSTREAM -> {
+                source.installedPath?.let { invoke("csLoadPlugin", androidAppContext, it) }
+            }
+            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA -> {
+                val now = System.currentTimeMillis()
+                if (!force && now - lastAnimeBridgeReloadAt < BRIDGE_RELOAD_COOLDOWN_MS) return
+                lastAnimeBridgeReloadAt = now
+                val raw = invoke("getInstalledAnimeExtensions", androidAppContext, appFilesDir())
+                val parsed = parseSources(raw, ExtensionEngine.ANIYOMI, emptyList())
+                updateBridgeRegistry(parsed)
+                cachedLoadedSources = parsed
+                cachedLoadedSourcesAt = now
+                Log.i(TAG, "reloadBridge: anime extensions (${parsed.size}) for ${source.name}")
+            }
         }
     }
 
     actual suspend fun loadInstalledSources(paths: List<String>): List<ExtensionSource> = withContext(Dispatchers.IO) {
         ensureReady()
-        paths.groupBy { if (it.endsWith(".cs3")) ExtensionEngine.CLOUDSTREAM else ExtensionEngine.ANIYOMI }
-            .flatMap { (engine, files) ->
-                val raw = if (engine == ExtensionEngine.CLOUDSTREAM) {
-                    files.forEach { invoke("csLoadPlugin", androidAppContext, it) }
-                    invoke("csGetRegisteredProviders")
-                } else {
-                    val folder = File(files.firstOrNull() ?: return@flatMap emptyList()).parentFile?.absolutePath
-                        ?: return@flatMap emptyList()
-                    invoke("getInstalledAnimeExtensions", androidAppContext, folder)
-                }
-                parseSources(raw, engine, files)
+        val now = System.currentTimeMillis()
+        if (
+            cachedLoadedSources.isNotEmpty() &&
+            now - cachedLoadedSourcesAt < BRIDGE_RELOAD_COOLDOWN_MS
+        ) {
+            return@withContext cachedLoadedSources
+        }
+        val mangaPaths = paths.filter { path ->
+            !path.endsWith(".cs3") && (path.contains("/exts_manga/") || path.contains("/mangayomi/"))
+        }
+        val animePaths = paths.filter { path ->
+            !path.endsWith(".cs3") &&
+                !path.contains("/exts_manga/") &&
+                !path.contains("/mangayomi/") &&
+                !path.contains("/sora/")
+        }
+        val soraPaths = paths.filter { path ->
+            !path.endsWith(".cs3") && path.contains("/sora/")
+        }
+        val cloudStreamPaths = paths.filter { it.endsWith(".cs3") }
+        val hasAnimeApks = animeExtensionsDir().listFiles()?.any { it.isFile && it.extension == "apk" } == true
+        val hasMangaApks = mangaExtensionsDir().listFiles()?.any { it.isFile && it.extension == "apk" } == true
+        val loaded = buildList {
+            if (animePaths.isNotEmpty() || soraPaths.isNotEmpty() || hasAnimeApks) {
+                val raw = invoke("getInstalledAnimeExtensions", androidAppContext, appFilesDir())
+                val hintPaths = (animePaths + soraPaths).ifEmpty { paths }
+                val parsed = parseSources(raw, ExtensionEngine.ANIYOMI, hintPaths)
+                addAll(
+                    parsed.map { source ->
+                        val soraPath = soraPaths.firstOrNull { path -> pathMatchesSource(path, source) }
+                        if (soraPath != null) source.copy(engine = ExtensionEngine.SORA) else source
+                    },
+                )
             }
+            if (mangaPaths.isNotEmpty() || hasMangaApks) {
+                val raw = invoke("getInstalledMangaExtensions", androidAppContext, appFilesDir())
+                val hintPaths = mangaPaths.ifEmpty { paths }
+                addAll(parseSources(raw, ExtensionEngine.MANGAYOMI, hintPaths))
+            }
+            if (cloudStreamPaths.isNotEmpty()) {
+                cloudStreamPaths.forEach { invoke("csLoadPlugin", androidAppContext, it) }
+                val raw = invoke("csGetRegisteredProviders")
+                addAll(parseSources(raw, ExtensionEngine.CLOUDSTREAM, cloudStreamPaths))
+            }
+        }.distinctBy { "${it.engine.name}:${it.runtimeId ?: it.id}:${it.language}" }
+        updateBridgeRegistry(loaded)
+        cachedLoadedSources = loaded
+        cachedLoadedSourcesAt = now
+        lastAnimeBridgeReloadAt = now
+        loaded
     }
 
     actual suspend fun search(source: ExtensionSource, query: String): List<ExtensionMedia> = withContext(Dispatchers.IO) {
         ensureReady()
-        val rtId = source.runtimeId ?: source.id
+        reloadBridgeForSource(source)
+        val rtId = resolveBridgeSourceId(source)
         Log.i(TAG, "search: engine=${source.engine.name} runtimeId=$rtId query=$query")
         val raw = when (source.engine) {
-            ExtensionEngine.ANIYOMI -> invoke(
-                "aniyomiSearch", androidAppContext, rtId, true, query, 1, requestParams()
+            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA -> invoke(
+                "aniyomiSearch",
+                androidAppContext,
+                rtId,
+                bridgeIsAnime(source),
+                query,
+                1,
+                requestParams(),
             )
+            ExtensionEngine.MANGAYOMI -> {
+                require(mangayomiUsesMangaBridge(source)) {
+                    "${source.name} is a Mangayomi script source — install the APK variant or use Aniyomi extensions"
+                }
+                invoke(
+                    "aniyomiSearch",
+                    androidAppContext,
+                    rtId,
+                    bridgeIsAnime(source),
+                    query,
+                    1,
+                    requestParams(),
+                )
+            }
             ExtensionEngine.CLOUDSTREAM -> invoke(
                 "csSearch", androidAppContext, query, rtId, 1, requestParams()
             )
-            else -> error("${source.engine.displayName} runtime is unavailable")
         }
         val results = parseMedia(raw)
         Log.i(TAG, "search: got ${results.size} results")
@@ -158,12 +350,14 @@ actual class ExtensionRuntime actual constructor() {
         media: ExtensionMedia,
     ): Pair<ExtensionMedia, List<ExtensionEpisode>> = withContext(Dispatchers.IO) {
         ensureReady()
+        reloadBridgeForSource(source)
+        val rtId = resolveBridgeSourceId(source)
         val raw = when (source.engine) {
-            ExtensionEngine.ANIYOMI -> invoke(
+            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA -> invoke(
                 "aniyomiGetDetail",
                 androidAppContext,
-                source.runtimeId ?: source.id,
-                true,
+                rtId,
+                bridgeIsAnime(source),
                 mapOf(
                     "title" to media.title,
                     "url" to media.url,
@@ -172,10 +366,27 @@ actual class ExtensionRuntime actual constructor() {
                 ),
                 requestParams(),
             )
+            ExtensionEngine.MANGAYOMI -> {
+                require(mangayomiUsesMangaBridge(source)) {
+                    "${source.name} is a Mangayomi script source — install the APK variant or use Aniyomi extensions"
+                }
+                invoke(
+                    "aniyomiGetDetail",
+                    androidAppContext,
+                    rtId,
+                    bridgeIsAnime(source),
+                    mapOf(
+                        "title" to media.title,
+                        "url" to media.url,
+                        "thumbnail_url" to media.thumbnailUrl,
+                        "description" to media.description,
+                    ),
+                    requestParams(),
+                )
+            }
             ExtensionEngine.CLOUDSTREAM -> invoke(
-                "csGetDetail", androidAppContext, source.runtimeId ?: source.id, media.url, requestParams()
+                "csGetDetail", androidAppContext, rtId, media.url, requestParams()
             )
-            else -> error("${source.engine.displayName} runtime is unavailable")
         }
         parseDetails(raw, media)
     }
@@ -184,27 +395,85 @@ actual class ExtensionRuntime actual constructor() {
         source: ExtensionSource,
         episode: ExtensionEpisode,
     ): List<ExtensionVideo> = withContext(Dispatchers.IO) {
+        fetchVideos(source, episode)
+    }
+
+    actual suspend fun videosStream(
+        source: ExtensionSource,
+        episode: ExtensionEpisode,
+        onVideo: (suspend (ExtensionVideo) -> Unit)?,
+    ): List<ExtensionVideo> = withContext(Dispatchers.IO) {
+        if (source.engine == ExtensionEngine.CLOUDSTREAM) {
+            val deadline = System.currentTimeMillis() + 30_000
+            val collected = linkedMapOf<String, ExtensionVideo>()
+            while (System.currentTimeMillis() < deadline) {
+                val batch = fetchVideos(source, episode)
+                for (video in batch) {
+                    val key = "${video.quality}|${video.url}"
+                    if (key !in collected) {
+                        collected[key] = video
+                        onVideo?.invoke(video)
+                    }
+                }
+                if (collected.isNotEmpty()) return@withContext collected.values.toList()
+                delay(500)
+            }
+            return@withContext collected.values.toList()
+        }
+
+        var result = fetchVideos(source, episode)
+        result.forEach { onVideo?.invoke(it) }
+        if (result.isEmpty()) {
+            delay(2_000)
+            result = fetchVideos(source, episode)
+            result.forEach { onVideo?.invoke(it) }
+        }
+        result
+    }
+
+    private fun fetchVideos(source: ExtensionSource, episode: ExtensionEpisode): List<ExtensionVideo> {
         ensureReady()
-        val rtId = source.runtimeId ?: source.id
+        reloadBridgeForSource(source)
+        val rtId = resolveBridgeSourceId(source)
+        val episodePayload = episodePayload(episode)
         Log.i(TAG, "videos: engine=${source.engine.name} runtimeId=$rtId episode=${episode.name} url=${episode.url}")
         val raw = when (source.engine) {
-            ExtensionEngine.ANIYOMI -> invoke(
+            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA -> invoke(
                 "aniyomiGetVideoList",
                 androidAppContext,
                 rtId,
-                true,
-                mapOf("name" to episode.name, "url" to episode.url, "episode_number" to episode.number),
+                bridgeIsAnime(source),
+                episodePayload,
                 requestParams(),
             )
+            ExtensionEngine.MANGAYOMI -> {
+                require(mangayomiUsesMangaBridge(source)) {
+                    "${source.name} is a Mangayomi script source — install the APK variant or use Aniyomi extensions"
+                }
+                invoke(
+                    "aniyomiGetVideoList",
+                    androidAppContext,
+                    rtId,
+                    bridgeIsAnime(source),
+                    episodePayload,
+                    requestParams(),
+                )
+            }
             ExtensionEngine.CLOUDSTREAM -> invoke(
                 "csGetVideoList", androidAppContext, rtId, episode.url, requestParams()
             )
-            else -> error("${source.engine.displayName} runtime is unavailable")
         }
-        Log.i(TAG, "videos: raw type=${raw?.javaClass?.simpleName} raw=$raw")
+        Log.i(TAG, "videos: raw type=${raw?.javaClass?.simpleName}")
         val parsed = parseVideos(raw)
         Log.i(TAG, "videos: parsed ${parsed.size} videos")
-        parsed
+        return parsed
+    }
+
+    private fun episodePayload(episode: ExtensionEpisode): Map<String, Any?> = buildMap {
+        put("name", episode.name)
+        put("url", episode.url)
+        put("episode_number", episode.number)
+        if (episode.sortMap.isNotEmpty()) put("sortMap", episode.sortMap)
     }
 
     actual suspend fun cancel(token: String) {
@@ -229,7 +498,14 @@ actual class ExtensionRuntime actual constructor() {
         val instance = clazz.getField("INSTANCE").get(null)
         bridgeClass = clazz
         bridge = instance
-        invoke("initialize", context, mapOf("aniyomiExtensionsPath" to File(ExtensionPlatformFiles.rootDir(), "extensions/aniyomi").absolutePath))
+        invoke("initialize", context, mapOf(
+            "aniyomiExtensionsPath" to appFilesDir(),
+            "mangayomiExtensionsPath" to appFilesDir(),
+        ))
+        ensureBridgeDirArtifactsReadOnly(animeExtensionsDir(), ::log)
+        ensureBridgeDirArtifactsReadOnly(mangaExtensionsDir(), ::log)
+        reloadInstalledSources(isAnime = true)
+        reloadInstalledSources(isAnime = false)
         _state.value = ExtensionRuntimeState(
             installed = true,
             ready = true,
@@ -242,10 +518,16 @@ actual class ExtensionRuntime actual constructor() {
     private fun invoke(name: String, vararg args: Any?): Any? {
         val clazz = bridgeClass ?: error("Extension runtime is not loaded")
         val target = bridge ?: error("Extension runtime is not loaded")
-        val method = clazz.methods
-            .filter { it.name == name && it.parameterTypes.size == args.size }
-            .firstOrNull { method -> parametersMatch(method, args) }
-            ?: error("Runtime method $name/${args.size} is unavailable")
+        val candidates = clazz.methods.filter { it.name == name && it.parameterTypes.size == args.size }
+        val method = candidates.firstOrNull { candidate -> parametersMatch(candidate, args) }
+            ?: run {
+                val argTypes = args.map { it?.javaClass?.name ?: "null" }
+                val signatures = candidates.joinToString { candidate ->
+                    candidate.parameterTypes.joinToString { it.name }
+                }
+                Log.e(TAG, "Runtime method $name/${args.size} unavailable. args=$argTypes candidates=[$signatures]")
+                error("Runtime method $name/${args.size} is unavailable")
+            }
         return try {
             method.invoke(target, *args)
         } catch (error: Throwable) {
@@ -259,9 +541,18 @@ actual class ExtensionRuntime actual constructor() {
 
     private fun parametersMatch(method: Method, args: Array<out Any?>): Boolean =
         method.parameterTypes.zip(args).all { (type, value) ->
-            value == null || type.isAssignableFrom(value.javaClass) ||
-                (type == java.lang.Boolean.TYPE && value is Boolean) ||
-                (type == java.lang.Integer.TYPE && value is Int)
+            if (value == null) return@all !type.isPrimitive
+            when (type) {
+                java.lang.Boolean.TYPE -> value is Boolean
+                java.lang.Integer.TYPE -> value is Int || value is Long
+                java.lang.Long.TYPE -> value is Long || value is Int
+                java.lang.Double.TYPE -> value is Double || value is Float
+                java.lang.Float.TYPE -> value is Float || value is Double
+                else -> type.isAssignableFrom(value.javaClass) ||
+                    (type == java.lang.String::class.java && value is String) ||
+                    (type == java.lang.Long::class.java && value is Long) ||
+                    (type == java.lang.Integer::class.java && value is Int)
+            }
         }
 
     private fun ensureReady() {
@@ -317,6 +608,7 @@ actual class ExtensionRuntime actual constructor() {
 
     companion object {
         private const val TAG = "AnisurgeExtensions"
+        private const val BRIDGE_RELOAD_COOLDOWN_MS = 15_000L
         private const val RUNTIME_URL =
             "https://github.com/RyanYuuki/AnymeXExtensionRuntimeBridge/releases/download/v1.8.2/anymex_runtime_host.apk"
     }
@@ -325,14 +617,70 @@ actual class ExtensionRuntime actual constructor() {
 private fun Throwable.rootCause(): Throwable =
     generateSequence(this) { it.cause }.last()
 
+/** Android 14+ rejects writable APKs in DexClassLoader — match Aniyomi/AnymeX install behavior. */
+private fun finalizeInstalledArtifact(file: File) {
+    file.setReadable(true, false)
+    file.setWritable(false, false)
+    file.setReadOnly()
+}
+
+private fun makeWritableForReplace(file: File) {
+    if (!file.exists()) return
+    file.setWritable(true, false)
+    file.delete()
+}
+
+private fun makeWritableForStagingDownload(file: File) = makeWritableForReplace(file)
+
+private fun ensureBridgeDirArtifactsReadOnly(dir: File, log: ((String) -> Unit)? = null) {
+    dir.listFiles()
+        ?.asSequence()
+        ?.filter { it.isFile && it.extension.lowercase() in setOf("apk", "js", "dart") }
+        ?.forEach { file ->
+            if (file.canWrite()) {
+                finalizeInstalledArtifact(file)
+                log?.invoke("Repaired bridge artifact permissions: ${file.name}")
+            }
+        }
+}
+
 actual object ExtensionPlatformFiles {
     actual val isAndroid: Boolean = true
     actual fun rootDir(): String =
         File(androidAppContext.filesDir, "extensions").apply { mkdirs() }.absolutePath
 
+    actual fun stagingPathFor(source: ExtensionSource): String {
+        val safeId = source.uninstallKey().replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val ext = source.artifactExtension()
+        return when (source.engine) {
+            ExtensionEngine.MANGAYOMI -> {
+                val dir = File(androidAppContext.filesDir, source.bridgeStorageDir()).apply { mkdirs() }
+                File(dir, "$safeId.$ext").absolutePath
+            }
+            ExtensionEngine.CLOUDSTREAM -> {
+                val dir = File(rootDir(), "cloudstream").apply { mkdirs() }
+                File(dir, "$safeId.$ext").absolutePath
+            }
+            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA -> {
+                val dir = File(rootDir(), source.engine.name.lowercase()).apply { mkdirs() }
+                File(dir, "$safeId.$ext").absolutePath
+            }
+        }
+    }
+
+    actual fun ensureParentDirs(path: String) {
+        val file = File(path)
+        val parent = file.parentFile ?: return
+        if (!parent.exists()) parent.mkdirs()
+        if (!parent.exists() || !parent.canWrite()) {
+            error("Cannot write extension files to ${parent.absolutePath}")
+        }
+    }
+
     actual suspend fun download(client: HttpClient, url: String, destination: String) = withContext(Dispatchers.IO) {
         val file = File(destination)
-        file.parentFile?.mkdirs()
+        ensureParentDirs(destination)
+        makeWritableForStagingDownload(file)
         val channel = client.get(url).bodyAsChannel()
         file.outputStream().use { output ->
             val buffer = ByteArray(64 * 1024)
@@ -341,9 +689,36 @@ actual object ExtensionPlatformFiles {
                 if (read > 0) output.write(buffer, 0, read)
             }
         }
+        file.setReadable(true, false)
+        Unit
     }
 
-    actual fun delete(path: String): Boolean = File(path).delete()
+    actual fun delete(path: String): Boolean {
+        val file = File(path)
+        if (!file.exists()) return true
+        file.setWritable(true, false)
+        return file.delete()
+    }
+
+    actual fun installedApkPathCandidates(source: ExtensionSource): List<String> {
+        val pkg = source.uninstallKey()
+        val filesDir = androidAppContext.filesDir
+        val extsDir = File(filesDir, source.bridgeStorageDir())
+        val ext = source.artifactExtension()
+        val safeId = source.id.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        return buildList {
+            source.installedPath?.takeIf { it.isNotBlank() }?.let(::add)
+            add(stagingPathFor(source))
+            add(File(extsDir, "$safeId.$ext").absolutePath)
+            add(File(extsDir, "$pkg.$ext").absolutePath)
+            if (ext == "apk") {
+                add(File(extsDir, "$pkg.apk").absolutePath)
+                extsDir.listFiles()
+                    ?.filter { it.isFile && it.extension.equals("apk", ignoreCase = true) && it.nameWithoutExtension == pkg }
+                    ?.forEach { add(it.absolutePath) }
+            }
+        }.distinct()
+    }
 }
 
 private class ChildFirstClassLoader(
@@ -363,22 +738,84 @@ private class ChildFirstClassLoader(
     }
 }
 
-private fun parseSources(raw: Any?, engine: ExtensionEngine, paths: List<String>): List<ExtensionSource> =
-    (raw as? List<*>)?.mapNotNull { item ->
-        val map = item as? Map<*, *> ?: return@mapNotNull null
-        val id = map["id"]?.toString() ?: return@mapNotNull null
+private fun pathFileStem(path: String): String =
+    path.substringAfterLast("/").substringBeforeLast(".")
+
+private fun pathStemMatchesBridgeName(stem: String, bridgeName: String): Boolean {
+    val normalizedStem = stem.lowercase()
+    val normalizedName = bridgeName.lowercase()
+    if (normalizedStem == normalizedName) return true
+    val stemToken = stem.substringAfterLast('.').lowercase()
+    return stemToken.isNotBlank() && (
+        normalizedName.contains(stemToken) ||
+            stemToken.contains(normalizedName.substringBefore('.'))
+        )
+}
+
+private fun pathMatchesSource(path: String, source: ExtensionSource): Boolean {
+    val fileStem = pathFileStem(path)
+    return source.pkgName == fileStem ||
+        source.id == fileStem ||
+        source.runtimeId == fileStem ||
+        source.name.equals(fileStem, ignoreCase = true) ||
+        pathStemMatchesBridgeName(fileStem, source.name)
+}
+
+private fun parseSources(raw: Any?, engine: ExtensionEngine, paths: List<String>): List<ExtensionSource> {
+    val list = raw as? List<*> ?: return emptyList()
+    val parsed = list.mapIndexedNotNull { index: Int, item: Any? ->
+        val map = item as? Map<*, *> ?: return@mapIndexedNotNull null
+        val pkg = map["pkg"]?.toString()
+            ?: map["pkgName"]?.toString()
+            ?: map["packageName"]?.toString()
+        val bridgeId = map["id"]?.toString() ?: map["sourceId"]?.toString() ?: pkg ?: return@mapIndexedNotNull null
+        val bridgeName = map["name"]?.toString().orEmpty()
+        val path = paths.firstOrNull { candidate ->
+            val stem = pathFileStem(candidate)
+            (pkg != null && stem == pkg) ||
+                stem == bridgeId ||
+                (bridgeName.isNotBlank() && pathStemMatchesBridgeName(stem, bridgeName))
+        } ?: paths.getOrNull(index) ?: paths.firstOrNull()
+        val fallbackId = path?.let(::pathFileStem) ?: bridgeId
+        val lang = map["lang"]?.toString() ?: "all"
+        val catalogId = when {
+            !pkg.isNullOrBlank() && lang != "all" -> "$pkg:$lang"
+            !pkg.isNullOrBlank() -> pkg
+            else -> fallbackId.takeIf { it.isNotBlank() && !it.all(Char::isDigit) } ?: bridgeId
+        }
+        val runtimeId = bridgeId.ifBlank { fallbackId }
+        val itemType = map["itemType"]?.toString()?.lowercase()
+        val isAnime = when {
+            itemType?.contains("anime") == true -> true
+            itemType?.contains("manga") == true -> false
+            engine == ExtensionEngine.MANGAYOMI -> itemType?.contains("manga") != true
+            else -> true
+        }
+        Log.i("AnisurgeExtensions", "parseSources: engine=$engine id=$catalogId runtimeId=$runtimeId name=${map["name"]}")
         ExtensionSource(
-            id = id,
-            name = map["name"]?.toString() ?: id,
+            id = catalogId,
+            name = map["name"]?.toString() ?: catalogId,
             engine = engine,
             language = map["lang"]?.toString() ?: "all",
             version = map["version"]?.toString() ?: "",
             iconUrl = map["iconUrl"]?.toString(),
-            installedPath = paths.firstOrNull(),
-            runtimeId = id,
+            installedPath = path,
+            runtimeId = runtimeId,
+            pkgName = pkg,
+            isAnime = isAnime,
             installed = true,
         )
-    }.orEmpty()
+    }
+    if (paths.isEmpty()) return parsed
+    return parsed.map { source ->
+        val matchedPath = paths.firstOrNull { path -> pathMatchesSource(path, source) }
+            ?: paths.firstOrNull { path ->
+                val stem = pathFileStem(path)
+                source.pkgName == stem || source.id == stem
+            }
+        if (matchedPath != null) source.copy(installedPath = matchedPath) else source
+    }
+}
 
 private fun parseMedia(raw: Any?): List<ExtensionMedia> {
     val map = raw as? Map<*, *>
@@ -410,7 +847,16 @@ private fun parseDetails(raw: Any?, fallback: ExtensionMedia): Pair<ExtensionMed
             ?: (value["episode"] as? Number)?.toDouble()
             ?: (value["ep"] as? Number)?.toDouble()
             ?: 0.0
-        ExtensionEpisode(name = name, url = url, number = number)
+        val sortMap = (value["sortMap"] as? Map<*, *>)?.mapNotNull { (key, raw) ->
+            key?.toString()?.let { k -> k to (raw?.toString() ?: "") }
+        }?.toMap().orEmpty().toMutableMap()
+        value["translationType"]?.toString()?.takeIf { it.isNotBlank() }?.let {
+            sortMap["translationType"] = it
+        }
+        value["translation_type"]?.toString()?.takeIf { it.isNotBlank() }?.let {
+            sortMap["translation_type"] = it
+        }
+        ExtensionEpisode(name = name, url = url, number = number, sortMap = sortMap)
     }.orEmpty()
     return media to episodes
 }

@@ -18,8 +18,14 @@ import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.StreamingData
 import to.kuudere.anisuge.data.models.WatchInfoResponse
 import to.kuudere.anisuge.data.models.expandForSelection
+import to.kuudere.anisuge.data.models.hidesServer
 import to.kuudere.anisuge.data.models.orderSelectableServerIds
+import to.kuudere.anisuge.data.models.SubtitleData
+import to.kuudere.anisuge.data.models.SourceData
 import to.kuudere.anisuge.data.repository.ServerRepository
+import to.kuudere.anisuge.extensions.ExtensionStreamResult
+import to.kuudere.anisuge.extensions.ExtensionVideo
+import to.kuudere.anisuge.extensions.parseExtensionServerId
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.services.HomeService
 import to.kuudere.anisuge.data.services.SyncManager
@@ -92,11 +98,18 @@ data class WatchUiState(
     val syncSnackbar: String? = null,
     val berriesToast: String? = null,
     val servers: List<ServerInfo> = emptyList(),
+    val pendingExtensionStreams: PendingExtensionStreams? = null,
 )
 
 data class WatchEpisodeProgress(
     val currentTime: Double,
     val duration: Double,
+)
+
+data class PendingExtensionStreams(
+    val sourceName: String,
+    val videos: List<ExtensionVideo>,
+    val isLoading: Boolean = false,
 )
 
 class WatchViewModel(
@@ -125,6 +138,8 @@ class WatchViewModel(
 
     /** Last batch_scrape section (for per-stream subtitles when switching quality). */
     private var cachedStreamSection: BatchScrapeStreamData? = null
+    private var cachedExtensionVideos: List<ExtensionVideo>? = null
+    private var cachedExtensionStreamResult: ExtensionStreamResult? = null
     private var cachedEpisodeList: List<EpisodeItem>? = null
     private var cachedEpisodeListKey: String? = null
     private var skipTimesJob: kotlinx.coroutines.Job? = null
@@ -166,19 +181,19 @@ class WatchViewModel(
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
                 serverRepository.servers,
-                serverRepository.userPriority
-            ) { list, priority ->
-                val expanded = list.expandForSelection()
+                serverRepository.userPriority,
+                serverRepository.hiddenServerIds,
+            ) { list, priority, hidden ->
+                val expanded = list.expandForSelection().filterNot { hidden.hidesServer(it.id) }
                 val order = orderSelectableServerIds(
                     list,
                     priority,
                     ServerRepository.DEFAULT_STREAM_SOURCE_ORDER,
-                )
-                val sorted = expanded.sortedBy { s ->
+                ).filterNot { hidden.hidesServer(it) }
+                expanded.sortedBy { s ->
                     val idx = order.indexOf(s.id)
                     if (idx == -1) Int.MAX_VALUE else idx
                 }
-                sorted
             }.collect { sortedList ->
                 _uiState.update { it.copy(servers = sortedList) }
             }
@@ -579,6 +594,13 @@ class WatchViewModel(
         val currState = _uiState.value
         var anilistId = explicitAnilistId ?: currState.episodeData?.anilistId
 
+        val episodeNum = currState.currentEpisodeNumber
+
+        if (parseExtensionServerId(serverName) != null) {
+            loadExtensionStream(serverName, episodeNum, generation)
+            return
+        }
+
         if (anilistId == null) {
             val details = infoService.getAnimeDetails(currentAnimeId)
             anilistId = details?.anilistId
@@ -586,13 +608,6 @@ class WatchViewModel(
 
         if (anilistId == null) {
             _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null) }
-            return
-        }
-
-        val episodeNum = currState.currentEpisodeNumber
-
-        if (to.kuudere.anisuge.extensions.parseExtensionServerId(serverName) != null) {
-            loadExtensionStream(serverName, episodeNum, generation)
             return
         }
 
@@ -777,51 +792,45 @@ class WatchViewModel(
 
     private suspend fun loadExtensionStream(serverName: String, episodeNum: Int, generation: Int) {
         val state = _uiState.value
-        val title = state.episodeData?.title
-        val titles = buildList {
-            title?.english?.takeIf { it.isNotBlank() }?.let(::add)
-            title?.romaji?.takeIf { it.isNotBlank() }?.let(::add)
-            title?.native?.takeIf { it.isNotBlank() }?.let(::add)
-            title?.userPreferred?.takeIf { it.isNotBlank() }?.let(::add)
-        }.distinct()
+        val titles = extensionSearchTitles(state)
+        val synonyms = runCatching {
+            infoService.getAnimeDetails(currentAnimeId)?.synonyms?.filter { it.isNotBlank() }.orEmpty()
+        }.getOrDefault(emptyList())
         try {
             _uiState.update {
                 it.copy(
                     isLoadingVideo = true,
                     currentServer = serverName,
-                    loadingMessage = "Searching extension source...",
+                    loadingMessage = "Loading extension stream...",
+                    pendingExtensionStreams = null,
+                    streamingData = null,
                 )
             }
             val result = extensionManager.resolveStream(
                 animeId = currentAnimeId,
                 titles = titles.ifEmpty { listOf(currentAnimeId) },
+                synonyms = synonyms,
                 episodeNumber = episodeNum,
                 serverId = serverName,
             )
             if (!coroutineContext.isActive || generation != streamLoadGeneration) return
-            val streamingData = result.toStreamingData()
-            val qualities = streamingData.sources.orEmpty().mapNotNull { source ->
-                source.url?.takeIf { it.isNotBlank() }?.let { (source.quality ?: "Auto") to it }
-            }
-            val subtitles = streamingData.subtitles.orEmpty()
-            val defaultQuality = qualities.firstOrNull()?.first ?: "Auto"
             cachedStreamSection = null
-            _uiState.update {
-                it.copy(
-                    isLoadingVideo = false,
-                    loadingMessage = null,
-                    streamingData = streamingData,
-                    availableQualities = qualities,
-                    currentQuality = defaultQuality,
-                    availableSubtitles = subtitles,
-                    currentSubtitleUrl = subtitles.firstOrNull()?.url,
-                    subtitlesDisabled = false,
-                    offlinePath = null,
-                )
+            cachedExtensionStreamResult = result
+            cachedExtensionVideos = result.videos
+            if (result.videos.size > 1) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingVideo = false,
+                        loadingMessage = null,
+                        pendingExtensionStreams = PendingExtensionStreams(
+                            sourceName = result.source.name,
+                            videos = result.videos,
+                        ),
+                    )
+                }
+                return
             }
-            qualities.firstOrNull()?.second?.let { url ->
-                viewModelScope.launch { infoService.prewarmStreamUrl(url) }
-            }
+            applyExtensionStream(result, result.videos.firstOrNull(), generation)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -832,10 +841,78 @@ class WatchViewModel(
                         isLoadingVideo = false,
                         loadingMessage = null,
                         offlinePath = null,
+                        pendingExtensionStreams = null,
                         berriesToast = e.message ?: "Extension stream failed",
                     )
                 }
             }
+        }
+    }
+
+    private fun extensionSearchTitles(state: WatchUiState): List<String> {
+        val title = state.episodeData?.title
+        return buildList {
+            title?.english?.takeIf { it.isNotBlank() }?.let(::add)
+            title?.romaji?.takeIf { it.isNotBlank() }?.let(::add)
+            title?.native?.takeIf { it.isNotBlank() }?.let(::add)
+            title?.userPreferred?.takeIf { it.isNotBlank() }?.let(::add)
+        }.distinct()
+    }
+
+    private fun applyExtensionStream(
+        result: ExtensionStreamResult,
+        selectedVideo: ExtensionVideo?,
+        generation: Int,
+    ) {
+        val video = selectedVideo ?: return
+        if (generation != streamLoadGeneration) return
+        val streamingData = result.toStreamingData(video)
+        val qualities = result.videos.mapNotNull { item ->
+            item.url.takeIf { it.isNotBlank() }?.let { (item.quality.ifBlank { "Auto" }) to it }
+        }
+        val subtitles = streamingData.subtitles.orEmpty()
+        val defaultQuality = video.quality.ifBlank { qualities.firstOrNull()?.first ?: "Auto" }
+        _uiState.update {
+            it.copy(
+                isLoadingVideo = false,
+                loadingMessage = null,
+                streamingData = streamingData,
+                availableQualities = qualities,
+                currentQuality = defaultQuality,
+                availableSubtitles = subtitles,
+                currentSubtitleUrl = subtitles.firstOrNull()?.url,
+                subtitlesDisabled = false,
+                offlinePath = null,
+                pendingExtensionStreams = null,
+            )
+        }
+        video.url.takeIf { it.isNotBlank() }?.let { url ->
+            viewModelScope.launch { infoService.prewarmStreamUrl(url) }
+        }
+        attachAniskipTimes(
+            streamGeneration = generation,
+            malId = _uiState.value.episodeData?.malId,
+            anilistId = _uiState.value.episodeData?.anilistId,
+            episodeNumber = _uiState.value.currentEpisodeNumber,
+            episodeLengthSec = lastSkipEpisodeLengthSec.takeIf { it >= 60.0 },
+        )
+    }
+
+    fun confirmExtensionStream(video: ExtensionVideo) {
+        val result = cachedExtensionStreamResult ?: return
+        applyExtensionStream(result, video, streamLoadGeneration)
+    }
+
+    fun dismissExtensionStreamPicker() {
+        streamLoadGeneration++
+        cachedExtensionStreamResult = null
+        cachedExtensionVideos = null
+        _uiState.update {
+            it.copy(
+                pendingExtensionStreams = null,
+                isLoadingVideo = false,
+                loadingMessage = null,
+            )
         }
     }
 
@@ -845,6 +922,43 @@ class WatchViewModel(
 
     fun setQuality(quality: String) {
         val server = _uiState.value.currentServer
+        if (parseExtensionServerId(server) != null) {
+            val video = cachedExtensionVideos?.firstOrNull {
+                it.quality.equals(quality, ignoreCase = true)
+            } ?: return
+            val subtitles = video.subtitles
+                .distinctBy { it.url }
+                .map {
+                    SubtitleData(
+                        languageName = it.label,
+                        language = it.language,
+                        url = it.url,
+                        format = it.url.substringBefore("?").substringAfterLast(".", ""),
+                    )
+                }
+            val curr = _uiState.value
+            _uiState.update {
+                it.copy(
+                    currentQuality = quality,
+                    streamingData = StreamingData(
+                        sources = listOf(
+                            SourceData(
+                                quality = video.quality,
+                                url = video.url,
+                                headers = video.headers,
+                            ),
+                        ),
+                        subtitles = subtitles,
+                        intro = curr.introSkip,
+                        outro = curr.outroSkip,
+                    ),
+                    availableSubtitles = subtitles,
+                    currentSubtitleUrl = if (!it.subtitlesDisabled) subtitles.firstOrNull()?.url else null,
+                    showSettingsOverlay = false,
+                )
+            }
+            return
+        }
         val shouldRefreshStream = server.equals("animepahe", ignoreCase = true) ||
                 server.equals("animepahe-dub", ignoreCase = true)
 
@@ -971,6 +1085,38 @@ class WatchViewModel(
         loadJob = viewModelScope.launch {
             loadVideoStream(server)
         }
+    }
+
+    fun switchAudioLang(lang: String) {
+        val state = _uiState.value
+        val preferenceIfUnset = if (state.defaultLang) "dub" else "sub"
+        val normalized = normalizeWatchLang(lang, preferenceIfUnset)
+        val currentLang = normalizeWatchLang(state.targetLang, preferenceIfUnset)
+        if (normalized == currentLang) return
+
+        fun inLangBucket(serverId: String, bucket: String): Boolean = when (bucket) {
+            "dub" -> to.kuudere.anisuge.extensions.isDubSelectableServerId(serverId)
+            else -> !to.kuudere.anisuge.extensions.isDubSelectableServerId(serverId)
+        }
+
+        val langServers = state.servers.filter { inLangBucket(it.id, normalized) }
+        if (langServers.isEmpty()) return
+
+        val resumePosition = lastPlaybackPositionSec.coerceAtLeast(state.savedWatchPosition)
+        val keepCurrent = langServers.any { it.id.equals(state.currentServer, ignoreCase = true) }
+        val nextServer = if (keepCurrent) {
+            state.currentServer
+        } else {
+            langServers.firstOrNull()?.id ?: return
+        }
+
+        changeServerWithState(
+            newServer = nextServer,
+            position = resumePosition,
+            targetAudioLang = normalized,
+            targetSubtitleLang = state.targetSubtitleLang,
+            targetSubtitleLangCode = state.targetSubtitleLangCode,
+        )
     }
 
     fun switchServer(serverId: String) {

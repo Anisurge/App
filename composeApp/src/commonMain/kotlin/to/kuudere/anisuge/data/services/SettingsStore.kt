@@ -34,6 +34,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val SYNC_PERCENTAGE_KEY = androidx.datastore.preferences.core.intPreferencesKey("sync_percentage")
         val SUBTITLE_SIZE_KEY = androidx.datastore.preferences.core.intPreferencesKey("subtitle_size")
         val SERVER_PRIORITY_KEY = stringPreferencesKey("server_priority")
+        val HIDDEN_SERVER_IDS_KEY = stringPreferencesKey("hidden_server_ids")
         val DOWNLOAD_PATH_KEY = stringPreferencesKey("download_path")
         val NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("notifications_enabled")
         val NOTIFICATIONS_NEW_EPISODE_KEY = booleanPreferencesKey("notifications_new_episode")
@@ -152,6 +153,19 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         }
         .distinctUntilChanged()
 
+    val hiddenServerIdsFlow: Flow<Set<String>> = dataStore.data.map { preferences ->
+        val jsonStr = preferences[HIDDEN_SERVER_IDS_KEY]
+        if (jsonStr.isNullOrBlank()) {
+            emptySet()
+        } else {
+            runCatching {
+                json.decodeFromString<List<String>>(jsonStr)
+                    .map { it.lowercase() }
+                    .toSet()
+            }.getOrElse { emptySet() }
+        }
+    }.distinctUntilChanged()
+
     val serverPriorityFlow: Flow<List<String>> = dataStore.data.map { preferences ->
         val jsonStr = preferences[SERVER_PRIORITY_KEY]
         if (jsonStr != null) {
@@ -182,6 +196,24 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setServerPriority(priority: List<String>) {
         dataStore.edit { it[SERVER_PRIORITY_KEY] = json.encodeToString(priority) }
+    }
+
+    suspend fun setHiddenServerIds(ids: Set<String>) {
+        dataStore.edit {
+            it[HIDDEN_SERVER_IDS_KEY] = json.encodeToString(ids.map { id -> id.lowercase() }.distinct())
+        }
+    }
+
+    suspend fun setServerVisible(serverId: String, visible: Boolean) {
+        val normalized = serverId.lowercase()
+        dataStore.edit { preferences ->
+            val current = preferences[HIDDEN_SERVER_IDS_KEY]?.let { raw ->
+                runCatching { json.decodeFromString<List<String>>(raw).map { it.lowercase() }.toMutableSet() }
+                    .getOrElse { mutableSetOf() }
+            } ?: mutableSetOf()
+            if (visible) current.remove(normalized) else current.add(normalized)
+            preferences[HIDDEN_SERVER_IDS_KEY] = json.encodeToString(current.toList())
+        }
     }
 
     suspend fun setAutoPlay(enabled: Boolean) {

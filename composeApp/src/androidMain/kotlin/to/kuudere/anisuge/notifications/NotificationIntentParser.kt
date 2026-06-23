@@ -58,6 +58,11 @@ object NotificationIntentParser {
             else -> "ANNOUNCEMENT"
         }
 
+        val server = data.getQueryParameter("server")
+            ?: intent.getStringExtra("server")
+        val lang = data.getQueryParameter("lang")
+            ?: intent.getStringExtra("lang")
+
         return NotificationLaunch(
             id = System.nanoTime(),
             type = type,
@@ -65,6 +70,8 @@ object NotificationIntentParser {
             body = intent.getStringExtra("body") ?: "",
             animeId = animeId,
             episodeNumber = episodeNumber,
+            server = server,
+            lang = lang,
             actionUrl = intent.getStringExtra("actionUrl") ?: data.toString(),
             actionLabel = intent.getStringExtra("actionLabel"),
             mediaType = intent.getStringExtra("mediaType"),

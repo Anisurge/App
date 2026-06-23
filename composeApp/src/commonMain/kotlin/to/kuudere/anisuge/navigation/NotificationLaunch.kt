@@ -7,6 +7,8 @@ data class NotificationLaunch(
     val body: String,
     val animeId: String? = null,
     val episodeNumber: Int? = null,
+    val server: String? = null,
+    val lang: String? = null,
     val actionUrl: String? = null,
     val actionLabel: String? = null,
     val mediaType: String? = null,

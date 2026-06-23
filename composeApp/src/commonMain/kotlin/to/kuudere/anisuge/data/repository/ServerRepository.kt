@@ -24,7 +24,10 @@ import kotlinx.serialization.json.Json
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.FALLBACK_SERVERS
 import to.kuudere.anisuge.data.models.ServerInfo
+import to.kuudere.anisuge.data.models.collapseToBaseServerPriority
 import to.kuudere.anisuge.data.models.expandForSelection
+import to.kuudere.anisuge.data.models.excludingHidden
+import to.kuudere.anisuge.data.models.hidesServer
 import to.kuudere.anisuge.data.models.orderSelectableServerIds
 import to.kuudere.anisuge.data.services.SettingsStore
 import to.kuudere.anisuge.extensions.ExtensionManager
@@ -45,18 +48,34 @@ class ServerRepository(
         val DEFAULT_STREAM_SOURCE_ORDER = listOf("zen2", "zen", "allmanga", "suzu")
 
         /**
-         * Order for the Settings servers list — same rules as [ServerRepository.getFallbackPriority]
-         * so the UI matches playback fallback order (Sub/Dub split for `sub_dub` catalog rows).
+         * Order for the Settings servers list — one row per provider (Sub/Dub chosen at playback).
+         * Saved priority may contain legacy `-dub` ids; they collapse to the base id for display.
          */
         fun sortServersForSettingsDisplay(
             servers: List<ServerInfo>,
             savedPriority: List<String>,
         ): List<ServerInfo> {
             if (servers.isEmpty()) return emptyList()
-            val expanded = servers.expandForSelection()
-            val order = orderSelectableServerIds(servers, savedPriority, DEFAULT_STREAM_SOURCE_ORDER)
+            val collapsedPriority = savedPriority.collapseToBaseServerPriority()
+            val serverIds = servers.map { it.id }.toSet()
+            val order = if (collapsedPriority.isEmpty()) {
+                val priority = mutableListOf<String>()
+                for (baseId in DEFAULT_STREAM_SOURCE_ORDER) {
+                    if (baseId in serverIds) priority.add(baseId)
+                }
+                for (id in servers.map { it.id }) {
+                    if (id !in priority) priority.add(id)
+                }
+                priority
+            } else {
+                val result = collapsedPriority.filter { it in serverIds }.toMutableList()
+                for (id in servers.map { it.id }) {
+                    if (id !in result) result.add(id)
+                }
+                result
+            }
             val orderIndex = order.withIndex().associate { it.value to it.index }
-            return expanded.sortedBy { orderIndex[it.id] ?: Int.MAX_VALUE }
+            return servers.sortedBy { orderIndex[it.id] ?: Int.MAX_VALUE }
         }
     }
 
@@ -75,12 +94,19 @@ class ServerRepository(
 
     private val _userPriority = MutableStateFlow<List<String>>(emptyList())
     val userPriority: StateFlow<List<String>> = _userPriority.asStateFlow()
+    private val _hiddenServerIds = MutableStateFlow<Set<String>>(emptySet())
+    val hiddenServerIds: StateFlow<Set<String>> = _hiddenServerIds.asStateFlow()
     private var apiServers: List<ServerInfo> = emptyList()
 
     init {
         scope.launch {
             settingsStore.serverPriorityFlow.collect { priority ->
                 _userPriority.value = priority
+            }
+        }
+        scope.launch {
+            settingsStore.hiddenServerIdsFlow.collect { hidden ->
+                _hiddenServerIds.value = hidden
             }
         }
         scope.launch {
@@ -104,12 +130,18 @@ class ServerRepository(
         return _servers.value.find { it.id.equals(id, ignoreCase = true) }
     }
 
+    private fun priorityCatalog(): List<ServerInfo> =
+        _servers.value.expandForSelection().excludingHidden(_hiddenServerIds.value)
+
     fun getFallbackPriority(): List<String> {
+        val hidden = _hiddenServerIds.value
         val catalog = _servers.value
-        if (catalog.isEmpty()) {
-            return orderSelectableServerIds(FALLBACK_SERVERS, emptyList(), DEFAULT_STREAM_SOURCE_ORDER)
+        val ordered = if (catalog.isEmpty()) {
+            orderSelectableServerIds(FALLBACK_SERVERS, emptyList(), DEFAULT_STREAM_SOURCE_ORDER)
+        } else {
+            orderSelectableServerIds(catalog, _userPriority.value, DEFAULT_STREAM_SOURCE_ORDER)
         }
-        return orderSelectableServerIds(catalog, _userPriority.value, DEFAULT_STREAM_SOURCE_ORDER)
+        return ordered.filterNot { hidden.hidesServer(it) }
     }
 
     suspend fun setUserPriority(priority: List<String>) {
@@ -123,10 +155,9 @@ class ServerRepository(
     }
 
     fun getAvailableServers(): List<ServerInfo> {
-        val catalog = _servers.value
+        val catalog = priorityCatalog()
         val priority = getFallbackPriority()
-        val expanded = catalog.expandForSelection()
-        return expanded.sortedBy { server ->
+        return catalog.sortedBy { server ->
             val index = priority.indexOf(server.id)
             if (index == -1) Int.MAX_VALUE else index
         }

@@ -17,7 +17,49 @@ data class ServerInfo(
 
     val displayName: String
         get() = label
+
+    val isExtensionServer: Boolean
+        get() = id.startsWith("ext:")
 }
+
+fun List<ServerInfo>.extensionServers(): List<ServerInfo> = filter { it.isExtensionServer }
+
+fun List<ServerInfo>.catalogServers(): List<ServerInfo> = filterNot { it.isExtensionServer }
+
+fun Set<String>.hidesServer(id: String): Boolean =
+    any { it.equals(id, ignoreCase = true) }
+
+/** Collapse expanded Sub/Dub priority ids (`suzu-dub`) to base catalog ids for settings UI. */
+fun String.baseServerIdForSettings(): String = when {
+    endsWith("-dub", ignoreCase = true) -> dropLast(4)
+    endsWith(":dub", ignoreCase = true) -> dropLast(4)
+    else -> this
+}
+
+fun List<String>.collapseToBaseServerPriority(): List<String> {
+    val result = mutableListOf<String>()
+    val seen = mutableSetOf<String>()
+    for (id in this) {
+        val base = id.baseServerIdForSettings()
+        if (base !in seen) {
+            result.add(base)
+            seen.add(base)
+        }
+    }
+    return result
+}
+
+fun Set<String>.isServerVisibleInSettings(server: ServerInfo): Boolean {
+    val id = server.id.lowercase()
+    if (hidesServer(id)) return false
+    if (server.type == "sub_dub" && hidesServer("$id-dub")) return false
+    val base = id.baseServerIdForSettings()
+    if (base != id && hidesServer(base)) return false
+    return true
+}
+
+fun List<ServerInfo>.excludingHidden(hiddenIds: Set<String>): List<ServerInfo> =
+    if (hiddenIds.isEmpty()) this else filterNot { hiddenIds.hidesServer(it.id) }
 
 /** Split catalog `sub_dub` rows into separate Sub vs Dub stream source ids (`base` and `base-dub`) for UI and priority. */
 fun ServerInfo.expandToSelectable(): List<ServerInfo> = when (type) {

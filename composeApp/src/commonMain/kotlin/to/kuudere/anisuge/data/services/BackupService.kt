@@ -34,6 +34,7 @@ class BackupService(
             syncPercentage = settingsStore.syncPercentageFlow.first(),
             subtitleSize = settingsStore.subtitleSizeFlow.first(),
             serverPriority = settingsStore.serverPriorityFlow.first(),
+            hiddenServerIds = settingsStore.hiddenServerIdsFlow.first().toList(),
             notificationsEnabled = settingsStore.notificationsEnabledFlow.first(),
             notificationsNewEpisode = settingsStore.notificationsNewEpisodeFlow.first(),
             notificationsAnnouncement = settingsStore.notificationsAnnouncementFlow.first(),
@@ -158,6 +159,7 @@ class BackupService(
         settingsStore.setSyncPercentage(value.syncPercentage)
         settingsStore.setSubtitleSize(value.subtitleSize)
         settingsStore.setServerPriority(value.serverPriority)
+        settingsStore.setHiddenServerIds(value.hiddenServerIds.map { it.lowercase() }.toSet())
         settingsStore.setNotificationsEnabled(value.notificationsEnabled)
         settingsStore.setNotificationsNewEpisode(value.notificationsNewEpisode)
         settingsStore.setNotificationsAnnouncement(value.notificationsAnnouncement)

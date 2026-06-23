@@ -146,7 +146,15 @@ fun App(
             )
         }
         val searchVm = remember { SearchViewModel(AppComponent.searchService) }
-        val infoVm = remember { AnimeInfoViewModel(AppComponent.infoService, AppComponent.watchlistService, AppComponent.homeService) }
+        val infoVm = remember {
+            AnimeInfoViewModel(
+                AppComponent.infoService,
+                AppComponent.watchlistService,
+                AppComponent.homeService,
+                AppComponent.extensionManager,
+                AppComponent.settingsStore,
+            )
+        }
         val watchVm = remember {
             WatchViewModel(
                 AppComponent.infoService,
@@ -344,7 +352,12 @@ fun App(
 
             when {
                 launch.animeId != null && launch.episodeNumber != null -> {
-                    val dest = Screen.Watch(launch.animeId, launch.episodeNumber).route
+                    val dest = Screen.Watch(
+                        launch.animeId,
+                        launch.episodeNumber,
+                        server = launch.server,
+                        lang = launch.lang,
+                    ).route
                     deepLinkLog("navigate watch $dest")
                     navController.navigate(dest) { launchSingleTop = true }
                 }

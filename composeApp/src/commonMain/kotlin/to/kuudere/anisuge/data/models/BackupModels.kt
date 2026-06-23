@@ -26,6 +26,7 @@ data class BackupSettings(
     val syncPercentage: Int,
     val subtitleSize: Int,
     val serverPriority: List<String>,
+    val hiddenServerIds: List<String> = emptyList(),
     val notificationsEnabled: Boolean,
     val notificationsNewEpisode: Boolean,
     val notificationsAnnouncement: Boolean,

@@ -67,10 +67,18 @@ val macosVersion = numericVersion.split(".").let {
 // The 0.8.18 .so lacks glFlush() → UnsatisfiedLinkError at runtime.
 // Force ALL skiko artifacts to the version the JVM JAR already resolved to.
 configurations.all {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "org.jetbrains.skiko") {
-            useVersion("0.9.37.4")
-            because("Align Skiko native runtime with JVM JAR version resolved by compose.ui:1.10.1")
+    resolutionStrategy {
+        force("com.squareup.okhttp3:okhttp:${libs.versions.okhttp.get()}")
+        force("com.squareup.okhttp3:okhttp-sse:${libs.versions.okhttp.get()}")
+        eachDependency {
+            if (requested.group == "org.jetbrains.skiko") {
+                useVersion("0.9.37.4")
+                because("Align Skiko native runtime with JVM JAR version resolved by compose.ui:1.10.1")
+            }
+            if (requested.group == "com.squareup.okhttp3" && requested.name.startsWith("okhttp")) {
+                useVersion(libs.versions.okhttp.get())
+                because("Aniyomi extensions require OkHttp 5.x (CacheControl.maxAge duration API)")
+            }
         }
     }
 }
@@ -145,6 +153,8 @@ kotlin {
             implementation(libs.backdrop)
             implementation(libs.kyant.shapes)
             implementation(libs.ktor.client.okhttp)
+            implementation(libs.okhttp.core)
+            implementation(libs.okhttp.sse)
             implementation(libs.kotlinx.coroutines.android)
             // Native libmpv for Android (has ASS support via libass)
             implementation("dev.jdtech.mpv:libmpv:0.5.1")

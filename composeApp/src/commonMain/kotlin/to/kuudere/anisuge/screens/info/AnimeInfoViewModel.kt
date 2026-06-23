@@ -10,7 +10,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import to.kuudere.anisuge.data.models.AnimeDetails
+import to.kuudere.anisuge.data.services.SettingsStore
+import to.kuudere.anisuge.extensions.ExtensionManager
+import to.kuudere.anisuge.extensions.serverId
 import to.kuudere.anisuge.data.models.RecommendationItem
 import to.kuudere.anisuge.data.models.EpisodeItem
 import to.kuudere.anisuge.data.models.AnimeThemeItem
@@ -25,6 +29,14 @@ data class EpisodeProgress(
     val currentTime: Double,
     val duration: Double
 )
+
+enum class ExtensionMappingStatus {
+    Idle,
+    Searching,
+    Mapped,
+    Failed,
+    NeedsPick,
+}
 
 data class AnimeInfoUiState(
     val isLoading: Boolean = true,
@@ -46,18 +58,33 @@ data class AnimeInfoUiState(
     val franchiseOrder: List<FranchiseEntry> = emptyList(),
     val isLoadingThemes: Boolean = false,
     val themes: List<AnimeThemeItem> = emptyList(),
+    val extensionMappingStatus: ExtensionMappingStatus = ExtensionMappingStatus.Idle,
+    val extensionMappedTitle: String? = null,
+    val extensionPrefetchServerId: String? = null,
 )
 
 class AnimeInfoViewModel(
     private val infoService: InfoService,
     private val watchlistService: WatchlistService,
-    private val homeService: HomeService
+    private val homeService: HomeService,
+    private val extensionManager: ExtensionManager,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AnimeInfoUiState())
     val uiState: StateFlow<AnimeInfoUiState> = _uiState.asStateFlow()
 
     private var currentAnimeId: String? = null
+
+    init {
+        viewModelScope.launch {
+            extensionManager.pendingMatch.collect { pending ->
+                if (pending != null && currentAnimeId != null) {
+                    _uiState.update { it.copy(extensionMappingStatus = ExtensionMappingStatus.NeedsPick) }
+                }
+            }
+        }
+    }
 
     fun loadAnimeInfo(id: String) {
         if (currentAnimeId == id && !_uiState.value.isLoading) {
@@ -111,6 +138,7 @@ class AnimeInfoViewModel(
                     }
                     loadRecommendations(id)
                     loadFranchiseOrder(details)
+                    prefetchExtensionMapping(details)
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "Failed to load anime details.") }
                 }
@@ -243,6 +271,95 @@ class AnimeInfoViewModel(
             }
         }
     }
+
+    fun clearAndRetryExtensionMapping() {
+        val animeId = currentAnimeId ?: return
+        val serverId = _uiState.value.extensionPrefetchServerId ?: return
+        val details = _uiState.value.details ?: return
+        viewModelScope.launch {
+            extensionManager.clearMapping(animeId, serverId)
+            prefetchExtensionMapping(details)
+        }
+    }
+
+    private fun prefetchExtensionMapping(details: AnimeDetails) {
+        viewModelScope.launch {
+            if (!extensionManager.runtime.state.value.ready) {
+                _uiState.update {
+                    it.copy(
+                        extensionMappingStatus = ExtensionMappingStatus.Idle,
+                        extensionMappedTitle = null,
+                        extensionPrefetchServerId = null,
+                    )
+                }
+                return@launch
+            }
+            if (extensionManager.busy.value) {
+                extensionManager.busy.first { !it }
+            }
+            if (extensionManager.installed.value.isEmpty()) {
+                _uiState.update {
+                    it.copy(
+                        extensionMappingStatus = ExtensionMappingStatus.Idle,
+                        extensionMappedTitle = null,
+                        extensionPrefetchServerId = null,
+                    )
+                }
+                return@launch
+            }
+            val priority = settingsStore.serverPriorityFlow.first()
+            val serverId = extensionManager.preferredExtensionServerId(priority)
+                ?: extensionManager.installed.value.firstOrNull()?.serverId()
+                ?: return@launch
+            val animeId = details.animeId.ifBlank { details.id }
+            val titles = extensionSearchTitles(details)
+            val synonyms = details.synonyms.filter { it.isNotBlank() }
+            _uiState.update {
+                it.copy(
+                    extensionMappingStatus = ExtensionMappingStatus.Searching,
+                    extensionMappedTitle = null,
+                    extensionPrefetchServerId = serverId,
+                )
+            }
+            try {
+                val result = extensionManager.prefetchMapping(
+                    animeId = animeId,
+                    titles = titles,
+                    synonyms = synonyms,
+                    serverId = serverId,
+                )
+                _uiState.update {
+                    it.copy(
+                        extensionMappingStatus = ExtensionMappingStatus.Mapped,
+                        extensionMappedTitle = result.mappedTitle,
+                        extensionPrefetchServerId = serverId,
+                    )
+                }
+            } catch (e: Exception) {
+                println("[AnimeInfoVM] extension prefetch error: ${e.message}")
+                val status = if (extensionManager.pendingMatch.value != null) {
+                    ExtensionMappingStatus.NeedsPick
+                } else {
+                    ExtensionMappingStatus.Failed
+                }
+                _uiState.update {
+                    it.copy(
+                        extensionMappingStatus = status,
+                        extensionMappedTitle = null,
+                        extensionPrefetchServerId = serverId,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun extensionSearchTitles(details: AnimeDetails): List<String> =
+        buildList {
+            details.title.english.takeIf { it.isNotBlank() }?.let(::add)
+            details.title.romaji.takeIf { it.isNotBlank() }?.let(::add)
+            details.title.native.takeIf { it.isNotBlank() }?.let(::add)
+            details.title.userPreferred.takeIf { it.isNotBlank() }?.let(::add)
+        }.distinct()
 
     fun updateWatchlist(folder: String) {
         val animeId = currentAnimeId ?: return

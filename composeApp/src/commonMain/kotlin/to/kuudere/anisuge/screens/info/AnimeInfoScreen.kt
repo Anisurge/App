@@ -90,6 +90,63 @@ fun AnimeInfoScreen(
     }
 
     val state by viewModel.uiState.collectAsState()
+    val pendingExtensionMatch by AppComponent.extensionManager.pendingMatch.collectAsState()
+
+    pendingExtensionMatch?.let { pending ->
+        AlertDialog(
+            onDismissRequest = {
+                AppComponent.extensionManager.choosePendingMatch(pending.requestId, null)
+            },
+            title = { Text("Choose the correct anime") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "${pending.sourceName} returned multiple matches for ${pending.animeTitle}.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    pending.candidates.forEach { (media, confidence) ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                AppComponent.extensionManager.choosePendingMatch(pending.requestId, media)
+                            },
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                media.thumbnailUrl?.let {
+                                    AsyncImage(
+                                        model = it,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(46.dp, 64.dp).clip(RoundedCornerShape(4.dp)),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                }
+                                Column(Modifier.weight(1f)) {
+                                    Text(media.title, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${(confidence * 100).toInt()}% match",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = {
+                    AppComponent.extensionManager.choosePendingMatch(pending.requestId, null)
+                }) { Text("Cancel") }
+            },
+        )
+    }
     val preferRomajiAnimeTitles by to.kuudere.anisuge.AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(
         initial = false
     )
@@ -170,7 +227,8 @@ fun AnimeInfoScreen(
                             details.title.romaji,
                             details.title.native,
                             details.title.userPreferred,
-                        ) + details.synonyms,
+                        ),
+                        synonyms = details.synonyms,
                         anilistId = anilistId,
                         episodes = batch,
                         preferredServer = chosenServer,
@@ -346,6 +404,7 @@ fun AnimeInfoScreen(
                         onPosterClick = { previewImageUrl = it },
                         showFullAnimeTitles = showFullAnimeTitles,
                         onExpandThemes = { viewModel.expandThemes() },
+                        onExtensionChipClick = { viewModel.clearAndRetryExtensionMapping() },
                     )
                 }
 
@@ -893,6 +952,7 @@ private val BATCH_RECOMMENDED_SERVERS = listOf("anikage", "anitaku-1", "anitaku"
 private suspend fun preflightBatchDownloadServer(
     animeId: String,
     titles: List<String>,
+    synonyms: List<String> = emptyList(),
     anilistId: Int,
     episodes: List<to.kuudere.anisuge.data.models.EpisodeItem>,
     preferredServer: String,
@@ -919,9 +979,10 @@ private suspend fun preflightBatchDownloadServer(
                 async {
                     val usable = runCatching {
                         if (to.kuudere.anisuge.extensions.parseExtensionServerId(server) != null) {
-                            to.kuudere.anisuge.AppComponent.extensionManager.resolveStream(
+                            to.kuudere.anisuge.AppComponent.extensionManager.resolveStreamForEpisode(
                                 animeId = animeId,
                                 titles = titles.filter { it.isNotBlank() },
+                                synonyms = synonyms.filter { it.isNotBlank() },
                                 episodeNumber = episode.number,
                                 serverId = server,
                             ).videos.isNotEmpty()
@@ -1258,6 +1319,7 @@ private fun MobileLayout(
     onPosterClick: (String) -> Unit = {},
     showFullAnimeTitles: Boolean = false,
     onExpandThemes: () -> Unit = {},
+    onExtensionChipClick: () -> Unit = {},
 ) {
     val scrollState = rememberScrollState()
 
@@ -1523,6 +1585,7 @@ private fun MobileLayout(
                                 isPremiumUser = isPremiumUser,
                                 watchedEpisode = anime.watchProgress?.episode,
                                 currentProgressSeconds = anime.watchProgress?.currentTime,
+                                onExtensionChipClick = onExtensionChipClick,
                             )
                         }
                     } else {
@@ -3046,6 +3109,34 @@ private fun SeasonBatchPickerDialog(
     )
 }
 
+@Composable
+private fun ExtensionMappingChip(
+    status: ExtensionMappingStatus,
+    mappedTitle: String?,
+    onClick: () -> Unit,
+) {
+    if (status == ExtensionMappingStatus.Idle) return
+    val label = when (status) {
+        ExtensionMappingStatus.Searching -> "Extension: Searching…"
+        ExtensionMappingStatus.Mapped -> "Extension: Found — ${mappedTitle.orEmpty()}"
+        ExtensionMappingStatus.Failed -> "Extension: Not found — tap to retry"
+        ExtensionMappingStatus.NeedsPick -> "Extension: Pick correct title"
+        ExtensionMappingStatus.Idle -> return
+    }
+    Spacer(Modifier.height(10.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(AppColors.surface)
+            .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Text(label, color = AppColors.textMuted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EpisodeListSection(
@@ -3056,6 +3147,7 @@ private fun EpisodeListSection(
     isPremiumUser: Boolean,
     watchedEpisode: Int? = null,
     currentProgressSeconds: Double? = null,
+    onExtensionChipClick: () -> Unit = {},
 ) {
     if (state.isLoadingEpisodes) {
         Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
@@ -3078,6 +3170,11 @@ private fun EpisodeListSection(
     val pageGroups = (1..totalEpisodes step episodesPerPage).toList()
 
     Column(Modifier.fillMaxWidth()) {
+        ExtensionMappingChip(
+            status = state.extensionMappingStatus,
+            mappedTitle = state.extensionMappedTitle,
+            onClick = onExtensionChipClick,
+        )
         // Season header + Group selector
         var showGroupSheet by remember { mutableStateOf(false) }
         Box(

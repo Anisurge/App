@@ -36,9 +36,13 @@ import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import to.kuudere.anisuge.data.models.expandForSelection
+import to.kuudere.anisuge.data.models.excludingHidden
+import to.kuudere.anisuge.data.models.hidesServer
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.InfoService
 import to.kuudere.anisuge.data.models.asHttpHeaderMap
+import to.kuudere.anisuge.extensions.preferredDownloadQualityIndex as extensionPreferredDownloadQualityIndex
+import to.kuudere.anisuge.extensions.resolvedForDownload
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -167,9 +171,11 @@ fun DownloadEpisodeDialog(
     }
 
     val catalogServers = serverRepository.servers.collectAsState()
-    val allSelectableServers = remember(catalogServers.value) {
+    val hiddenServerIds = serverRepository.hiddenServerIds.collectAsState()
+    val allSelectableServers = remember(catalogServers.value, hiddenServerIds.value) {
         catalogServers.value
             .expandForSelection()
+            .excludingHidden(hiddenServerIds.value)
             .filterNot { it.id.equals("animepahe", ignoreCase = true) }
     }
 
@@ -244,15 +250,19 @@ fun DownloadEpisodeDialog(
                     details?.title?.native?.takeIf { it.isNotBlank() }?.let(::add)
                     details?.synonyms?.filter { it.isNotBlank() }?.let(::addAll)
                 }
-                val result = to.kuudere.anisuge.AppComponent.extensionManager.resolveStream(
+                val result = to.kuudere.anisuge.AppComponent.extensionManager.resolveStreamForEpisode(
                     animeId = animeId,
                     titles = titles.ifEmpty { listOf(animeId) },
+                    synonyms = details?.synonyms?.filter { it.isNotBlank() }.orEmpty(),
                     episodeNumber = episodeNumber,
                     serverId = server,
                 )
-                availableQualities = result.videos.map {
-                    Triple(it.quality, it.url, it.headers)
+                val qualities = result.videos.map { video ->
+                    val resolved = video.resolvedForDownload()
+                    Triple(resolved.quality, resolved.url, resolved.headers)
                 }
+                availableQualities = qualities
+                selectedQualityIndex = extensionPreferredDownloadQualityIndex(qualities)
                 availableSubtitles = result.videos.flatMap { it.subtitles }
                     .map { it.label }
                     .distinct()

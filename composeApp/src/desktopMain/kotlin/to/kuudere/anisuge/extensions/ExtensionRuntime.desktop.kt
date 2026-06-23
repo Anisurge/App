@@ -6,6 +6,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -76,19 +77,27 @@ actual class ExtensionRuntime actual constructor() {
         result as? Boolean ?: false
     }
 
+    actual suspend fun invalidateInstalledSourcesCache() = Unit
+
     actual suspend fun loadInstalledSources(paths: List<String>): List<ExtensionSource> {
         ensureReady()
-        return paths.groupBy { if (it.endsWith(".cs3")) ExtensionEngine.CLOUDSTREAM else ExtensionEngine.ANIYOMI }
-            .flatMap { (engine, files) ->
-                val folder = File(files.firstOrNull() ?: return@flatMap emptyList()).parent ?: return@flatMap emptyList()
-                val data = call(if (engine == ExtensionEngine.CLOUDSTREAM) "csLoadExtensions" else "loadExtensions", mapOf("folderPath" to folder))
-                parseDesktopSources(data, engine, files)
+        return paths.groupBy { path ->
+            when {
+                path.endsWith(".cs3") -> ExtensionEngine.CLOUDSTREAM
+                path.contains("/exts_manga/") || path.contains("/mangayomi/") -> ExtensionEngine.MANGAYOMI
+                path.contains("/sora/") -> ExtensionEngine.SORA
+                else -> ExtensionEngine.ANIYOMI
             }
+        }.flatMap { (engine, files) ->
+            val folder = File(files.firstOrNull() ?: return@flatMap emptyList()).parent ?: return@flatMap emptyList()
+            val data = call(if (engine == ExtensionEngine.CLOUDSTREAM) "csLoadExtensions" else "loadExtensions", mapOf("folderPath" to folder))
+            parseDesktopSources(data, engine, files)
+        }
     }
 
     actual suspend fun search(source: ExtensionSource, query: String): List<ExtensionMedia> {
         val method = if (source.engine == ExtensionEngine.CLOUDSTREAM) "csSearch" else "search"
-        return parseDesktopMedia(call(method, mapOf("sourceId" to (source.runtimeId ?: source.id), "query" to query, "page" to 1, "isAnime" to true)))
+        return parseDesktopMedia(call(method, mapOf("sourceId" to source.bridgeSourceId(), "query" to query, "page" to 1, "isAnime" to source.isAnime)))
     }
 
     actual suspend fun details(
@@ -96,22 +105,63 @@ actual class ExtensionRuntime actual constructor() {
         media: ExtensionMedia,
     ): Pair<ExtensionMedia, List<ExtensionEpisode>> {
         val args = if (source.engine == ExtensionEngine.CLOUDSTREAM) {
-            mapOf("sourceId" to (source.runtimeId ?: source.id), "url" to media.url)
+            mapOf("sourceId" to source.bridgeSourceId(), "url" to media.url)
         } else {
             mapOf(
-                "sourceId" to (source.runtimeId ?: source.id),
-                "isAnime" to true,
+                "sourceId" to source.bridgeSourceId(),
+                "isAnime" to source.isAnime,
                 "media" to mapOf("title" to media.title, "url" to media.url, "thumbnail_url" to media.thumbnailUrl),
             )
         }
         return parseDesktopDetails(call(if (source.engine == ExtensionEngine.CLOUDSTREAM) "csGetDetail" else "getDetail", args), media)
     }
 
-    actual suspend fun videos(source: ExtensionSource, episode: ExtensionEpisode): List<ExtensionVideo> {
+    actual suspend fun videos(source: ExtensionSource, episode: ExtensionEpisode): List<ExtensionVideo> =
+        fetchVideos(source, episode)
+
+    actual suspend fun videosStream(
+        source: ExtensionSource,
+        episode: ExtensionEpisode,
+        onVideo: (suspend (ExtensionVideo) -> Unit)?,
+    ): List<ExtensionVideo> {
+        if (source.engine == ExtensionEngine.CLOUDSTREAM) {
+            val deadline = System.currentTimeMillis() + 30_000
+            val collected = linkedMapOf<String, ExtensionVideo>()
+            while (System.currentTimeMillis() < deadline) {
+                val batch = fetchVideos(source, episode)
+                for (video in batch) {
+                    val key = "${video.quality}|${video.url}"
+                    if (key !in collected) {
+                        collected[key] = video
+                        onVideo?.invoke(video)
+                    }
+                }
+                if (collected.isNotEmpty()) return collected.values.toList()
+                delay(500)
+            }
+            return collected.values.toList()
+        }
+        var result = fetchVideos(source, episode)
+        result.forEach { onVideo?.invoke(it) }
+        if (result.isEmpty()) {
+            delay(2_000)
+            result = fetchVideos(source, episode)
+            result.forEach { onVideo?.invoke(it) }
+        }
+        return result
+    }
+
+    private suspend fun fetchVideos(source: ExtensionSource, episode: ExtensionEpisode): List<ExtensionVideo> {
+        val episodePayload = buildMap<String, Any?> {
+            put("name", episode.name)
+            put("url", episode.url)
+            put("episode_number", episode.number)
+            if (episode.sortMap.isNotEmpty()) put("sortMap", episode.sortMap)
+        }
         val args = if (source.engine == ExtensionEngine.CLOUDSTREAM) {
-            mapOf("sourceId" to (source.runtimeId ?: source.id), "url" to episode.url)
+            mapOf("sourceId" to source.bridgeSourceId(), "url" to episode.url)
         } else {
-            mapOf("sourceId" to (source.runtimeId ?: source.id), "episode" to mapOf("name" to episode.name, "url" to episode.url))
+            mapOf("sourceId" to source.bridgeSourceId(), "isAnime" to source.isAnime, "episode" to episodePayload)
         }
         return parseDesktopVideos(call(if (source.engine == ExtensionEngine.CLOUDSTREAM) "csGetVideoList" else "getVideoList", args))
     }
@@ -214,9 +264,25 @@ actual object ExtensionPlatformFiles {
     actual fun rootDir(): String =
         File(System.getProperty("user.home"), ".anisurge/extensions").apply { mkdirs() }.absolutePath
 
+    actual fun stagingPathFor(source: ExtensionSource): String {
+        val safeId = source.uninstallKey().replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val ext = source.artifactExtension()
+        val engineDir = when (source.engine) {
+            ExtensionEngine.CLOUDSTREAM -> "cloudstream"
+            ExtensionEngine.MANGAYOMI -> source.bridgeStorageDir()
+            else -> source.engine.name.lowercase()
+        }
+        val dir = File(rootDir(), engineDir).apply { mkdirs() }
+        return File(dir, "$safeId.$ext").absolutePath
+    }
+
+    actual fun ensureParentDirs(path: String) {
+        File(path).parentFile?.mkdirs()
+    }
+
     actual suspend fun download(client: HttpClient, url: String, destination: String) = withContext(Dispatchers.IO) {
         val file = File(destination)
-        file.parentFile?.mkdirs()
+        ensureParentDirs(destination)
         val target = if (destination.endsWith(".jar") && url.substringBefore("?").endsWith(".apk")) {
             File("$destination.apk")
         } else file
@@ -234,6 +300,24 @@ actual object ExtensionPlatformFiles {
         }
     }
     actual fun delete(path: String): Boolean = File(path).delete()
+
+    actual fun installedApkPathCandidates(source: ExtensionSource): List<String> {
+        val pkg = source.uninstallKey()
+        val safeId = source.id.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val ext = source.artifactExtension()
+        val engineDir = when (source.engine) {
+            ExtensionEngine.CLOUDSTREAM -> "cloudstream"
+            ExtensionEngine.MANGAYOMI -> source.bridgeStorageDir()
+            else -> source.engine.name.lowercase()
+        }
+        val root = File(ExtensionPlatformFiles.rootDir())
+        return buildList {
+            source.installedPath?.takeIf { it.isNotBlank() }?.let(::add)
+            add(stagingPathFor(source))
+            add(File(root, "$engineDir/$safeId.$ext").absolutePath)
+            add(File(root, "$engineDir/$pkg.$ext").absolutePath)
+        }.distinct()
+    }
 }
 
 private suspend fun convertApkToJar(client: HttpClient, apk: File, output: File) {
@@ -296,16 +380,27 @@ private fun parseDesktopSources(
     paths: List<String>,
 ): List<ExtensionSource> = (data as? JsonArray)?.mapNotNull { item ->
     val o = item as? JsonObject ?: return@mapNotNull null
-    val id = o["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+    val pkg = o["pkg"]?.jsonPrimitive?.contentOrNull
+    val bridgeId = o["id"]?.jsonPrimitive?.contentOrNull ?: pkg ?: return@mapNotNull null
+    val catalogId = pkg?.takeIf { it.isNotBlank() } ?: bridgeId
+    val itemType = o["itemType"]?.jsonPrimitive?.contentOrNull?.lowercase()
+    val isAnime = when {
+        itemType?.contains("anime") == true -> true
+        itemType?.contains("manga") == true -> false
+        engine == ExtensionEngine.MANGAYOMI -> false
+        else -> true
+    }
     ExtensionSource(
-        id = id,
-        name = o["name"]?.jsonPrimitive?.contentOrNull ?: id,
+        id = catalogId,
+        name = o["name"]?.jsonPrimitive?.contentOrNull ?: catalogId,
         engine = engine,
         language = o["lang"]?.jsonPrimitive?.contentOrNull ?: "all",
         version = o["version"]?.jsonPrimitive?.contentOrNull ?: "",
         iconUrl = o["iconUrl"]?.jsonPrimitive?.contentOrNull,
         installedPath = paths.firstOrNull(),
-        runtimeId = id,
+        runtimeId = bridgeId,
+        pkgName = pkg,
+        isAnime = isAnime,
         installed = true,
     )
 }.orEmpty()
@@ -342,7 +437,8 @@ private fun parseDesktopDetails(
             ?: ep["episode"]?.jsonPrimitive?.doubleOrNull
             ?: ep["ep"]?.jsonPrimitive?.doubleOrNull
             ?: 0.0
-        ExtensionEpisode(name, url, number)
+        val sortMap = (ep["sortMap"] as? JsonObject)?.mapValues { it.value.jsonPrimitive.contentOrNull.orEmpty() }.orEmpty()
+        ExtensionEpisode(name, url, number, sortMap)
     }.orEmpty()
     return media to episodes
 }

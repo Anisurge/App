@@ -1,7 +1,13 @@
 package to.kuudere.anisuge.screens.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,14 +25,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -49,6 +57,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
@@ -56,6 +66,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.extensions.CloudflareBypassDialog
@@ -87,6 +99,10 @@ import to.kuudere.anisuge.extensions.ExtensionSource
 import to.kuudere.anisuge.extensions.ExtensionRuntimeState
 import to.kuudere.anisuge.theme.AppColors
 
+private const val DeleteAnimDurationMs = 280L
+
+private fun extensionItemKey(source: ExtensionSource): String = "${source.engine.name}:${source.id}"
+
 private val EngineAccent = mapOf(
     ExtensionEngine.ANIYOMI to Color(0xFF3F51B5),
     ExtensionEngine.CLOUDSTREAM to Color(0xFF42A5F5),
@@ -95,7 +111,15 @@ private val EngineAccent = mapOf(
 )
 
 @Composable
-fun ExtensionsSettings(modifier: Modifier = Modifier) {
+fun ExtensionsSettings(
+    modifier: Modifier = Modifier,
+    sortDialogVisible: Boolean? = null,
+    onSortDialogVisibleChange: ((Boolean) -> Unit)? = null,
+    runtimeDialogVisible: Boolean? = null,
+    onRuntimeDialogVisibleChange: ((Boolean) -> Unit)? = null,
+    repoDialogVisible: Boolean? = null,
+    onRepoDialogVisibleChange: ((Boolean) -> Unit)? = null,
+) {
     val manager = AppComponent.extensionManager
     val config by manager.config.collectAsState()
     val available by manager.available.collectAsState()
@@ -105,15 +129,50 @@ fun ExtensionsSettings(modifier: Modifier = Modifier) {
     val error by manager.error.collectAsState()
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    var showRepoDialog by remember { mutableStateOf(false) }
-    var showRuntimeDialog by remember { mutableStateOf(false) }
-    var showSortDialog by remember { mutableStateOf(false) }
-    var showBypassDialog by remember { mutableStateOf(false) }
+    var localRepoDialog by remember { mutableStateOf(false) }
+    var localRuntimeDialog by remember { mutableStateOf(false) }
+    var localSortDialog by remember { mutableStateOf(false) }
+    var localBypassDialog by remember { mutableStateOf(false) }
     var filterEngine by remember { mutableStateOf<ExtensionEngine?>(null) }
     var filterInstalled by remember { mutableStateOf<Boolean?>(null) }
     var showOnlyNsfw by remember { mutableStateOf(false) }
     var operationError by remember { mutableStateOf<String?>(null) }
     var operationMessage by remember { mutableStateOf<String?>(null) }
+    var animatingOutIds by remember { mutableStateOf(setOf<String>()) }
+    val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val chipScrollState = rememberScrollState()
+
+    LaunchedEffect(Unit) {
+        runCatching { manager.refresh() }
+    }
+
+    LaunchedEffect(operationMessage) {
+        operationMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            operationMessage = null
+        }
+    }
+
+    LaunchedEffect(operationError) {
+        operationError?.let {
+            snackbarHostState.showSnackbar(it)
+            operationError = null
+        }
+    }
+
+    val actualRepoDialog = repoDialogVisible ?: localRepoDialog
+    val actualRuntimeDialog = runtimeDialogVisible ?: localRuntimeDialog
+    val actualSortDialog = sortDialogVisible ?: localSortDialog
+    fun changeRepoDialog(v: Boolean) {
+        if (onRepoDialogVisibleChange != null) onRepoDialogVisibleChange(v) else localRepoDialog = v
+    }
+    fun changeRuntimeDialog(v: Boolean) {
+        if (onRuntimeDialogVisibleChange != null) onRuntimeDialogVisibleChange(v) else localRuntimeDialog = v
+    }
+    fun changeSortDialog(v: Boolean) {
+        if (onSortDialogVisibleChange != null) onSortDialogVisibleChange(v) else localSortDialog = v
+    }
 
     fun guarded(action: suspend () -> Unit) {
         scope.launch {
@@ -127,75 +186,75 @@ fun ExtensionsSettings(modifier: Modifier = Modifier) {
         }
     }
 
-    if (showRepoDialog) {
+    fun uninstallWithAnimation(source: ExtensionSource) {
+        val key = extensionItemKey(source)
+        scope.launch {
+            operationError = null
+            operationMessage = null
+            animatingOutIds = animatingOutIds + key
+            delay(DeleteAnimDurationMs)
+            runCatching { manager.uninstall(source) }.onFailure { e ->
+                val cause = generateSequence(e) { it.cause }.last()
+                operationError = cause.message?.takeIf { it.isNotBlank() }
+                    ?: cause::class.simpleName ?: "Uninstall failed"
+            }
+            animatingOutIds = animatingOutIds - key
+        }
+    }
+
+    if (actualRepoDialog) {
         RepoManagementDialog(
             config = config.repositories,
             runtimeState = runtime,
             manager = manager,
-            onDismiss = { showRepoDialog = false },
+            onDismiss = { changeRepoDialog(false) },
             onRemoveRepo = { repo -> runCatching { manager.removeRepository(repo) } },
             onInstallRuntime = { guarded { manager.runtime.install(force = runtime.installed) } },
             onRemoveRuntime = { guarded { manager.runtime.remove() } },
         )
     }
 
-    if (showRuntimeDialog) {
+    if (actualRuntimeDialog) {
         RuntimeStatusDialog(
             state = runtime,
-            onDismiss = { showRuntimeDialog = false },
+            onDismiss = { changeRuntimeDialog(false) },
             onInstall = { guarded { manager.runtime.install(force = runtime.installed) } },
             onRemove = { guarded { manager.runtime.remove() } },
-            onBypass = { showBypassDialog = true },
+            onBypass = { localBypassDialog = true },
             logs = if (runtime.ready) manager.runtime.logs() else emptyList(),
         )
     }
 
-    if (showBypassDialog) {
+    if (localBypassDialog) {
         CloudflareBypassDialog(
-            onDismiss = { showBypassDialog = false },
+            onDismiss = { localBypassDialog = false },
             onBypass = { url ->
-                showBypassDialog = false
+                localBypassDialog = false
                 guarded { manager.runtime.openCloudflareBypass(url) }
             },
         )
     }
 
-    if (showSortDialog) {
+    if (actualSortDialog) {
         SortFilterDialog(
             currentEngine = filterEngine,
             currentInstalled = filterInstalled,
             showNsfw = showOnlyNsfw,
-            onDismiss = { showSortDialog = false },
+            onDismiss = { changeSortDialog(false) },
             onApply = { engine, installedFilter, nsfw ->
                 filterEngine = engine
                 filterInstalled = installedFilter
                 showOnlyNsfw = nsfw
-                showSortDialog = false
+                changeSortDialog(false)
             },
         )
     }
 
     Column(modifier = modifier.fillMaxWidth().fillMaxHeight()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "Extensions",
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.weight(1f),
-            )
-            HeaderActionButton(Icons.AutoMirrored.Filled.Sort, "Sort & Filter", onClick = { showSortDialog = true })
-            Spacer(Modifier.width(6.dp))
-            HeaderActionButton(Icons.Default.Build, "Runtime", onClick = { showRuntimeDialog = true })
-            Spacer(Modifier.width(6.dp))
-            HeaderActionButton(Icons.Default.Settings, "Repositories", onClick = { showRepoDialog = true })
-        }
-
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             placeholder = { Text("Search extensions", color = AppColors.textMuted) },
             singleLine = true,
             leadingIcon = { Icon(Icons.Default.Search, null, tint = AppColors.textMuted) },
@@ -217,6 +276,7 @@ fun ExtensionsSettings(modifier: Modifier = Modifier) {
                 unfocusedPlaceholderColor = AppColors.textMuted,
             ),
         )
+        Spacer(Modifier.height(8.dp))
 
         val filtered = available.filter { source ->
             val matchesQuery = query.isBlank() || source.name.contains(query, ignoreCase = true) ||
@@ -226,13 +286,16 @@ fun ExtensionsSettings(modifier: Modifier = Modifier) {
             val matchesInstalled = filterInstalled == null || source.installed == filterInstalled
             val matchesNsfw = !showOnlyNsfw || source.isNsfw
             matchesQuery && matchesEngine && matchesInstalled && matchesNsfw
-        }.sortedWith(compareByDescending<ExtensionSource> { it.installed }.thenBy { it.name })
+        }
+        val installedItems = filtered.filter { it.installed }.sortedBy { it.name.lowercase() }
+        val availableItems = filtered.filter { !it.installed }.sortedBy { it.name.lowercase() }
+        val updateCount = installedItems.count { it.hasUpdate }
 
-        if (busy && filtered.isEmpty()) {
+        if (busy && installedItems.isEmpty() && availableItems.isEmpty()) {
             Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AppColors.accent)
             }
-        } else if (filtered.isEmpty()) {
+        } else if (installedItems.isEmpty() && availableItems.isEmpty()) {
             Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Extension, null, tint = AppColors.textMuted, modifier = Modifier.size(48.dp))
@@ -245,33 +308,169 @@ fun ExtensionsSettings(modifier: Modifier = Modifier) {
                 }
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(filtered, key = { "${it.engine.name}:${it.id}" }) { source ->
-                    ExtensionSourceCard(
-                        source = source,
-                        isBusy = busy,
-                        onInstall = { guarded { manager.install(source) } },
-                        onUninstall = { guarded { manager.uninstall(source) } },
-                        onTest = { guarded { operationMessage = manager.testSource(source) } },
-                    )
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (updateCount > 0) {
+                        item(key = "updates_banner") {
+                            UpdatesAvailableBanner(
+                                count = updateCount,
+                                isBusy = busy,
+                                onUpdateAll = {
+                                    guarded {
+                                        val count = manager.updateAllAvailable()
+                                        operationMessage = if (count > 0) {
+                                            "Updated $count extension${if (count == 1) "" else "s"}"
+                                        } else {
+                                            "No updates available"
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    if (installedItems.isNotEmpty()) {
+                        item(key = "header_installed") {
+                            ExtensionSectionHeader(
+                                title = "Installed",
+                                count = installedItems.size,
+                            )
+                        }
+                        extensionListItems(
+                            items = installedItems,
+                            animatingOutIds = animatingOutIds,
+                            busy = busy,
+                            chipScrollState = chipScrollState,
+                            onInstall = { source -> guarded { manager.install(source) } },
+                            onUpdate = { source ->
+                                guarded {
+                                    manager.update(source)
+                                    operationMessage = "Updated ${source.name}"
+                                }
+                            },
+                            onUninstall = ::uninstallWithAnimation,
+                            onRepair = { source ->
+                                guarded { operationMessage = manager.repairSource(source) }
+                            },
+                        )
+                    }
+                    if (availableItems.isNotEmpty()) {
+                        item(key = "header_available") {
+                            ExtensionSectionHeader(
+                                title = "Not installed",
+                                count = availableItems.size,
+                            )
+                        }
+                        extensionListItems(
+                            items = availableItems,
+                            animatingOutIds = animatingOutIds,
+                            busy = busy,
+                            chipScrollState = chipScrollState,
+                            onInstall = { source -> guarded { manager.install(source) } },
+                            onUpdate = { _ -> },
+                            onUninstall = ::uninstallWithAnimation,
+                            onRepair = { _ -> },
+                        )
+                    }
                 }
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+                )
             }
         }
+    }
+}
 
-        operationError?.let {
-            Text(it, color = AppColors.error, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
-        }
-        operationMessage?.let {
-            Text(it, color = AppColors.accent, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
+private fun LazyListScope.extensionListItems(
+    items: List<ExtensionSource>,
+    animatingOutIds: Set<String>,
+    busy: Boolean,
+    chipScrollState: ScrollState,
+    onInstall: (ExtensionSource) -> Unit,
+    onUpdate: (ExtensionSource) -> Unit,
+    onUninstall: (ExtensionSource) -> Unit,
+    onRepair: (ExtensionSource) -> Unit,
+) {
+    items(items, key = { extensionItemKey(it) }) { source ->
+        val itemKey = extensionItemKey(source)
+        AnimatedVisibility(
+            visible = itemKey !in animatingOutIds,
+            enter = EnterTransition.None,
+            exit = shrinkVertically(animationSpec = tween(DeleteAnimDurationMs.toInt())) +
+                fadeOut(animationSpec = tween(DeleteAnimDurationMs.toInt())),
+            modifier = Modifier.animateItem(),
+        ) {
+            ExtensionSourceCard(
+                source = source,
+                isBusy = busy || itemKey in animatingOutIds,
+                chipScrollState = chipScrollState,
+                onInstall = { onInstall(source) },
+                onUpdate = { onUpdate(source) },
+                onUninstall = { onUninstall(source) },
+                onRepair = { onRepair(source) },
+            )
         }
     }
 }
 
 @Composable
-private fun HeaderActionButton(icon: ImageVector, contentDesc: String, onClick: () -> Unit) {
+private fun ExtensionSectionHeader(title: String, count: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title,
+            color = AppColors.text,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            count.toString(),
+            color = AppColors.textMuted,
+            fontSize = 12.sp,
+        )
+    }
+}
+
+@Composable
+private fun UpdatesAvailableBanner(
+    count: Int,
+    isBusy: Boolean,
+    onUpdateAll: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(AppColors.accent.copy(alpha = 0.12f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Update, null, tint = AppColors.accent, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "$count update${if (count == 1) "" else "s"} available",
+            color = AppColors.text,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onUpdateAll, enabled = !isBusy) {
+            Text("Update all", color = AppColors.accent)
+        }
+    }
+}
+
+@Composable
+internal fun HeaderActionButton(icon: ImageVector, contentDesc: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
@@ -287,12 +486,19 @@ private fun HeaderActionButton(icon: ImageVector, contentDesc: String, onClick: 
 private fun ExtensionSourceCard(
     source: ExtensionSource,
     isBusy: Boolean = false,
+    chipScrollState: ScrollState,
     onInstall: () -> Unit,
+    onUpdate: () -> Unit,
     onUninstall: () -> Unit,
-    onTest: () -> Unit,
+    onRepair: () -> Unit,
 ) {
     val accent = EngineAccent[source.engine] ?: AppColors.accent
     val engineName = source.engine.displayName
+    var installing by remember { mutableStateOf(false) }
+    LaunchedEffect(isBusy) {
+        if (!isBusy) installing = false
+    }
+    val showSpinner = installing && isBusy
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -316,7 +522,12 @@ private fun ExtensionSourceCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(chipScrollState),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     InfoChip(text = engineName, color = accent)
                     InfoChip(text = source.language.uppercase(), color = AppColors.textMuted)
                     if (source.version.isNotBlank()) {
@@ -324,6 +535,9 @@ private fun ExtensionSourceCard(
                             text = if (source.version.startsWith("v")) source.version else "v${source.version}",
                             color = AppColors.accent,
                         )
+                    }
+                    if (source.hasUpdate) {
+                        InfoChip(text = "Update", color = AppColors.accent)
                     }
                     if (source.isNsfw) {
                         InfoChip(text = "18+", color = Color(0xFFE53935))
@@ -338,53 +552,59 @@ private fun ExtensionSourceCard(
                             icon = Icons.Default.Update,
                             containerColor = AppColors.accent.copy(alpha = 0.2f),
                             iconColor = AppColors.accent,
-                            onClick = onInstall,
+                            contentDesc = "Update",
+                            onClick = onUpdate,
                             enabled = !isBusy,
                         )
                     }
                     ActionIconButton(
-                        icon = Icons.Default.Build,
+                        icon = Icons.Default.Refresh,
                         containerColor = AppColors.surfaceVariant,
                         iconColor = AppColors.text,
-                        onClick = onTest,
+                        contentDesc = "Repair",
+                        onClick = onRepair,
                         enabled = !isBusy,
                     )
                     ActionIconButton(
                         icon = Icons.Default.Delete,
                         containerColor = Color(0xFFE53935).copy(alpha = 0.2f),
                         iconColor = Color(0xFFE53935),
+                        contentDesc = "Uninstall",
                         onClick = onUninstall,
                         enabled = !isBusy,
                     )
                 }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            if (source.engine.nativeRuntime) AppColors.accent.copy(alpha = 0.2f)
-                            else AppColors.surfaceVariant
-                        ),
-                ) {
-                    if (isBusy) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.5.dp,
-                            color = AppColors.accent,
-                        )
-                    } else {
-                        IconButton(
-                            onClick = onInstall,
-                            enabled = source.engine.nativeRuntime,
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(Icons.Default.Download, null, tint =
-                                if (source.engine.nativeRuntime) AppColors.accent else AppColors.textMuted,
-                                modifier = Modifier.size(18.dp))
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (source.engine.nativeRuntime) AppColors.accent.copy(alpha = 0.2f)
+                                else AppColors.surfaceVariant
+                            ),
+                    ) {
+                        if (showSpinner) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.5.dp,
+                                color = AppColors.accent,
+                            )
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    installing = true
+                                    onInstall()
+                                },
+                                enabled = source.engine.nativeRuntime,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(Icons.Default.Download, null, tint =
+                                    if (source.engine.nativeRuntime) AppColors.accent else AppColors.textMuted,
+                                    modifier = Modifier.size(18.dp))
+                            }
                         }
                     }
                 }
-            }
         }
     }
 }
@@ -439,7 +659,14 @@ private fun InfoChip(text: String, color: Color) {
             .background(color.copy(alpha = 0.12f))
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
-        Text(text, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = text,
+            color = color,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
@@ -448,6 +675,7 @@ private fun ActionIconButton(
     icon: ImageVector,
     containerColor: Color,
     iconColor: Color,
+    contentDesc: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
     size: Dp = 36.dp,
@@ -458,7 +686,7 @@ private fun ActionIconButton(
             .background(containerColor),
     ) {
         IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(size)) {
-            Icon(icon, null, tint = iconColor, modifier = Modifier.size(18.dp))
+            Icon(icon, contentDesc, tint = iconColor, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -699,8 +927,8 @@ private fun RuntimeStatusInline(
                     )
                     Text(
                         if (state.busy) state.status
-                        else if (state.installed) "Aniyomi & CloudStream ready"
-                        else "Download plugin to unlock Aniyomi & CloudStream",
+                        else if (state.installed) "All 4 engine types ready"
+                        else "Download plugin to unlock extensions",
                         color = AppColors.textMuted,
                         fontSize = 12.sp,
                     )
@@ -804,8 +1032,7 @@ private fun RuntimeStatusDialog(
                 }
 
                 Text(
-                    "Aniyomi and CloudStream use the helper. Mangayomi and Sora repositories can be inspected, " +
-                        "but their Dart engines are not executable in this Kotlin build yet.",
+                    "All 4 engine types (Aniyomi, CloudStream, Mangayomi, Sora) are supported.",
                     color = AppColors.textMuted,
                     fontSize = 11.sp,
                 )

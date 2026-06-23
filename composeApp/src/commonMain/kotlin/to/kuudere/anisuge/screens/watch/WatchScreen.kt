@@ -58,6 +58,7 @@ import to.kuudere.anisuge.player.StreamProxy
 import to.kuudere.anisuge.player.VideoPlayerState
 import to.kuudere.anisuge.player.VideoPlayerSurface
 import to.kuudere.anisuge.player.rememberVideoPlayerState
+import to.kuudere.anisuge.utils.DownloadManager
 import to.kuudere.anisuge.utils.HlsPngTsStrip
 import to.kuudere.anisuge.utils.ProgressiveStreamAccel
 import coil3.compose.AsyncImage
@@ -80,7 +81,9 @@ import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
 import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.SessionCheckResult
+import to.kuudere.anisuge.extensions.resolveBridgeProxyStreamUrl
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
+
 import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
@@ -101,6 +104,16 @@ fun WatchScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val pendingExtensionMatch by AppComponent.extensionManager.pendingMatch.collectAsState()
+
+    uiState.pendingExtensionStreams?.let { pending ->
+        ExtensionStreamPickerSheet(
+            sourceName = pending.sourceName,
+            videos = pending.videos,
+            isLoading = pending.isLoading,
+            onSelect = { viewModel.confirmExtensionStream(it) },
+            onDismiss = { viewModel.dismissExtensionStreamPicker() },
+        )
+    }
 
     pendingExtensionMatch?.let { pending ->
         AlertDialog(
@@ -364,18 +377,14 @@ fun WatchScreen(
                 )
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    var fullscreenCommentsOpen by remember { mutableStateOf(false) }
-                    LaunchedEffect(uiState.isFullscreen) {
-                        if (!uiState.isFullscreen) fullscreenCommentsOpen = false
-                    }
-                    val useFullscreenSplit = uiState.isFullscreen && fullscreenCommentsOpen
-                    val isPanelActive = uiState.activeSidePanel != null && !useFullscreenSplit
+                    var commentsSheetOpen by remember { mutableStateOf(false) }
+                    val isPanelActive = uiState.activeSidePanel != null
                     val sidePanelWidth = 350.dp
 
                     Row(Modifier.fillMaxSize()) {
                         Box(
                             Modifier
-                                .weight(if (useFullscreenSplit) 0.7f else 1f)
+                                .weight(1f)
                                 .fillMaxHeight()
                         ) {
                             // Use unique key so player FULLY resets when video changes
@@ -391,55 +400,42 @@ fun WatchScreen(
                                     onBack = handleBack,
                                     onExit = onExit,
                                     onInfoClick = {
-                                        fullscreenCommentsOpen = false
                                         viewModel.toggleSidePanel("info")
                                     },
                                     onEpisodesClick = {
-                                        fullscreenCommentsOpen = false
                                         viewModel.toggleSidePanel("episodes")
                                     },
                                     onCommentsClick = {
-                                        if (uiState.isFullscreen) {
-                                            fullscreenCommentsOpen = true
-                                            viewModel.toggleSidePanel(null)
-                                        } else {
-                                            viewModel.toggleSidePanel("comments")
-                                        }
+                                        commentsSheetOpen = true
+                                        viewModel.toggleSidePanel(null)
                                     },
                                 )
                             }
                         }
 
-                        if (useFullscreenSplit) {
-                            Box(
-                                Modifier
-                                    .weight(0.3f)
-                                    .fillMaxHeight()
-                            ) {
-                                WatchCommentsContent(
-                                    animeId = animeId,
-                                    uiState = uiState,
-                                    onClose = { fullscreenCommentsOpen = false },
-                                )
-                            }
-                        } else {
-                            AnimatedVisibility(
-                                visible = isPanelActive,
-                                enter = slideInHorizontally(animationSpec = tween(300)) { it } + expandHorizontally(
-                                    animationSpec = tween(300),
-                                    expandFrom = Alignment.Start
-                                ) + fadeIn(animationSpec = tween(300)),
-                                exit = slideOutHorizontally(animationSpec = tween(300)) { it } + shrinkHorizontally(
-                                    animationSpec = tween(300),
-                                    shrinkTowards = Alignment.Start
-                                ) + fadeOut(animationSpec = tween(300))
-                            ) {
-                                Box(Modifier.width(sidePanelWidth).fillMaxHeight()) {
-                                    SidePanelContent(uiState, viewModel, animeId)
-                                }
+                        AnimatedVisibility(
+                            visible = isPanelActive,
+                            enter = slideInHorizontally(animationSpec = tween(300)) { it } + expandHorizontally(
+                                animationSpec = tween(300),
+                                expandFrom = Alignment.Start
+                            ) + fadeIn(animationSpec = tween(300)),
+                            exit = slideOutHorizontally(animationSpec = tween(300)) { it } + shrinkHorizontally(
+                                animationSpec = tween(300),
+                                shrinkTowards = Alignment.Start
+                            ) + fadeOut(animationSpec = tween(300))
+                        ) {
+                            Box(Modifier.width(sidePanelWidth).fillMaxHeight()) {
+                                SidePanelContent(uiState, viewModel, animeId)
                             }
                         }
                     }
+
+                    WatchCommentsBottomSheet(
+                        visible = commentsSheetOpen,
+                        animeId = animeId,
+                        episodeNumber = uiState.currentEpisodeNumber,
+                        onDismiss = { commentsSheetOpen = false },
+                    )
                 }
             }
         }
@@ -1151,30 +1147,6 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                         } // end outer Box
                     }
 
-                    "comments" -> {
-                        var fastUserId by remember { mutableStateOf<String?>(null) }
-                        LaunchedEffect(Unit) {
-                            fastUserId = AppComponent.sessionStore.get()?.let { "me" }
-                        }
-
-                        val userProfile by produceState<to.kuudere.anisuge.data.models.UserProfile?>(null) {
-                            val result = AppComponent.authService.checkSession()
-                            value = if (result is SessionCheckResult.Valid) result.user else null
-                        }
-
-                        // Use the Kuudere string slug passed to WatchScreen, not the anilist int
-                        CommentsSection(
-                            animeId = animeId,
-                            episodeNumber = uiState.currentEpisodeNumber,
-                            userId = userProfile?.effectiveId ?: fastUserId,
-                            username = userProfile?.username,
-                            userPfp = userProfile?.avatar,
-                            userFrameUrl = userProfile?.equippedFrameUrl,
-                            userOuterFrameUrl = userProfile?.equippedOuterFrameUrl,
-                            onClose = { viewModel.toggleSidePanel(null) }
-                        )
-                    }
-
                     else -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("Select an option", color = Color.White)
@@ -1198,8 +1170,10 @@ private fun AndroidWatchPageLayout(
     onBack: () -> Unit,
     onExit: () -> Unit,
 ) {
-    var selectedTab by remember { mutableStateOf(WatchPageTab.Episodes) }
+    var commentsSheetOpen by remember { mutableStateOf(false) }
+    var downloadSheetOpen by remember { mutableStateOf(false) }
     val playerKey = "$animeId-${uiState.currentEpisodeNumber}-${offlinePath ?: "online"}"
+    val activeWatchLang = uiState.targetLang ?: if (uiState.defaultLang) "dub" else "sub"
 
     BoxWithConstraints(
         modifier = Modifier
@@ -1227,13 +1201,7 @@ private fun AndroidWatchPageLayout(
         ) {
             Column(
                 modifier = Modifier
-                    .weight(
-                        when {
-                            uiState.isFullscreen && selectedTab == WatchPageTab.Comments -> 0.7f
-                            useLandscapeTabs -> 0.62f
-                            else -> 1f
-                        }
-                    )
+                    .weight(if (useLandscapeTabs) 0.62f else 1f)
                     .fillMaxHeight()
             ) {
                 Box(
@@ -1258,12 +1226,9 @@ private fun AndroidWatchPageLayout(
                             onExit = onExit,
                             onInfoClick = {},
                             onEpisodesClick = {
-                                selectedTab = WatchPageTab.Episodes
                                 if (uiState.isFullscreen) viewModel.setFullscreen(false)
                             },
-                            onCommentsClick = {
-                                selectedTab = WatchPageTab.Comments
-                            },
+                            onCommentsClick = { commentsSheetOpen = true },
                             showPlayerLibraryActions = uiState.isFullscreen,
                             showFullscreenButton = true,
                             compactControls = !uiState.isFullscreen,
@@ -1271,27 +1236,25 @@ private fun AndroidWatchPageLayout(
                     }
                 }
 
-                if (!uiState.isFullscreen && !useLandscapeTabs && uiState.offlinePath == null && uiState.servers.isNotEmpty()) {
-                    InlineServerSelector(
-                        servers = uiState.servers,
-                        currentServerId = uiState.currentServer,
-                        onServerSelected = { serverId -> viewModel.switchServer(serverId) },
-                    )
+                if (!uiState.isFullscreen && !useLandscapeTabs && uiState.offlinePath == null) {
+                    if (uiState.servers.isNotEmpty()) {
+                        InlineServerSelector(
+                            servers = uiState.servers,
+                            currentServerId = uiState.currentServer,
+                            currentLang = activeWatchLang,
+                            onLangChange = { viewModel.switchAudioLang(it) },
+                            onServerSelected = { serverId -> viewModel.switchServer(serverId) },
+                        )
+                    }
 
-                    WatchPageTabContent(
-                        selectedTab = selectedTab,
+                    EpisodeListContent(
                         uiState = uiState,
                         viewModel = viewModel,
-                        animeId = animeId,
-                        onClose = { selectedTab = WatchPageTab.Episodes },
+                        onCommentsClick = { commentsSheetOpen = true },
+                        onDownloadClick = { downloadSheetOpen = true },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                    )
-
-                    WatchPageTabs(
-                        selectedTab = selectedTab,
-                        onSelectTab = { selectedTab = it },
                     )
                 }
             }
@@ -1307,72 +1270,37 @@ private fun AndroidWatchPageLayout(
                         InlineServerSelector(
                             servers = uiState.servers,
                             currentServerId = uiState.currentServer,
+                            currentLang = activeWatchLang,
+                            onLangChange = { viewModel.switchAudioLang(it) },
                             onServerSelected = { serverId -> viewModel.switchServer(serverId) },
                         )
                     }
 
-                    WatchPageTabs(
-                        selectedTab = selectedTab,
-                        onSelectTab = { selectedTab = it },
-                        compact = true,
-                    )
-
-                    WatchPageTabContent(
-                        selectedTab = selectedTab,
+                    EpisodeListContent(
                         uiState = uiState,
                         viewModel = viewModel,
-                        animeId = animeId,
-                        onClose = { selectedTab = WatchPageTab.Episodes },
+                        onCommentsClick = { commentsSheetOpen = true },
+                        onDownloadClick = { downloadSheetOpen = true },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
                     )
                 }
             }
-
-            if (uiState.isFullscreen && selectedTab == WatchPageTab.Comments) {
-                Box(
-                    modifier = Modifier
-                        .weight(0.3f)
-                        .fillMaxHeight()
-                        .background(AppColors.background)
-                ) {
-                    WatchCommentsContent(
-                        animeId = animeId,
-                        uiState = uiState,
-                        onClose = { selectedTab = WatchPageTab.Episodes },
-                    )
-                }
-            }
         }
-    }
-}
 
-@Composable
-private fun WatchPageTabContent(
-    selectedTab: WatchPageTab,
-    uiState: WatchUiState,
-    viewModel: WatchViewModel,
-    animeId: String,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier.background(Color.Black)
-    ) {
-        when (selectedTab) {
-            WatchPageTab.Episodes -> EpisodeListContent(
-                uiState = uiState,
-                viewModel = viewModel,
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            WatchPageTab.Comments -> WatchCommentsContent(
-                animeId = animeId,
-                uiState = uiState,
-                onClose = onClose,
-            )
-        }
+        WatchCommentsBottomSheet(
+            visible = commentsSheetOpen,
+            animeId = animeId,
+            episodeNumber = uiState.currentEpisodeNumber,
+            onDismiss = { commentsSheetOpen = false },
+        )
+        WatchEpisodeDownloadSheet(
+            visible = downloadSheetOpen,
+            uiState = uiState,
+            isPremiumUser = isPremiumUser,
+            onDismiss = { downloadSheetOpen = false },
+        )
     }
 }
 
@@ -1380,47 +1308,108 @@ private fun WatchPageTabContent(
 private fun InlineServerSelector(
     servers: List<ServerInfo>,
     currentServerId: String,
+    currentLang: String,
+    onLangChange: (String) -> Unit,
     onServerSelected: (String) -> Unit,
 ) {
-    val subServers = servers.filter { !it.id.endsWith("-dub", ignoreCase = true) }
-    val dubServers = servers.filter { it.id.endsWith("-dub", ignoreCase = true) }
+    val subServers = servers.filter { !to.kuudere.anisuge.extensions.isDubSelectableServerId(it.id) }
+    val dubServers = servers.filter { to.kuudere.anisuge.extensions.isDubSelectableServerId(it.id) }
+    val activeLang = when (currentLang.lowercase()) {
+        "dub" -> "dub"
+        else -> "sub"
+    }
+    val visibleServers = if (activeLang == "dub") dubServers else subServers
+    var langMenuExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF1A1A1A))
+            .padding(top = 8.dp, bottom = 8.dp),
     ) {
-        if (subServers.isNotEmpty()) {
-            Text(
-                text = "SUB",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp),
-            )
-            ServerChipRow(
-                servers = subServers,
-                currentServerId = currentServerId,
-                onServerSelected = onServerSelected,
-            )
-        }
+        if (visibleServers.isEmpty() && subServers.isEmpty() && dubServers.isEmpty()) return@Column
 
-        if (dubServers.isNotEmpty()) {
-            Text(
-                text = "DUB",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp),
-            )
-            ServerChipRow(
-                servers = dubServers,
-                currentServerId = currentServerId,
-                onServerSelected = onServerSelected,
-            )
-        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.padding(start = 12.dp)) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF333333))
+                        .clickable { langMenuExpanded = true }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = activeLang.uppercase(),
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Audio language",
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                DropdownMenu(
+                    expanded = langMenuExpanded,
+                    onDismissRequest = { langMenuExpanded = false },
+                    modifier = Modifier.background(AppColors.surface),
+                ) {
+                    listOf("sub" to "Sub", "dub" to "Dub").forEach { (key, label) ->
+                        val selected = activeLang == key
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        label,
+                                        color = Color.White,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                    if (selected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = AppColors.accent,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
+                            },
+                            onClick = {
+                                langMenuExpanded = false
+                                if (!selected) onLangChange(key)
+                            },
+                        )
+                    }
+                }
+            }
 
-        Spacer(Modifier.height(8.dp))
+            if (visibleServers.isNotEmpty()) {
+                ServerChipRow(
+                    servers = visibleServers,
+                    currentServerId = currentServerId,
+                    onServerSelected = onServerSelected,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                Text(
+                    text = "No ${activeLang.uppercase()} servers",
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 8.dp, end = 12.dp),
+                )
+            }
+        }
     }
 }
 
@@ -1429,10 +1418,11 @@ private fun ServerChipRow(
     servers: List<ServerInfo>,
     currentServerId: String,
     onServerSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
 
-    Box(Modifier.fillMaxWidth()) {
+    Box(modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1476,73 +1466,47 @@ private fun ServerChipRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WatchPageTabs(
-    selectedTab: WatchPageTab,
-    onSelectTab: (WatchPageTab) -> Unit,
-    compact: Boolean = false,
+private fun WatchCommentsBottomSheet(
+    visible: Boolean,
+    animeId: String,
+    episodeNumber: Int,
+    onDismiss: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AppColors.background),
+    if (!visible) return
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppColors.background,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.border) },
     ) {
-        HorizontalDivider(color = AppColors.border)
-        TabRow(
-            selectedTabIndex = selectedTab.ordinal,
-            containerColor = AppColors.background,
-            contentColor = AppColors.text,
-            indicator = { positions ->
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(positions[selectedTab.ordinal]),
-                    color = AppColors.accent,
-                )
-            },
-            divider = {
-                HorizontalDivider(color = AppColors.border)
-            },
-            modifier = Modifier.height(if (compact) 56.dp else 88.dp),
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 28.dp),
         ) {
-            WatchPageTab.entries.forEach { tab ->
-                Tab(
-                    selected = selectedTab == tab,
-                    onClick = { onSelectTab(tab) },
-                    text = {
-                        Text(
-                            text = tab.label,
-                            fontSize = if (compact) 12.sp else 14.sp,
-                            fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.SemiBold,
-                            maxLines = 1,
-                        )
-                    },
-                    icon = {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            modifier = Modifier.size(if (compact) 18.dp else 21.dp),
-                        )
-                    },
-                    selectedContentColor = Color.White,
-                    unselectedContentColor = Color.White.copy(alpha = 0.55f),
-                )
-            }
+            val sheetHeight = (maxHeight * 0.88f).coerceAtMost(520.dp)
+            WatchCommentsPanel(
+                animeId = animeId,
+                episodeNumber = episodeNumber,
+                onClose = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(sheetHeight),
+            )
         }
     }
 }
 
-private enum class WatchPageTab(
-    val label: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-) {
-    Episodes("Episodes", Icons.AutoMirrored.Filled.List),
-    Comments("Comments", Icons.AutoMirrored.Filled.Comment),
-}
-
 @Composable
-private fun WatchCommentsContent(
+private fun WatchCommentsPanel(
     animeId: String,
-    uiState: WatchUiState,
+    episodeNumber: Int,
     onClose: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var fastUserId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -1554,22 +1518,302 @@ private fun WatchCommentsContent(
         value = if (result is SessionCheckResult.Valid) result.user else null
     }
 
-    CommentsSection(
-        animeId = animeId,
-        episodeNumber = uiState.currentEpisodeNumber,
-        userId = userProfile?.effectiveId ?: fastUserId,
-        username = userProfile?.username,
-        userPfp = userProfile?.avatar,
-        userFrameUrl = userProfile?.equippedFrameUrl,
-        userOuterFrameUrl = userProfile?.equippedOuterFrameUrl,
-        onClose = onClose,
-    )
+    Box(modifier) {
+        CommentsSection(
+            animeId = animeId,
+            episodeNumber = episodeNumber,
+            userId = userProfile?.effectiveId ?: fastUserId,
+            username = userProfile?.username,
+            userPfp = userProfile?.avatar,
+            userFrameUrl = userProfile?.equippedFrameUrl,
+            userOuterFrameUrl = userProfile?.equippedOuterFrameUrl,
+            onClose = onClose,
+        )
+    }
+}
+
+@Composable
+private fun WatchEpisodeActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    progress: Float? = null,
+    onClick: () -> Unit,
+) {
+    val activeProgress = progress?.takeIf { it in 0f..1f && it < 1f }
+    Box(
+        modifier = modifier
+            .height(40.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, AppColors.border, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(AppColors.surface),
+        )
+        activeProgress?.let { fraction ->
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(AppColors.accent.copy(alpha = 0.28f))
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                    .background(AppColors.accent.copy(alpha = 0.42f)),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = AppColors.accent,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WatchEpisodeDownloadSheet(
+    visible: Boolean,
+    uiState: WatchUiState,
+    isPremiumUser: Boolean,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) return
+
+    val stream = remember(uiState.currentServer, uiState.currentQuality, uiState.availableQualities, uiState.streamingData) {
+        resolveWatchStreamForDownload(uiState)
+    }
+    val serverLabel = remember(uiState.currentServer, uiState.servers) {
+        uiState.servers.firstOrNull { it.id.equals(uiState.currentServer, ignoreCase = true) }?.label
+            ?: uiState.currentServer.ifBlank { "Current server" }
+    }
+    val audioMode = uiState.targetLang ?: if (uiState.defaultLang) "dub" else "sub"
+    val subtitleOptions = remember(uiState.availableSubtitles) {
+        uiState.availableSubtitles
+            .mapNotNull { sub -> (sub.title ?: sub.resolvedLang)?.takeIf { it.isNotBlank() } }
+            .distinct()
+    }
+    var selectedSubtitleLabels by remember(stream, subtitleOptions, uiState.currentSubtitleUrl) {
+        mutableStateOf(
+            buildSet {
+                uiState.availableSubtitles.forEach { sub ->
+                    val label = sub.title ?: sub.resolvedLang
+                    if (!label.isNullOrBlank() && sub.url == uiState.currentSubtitleUrl) add(label)
+                }
+                if (isEmpty()) {
+                    when {
+                        "English" in subtitleOptions -> add("English")
+                        subtitleOptions.isNotEmpty() -> add(subtitleOptions.first())
+                    }
+                }
+            },
+        )
+    }
+    var shouldRequestStoragePermission by remember { mutableStateOf(false) }
+    var shouldRequestNotificationPermission by remember { mutableStateOf(false) }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val displayTitle = uiState.episodeData?.title?.resolveDisplayTitle()
+        ?: uiState.offlineTitle
+        ?: "Anime"
+
+    fun startDownloadNow() {
+        val resolved = stream ?: return
+        val animeId = uiState.animeId.ifBlank { uiState.episodeData?.animeId.orEmpty() }
+        val anilistId = uiState.episodeData?.anilistId ?: uiState.episodeData?.anime?.anilistId ?: 0
+        to.kuudere.anisuge.utils.DownloadManager.startDownload(
+            animeId = animeId,
+            anilistId = anilistId,
+            episodeNumber = uiState.currentEpisodeNumber,
+            title = displayTitle,
+            coverImage = uiState.episodeData?.coverImage?.bestUrl
+                ?: uiState.episodeData?.anime?.coverImage?.bestUrl,
+            server = uiState.currentServer,
+            subtitleLabels = selectedSubtitleLabels.toList(),
+            audioLang = if (audioMode == "dub") "eng" else "jpn",
+            downloadFonts = true,
+            headers = resolved.headers,
+            m3u8Url = resolved.url,
+            preferBatchDub = audioMode == "dub",
+            useParallelSegments = isPremiumUser,
+        )
+        onDismiss()
+    }
+
+    if (shouldRequestStoragePermission) {
+        to.kuudere.anisuge.utils.RequestStoragePermission { granted ->
+            shouldRequestStoragePermission = false
+            if (granted) shouldRequestNotificationPermission = true
+        }
+    }
+    if (shouldRequestNotificationPermission) {
+        to.kuudere.anisuge.utils.RequestNotificationPermission {
+            shouldRequestNotificationPermission = false
+            startDownloadNow()
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = AppColors.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.border) },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                text = "Download episode ${uiState.currentEpisodeNumber}",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = displayTitle,
+                color = Color.Gray,
+                fontSize = 13.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("Server: $serverLabel", color = Color.White, fontSize = 13.sp)
+                Text("Audio: ${audioMode.uppercase()}", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                Text("Quality: ${uiState.currentQuality}", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+            }
+
+            if (subtitleOptions.isNotEmpty()) {
+                Text("Subtitles", color = Color.Gray, fontSize = 13.sp)
+                subtitleOptions.forEach { label ->
+                    val checked = label in selectedSubtitleLabels
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedSubtitleLabels = if (checked) {
+                                    selectedSubtitleLabels - label
+                                } else {
+                                    selectedSubtitleLabels + label
+                                }
+                            },
+                    ) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { selected ->
+                                selectedSubtitleLabels = if (selected) {
+                                    selectedSubtitleLabels + label
+                                } else {
+                                    selectedSubtitleLabels - label
+                                }
+                            },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = AppColors.accent,
+                                uncheckedColor = AppColors.border,
+                                checkmarkColor = AppColors.onAccent,
+                            ),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(label, color = Color.White, fontSize = 14.sp)
+                    }
+                }
+            }
+
+            if (stream == null) {
+                Text(
+                    text = "Stream is still loading. Wait for playback to start, then try again.",
+                    color = Color(0xFFFFB74D),
+                    fontSize = 12.sp,
+                )
+            }
+
+            Button(
+                onClick = {
+                    if (stream == null) return@Button
+                    when {
+                        !to.kuudere.anisuge.utils.hasStoragePermission() -> {
+                            shouldRequestStoragePermission = true
+                        }
+                        !to.kuudere.anisuge.utils.hasNotificationPermission() -> {
+                            shouldRequestNotificationPermission = true
+                        }
+                        else -> startDownloadNow()
+                    }
+                },
+                enabled = stream != null && uiState.currentServer.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(
+                    text = "Download with current server",
+                    color = Color.Black,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                )
+            }
+        }
+    }
+}
+
+private data class WatchDownloadStream(
+    val url: String,
+    val headers: Map<String, String>,
+)
+
+private fun resolveWatchStreamForDownload(uiState: WatchUiState): WatchDownloadStream? {
+    val rawUrl = uiState.availableQualities
+        .find { it.first == uiState.currentQuality }
+        ?.second
+        ?: uiState.availableQualities.firstOrNull()?.second
+        ?: return null
+    if (rawUrl.isBlank()) return null
+
+    val currentSource = uiState.streamingData?.sources?.find { it.url == rawUrl }
+    val headers = currentSource?.headers ?: uiState.streamingData?.headers ?: emptyMap()
+    val resolved = resolveBridgeProxyStreamUrl(rawUrl, headers)
+    return WatchDownloadStream(url = resolved.url, headers = resolved.headers)
 }
 
 @Composable
 private fun EpisodeListContent(
     uiState: WatchUiState,
     viewModel: WatchViewModel,
+    onCommentsClick: (() -> Unit)? = null,
+    onDownloadClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val episodes = uiState.episodeData?.episodes ?: emptyList()
@@ -1590,6 +1834,38 @@ private fun EpisodeListContent(
         mutableStateOf(currentEpisodePageStart)
     }
     var isPageDropdownExpanded by remember { mutableStateOf(false) }
+    val downloadTasks by DownloadManager.tasks.collectAsState()
+    val currentDownloadTask = remember(
+        downloadTasks,
+        uiState.animeId,
+        uiState.currentEpisodeNumber,
+    ) {
+        downloadTasks.find {
+            it.animeId == uiState.animeId && it.episodeNumber == uiState.currentEpisodeNumber
+        }
+    }
+    val downloadButtonLabel = remember(currentDownloadTask) {
+        when {
+            currentDownloadTask == null -> "Download"
+            currentDownloadTask.status == "Finished" -> "Downloaded"
+            currentDownloadTask.isPaused -> {
+                val pct = (currentDownloadTask.progress * 100).toInt().coerceIn(0, 100)
+                "Paused $pct%"
+            }
+            currentDownloadTask.status.startsWith("Failed") -> "Download"
+            else -> {
+                val pct = (currentDownloadTask.progress * 100).toInt().coerceIn(0, 100)
+                "$pct%"
+            }
+        }
+    }
+    val downloadButtonProgress = remember(currentDownloadTask) {
+        currentDownloadTask?.takeIf {
+            !it.isPaused &&
+                it.status != "Finished" &&
+                !it.status.startsWith("Failed")
+        }?.progress
+    }
     var hasScrolled by remember { mutableStateOf(false) }
     var pageDropdownAnchorSize by remember { mutableStateOf(IntSize.Zero) }
     var pageDropdownAnchorOffset by remember { mutableStateOf(IntOffset.Zero) }
@@ -1676,6 +1952,10 @@ private fun EpisodeListContent(
                         visibleCount = visibleEpisodes.size,
                         isPageDropdownExpanded = isPageDropdownExpanded,
                         onPageDropdownClick = { isPageDropdownExpanded = !isPageDropdownExpanded },
+                        onCommentsClick = onCommentsClick,
+                        onDownloadClick = onDownloadClick,
+                        downloadProgress = downloadButtonProgress,
+                        downloadButtonLabel = downloadButtonLabel,
                         onAnchorPositioned = { size, offset ->
                             pageDropdownAnchorSize = size
                             pageDropdownAnchorOffset = IntOffset(
@@ -1780,49 +2060,80 @@ private fun EpisodeListHeader(
     visibleCount: Int,
     isPageDropdownExpanded: Boolean,
     onPageDropdownClick: () -> Unit,
+    onCommentsClick: (() -> Unit)? = null,
+    onDownloadClick: (() -> Unit)? = null,
+    downloadProgress: Float? = null,
+    downloadButtonLabel: String = "Download",
     onAnchorPositioned: (IntSize, androidx.compose.ui.geometry.Offset) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (onCommentsClick != null || onDownloadClick != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                onCommentsClick?.let { onClick ->
+                    WatchEpisodeActionButton(
+                        label = "Comments",
+                        icon = Icons.AutoMirrored.Filled.Comment,
+                        modifier = Modifier.weight(1f),
+                        onClick = onClick,
+                    )
+                }
+                onDownloadClick?.let { onClick ->
+                    WatchEpisodeActionButton(
+                        label = downloadButtonLabel,
+                        icon = Icons.Default.Download,
+                        modifier = Modifier.weight(1f),
+                        progress = downloadProgress,
+                        onClick = onClick,
+                    )
+                }
+            }
+        }
+
+        val rangeEnd = (currentPageStart + episodesPerPage - 1).coerceAtMost(totalEpisodes)
+        val canPickRange = searchQuery.isBlank() && pageGroups.size > 1
         Box(
             Modifier
                 .fillMaxWidth()
                 .onGloballyPositioned { coordinates ->
                     onAnchorPositioned(coordinates.size, coordinates.positionInRoot())
                 }
-                .clip(RoundedCornerShape(10.dp))
-                .border(1.dp, AppColors.border, RoundedCornerShape(10.dp))
-                .background(AppColors.surface)
-                .clickable(enabled = searchQuery.isBlank() && pageGroups.size > 1) {
-                    onPageDropdownClick()
-                }
-                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, AppColors.border.copy(alpha = 0.65f), RoundedCornerShape(8.dp))
+                .background(AppColors.surface.copy(alpha = 0.85f))
+                .clickable(enabled = canPickRange) { onPageDropdownClick() }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column {
-                    val end = (currentPageStart + episodesPerPage - 1).coerceAtMost(totalEpisodes)
-                    Text(
-                        text = if (searchQuery.isBlank()) "Episodes $currentPageStart - $end" else "Search results",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = if (searchQuery.isBlank()) "$totalEpisodes total episodes" else "$visibleCount matching episodes",
-                        color = Color.Gray,
-                        fontSize = 12.sp,
-                    )
-                }
-
-                if (searchQuery.isBlank() && pageGroups.size > 1) {
+                Text(
+                    text = when {
+                        searchQuery.isNotBlank() -> "$visibleCount of $totalEpisodes episodes"
+                        totalEpisodes <= episodesPerPage -> "$totalEpisodes episodes"
+                        else -> "Episodes $currentPageStart–$rangeEnd · $totalEpisodes total"
+                    },
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (canPickRange) {
                     Icon(
-                        imageVector = if (isPageDropdownExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Select range",
-                        tint = Color.White,
+                        imageVector = if (isPageDropdownExpanded) {
+                            Icons.Default.KeyboardArrowUp
+                        } else {
+                            Icons.Default.KeyboardArrowDown
+                        },
+                        contentDescription = "Select episode range",
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }

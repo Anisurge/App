@@ -845,15 +845,15 @@ fun PlayerControls(
                                                 modifier = Modifier.size(22.dp)
                                             )
                                         }
+                                    }
+                                    if (!isOffline) {
                                         IconButton(onClick = {
-                                            if (!isOffline) onCommentsClick(); recordInteraction(
-                                            forceShow = false
-                                        )
-                                        }, modifier = Modifier.size(40.dp), enabled = !isOffline) {
+                                            onCommentsClick(); recordInteraction(forceShow = false)
+                                        }, modifier = Modifier.size(40.dp)) {
                                             Icon(
                                                 Icons.Default.ChatBubbleOutline,
-                                                null,
-                                                tint = if (isOffline) Color.Gray else Color.White,
+                                                contentDescription = "Comments",
+                                                tint = Color.White,
                                                 modifier = Modifier.size(22.dp)
                                             )
                                         }

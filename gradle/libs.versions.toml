@@ -5,8 +5,8 @@ compose-plugin = "1.8.0"
 android-compileSdk = "36"
 android-minSdk = "26"
 android-targetSdk = "35"
-app-version = "0.12.37"
-app-buildNumber = "65"
+app-version = "0.12.40"
+app-buildNumber = "68"
 androidx-activity = "1.10.1"
 androidx-activityCompose = "1.10.1"
 androidx-lifecycle = "2.8.4"
@@ -20,6 +20,7 @@ navigationCompose = "2.9.0"
 jna = "5.14.0"
 kotlinx-datetime = "0.6.1"
 okio = "3.9.0"
+okhttp = "5.0.0-alpha.14"
 media3 = "1.5.1"
 ffmpeg-kit = "6.0"
 jave = "3.5.0"
@@ -78,6 +79,9 @@ jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 # Okio (path support for DataStore)
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+# OkHttp 5 — Aniyomi extensions call Kotlin-duration APIs missing in Ktor's OkHttp 4.12
+okhttp-core = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+okhttp-sse = { module = "com.squareup.okhttp3:okhttp-sse", version.ref = "okhttp" }
 # JNativeHook for cross-platform media keys
 jnativehook = { module = "com.github.kwhat:jnativehook", version = "2.2.2" }
 dbus_java = { module = "com.github.hypfvieh:dbus-java-transport-native-unixsocket", version = "4.3.1" }

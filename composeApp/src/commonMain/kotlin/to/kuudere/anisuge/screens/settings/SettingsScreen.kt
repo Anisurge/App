@@ -49,6 +49,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
@@ -69,6 +70,7 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Search
@@ -79,6 +81,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -149,6 +153,10 @@ import androidx.compose.ui.graphics.painter.Painter
 import to.kuudere.anisuge.data.models.Comment
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.data.models.AnimeFolderInfo
+import to.kuudere.anisuge.data.models.catalogServers
+import to.kuudere.anisuge.data.models.extensionServers
+import to.kuudere.anisuge.data.models.isServerVisibleInSettings
+import to.kuudere.anisuge.data.models.hidesServer
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.platform.AppVersion
 import to.kuudere.anisuge.platform.AppBuildNumber
@@ -341,6 +349,7 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Profile, strings.profile, Icons.Default.Person))
         add(SettingsNavItem(SettingsTab.Shop, "Store", Icons.Default.ShoppingBag))
         add(SettingsNavItem(SettingsTab.Berries, "Berries", Icons.Default.Star, useBeliIcon = true))
+        add(SettingsNavItem(SettingsTab.Extensions, "Extensions", Icons.Default.Extension))
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
@@ -350,7 +359,6 @@ fun SettingsScreen(
         // Community — not ready yet
         // add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
-        add(SettingsNavItem(SettingsTab.Extensions, "Extensions", Icons.Default.Extension))
         add(SettingsNavItem(SettingsTab.Storage, strings.storage, Icons.Default.Storage))
         if (!isDesktopPlatform) {
             add(SettingsNavItem(SettingsTab.Notifications, strings.notifications, Icons.Default.Notifications))
@@ -1122,13 +1130,17 @@ private fun MobileSettingsDetail(
     val uriHandler = LocalUriHandler.current
     val pickPfp = to.kuudere.anisuge.platform.rememberProfileImagePicker(viewModel::onCustomPfpPicked)
     val isShopTab = tab is SettingsTab.Shop
+    val isExtensionsTab = tab is SettingsTab.Extensions
+    var exSortDialog by remember { mutableStateOf(false) }
+    var exRuntimeDialog by remember { mutableStateOf(false) }
+    var exRepoDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BG)
             .then(
-                if (!isShopTab && tab !is SettingsTab.Extensions) Modifier.verticalScroll(rememberScrollState()) else Modifier,
+                if (!isShopTab && !isExtensionsTab) Modifier.verticalScroll(rememberScrollState()) else Modifier,
             ),
     ) {
         // Header with back
@@ -1149,12 +1161,19 @@ private fun MobileSettingsDetail(
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold
             )
+            if (isExtensionsTab) {
+                Spacer(Modifier.weight(1f))
+                ExtensionsSettingsButton(Icons.AutoMirrored.Filled.Sort, "Sort & Filter", onClick = { exSortDialog = true })
+                Spacer(Modifier.width(8.dp))
+                ExtensionsSettingsButton(Icons.Default.Build, "Runtime", onClick = { exRuntimeDialog = true })
+                Spacer(Modifier.width(8.dp))
+                ExtensionsSettingsButton(Icons.Default.Settings, "Repositories", onClick = { exRepoDialog = true })
+            }
         }
 
         HorizontalDivider(thickness = 1.dp, color = BORDER)
 
         // Content
-        val isExtensionsTab = tab is SettingsTab.Extensions
         Box(
             modifier = Modifier
                 .then(
@@ -1165,7 +1184,7 @@ private fun MobileSettingsDetail(
                         else -> Modifier.fillMaxWidth()
                     },
                 )
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = if (isExtensionsTab) 0.dp else 20.dp)
                 .padding(top = 8.dp, bottom = when {
                     isShopTab || isExtensionsTab -> 24.dp
                     else -> 156.dp
@@ -1324,10 +1343,19 @@ private fun MobileSettingsDetail(
                     uiState = uiState,
                     onReorder = viewModel::updateServerPriority,
                     onSave = viewModel::saveServerPriority,
-                    onReset = viewModel::resetServerPriority
+                    onReset = viewModel::resetServerPriority,
+                    onServerVisibilityChange = viewModel::setServerVisible,
                 )
 
-        is SettingsTab.Extensions -> ExtensionsSettings(Modifier.fillMaxSize())
+        is SettingsTab.Extensions -> ExtensionsSettings(
+            modifier = Modifier.fillMaxSize(),
+            sortDialogVisible = exSortDialog,
+            onSortDialogVisibleChange = { exSortDialog = it },
+            runtimeDialogVisible = exRuntimeDialog,
+            onRuntimeDialogVisibleChange = { exRuntimeDialog = it },
+            repoDialogVisible = exRepoDialog,
+            onRepoDialogVisibleChange = { exRepoDialog = it },
+        )
 
                 is SettingsTab.Notifications -> NotificationsTab(
                     enabled = uiState.notificationsEnabled,
@@ -1341,6 +1369,19 @@ private fun MobileSettingsDetail(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ExtensionsSettingsButton(icon: ImageVector, contentDesc: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(AppColors.accent.copy(alpha = 0.15f))
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+    ) {
+        Icon(icon, contentDesc, tint = AppColors.accent, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -1520,7 +1561,8 @@ private fun SettingsContent(
                 uiState = uiState,
                 onReorder = viewModel::updateServerPriority,
                 onSave = viewModel::saveServerPriority,
-                onReset = viewModel::resetServerPriority
+                onReset = viewModel::resetServerPriority,
+                onServerVisibilityChange = viewModel::setServerVisible,
             )
 
             is SettingsTab.Extensions -> ExtensionsSettings()
@@ -2697,6 +2739,19 @@ private fun PreferencesTab(
         )
 
         SettingCard(
+            title = strings.defaultAudioLanguage,
+            description = strings.defaultAudioLanguageDescription,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            SubDubDefaultSelector(
+                dubSelected = uiState.settings.defaultLang,
+                onSelect = onDefaultLangChange,
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SettingCard(
             title = strings.appLanguage,
             description = strings.appLanguageDescription,
             modifier = Modifier.fillMaxWidth()
@@ -2768,18 +2823,6 @@ private fun PreferencesTab(
                 )
             }
 
-            // Default Language
-            SettingCard(
-                title = strings.defaultAudioLanguage,
-                description = strings.defaultAudioLanguageDescription,
-                modifier = Modifier.weight(1f)
-            ) {
-                SettingToggle(
-                    checked = uiState.settings.defaultLang,
-                    onCheckedChange = onDefaultLangChange,
-                    label = strings.defaultToEnglishDub
-                )
-            }
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -2986,6 +3029,56 @@ private fun SettingCard(
         ) {
             content()
         }
+    }
+}
+
+@Composable
+private fun SubDubDefaultSelector(
+    dubSelected: Boolean,
+    onSelect: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SubDubDefaultChip(
+            label = "Sub",
+            selected = !dubSelected,
+            modifier = Modifier.weight(1f),
+            onClick = { onSelect(false) },
+        )
+        SubDubDefaultChip(
+            label = "Dub",
+            selected = dubSelected,
+            modifier = Modifier.weight(1f),
+            onClick = { onSelect(true) },
+        )
+    }
+}
+
+@Composable
+private fun SubDubDefaultChip(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .height(42.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) AppColors.accent else BG_CARD)
+            .border(1.dp, if (selected) AppColors.accent else BORDER, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (selected) AppColors.onAccent else TEXT,
+            fontSize = 14.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+        )
     }
 }
 
@@ -3543,6 +3636,25 @@ private fun MobilePreferencesContent(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
+            strings.defaultAudioLanguage,
+            color = TEXT,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium
+        )
+        Text(
+            strings.defaultAudioLanguageDescription,
+            color = MUTED,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+        )
+        SubDubDefaultSelector(
+            dubSelected = uiState.settings.defaultLang,
+            onSelect = onDefaultLangChange,
+        )
+
+        HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
+
+        Text(
             strings.appLanguage,
             color = TEXT,
             fontSize = 16.sp,
@@ -3585,15 +3697,6 @@ private fun MobilePreferencesContent(
             checked = uiState.settings.skipOutro,
             onCheckedChange = onSkipOutroChange
         )
-        MobileSettingRow(
-            title = strings.defaultToEnglishDub,
-            description = strings.defaultAudioLanguageDescription,
-            checked = uiState.settings.defaultLang,
-            onCheckedChange = onDefaultLangChange
-        )
-
-        HorizontalDivider(thickness = 1.dp, color = BORDER, modifier = Modifier.padding(vertical = 16.dp))
-
         if (isAndroidPlatform || isDesktopPlatform) {
             Text("Player enhancements", color = TEXT, fontSize = 16.sp, fontWeight = FontWeight.Medium)
             Text(
@@ -4411,11 +4514,91 @@ private fun MobileStorageOverview(
 
 // ── Servers Tab ────────────────────────────────────────────────────────────────
 @Composable
+private fun ServersPriorityList(
+    uiState: SettingsUiState,
+    onReorder: (List<String>) -> Unit,
+    onSave: () -> Unit,
+    onServerVisibilityChange: (String, Boolean) -> Unit,
+    itemHeightPx: Float,
+) {
+    val serverList = remember(uiState.availableServers, uiState.serverPriority) {
+        ServerRepository.sortServersForSettingsDisplay(uiState.availableServers, uiState.serverPriority)
+    }
+    var localServerList by remember(serverList) { mutableStateOf(serverList) }
+    LaunchedEffect(uiState.serverPriority, uiState.availableServers) {
+        localServerList = serverList
+    }
+    val autoSaveReorder = { newList: List<to.kuudere.anisuge.data.models.ServerInfo> ->
+        localServerList = newList
+        onReorder(newList.map { it.id })
+        onSave()
+    }
+    var draggingItemIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(0f) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        localServerList.forEachIndexed { currentIndex, server ->
+            val isDragging = draggingItemIndex == currentIndex
+            val visualOffset = if (isDragging) dragOffset.dp else 0.dp
+            DraggableServerItem(
+                server = server,
+                visible = uiState.hiddenServerIds.isServerVisibleInSettings(server),
+                isDragging = isDragging,
+                offsetY = visualOffset,
+                onVisibilityChange = { checked -> onServerVisibilityChange(server.id, checked) },
+                onDragStart = { draggingItemIndex = currentIndex },
+                onDrag = { delta ->
+                    dragOffset += delta
+                    if (draggingItemIndex != null) {
+                        val currentDragIndex = draggingItemIndex!!
+                        val dragItems = (dragOffset / itemHeightPx).toInt()
+                        val targetIndex = (currentDragIndex + dragItems).coerceIn(0, localServerList.size - 1)
+                        if (targetIndex != currentDragIndex) {
+                            val newList = localServerList.toMutableList()
+                            val item = newList.removeAt(currentDragIndex)
+                            newList.add(targetIndex, item)
+                            localServerList = newList
+                            draggingItemIndex = targetIndex
+                            dragOffset = dragOffset - (dragItems * itemHeightPx)
+                        }
+                    }
+                },
+                onDragEnd = {
+                    draggingItemIndex = null
+                    dragOffset = 0f
+                    autoSaveReorder(localServerList)
+                },
+                onMoveUp = {
+                    if (currentIndex > 0) {
+                        val newList = localServerList.toMutableList()
+                        val item = newList.removeAt(currentIndex)
+                        newList.add(currentIndex - 1, item)
+                        autoSaveReorder(newList)
+                    }
+                },
+                onMoveDown = {
+                    if (currentIndex < localServerList.size - 1) {
+                        val newList = localServerList.toMutableList()
+                        val item = newList.removeAt(currentIndex)
+                        newList.add(currentIndex + 1, item)
+                        autoSaveReorder(newList)
+                    }
+                },
+            )
+        }
+    }
+}
+
+@Composable
 private fun ServersTab(
     uiState: SettingsUiState,
     onReorder: (List<String>) -> Unit,
     onSave: () -> Unit,
     onReset: () -> Unit,
+    onServerVisibilityChange: (String, Boolean) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         // Header with title and reset button
@@ -4455,103 +4638,34 @@ private fun ServersTab(
             modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
         )
         Text(
-            "The list comes from the site catalog. Providers with both Sub and Dub appear as two separate entries.",
+            "Uncheck servers you do not want in the player list. Drag to set fallback order. Sub and Dub use the same entry — switch audio on the watch screen.",
             color = MUTED,
             fontSize = 13.sp,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        if (uiState.isLoadingServers || uiState.availableServers.isEmpty()) {
+        if (uiState.isLoadingServers) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(200.dp),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator(color = Color.White)
             }
-        } else {
-            val serverList = remember(uiState.availableServers, uiState.serverPriority) {
-                ServerRepository.sortServersForSettingsDisplay(
-                    uiState.availableServers,
-                    uiState.serverPriority,
-                )
-            }
-
-            var localServerList by remember(serverList) {
-                mutableStateOf(serverList)
-            }
-
-            LaunchedEffect(uiState.serverPriority, uiState.availableServers) {
-                localServerList = serverList
-            }
-
-            val autoSaveReorder = { newList: List<to.kuudere.anisuge.data.models.ServerInfo> ->
-                localServerList = newList
-                onReorder(newList.map { it.id })
-                onSave()
-            }
-
-            var draggingItemIndex by remember { mutableStateOf<Int?>(null) }
-            var dragOffset by remember { mutableStateOf(0f) }
-            val itemHeightPx = 58f // card height + spacing in pixels
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        } else if (uiState.availableServers.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                localServerList.forEachIndexed { currentIndex, server ->
-                    val isDragging = draggingItemIndex == currentIndex
-                    val visualOffset = if (isDragging) dragOffset.dp else 0.dp
-
-                    DraggableServerItem(
-                        server = server,
-                        isDragging = isDragging,
-                        offsetY = visualOffset,
-                        onDragStart = { draggingItemIndex = currentIndex },
-                        onDrag = { delta ->
-                            dragOffset += delta
-
-                            if (draggingItemIndex != null) {
-                                val currentDragIndex = draggingItemIndex!!
-                                // Calculate target index based on drag distance
-                                val dragItems = (dragOffset / itemHeightPx).toInt()
-                                val targetIndex = (currentDragIndex + dragItems)
-                                    .coerceIn(0, localServerList.size - 1)
-
-                                if (targetIndex != currentDragIndex) {
-                                    val newList = localServerList.toMutableList()
-                                    val item = newList.removeAt(currentDragIndex)
-                                    newList.add(targetIndex, item)
-                                    localServerList = newList
-                                    draggingItemIndex = targetIndex
-                                    // Adjust offset to account for the position change
-                                    dragOffset = dragOffset - (dragItems * itemHeightPx)
-                                }
-                            }
-                        },
-                        onDragEnd = {
-                            draggingItemIndex = null
-                            dragOffset = 0f
-                            autoSaveReorder(localServerList)
-                        },
-                        onMoveUp = {
-                            if (currentIndex > 0) {
-                                val newList = localServerList.toMutableList()
-                                val item = newList.removeAt(currentIndex)
-                                newList.add(currentIndex - 1, item)
-                                autoSaveReorder(newList)
-                            }
-                        },
-                        onMoveDown = {
-                            if (currentIndex < localServerList.size - 1) {
-                                val newList = localServerList.toMutableList()
-                                val item = newList.removeAt(currentIndex)
-                                newList.add(currentIndex + 1, item)
-                                autoSaveReorder(newList)
-                            }
-                        }
-                    )
-                }
+                Text("No servers available", color = MUTED)
             }
+        } else {
+            ServersPriorityList(
+                uiState = uiState,
+                onReorder = onReorder,
+                onSave = onSave,
+                onServerVisibilityChange = onServerVisibilityChange,
+                itemHeightPx = 58f,
+            )
         }
     }
 }
@@ -4559,8 +4673,10 @@ private fun ServersTab(
 @Composable
 private fun DraggableServerItem(
     server: to.kuudere.anisuge.data.models.ServerInfo,
+    visible: Boolean,
     isDragging: Boolean,
     offsetY: androidx.compose.ui.unit.Dp,
+    onVisibilityChange: (Boolean) -> Unit,
     onDragStart: () -> Unit,
     onDrag: (Float) -> Unit,
     onDragEnd: () -> Unit,
@@ -4577,6 +4693,18 @@ private fun DraggableServerItem(
         animationSpec = androidx.compose.animation.core.tween(150)
     )
 
+    val extensionRowBg = AppColors.accent.copy(alpha = 0.14f)
+    val rowBackground = when {
+        isDragging -> BG_HOVER
+        server.isExtensionServer -> extensionRowBg
+        else -> BG_CARD
+    }
+    val titleColor = when {
+        !visible -> TEXT.copy(alpha = 0.45f)
+        server.isExtensionServer -> AppColors.accent
+        else -> TEXT
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -4587,15 +4715,27 @@ private fun DraggableServerItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    if (isDragging) BG_HOVER else BG_CARD,
-                    RoundedCornerShape(12.dp)
+                .background(rowBackground, RoundedCornerShape(12.dp))
+                .then(
+                    if (server.isExtensionServer && !isDragging) {
+                        Modifier.border(1.dp, AppColors.accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                    } else {
+                        Modifier
+                    }
                 )
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+                .padding(horizontal = 8.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Drag handle icon (6 dots) - now actually draggable
+            Checkbox(
+                checked = visible,
+                onCheckedChange = onVisibilityChange,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = AppColors.accent,
+                    uncheckedColor = MUTED,
+                    checkmarkColor = Color.White,
+                ),
+            )
             Icon(
                 imageVector = Icons.Default.DragIndicator,
                 contentDescription = "Drag to reorder",
@@ -4615,14 +4755,15 @@ private fun DraggableServerItem(
                     .clickable { /* Consume clicks */ }
             )
 
-            // Server name
-            Text(
-                server.displayName,
-                color = TEXT,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.weight(1f)
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    server.displayName,
+                    color = titleColor,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                )
+            }
 
             // Reorder buttons (up/down arrows)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -4660,110 +4801,44 @@ private fun MobileServersContent(
     onReorder: (List<String>) -> Unit,
     onSave: () -> Unit,
     onReset: () -> Unit,
+    onServerVisibilityChange: (String, Boolean) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             "Drag and drop the servers to change the order in which they are used to find streams.",
             color = MUTED,
             fontSize = 14.sp,
-            modifier = Modifier.padding(bottom = 8.dp, top = 8.dp)
+            modifier = Modifier.padding(bottom = 8.dp, top = 8.dp),
         )
         Text(
-            "List from site catalog. Providers with both Sub and Dub appear as two separate entries.",
+            "Uncheck any server or extension to hide it from the player. Sub and Dub share one entry — pick audio while watching.",
             color = MUTED,
             fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 12.dp)
+            modifier = Modifier.padding(bottom = 12.dp),
         )
 
-        if (uiState.isLoadingServers || uiState.availableServers.isEmpty()) {
+        if (uiState.isLoadingServers) {
             Box(
                 modifier = Modifier.fillMaxWidth().height(200.dp),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator(color = Color.White)
             }
-        } else {
-            val serverList = remember(uiState.availableServers, uiState.serverPriority) {
-                ServerRepository.sortServersForSettingsDisplay(
-                    uiState.availableServers,
-                    uiState.serverPriority,
-                )
-            }
-
-            var localServerList by remember(serverList) {
-                mutableStateOf(serverList)
-            }
-
-            LaunchedEffect(uiState.serverPriority, uiState.availableServers) {
-                localServerList = serverList
-            }
-
-            val autoSaveReorder = { newList: List<to.kuudere.anisuge.data.models.ServerInfo> ->
-                localServerList = newList
-                onReorder(newList.map { it.id })
-                onSave()
-            }
-
-            var draggingItemIndex by remember { mutableStateOf<Int?>(null) }
-            var dragOffset by remember { mutableStateOf(0f) }
-            val itemHeightPxMobile = 58f
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+        } else if (uiState.availableServers.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                localServerList.forEachIndexed { currentIndex, server ->
-                    val isDragging = draggingItemIndex == currentIndex
-                    val visualOffset = if (isDragging) dragOffset.dp else 0.dp
-
-                    DraggableServerItem(
-                        server = server,
-                        isDragging = isDragging,
-                        offsetY = visualOffset,
-                        onDragStart = { draggingItemIndex = currentIndex },
-                        onDrag = { delta ->
-                            dragOffset += delta
-
-                            if (draggingItemIndex != null) {
-                                val currentDragIndex = draggingItemIndex!!
-                                val dragItems = (dragOffset / itemHeightPxMobile).toInt()
-                                val targetIndex = (currentDragIndex + dragItems)
-                                    .coerceIn(0, localServerList.size - 1)
-
-                                if (targetIndex != currentDragIndex) {
-                                    val newList = localServerList.toMutableList()
-                                    val item = newList.removeAt(currentDragIndex)
-                                    newList.add(targetIndex, item)
-                                    localServerList = newList
-                                    draggingItemIndex = targetIndex
-                                    dragOffset = dragOffset - (dragItems * itemHeightPxMobile)
-                                }
-                            }
-                        },
-                        onDragEnd = {
-                            draggingItemIndex = null
-                            dragOffset = 0f
-                            autoSaveReorder(localServerList)
-                        },
-                        onMoveUp = {
-                            if (currentIndex > 0) {
-                                val newList = localServerList.toMutableList()
-                                val item = newList.removeAt(currentIndex)
-                                newList.add(currentIndex - 1, item)
-                                autoSaveReorder(newList)
-                            }
-                        },
-                        onMoveDown = {
-                            if (currentIndex < localServerList.size - 1) {
-                                val newList = localServerList.toMutableList()
-                                val item = newList.removeAt(currentIndex)
-                                newList.add(currentIndex + 1, item)
-                                autoSaveReorder(newList)
-                            }
-                        }
-                    )
-                }
+                Text("No servers available", color = MUTED)
             }
+        } else {
+            ServersPriorityList(
+                uiState = uiState,
+                onReorder = onReorder,
+                onSave = onSave,
+                onServerVisibilityChange = onServerVisibilityChange,
+                itemHeightPx = 58f,
+            )
         }
 
         // Reset button at the bottom

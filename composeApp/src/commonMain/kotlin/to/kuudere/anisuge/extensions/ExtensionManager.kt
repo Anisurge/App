@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -47,12 +48,22 @@ class ExtensionManager(
     private val _pendingMatch = MutableStateFlow<PendingExtensionMatch?>(null)
     val pendingMatch: StateFlow<PendingExtensionMatch?> = _pendingMatch.asStateFlow()
     private val pendingChoices = mutableMapOf<String, CompletableDeferred<ExtensionMedia?>>()
+    private var bridgeIdsSyncedAt = 0L
 
     init {
         scope.launch {
             store.configFlow.collect {
                 _config.value = it
                 refresh()
+            }
+        }
+        scope.launch {
+            var wasReady = runtime.state.value.ready
+            runtime.state.collect { state ->
+                if (state.ready && !wasReady) {
+                    republishInstalled()
+                }
+                wasReady = state.ready
             }
         }
     }
@@ -105,26 +116,13 @@ class ExtensionManager(
                     else parseRepository(response.bodyAsText(), repo.url, repo.engine)
                 }.getOrElse { emptyList() }
             }.distinctBy { "${it.engine.name}:${it.id}" }
-            val installedById = config.installedSourceIds.toSet()
-            val localPaths = fetched.filter { compositeSourceId(it) in installedById }
-                .mapNotNull { installedPathFor(it) }
-            val loaded = if (runtime.state.value.ready) runtime.loadInstalledSources(localPaths) else emptyList()
-            _available.value = fetched.map { source ->
-                val loadedSource = loaded.firstOrNull {
-                    it.engine == source.engine && (
-                        it.id == source.id ||
-                            it.name.equals(source.name, ignoreCase = true) ||
-                            it.installedPath == installedPathFor(source)
-                        )
-                }
-                source.copy(
-                    installed = compositeSourceId(source) in installedById,
-                    installedPath = installedPathFor(source),
-                    runtimeId = loadedSource?.runtimeId ?: source.runtimeId,
-                    hasUpdate = loadedSource != null && compareVersions(source.version, source.latestVersion) < 0,
-                )
+            val installedById = normalizeInstalledIds(config.installedSourceIds)
+            val loaded = if (runtime.state.value.ready) {
+                runtime.loadInstalledSources(installedLocalPaths(fetched, installedById))
+            } else {
+                emptyList()
             }
-            _installed.value = _available.value.filter { it.installed }
+            publishSources(fetched, loaded, installedById)
         } catch (e: Exception) {
             _error.value = e.message ?: "Extension refresh failed"
         } finally {
@@ -133,18 +131,15 @@ class ExtensionManager(
     }
 
     suspend fun install(source: ExtensionSource) {
-        require(source.engine.nativeRuntime) {
-            "${source.engine.displayName} execution needs a Kotlin runtime port and is not available in this build."
-        }
         _busy.value = true
         _error.value = null
         try {
             if (!runtime.state.value.ready) runtime.install()
             val url = source.downloadUrl ?: error("Extension has no download URL")
-            val path = extensionDownloadPath(source)
+            val path = ExtensionPlatformFiles.stagingPathFor(source)
+            ExtensionPlatformFiles.ensureParentDirs(path)
             ExtensionPlatformFiles.download(httpClient, url, path)
-            val isAnime = source.engine == ExtensionEngine.ANIYOMI
-            val installed = runtime.installExtension(path, isAnime)
+            val installed = runtime.installExtension(path, source.installUsesAnimeDir())
             if (!installed) {
                 println("[ExtensionManager] installSourceInternal returned false for ${source.name}, trying fallback via folder scan")
             }
@@ -165,15 +160,23 @@ class ExtensionManager(
         _busy.value = true
         _error.value = null
         try {
-            val isAnime = source.engine == ExtensionEngine.ANIYOMI
-            runCatching { runtime.uninstallExtension(source.id, isAnime) }
-            installedPathFor(source)?.let { ExtensionPlatformFiles.delete(it) }
-            val compositeId = compositeSourceId(source)
+            val pkg = source.uninstallKey()
+            ExtensionPlatformFiles.installedApkPathCandidates(source).forEach { path ->
+                ExtensionPlatformFiles.delete(path)
+            }
+            runCatching { runtime.uninstallExtension(pkg, source.isAnime) }
+                .onFailure { println("[ExtensionManager] bridge uninstall failed for ${source.name}: ${it.message}") }
+            runtime.invalidateInstalledSourcesCache()
             store.update { current ->
                 current.copy(
-                    installedSourceIds = current.installedSourceIds - compositeId,
-                    sourceOrder = current.sourceOrder - compositeId,
-                    mappings = current.mappings.filterNot { it.sourceId == compositeId },
+                    installedSourceIds = current.installedSourceIds.filterNot { raw ->
+                        installedIdMatchesSource(raw, source)
+                    },
+                    sourceOrder = current.sourceOrder.filterNot { id ->
+                        installedIdMatchesSource(id, source)
+                    },
+                    mappings = current.mappings.filterNot { installedIdMatchesSource(it.sourceId, source) },
+                    episodeCaches = current.episodeCaches.filterNot { installedIdMatchesSource(it.sourceId, source) },
                 )
             }
             republishInstalled()
@@ -187,121 +190,462 @@ class ExtensionManager(
 
     private suspend fun republishInstalled() {
         val config = store.configFlow.first()
-        val installedById = config.installedSourceIds.toSet()
-        val currentAvailable = _available.value
-        val localPaths = currentAvailable.filter { compositeSourceId(it) in installedById }
-            .mapNotNull { installedPathFor(it) }
-        val loaded = if (runtime.state.value.ready) runtime.loadInstalledSources(localPaths) else emptyList()
-        _available.value = currentAvailable.map { source ->
-            val loadedSource = loaded.firstOrNull {
-                it.engine == source.engine && (
-                    it.id == source.id ||
-                        it.name.equals(source.name, ignoreCase = true) ||
-                        it.installedPath == installedPathFor(source)
-                    )
-            }
-            source.copy(
-                installed = compositeSourceId(source) in installedById,
-                installedPath = installedPathFor(source),
-                runtimeId = loadedSource?.runtimeId ?: source.runtimeId,
-                hasUpdate = loadedSource != null && compareVersions(source.version, source.latestVersion) < 0,
-            )
+        val installedById = normalizeInstalledIds(config.installedSourceIds)
+        val loaded = if (runtime.state.value.ready) {
+            runtime.loadInstalledSources(installedLocalPaths(_available.value, installedById))
+        } else {
+            emptyList()
         }
-        _installed.value = _available.value.filter { it.installed }
+        publishSources(_available.value.ifEmpty { fetchedFromRepositories(config) }, loaded, installedById)
     }
 
     fun servers(): List<ServerInfo> {
         val order = _config.value.sourceOrder
-        return _installed.value
-            .filter { it.engine.nativeRuntime }
+        val bridgeInstalled = _installed.value.filter { it.isBridgeCapableOnPlatform() }
+        val grouped = bridgeInstalled.groupBy { variantGroupKey(it) }
+        return bridgeInstalled
             .sortedBy { order.indexOf(compositeSourceId(it)).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE }
-            .map {
+            .map { source ->
+                val siblings = grouped[variantGroupKey(source)].orEmpty()
+                val explicitDub = extensionVariantIsExplicitDub(source, siblings)
                 ServerInfo(
-                    id = it.serverId(),
-                    label = "${it.name} · ${it.engine.displayName} · Extension",
-                    type = "sub_dub",
+                    id = source.selectableServerId(dub = explicitDub),
+                    label = buildExtensionServerLabel(source, siblings),
+                    type = if (explicitDub) "dub" else "sub_dub",
                 )
             }
+            .distinctBy { it.id }
     }
+
+    fun preferredExtensionServerId(serverPriority: List<String>): String? {
+        val bridgeInstalled = _installed.value.filter { it.isBridgeCapableOnPlatform() }
+        val grouped = bridgeInstalled.groupBy { variantGroupKey(it) }
+        val installedIds = bridgeInstalled.flatMap { source ->
+            val siblings = grouped[variantGroupKey(source)].orEmpty()
+            val explicitDub = extensionVariantIsExplicitDub(source, siblings)
+            if (explicitDub) {
+                listOf(source.selectableServerId(dub = true))
+            } else {
+                listOf(
+                    source.selectableServerId(dub = false),
+                    source.selectableServerId(dub = true),
+                )
+            }
+        }.toSet()
+        return serverPriority.firstOrNull { id ->
+            parseExtensionServerId(id) != null && id in installedIds
+        } ?: bridgeInstalled.firstOrNull()?.let { source ->
+            source.selectableServerId(dub = false)
+        }
+    }
+
+    fun episodeCacheFor(animeId: String, serverId: String): ExtensionEpisodeCache? {
+        val source = findInstalledSource(serverId) ?: return null
+        return _config.value.episodeCaches.firstOrNull {
+            it.animeId == animeId && it.sourceId == compositeSourceId(source)
+        }
+    }
+
+    suspend fun prefetchMapping(
+        animeId: String,
+        titles: List<String>,
+        synonyms: List<String> = emptyList(),
+        serverId: String,
+    ): ExtensionPrefetchResult {
+        ensureBridgeReady()
+        val source = findInstalledSource(serverId) ?: error("Extension is not installed")
+        val compositeId = compositeSourceId(source)
+        val cached = _config.value.episodeCaches.firstOrNull {
+            it.animeId == animeId && it.sourceId == compositeId
+        }
+        if (cached != null && cached.episodes.isNotEmpty()) {
+            return ExtensionPrefetchResult(source, cached.media, cached.episodes, cached.mappedTitle)
+        }
+        val mapping = ensureMapping(animeId, source, titles, synonyms)
+        val (media, episodes) = runtime.details(source, mapping.media)
+        require(episodes.isNotEmpty()) { "${source.name} returned no episodes" }
+        val cache = ExtensionEpisodeCache(
+            animeId = animeId,
+            sourceId = compositeId,
+            mappedTitle = media.title,
+            media = media,
+            episodes = episodes,
+            updatedAt = Clock.System.now().toEpochMilliseconds(),
+        )
+        store.update { current ->
+            current.copy(
+                episodeCaches = current.episodeCaches.filterNot {
+                    it.animeId == animeId && it.sourceId == compositeId
+                } + cache,
+            )
+        }
+        return ExtensionPrefetchResult(source, media, episodes, media.title)
+    }
+
+    suspend fun resolveStreamForEpisode(
+        animeId: String,
+        titles: List<String>,
+        synonyms: List<String> = emptyList(),
+        episodeNumber: Int,
+        serverId: String,
+    ): ExtensionStreamResult = resolveStream(
+        animeId = animeId,
+        titles = titles,
+        synonyms = synonyms,
+        episodeNumber = episodeNumber,
+        serverId = serverId,
+    )
 
     suspend fun resolveStream(
         animeId: String,
         titles: List<String>,
         episodeNumber: Int,
         serverId: String,
+        synonyms: List<String> = emptyList(),
     ): ExtensionStreamResult {
+        ensureBridgeReady()
         val parsed = parseExtensionServerId(serverId) ?: error("Invalid extension server")
-        val source = _installed.value.firstOrNull {
-            it.id == parsed.sourceId && it.engine == parsed.engine
-        } ?: error("Extension is not installed")
-        println("[ExtensionManager] resolveStream: source=${source.name} engine=${source.engine.name} runtimeId=${source.runtimeId} serverId=$serverId")
-        var mapping = _config.value.mappings.firstOrNull {
-            it.animeId == animeId && it.sourceId == compositeSourceId(source)
+        val source = findInstalledSource(serverId) ?: error("Extension is not installed")
+        require(source.isBridgeCapableOnPlatform()) {
+            "${source.name} requires the AnymeX JS runtime (Mangayomi/Sora scripts are not supported on Android yet)"
         }
-        if (mapping == null) {
-            println("[ExtensionManager] resolveStream: no cached mapping, searching titles...")
-            val candidates = titles.filter { it.isNotBlank() }.flatMap { runtime.search(source, it) }
-                .distinctBy { it.url }
-                .map { it to matchConfidence(titles, it.title) }
-                .sortedByDescending { it.second }
-            println("[ExtensionManager] resolveStream: ${candidates.size} candidates, best=${candidates.firstOrNull()?.second}")
-            val best = candidates.firstOrNull() ?: error("No title match found in ${source.name}")
-            val chosen = if (best.second >= 0.92 || candidates.size == 1) {
-                best.first
-            } else {
-                val requestId = "${source.id}:${animeId}:${kotlin.random.Random.nextLong()}"
-                val deferred = CompletableDeferred<ExtensionMedia?>()
-                pendingChoices[requestId] = deferred
-                _pendingMatch.value = PendingExtensionMatch(
-                    requestId = requestId,
-                    sourceName = source.name,
-                    animeTitle = titles.firstOrNull().orEmpty(),
-                    candidates = candidates.take(8),
-                )
-                try {
-                    deferred.await() ?: error("Extension title selection was cancelled")
-                } finally {
-                    pendingChoices.remove(requestId)
-                    if (_pendingMatch.value?.requestId == requestId) _pendingMatch.value = null
-                }
+        if (source.engine == ExtensionEngine.ANIYOMI || source.engine == ExtensionEngine.SORA) {
+            require(source.hasNumericBridgeId()) {
+                "${source.name} is not loaded in the extension bridge — open Settings → Extensions and refresh"
             }
-            val confidence = candidates.firstOrNull { it.first.url == chosen.url }?.second ?: best.second
-            mapping = ExtensionMapping(animeId, compositeSourceId(source), chosen, confidence)
-            store.update { it.copy(mappings = it.mappings.filterNot { old -> old.animeId == animeId && old.sourceId == compositeSourceId(source) } + mapping) }
         }
-        val (media, episodes) = runtime.details(source, mapping.media)
-        println("[ExtensionManager] resolveStream: got ${episodes.size} episodes, looking for ep $episodeNumber")
-        val episode = episodes.minByOrNull { kotlin.math.abs(it.number - episodeNumber) }
-            ?.takeIf { kotlin.math.abs(it.number - episodeNumber) < 1.5 }
-            ?: episodes.firstOrNull { it.name.contains(episodeNumber.toString()) }
-            ?: episodes.firstOrNull()
+        val compositeId = compositeSourceId(source)
+        val prefetch = prefetchMapping(animeId, titles, synonyms, serverId)
+        val episode = findExtensionEpisode(prefetch.episodes, episodeNumber, preferDub = parsed.dub)
             ?: error("Episode $episodeNumber was not found in ${source.name}")
-        println("[ExtensionManager] resolveStream: matched episode=${episode.name} number=${episode.number}")
-        val allVideos = runtime.videos(source, episode)
-        println("[ExtensionManager] resolveStream: got ${allVideos.size} videos from runtime")
-        val videos = allVideos
-            .filter { video ->
-                val text = "${video.quality} ${video.url}".lowercase()
-                if (parsed.dub) "dub" in text || videosHaveNoLanguageMarkers(allVideos)
-                else "dub" !in text
-            }
-            .ifEmpty { allVideos }
+        val videos = runtime.videosStream(source, episode)
         require(videos.isNotEmpty()) { "No playable streams returned by ${source.name}" }
-        return ExtensionStreamResult(source, media, episode, videos)
+        return ExtensionStreamResult(prefetch.source, prefetch.media, episode, videos)
     }
+
+    suspend fun clearMapping(animeId: String, serverId: String) {
+        val source = findInstalledSource(serverId) ?: return
+        val compositeId = compositeSourceId(source)
+        store.update { current ->
+            current.copy(
+                mappings = current.mappings.filterNot { it.animeId == animeId && it.sourceId == compositeId },
+                episodeCaches = current.episodeCaches.filterNot { it.animeId == animeId && it.sourceId == compositeId },
+            )
+        }
+    }
+
+    private suspend fun ensureBridgeReady() {
+        if (!runtime.state.value.ready) error("Install the extension runtime first")
+        if (_busy.value) refresh()
+        if (_busy.value) {
+            busy.first { !it }
+        }
+        val config = store.configFlow.first()
+        val installedById = normalizeInstalledIds(config.installedSourceIds)
+        if (installedById.isEmpty()) return
+        val needsBridgeIds = _installed.value.any { source ->
+            source.isBridgeCapableOnPlatform() &&
+                (source.engine == ExtensionEngine.ANIYOMI || source.engine == ExtensionEngine.SORA) &&
+                !source.hasNumericBridgeId()
+        }
+        val stale = to.kuudere.anisuge.utils.currentTimeMillis() - bridgeIdsSyncedAt > 30_000L
+        if (!needsBridgeIds && !stale && _installed.value.isNotEmpty()) return
+        val loaded = runtime.loadInstalledSources(installedLocalPaths(_available.value, installedById))
+        if (_installed.value.isEmpty()) {
+            publishSources(_available.value, loaded, installedById)
+        } else {
+            applyLoadedRuntimeIds(loaded)
+        }
+        bridgeIdsSyncedAt = to.kuudere.anisuge.utils.currentTimeMillis()
+    }
+
+    private fun applyLoadedRuntimeIds(loaded: List<ExtensionSource>) {
+        if (loaded.isEmpty()) return
+        fun merge(source: ExtensionSource): ExtensionSource {
+            val match = findLoadedMatch(source, loaded) ?: return source
+            return source.copy(
+                runtimeId = match.runtimeId?.takeIf { it.isNotBlank() } ?: source.runtimeId,
+                pkgName = match.pkgName?.takeIf { it.isNotBlank() } ?: source.pkgName,
+                isAnime = match.isAnime,
+                installedPath = match.installedPath?.takeIf { it.isNotBlank() } ?: source.installedPath,
+            )
+        }
+        _available.value = _available.value.map(::merge)
+        _installed.value = _installed.value.map(::merge)
+    }
+
+    private suspend fun fetchedFromRepositories(config: ExtensionBackupConfig): List<ExtensionSource> =
+        config.repositories.flatMap { repo ->
+            runCatching {
+                val response = httpClient.get(repo.url)
+                if (!response.status.isSuccess()) emptyList()
+                else parseRepository(response.bodyAsText(), repo.url, repo.engine)
+            }.getOrElse { emptyList() }
+        }.distinctBy { "${it.engine.name}:${it.id}" }
+
+    private fun normalizeInstalledIds(ids: List<String>): Set<String> = ids.map { raw ->
+        if (":" in raw) raw
+        else "${ExtensionEngine.ANIYOMI.name}:$raw"
+    }.toSet()
+
+    private fun installedIdVariants(source: ExtensionSource): Set<String> {
+        val pkg = source.pkgName?.takeIf { it.isNotBlank() } ?: source.id
+        return setOf(
+            compositeSourceId(source),
+            "${source.engine.name}:$pkg",
+            pkg,
+            source.id,
+        )
+    }
+
+    private fun installedIdMatchesSource(rawId: String, source: ExtensionSource): Boolean {
+        if (rawId in installedIdVariants(source)) return true
+        val pkg = source.pkgName?.takeIf { it.isNotBlank() } ?: source.id
+        val stem = rawId.substringAfter(':', rawId)
+        return stem == pkg || stem == source.id
+    }
+
+    private fun isInstalledSource(source: ExtensionSource, installedById: Set<String>): Boolean {
+        val composite = compositeSourceId(source)
+        if (composite in installedById) return true
+        val pkg = source.pkgName?.takeIf { it.isNotBlank() } ?: source.id
+        return "${source.engine.name}:$pkg" in installedById ||
+            pkg in installedById ||
+            installedById.any { it.endsWith(":$pkg") || it == pkg }
+    }
+
+    private fun installedLocalPaths(
+        catalog: List<ExtensionSource>,
+        installedById: Set<String>,
+    ): List<String> = catalog
+        .filter { isInstalledSource(it, installedById) }
+        .mapNotNull { installedPathFor(it, installedById) }
+
+    private fun publishSources(
+        fetched: List<ExtensionSource>,
+        loaded: List<ExtensionSource>,
+        installedById: Set<String>,
+    ) {
+        val mergedCatalog = fetched.map { source -> mergeCatalogWithLoaded(source, loaded, installedById) }
+        val catalogComposites = mergedCatalog.map { compositeSourceId(it) }.toSet()
+        val bridgeOnly = loaded.filter { loadedSource ->
+            isInstalledSource(loadedSource, installedById) &&
+                compositeSourceId(loadedSource) !in catalogComposites &&
+                mergedCatalog.none { sourcesEquivalent(it, loadedSource) }
+        }.map { loadedSource ->
+            val catalogMatch = mergedCatalog.firstOrNull { sourcesEquivalent(it, loadedSource) }
+            val installedVersion = loadedSource.version
+            val latestVersion = catalogMatch?.latestVersion?.ifBlank { catalogMatch.version }.orEmpty()
+            loadedSource.copy(
+                installed = true,
+                installedPath = loadedSource.installedPath ?: installedPathFor(loadedSource),
+                latestVersion = latestVersion.ifBlank { loadedSource.latestVersion },
+                hasUpdate = catalogMatch != null &&
+                    latestVersion.isNotBlank() &&
+                    installedVersion.isNotBlank() &&
+                    compareVersions(installedVersion, latestVersion) < 0,
+            )
+        }
+        _available.value = (mergedCatalog + bridgeOnly).distinctBy { compositeSourceId(it) }
+        _installed.value = _available.value.filter { it.installed }
+    }
+
+    private fun mergeCatalogWithLoaded(
+        source: ExtensionSource,
+        loaded: List<ExtensionSource>,
+        installedById: Set<String>,
+    ): ExtensionSource {
+        val loadedSource = findLoadedMatch(source, loaded)
+        val installed = isInstalledSource(source, installedById)
+        val installedVersion = loadedSource?.version?.takeIf { it.isNotBlank() }
+            ?: source.version.takeIf { installed }
+        val latestVersion = source.latestVersion.ifBlank { source.version }
+        return source.copy(
+            installed = installed,
+            installedPath = loadedSource?.installedPath?.takeIf { it.isNotBlank() }
+                ?: installedPathFor(source, installedById),
+            runtimeId = loadedSource?.runtimeId?.takeIf { it.isNotBlank() } ?: source.runtimeId,
+            pkgName = loadedSource?.pkgName?.takeIf { it.isNotBlank() } ?: source.pkgName,
+            isAnime = loadedSource?.isAnime ?: source.isAnime,
+            version = installedVersion ?: source.version,
+            hasUpdate = installed &&
+                loadedSource != null &&
+                latestVersion.isNotBlank() &&
+                !installedVersion.isNullOrBlank() &&
+                compareVersions(installedVersion.orEmpty(), latestVersion) < 0,
+        )
+    }
+
+    private fun findLoadedMatch(
+        source: ExtensionSource,
+        loaded: List<ExtensionSource>,
+    ): ExtensionSource? {
+        loaded.firstOrNull { loadedSource -> sourcesEquivalent(source, loadedSource) }?.let { return it }
+        source.runtimeId?.takeIf { it.isNotBlank() }?.let { runtimeId ->
+            loaded.firstOrNull { it.runtimeId == runtimeId }?.let { return it }
+        }
+        val pkg = source.pkgName?.takeIf { it.isNotBlank() }
+        if (pkg != null) {
+            loaded.firstOrNull {
+                it.pkgName == pkg && it.language.equals(source.language, ignoreCase = true)
+            }?.let { return it }
+            if (source.language.equals("all", ignoreCase = true)) {
+                loaded.firstOrNull { it.pkgName == pkg }?.let { return it }
+            }
+        }
+        return null
+    }
+
+    private suspend fun ensureMapping(
+        animeId: String,
+        source: ExtensionSource,
+        titles: List<String>,
+        synonyms: List<String>,
+    ): ExtensionMapping {
+        val compositeId = compositeSourceId(source)
+        _config.value.mappings.firstOrNull {
+            it.animeId == animeId && it.sourceId == compositeId
+        }?.let { return it }
+
+        val searchTitles = ExtensionSourceMapper.formatSearchTitles(titles, synonyms)
+        require(searchTitles.isNotEmpty()) { "No searchable titles available" }
+        val savedTitle = _config.value.mappings.firstOrNull {
+            it.animeId == animeId && it.sourceId == compositeId
+        }?.media?.title
+
+        val mapped = ExtensionSourceMapper.mapMedia(
+            source = source,
+            runtime = runtime,
+            searchTitles = searchTitles,
+            savedTitle = savedTitle,
+        ) { candidates, animeTitle ->
+            val requestId = "${source.id}:$animeId:${kotlin.random.Random.nextLong()}"
+            val deferred = CompletableDeferred<ExtensionMedia?>()
+            pendingChoices[requestId] = deferred
+            _pendingMatch.value = PendingExtensionMatch(
+                requestId = requestId,
+                sourceName = source.name,
+                animeTitle = animeTitle,
+                candidates = candidates,
+            )
+            try {
+                deferred.await()
+            } finally {
+                pendingChoices.remove(requestId)
+                if (_pendingMatch.value?.requestId == requestId) _pendingMatch.value = null
+            }
+        } ?: error("No title match found in ${source.name}")
+
+        val mapping = ExtensionMapping(animeId, compositeId, mapped.first, mapped.second)
+        store.update { current ->
+            current.copy(
+                mappings = current.mappings.filterNot {
+                    it.animeId == animeId && it.sourceId == compositeId
+                } + mapping,
+            )
+        }
+        return mapping
+    }
+
+    private fun sourcesEquivalent(catalog: ExtensionSource, loaded: ExtensionSource): Boolean {
+        if (catalog.engine != loaded.engine &&
+            !(catalog.engine == ExtensionEngine.SORA && loaded.engine == ExtensionEngine.ANIYOMI)
+        ) {
+            return false
+        }
+        val catalogPkg = catalog.pkgName?.takeIf { it.isNotBlank() } ?: catalog.id.substringBefore(':')
+        val loadedPkg = loaded.pkgName?.takeIf { it.isNotBlank() }
+        if (loadedPkg != null && (catalogPkg == loadedPkg || catalog.id == loadedPkg)) {
+            if (catalog.language != loaded.language &&
+                !catalog.language.equals("all", ignoreCase = true) &&
+                !loaded.language.equals("all", ignoreCase = true)
+            ) {
+                return false
+            }
+            return true
+        }
+        if (catalog.id == loaded.id ||
+            catalog.runtimeId == loaded.runtimeId ||
+            catalog.runtimeId == loaded.id ||
+            catalog.id == loaded.runtimeId
+        ) {
+            return true
+        }
+        val catalogStem = catalog.installedPath?.substringAfterLast("/")?.substringBeforeLast(".")
+            ?: catalog.id.substringAfterLast(".")
+        if (catalogStem.isNotBlank() && (
+                catalogStem == loaded.id ||
+                    catalogStem == loaded.pkgName ||
+                    catalogStem == loaded.runtimeId
+                )
+        ) {
+            return true
+        }
+        return catalog.name.equals(loaded.name, ignoreCase = true) ||
+            catalog.name.contains(loaded.name, ignoreCase = true) ||
+            loaded.name.contains(catalog.name, ignoreCase = true)
+    }
+
+    private fun findInstalledSource(serverId: String): ExtensionSource? {
+        val parsed = parseExtensionServerId(serverId) ?: return null
+        val grouped = _installed.value.groupBy { variantGroupKey(it) }
+        val byBridgeId = _installed.value.filter { source ->
+            source.engine == parsed.engine && source.bridgeSourceId() == parsed.sourceId
+        }
+        if (byBridgeId.isNotEmpty()) {
+            if (byBridgeId.size == 1) return byBridgeId.first()
+            return byBridgeId.firstOrNull { source ->
+                val siblings = grouped[variantGroupKey(source)].orEmpty()
+                extensionVariantIsExplicitDub(source, siblings) == parsed.dub
+            } ?: byBridgeId.first()
+        }
+        return _installed.value.firstOrNull { source ->
+            source.engine == parsed.engine && (
+                source.id == parsed.sourceId ||
+                    source.pkgName == parsed.sourceId ||
+                    source.selectableServerId(dub = false) == serverId ||
+                    source.selectableServerId(dub = true) == serverId
+                )
+        }
+    }
+
+    private fun variantGroupKey(source: ExtensionSource): String =
+        source.pkgName?.takeIf { it.isNotBlank() } ?: compositeSourceId(source)
 
     suspend fun setOrder(ids: List<String>) = store.update { it.copy(sourceOrder = ids.distinct()) }
     fun choosePendingMatch(requestId: String, media: ExtensionMedia?) {
         pendingChoices[requestId]?.complete(media)
     }
 
-    suspend fun testSource(source: ExtensionSource): String {
+    suspend fun update(source: ExtensionSource) {
+        require(source.installed) { "Extension is not installed" }
+        install(source)
+    }
+
+    suspend fun updateAllAvailable(): Int {
+        val pending = _available.value.filter { it.installed && it.hasUpdate }
+        pending.forEach { update(it) }
+        return pending.size
+    }
+
+    suspend fun repairSource(source: ExtensionSource): String {
         require(source.installed) { "Install the extension first" }
-        val results = runtime.search(source, "Naruto")
-        require(results.isNotEmpty()) { "Search returned no results" }
-        val (_, episodes) = runtime.details(source, results.first())
-        require(episodes.isNotEmpty()) { "Details returned no episodes" }
-        return "Search and episode loading passed"
+        require(source.isBridgeCapableOnPlatform()) {
+            "${source.name} cannot be repaired on this platform"
+        }
+        runtime.invalidateInstalledSourcesCache()
+        val config = store.configFlow.first()
+        val installedById = normalizeInstalledIds(config.installedSourceIds)
+        val loaded = runtime.loadInstalledSources(installedLocalPaths(_available.value, installedById))
+        applyLoadedRuntimeIds(loaded)
+        republishInstalled()
+        val match = findLoadedMatch(source, loaded) ?: findInstalledSource(source.serverId())
+        if (source.engine == ExtensionEngine.ANIYOMI || source.engine == ExtensionEngine.SORA) {
+            require(match?.hasNumericBridgeId() == true) {
+                "${source.name} failed to reload — try uninstalling and reinstalling"
+            }
+        }
+        return "${source.name} reloaded in bridge"
     }
     suspend fun exportConfig(): ExtensionBackupConfig = store.configFlow.first()
     suspend fun restoreConfig(value: ExtensionBackupConfig) = store.restore(value)
@@ -322,27 +666,32 @@ class ExtensionManager(
         return array.mapNotNull { element ->
             val o = element as? JsonObject ?: return@mapNotNull null
             val pkg = o.string("pkg") ?: o.string("pkgName") ?: return@mapNotNull null
+            val lang = o.string("lang") ?: "all"
             val name = o.string("name")?.removePrefix("Aniyomi: ") ?: pkg.substringAfterLast(".")
             val apk = o.string("apk") ?: "$pkg.apk"
             val runtimeId = (o["sources"] as? JsonArray)
                 ?.firstOrNull()
                 ?.let { it as? JsonObject }
                 ?.string("id")
+            val catalogId = runtimeId?.takeIf { it.isNotBlank() }
+                ?: if (lang != "all") "$pkg:$lang" else pkg
             ExtensionSource(
-                id = o.string("id") ?: pkg,
+                id = catalogId,
                 name = name,
                 engine = ExtensionEngine.ANIYOMI,
-                language = o.string("lang") ?: "all",
+                language = lang,
                 version = o.string("version") ?: o.string("versionName") ?: "",
                 latestVersion = o.string("version") ?: o.string("versionName") ?: "",
                 iconUrl = o.string("icon") ?: "$base/icon/$pkg.png",
                 downloadUrl = if (apk.startsWith("http")) apk else "$base/apk/$apk",
                 repositoryUrl = repoUrl,
-                runtimeId = runtimeId,
+                runtimeId = runtimeId ?: pkg,
+                pkgName = pkg,
+                isAnime = true,
                 isNsfw = o.bool("nsfw"),
             )
         }.filter { source ->
-            val pkg = source.id
+            val pkg = source.pkgName ?: source.id
             val type = (array.firstOrNull { (it as? JsonObject)?.string("pkg") == pkg } as? JsonObject)?.string("type")
             type == null || type.contains("anime", true)
         }
@@ -394,16 +743,19 @@ class ExtensionManager(
                 version = o.string("version") ?: "",
                 latestVersion = o.string("version") ?: "",
                 iconUrl = o.string("iconUrl") ?: o.string("icon"),
-                downloadUrl = o.string("url") ?: o.string("sourceUrl"),
+                downloadUrl = o.string("url") ?: o.string("sourceUrl") ?: o.string("downloadUrl") ?: o.string("sourceCodeUrl"),
                 repositoryUrl = repoUrl,
+                runtimeId = o.string("id"),
+                isAnime = engine != ExtensionEngine.MANGAYOMI &&
+                    (o.string("type")?.contains("anime", true) != false),
             )
         }
     }
 
-    private fun installedPathFor(source: ExtensionSource): String? =
-        if (compositeSourceId(source) in _config.value.installedSourceIds) extensionDownloadPath(source) else null
-
-    private fun compositeSourceId(source: ExtensionSource): String = "${source.engine.name}:${source.id}"
+    private fun installedPathFor(
+        source: ExtensionSource,
+        installedById: Set<String> = normalizeInstalledIds(_config.value.installedSourceIds),
+    ): String? = if (isInstalledSource(source, installedById)) extensionDownloadPath(source) else null
 
     private fun detectEngine(root: JsonElement, body: String): ExtensionEngine {
         val items = when {
@@ -415,44 +767,22 @@ class ExtensionManager(
             else -> null
         } ?: return ExtensionEngine.ANIYOMI
         val hasPkg = items.any { (it as? JsonObject)?.get("pkg") != null || (it as? JsonObject)?.get("pkgName") != null }
-        val hasDownloadUrl = items.any { (it as? JsonObject)?.get("url") != null || (it as? JsonObject)?.get("downloadUrl") != null }
         val hasName = items.any { (it as? JsonObject)?.get("name") != null || (it as? JsonObject)?.get("sourceName") != null }
+        val hasSourceUrl = items.any { (it as? JsonObject)?.get("sourceUrl") != null }
         if (hasPkg) return ExtensionEngine.ANIYOMI
-        if (hasDownloadUrl && hasName && items.none { (it as? JsonObject)?.get("pkg") != null }) return ExtensionEngine.CLOUDSTREAM
+        if (hasSourceUrl) return ExtensionEngine.MANGAYOMI
+        val hasLang = items.any { (it as? JsonObject)?.get("lang") != null }
+        val hasUrl = items.any { (it as? JsonObject)?.get("url") != null || (it as? JsonObject)?.get("downloadUrl") != null }
+        if (hasUrl && hasName && !hasLang) return ExtensionEngine.CLOUDSTREAM
         if (hasName) return ExtensionEngine.MANGAYOMI
         return ExtensionEngine.ANIYOMI
     }
 
-    private fun extensionDownloadPath(source: ExtensionSource): String {
-        val ext = when (source.engine) {
-            ExtensionEngine.ANIYOMI -> if (ExtensionPlatformFiles.isAndroid) "apk" else "jar"
-            ExtensionEngine.CLOUDSTREAM -> if (ExtensionPlatformFiles.isAndroid) "cs3" else "jar"
-            else -> "js"
-        }
-        return "${ExtensionPlatformFiles.rootDir()}/extensions/${source.engine.name.lowercase()}/${safe(source.id)}.$ext"
-    }
+    private fun extensionDownloadPath(source: ExtensionSource): String =
+        ExtensionPlatformFiles.stagingPathFor(source)
 
     private fun safe(value: String) = value.replace(Regex("[^A-Za-z0-9._-]"), "_")
 
-    private fun matchConfidence(titles: List<String>, candidate: String): Double {
-        val normalizedCandidate = normalize(candidate)
-        return titles.maxOfOrNull { title ->
-            val normalized = normalize(title)
-            when {
-                normalized == normalizedCandidate -> 1.0
-                normalizedCandidate.contains(normalized) || normalized.contains(normalizedCandidate) -> 0.88
-                else -> {
-                    val a = normalized.split(" ").toSet()
-                    val b = normalizedCandidate.split(" ").toSet()
-                    if (a.isEmpty() || b.isEmpty()) 0.0 else a.intersect(b).size.toDouble() / max(a.size, b.size)
-                }
-            }
-        } ?: 0.0
-    }
-
-    private fun normalize(value: String) = value.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
-    private fun videosHaveNoLanguageMarkers(videos: List<ExtensionVideo>) =
-        videos.none { "${it.quality} ${it.url}".contains("dub", true) }
     private fun compareVersions(a: String, b: String): Int {
         val aa = a.split(".").map { it.toIntOrNull() ?: 0 }
         val bb = b.split(".").map { it.toIntOrNull() ?: 0 }
@@ -462,6 +792,8 @@ class ExtensionManager(
     }
 }
 
-private fun JsonObject.string(key: String) = this[key]?.jsonPrimitive?.contentOrNull
+private fun JsonObject.string(key: String) = this[key]?.jsonPrimitive?.run {
+    contentOrNull ?: content
+}
 private fun JsonObject.bool(key: String) = this[key]?.jsonPrimitive?.booleanOrNull ?: false
 private fun JsonObject.int(key: String) = this[key]?.jsonPrimitive?.intOrNull ?: 0

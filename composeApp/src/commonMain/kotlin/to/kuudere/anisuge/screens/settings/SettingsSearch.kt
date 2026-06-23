@@ -9,6 +9,7 @@ data class SettingsSearchEntry(
 )
 
 val SETTINGS_SEARCH_ENTRIES = listOf(
+    SettingsSearchEntry("default-audio", "Default audio", "Preferences", listOf("sub", "dub", "language", "playback"), SettingsTab.Preferences),
     SettingsSearchEntry("autoplay", "Auto play", "Preferences", listOf("playback", "episode"), SettingsTab.Preferences),
     SettingsSearchEntry("autonext", "Auto next episode", "Preferences", listOf("playback", "next"), SettingsTab.Preferences),
     SettingsSearchEntry("skip-intro", "Skip intro", "Preferences", listOf("opening", "aniskip"), SettingsTab.Preferences),

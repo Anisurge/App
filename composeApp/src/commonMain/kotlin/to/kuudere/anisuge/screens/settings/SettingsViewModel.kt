@@ -27,6 +27,7 @@ import to.kuudere.anisuge.data.models.LayoutConfig
 import to.kuudere.anisuge.data.models.StorageInfo
 import to.kuudere.anisuge.data.models.UserSettings
 import to.kuudere.anisuge.data.models.AnimeItem
+import to.kuudere.anisuge.data.models.collapseToBaseServerPriority
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.CommunityService
 import to.kuudere.anisuge.data.services.SettingsService
@@ -85,6 +86,7 @@ data class SettingsUiState(
     val hasServerPriorityChanges: Boolean = false,
     val isLoadingServers: Boolean = false,
     val availableServers: List<to.kuudere.anisuge.data.models.ServerInfo> = emptyList(),
+    val hiddenServerIds: Set<String> = emptySet(),
 
     val deleteAnimeId: String? = null,
     val deleteAnimeTitle: String? = null,
@@ -398,12 +400,18 @@ class SettingsViewModel(
 
         viewModelScope.launch {
             serverRepository.userPriority.collect { priority ->
-                _uiState.update { it.copy(serverPriority = priority, hasServerPriorityChanges = false) }
+                val collapsed = priority.collapseToBaseServerPriority()
+                _uiState.update { it.copy(serverPriority = collapsed, hasServerPriorityChanges = false) }
             }
         }
         viewModelScope.launch {
             serverRepository.servers.collect { servers ->
                 _uiState.update { it.copy(availableServers = servers) }
+            }
+        }
+        viewModelScope.launch {
+            serverRepository.hiddenServerIds.collect { hidden ->
+                _uiState.update { it.copy(hiddenServerIds = hidden) }
             }
         }
 
@@ -1411,7 +1419,7 @@ class SettingsViewModel(
     fun loadServerPriority() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingServers = true) }
-            val priority = serverRepository.userPriority.value
+            val priority = serverRepository.userPriority.value.collapseToBaseServerPriority()
             originalServerPriority = priority
             _uiState.update {
                 it.copy(
@@ -1424,17 +1432,18 @@ class SettingsViewModel(
     }
 
     fun updateServerPriority(newPriority: List<String>) {
+        val collapsed = newPriority.collapseToBaseServerPriority()
         _uiState.update {
             it.copy(
-                serverPriority = newPriority,
-                hasServerPriorityChanges = newPriority != originalServerPriority
+                serverPriority = collapsed,
+                hasServerPriorityChanges = collapsed != originalServerPriority.collapseToBaseServerPriority()
             )
         }
     }
 
     fun saveServerPriority() {
         viewModelScope.launch {
-            val priority = _uiState.value.serverPriority
+            val priority = _uiState.value.serverPriority.collapseToBaseServerPriority()
             serverRepository.setUserPriority(priority)
             originalServerPriority = priority
             _uiState.update { it.copy(hasServerPriorityChanges = false, successMessage = "Server priority saved") }
@@ -1452,6 +1461,21 @@ class SettingsViewModel(
                     successMessage = "Reset to default priority"
                 )
             }
+        }
+    }
+
+    fun setServerVisible(serverId: String, visible: Boolean) {
+        viewModelScope.launch {
+            val server = _uiState.value.availableServers.find { it.id.equals(serverId, ignoreCase = true) }
+            val relatedIds = buildList {
+                add(serverId.lowercase())
+                if (server?.type == "sub_dub") add("${serverId.lowercase()}-dub")
+            }
+            val current = settingsStore.hiddenServerIdsFlow.first().toMutableSet()
+            relatedIds.forEach { id ->
+                if (visible) current.remove(id) else current.add(id)
+            }
+            settingsStore.setHiddenServerIds(current)
         }
     }
 
