@@ -151,7 +151,9 @@ fun ExtensionsSettings(
     var operationMessage by remember { mutableStateOf<String?>(null) }
     var animatingOutIds by remember { mutableStateOf(setOf<String>()) }
     var isConfirmInstalling by remember { mutableStateOf(false) }
+    var browseSourceId by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
+    val onBrowseSource = { src: ExtensionSource -> browseSourceId = src.id }
     val snackbarHostState = remember { SnackbarHostState() }
     val chipScrollState = rememberScrollState()
 
@@ -401,11 +403,7 @@ fun ExtensionsSettings(
                                 guarded { operationMessage = manager.repairSource(source) }
                             },
                             onShare = { source -> shareExtensionSourceToChat(source) },
-                            onBrowse = {
-                                AppComponent.requestStandaloneExtensionPlay(
-                                    AppComponent.StandaloneExtensionPlay(it.id, it.name, 1, it.selectableServerId())
-                                )
-                            },
+                            onBrowse = onBrowseSource,
                         )
                     }
                     if (availableItems.isNotEmpty()) {
@@ -425,11 +423,7 @@ fun ExtensionsSettings(
                             onUninstall = ::uninstallWithAnimation,
                             onRepair = { _ -> },
                             onShare = { source -> shareExtensionSourceToChat(source) },
-                            onBrowse = {
-                                AppComponent.requestStandaloneExtensionPlay(
-                                    AppComponent.StandaloneExtensionPlay(it.id, it.name, 1, it.selectableServerId())
-                                )
-                            },
+                            onBrowse = onBrowseSource,
                         )
                     }
                 }
@@ -489,6 +483,49 @@ fun ExtensionsSettings(
                 }
             }
         )
+    }
+
+    if (browseSourceId != null) {
+        Dialog(onDismissRequest = { browseSourceId = null }) {
+            val manager = AppComponent.extensionManager
+            var q by remember { mutableStateOf("") }
+            var res by remember { mutableStateOf(listOf<ExtensionMedia>()) }
+            var sel by remember { mutableStateOf<ExtensionMedia?>(null) }
+            var epList by remember { mutableStateOf(listOf<ExtensionEpisode>()) }
+            val s = rememberCoroutineScope()
+            Column(Modifier.padding(12.dp).heightIn(max = 480.dp)) {
+                Row {
+                    IconButton(onClick = { browseSourceId = null }) { Icon(Icons.Default.Close, null) }
+                    Text("Browse extension standalone (internal only)", fontWeight = FontWeight.Bold)
+                }
+                OutlinedTextField(value = q, onValueChange = { q = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Search") })
+                Button(onClick = { s.launch { res = manager.searchExtension(browseSourceId!!, q) } }) { Text("Search") }
+                LazyColumn(Modifier.weight(1f)) {
+                    items(res) { m ->
+                        Text(m.title, modifier = Modifier.clickable {
+                            sel = m
+                            s.launch { epList = manager.getExtensionEpisodes(browseSourceId!!, m) }
+                        }.padding(6.dp))
+                    }
+                }
+                sel?.let { m ->
+                    Text("Episodes for ${m.title}")
+                    LazyColumn(Modifier.heightIn(max = 180.dp)) {
+                        items(epList) { e ->
+                            Text(e.name, modifier = Modifier.clickable {
+                                val src = installed.firstOrNull { it.id == browseSourceId } ?: available.firstOrNull { it.id == browseSourceId }
+                                src?.let {
+                                    AppComponent.requestStandaloneExtensionPlay(
+                                        AppComponent.StandaloneExtensionPlay(browseSourceId!!, m.title, e.number.toInt(), it.selectableServerId())
+                                    )
+                                }
+                                browseSourceId = null
+                            }.padding(4.dp))
+                        }
+                    }
+                }
+            }
+        }
     }
 
 }
@@ -674,11 +711,7 @@ private fun ExtensionSourceCard(
                         containerColor = AppColors.accent.copy(alpha = 0.15f),
                         iconColor = AppColors.accent,
                         contentDesc = "Browse standalone (like Aniyomi)",
-                        onClick = {
-                            AppComponent.requestStandaloneExtensionPlay(
-                                AppComponent.StandaloneExtensionPlay(source.id, source.name, 1, source.selectableServerId())
-                            )
-                        },
+                        onClick = { onBrowse(source) },
                         enabled = !isBusy,
                     )
                 }
