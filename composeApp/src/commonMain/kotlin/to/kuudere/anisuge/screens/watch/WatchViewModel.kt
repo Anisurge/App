@@ -99,6 +99,7 @@ data class WatchUiState(
     val berriesToast: String? = null,
     val servers: List<ServerInfo> = emptyList(),
     val pendingExtensionStreams: PendingExtensionStreams? = null,
+    val standaloneExtensionTitle: String? = null,
 )
 
 data class WatchEpisodeProgress(
@@ -208,6 +209,7 @@ class WatchViewModel(
         offlinePath: String? = null,
         offlineTitle: String? = null,
         resumeFromContinueSeconds: Double? = null,
+        standaloneExtensionTitle: String? = null,
     ) {
         // Cancel any ongoing loading IMMEDIATELY before touching state
         // This prevents race conditions when switching between videos
@@ -250,6 +252,7 @@ class WatchViewModel(
                 targetSubtitleLangCode = null,
                 didMarkWatched = false,
                 offlinePath = offlinePath,
+                standaloneExtensionTitle = standaloneExtensionTitle,
                 offlineTitle = offlineTitle,
                 currentServer = server?.lowercase().orEmpty().ifBlank { if (newAnime) "" else it.currentServer },
                 introSkip = if (newAnime) null else it.introSkip,
@@ -850,6 +853,10 @@ class WatchViewModel(
     }
 
     private fun extensionSearchTitles(state: WatchUiState): List<String> {
+        // For standalone extension use, use the provided title to ensure internal matching succeeds without catalog
+        if (!state.standaloneExtensionTitle.isNullOrBlank()) {
+            return listOf(state.standaloneExtensionTitle)
+        }
         val title = state.episodeData?.title
         return buildList {
             title?.english?.takeIf { it.isNotBlank() }?.let(::add)
@@ -1314,6 +1321,8 @@ class WatchViewModel(
     fun saveProgress(currentTime: Double, duration: Double, language: String = "sub") {
         val currState = _uiState.value
         if (currState.offlinePath != null) return
+        // Standalone extension use has no main app history (only internal extension caches)
+        if (!currState.standaloneExtensionTitle.isNullOrBlank()) return
 
         val episodeId = "ep-${currState.currentEpisodeNumber}"
         val animeId = currState.episodeData?.anime?.animeId?.takeIf { it.isNotBlank() }

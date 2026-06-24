@@ -39,6 +39,8 @@ sealed class Screen(val route: String) {
         val offlineTitle: String? = null,
         /** Seconds; from continue-watching feed when API watch info omits progress.current_time */
         val resumeAtSeconds: Double? = null,
+        /** For standalone extension use - provides the title for internal matching without catalog history */
+        val standaloneExtensionTitle: String? = null,
     ) : Screen(
         "watch/$animeId/$episodeNumber" + buildString {
             val params = mutableListOf<String>()
@@ -49,6 +51,9 @@ sealed class Screen(val route: String) {
             if (resumeAtSeconds != null && resumeAtSeconds >= 1.0) {
                 params.add("resumeAt=$resumeAtSeconds")
             }
+            if (standaloneExtensionTitle != null) {
+                params.add("standaloneTitle=${standaloneExtensionTitle.encodeURLParameter()}")
+            }
             if (params.isNotEmpty()) {
                 append("?")
                 append(params.joinToString("&"))
@@ -57,7 +62,7 @@ sealed class Screen(val route: String) {
     ) {
         companion object {
             const val route =
-                "watch/{animeId}/{episodeNumber}?server={server}&lang={lang}&offlinePath={offlinePath}&offlineTitle={offlineTitle}&resumeAt={resumeAt}"
+                "watch/{animeId}/{episodeNumber}?server={server}&lang={lang}&offlinePath={offlinePath}&offlineTitle={offlineTitle}&resumeAt={resumeAt}&standaloneTitle={standaloneTitle}"
         }
     }
 

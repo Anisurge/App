@@ -276,6 +276,7 @@ fun App(
         val appStrings = appStringsFor(AppLocale.fromCode(appLocaleCode))
         val preferRomajiAnimeTitles by AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(initial = false)
         val uriHandler = LocalUriHandler.current
+        val pendingStandalonePlay by AppComponent.pendingStandaloneExtensionPlay.collectAsState()
         val scope = rememberCoroutineScope()
 
         val handleChatAction: (String) -> Unit = { raw ->
@@ -394,6 +395,19 @@ fun App(
                     deepLinkLog("show notification dialog")
                     notificationDialog = launch
                 }
+            }
+        }
+
+        LaunchedEffect(pendingStandalonePlay) {
+            pendingStandalonePlay?.let { play ->
+                AppComponent.clearPendingStandaloneExtensionPlay()
+                val dest = Screen.Watch(
+                    animeId = "ext-standalone-${play.sourceId}",
+                    episodeNumber = play.episodeNumber,
+                    server = play.serverId,
+                    standaloneExtensionTitle = play.mediaTitle,
+                ).route
+                navController.navigate(dest) { launchSingleTop = true }
             }
         }
 
@@ -684,6 +698,7 @@ fun App(
                         val offlineTitle = backStackEntry.arguments.str("offlineTitle")
                         val resumeAtStr = backStackEntry.arguments.str("resumeAt")
                         val resumeAtSeconds = resumeAtStr?.toDoubleOrNull()
+                        val standaloneTitle = backStackEntry.arguments.str("standaloneTitle")
 
                         WatchScreen(
                             animeId = animeId,
@@ -693,6 +708,7 @@ fun App(
                             offlinePath = offlinePath,
                             offlineTitle = offlineTitle,
                             resumeAtSeconds = resumeAtSeconds,
+                            standaloneExtensionTitle = standaloneTitle,
                             viewModel = watchVm,
                             isPremiumUser = currentUserProfile?.isPremium == true,
                             onBack = {

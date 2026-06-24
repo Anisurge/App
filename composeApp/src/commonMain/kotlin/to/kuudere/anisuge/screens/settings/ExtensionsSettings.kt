@@ -40,6 +40,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.foundation.layout.heightIn
+import to.kuudere.anisuge.extensions.ExtensionMedia
+import to.kuudere.anisuge.extensions.ExtensionEpisode
+import to.kuudere.anisuge.extensions.selectableServerId
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Update
@@ -124,6 +129,7 @@ fun ExtensionsSettings(
     onRuntimeDialogVisibleChange: ((Boolean) -> Unit)? = null,
     repoDialogVisible: Boolean? = null,
     onRepoDialogVisibleChange: ((Boolean) -> Unit)? = null,
+    onWatchExtensionEpisode: (sourceId: String, mediaTitle: String, episodeNumber: Int, serverId: String) -> Unit = { _, _, _, _ -> },
 ) {
     val manager = AppComponent.extensionManager
     val config by manager.config.collectAsState()
@@ -395,6 +401,11 @@ fun ExtensionsSettings(
                                 guarded { operationMessage = manager.repairSource(source) }
                             },
                             onShare = { source -> shareExtensionSourceToChat(source) },
+                            onBrowse = {
+                                AppComponent.requestStandaloneExtensionPlay(
+                                    AppComponent.StandaloneExtensionPlay(it.id, it.name, 1, it.selectableServerId())
+                                )
+                            },
                         )
                     }
                     if (availableItems.isNotEmpty()) {
@@ -414,6 +425,11 @@ fun ExtensionsSettings(
                             onUninstall = ::uninstallWithAnimation,
                             onRepair = { _ -> },
                             onShare = { source -> shareExtensionSourceToChat(source) },
+                            onBrowse = {
+                                AppComponent.requestStandaloneExtensionPlay(
+                                    AppComponent.StandaloneExtensionPlay(it.id, it.name, 1, it.selectableServerId())
+                                )
+                            },
                         )
                     }
                 }
@@ -474,6 +490,7 @@ fun ExtensionsSettings(
             }
         )
     }
+
 }
 
 private fun LazyListScope.extensionListItems(
@@ -486,6 +503,7 @@ private fun LazyListScope.extensionListItems(
     onUninstall: (ExtensionSource) -> Unit,
     onRepair: (ExtensionSource) -> Unit,
     onShare: (ExtensionSource) -> Unit,
+    onBrowse: (ExtensionSource) -> Unit = {},
 ) {
     items(items, key = { extensionItemKey(it) }) { source ->
         val itemKey = extensionItemKey(source)
@@ -505,6 +523,7 @@ private fun LazyListScope.extensionListItems(
                 onUninstall = { onUninstall(source) },
                 onRepair = { onRepair(source) },
                 onShare = { onShare(source) },
+                onBrowse = onBrowse,
             )
         }
     }
@@ -585,6 +604,7 @@ private fun ExtensionSourceCard(
     onUninstall: () -> Unit,
     onRepair: () -> Unit,
     onShare: () -> Unit,
+    onBrowse: (ExtensionSource) -> Unit = {},
 ) {
     val accent = EngineAccent[source.engine] ?: AppColors.accent
     val engineName = source.engine.displayName
@@ -648,6 +668,20 @@ private fun ExtensionSourceCard(
                     onClick = onShare,
                     enabled = !isBusy,
                 )
+                if (source.installed) {
+                    ActionIconButton(
+                        icon = Icons.Default.PlayArrow,
+                        containerColor = AppColors.accent.copy(alpha = 0.15f),
+                        iconColor = AppColors.accent,
+                        contentDesc = "Browse standalone (like Aniyomi)",
+                        onClick = {
+                            AppComponent.requestStandaloneExtensionPlay(
+                                AppComponent.StandaloneExtensionPlay(source.id, source.name, 1, source.selectableServerId())
+                            )
+                        },
+                        enabled = !isBusy,
+                    )
+                }
                 if (source.installed) {
                     if (source.hasUpdate) {
                         ActionIconButton(
@@ -1268,6 +1302,8 @@ private fun ExtensionInstallConfirmDialog(
         }
     )
 }
+
+// Standalone browser defined inline in dialog below to avoid scope issues
 
 @Composable
 private fun SortFilterDialog(

@@ -246,6 +246,42 @@ class ExtensionManager(
         }
     }
 
+    /** Direct search inside a specific installed extension (for standalone Aniyomi-like use). */
+    suspend fun searchExtension(sourceId: String, query: String): List<ExtensionMedia> {
+        val source = findInstalledSource(sourceId) ?: return emptyList()
+        if (!source.isBridgeCapableOnPlatform()) return emptyList()
+        return try {
+            runtime.search(source, query).distinctBy { it.url }
+        } catch (e: Exception) {
+            println("[ExtensionManager] direct search failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /** Get episodes directly from extension for a media (standalone use). */
+    suspend fun getExtensionEpisodes(sourceId: String, media: ExtensionMedia): List<ExtensionEpisode> {
+        val source = findInstalledSource(sourceId) ?: return emptyList()
+        return try {
+            val (_, episodes) = runtime.details(source, media)
+            episodes
+        } catch (e: Exception) {
+            println("[ExtensionManager] get episodes failed: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /** Resolve stream videos directly for a standalone extension episode (no catalog matching). */
+    suspend fun getExtensionVideos(sourceId: String, episode: ExtensionEpisode): List<ExtensionVideo> {
+        val source = findInstalledSource(sourceId) ?: return emptyList()
+        if (!source.isBridgeCapableOnPlatform()) return emptyList()
+        return try {
+            runtime.videosStream(source, episode)
+        } catch (e: Exception) {
+            println("[ExtensionManager] direct get videos failed: ${e.message}")
+            emptyList()
+        }
+    }
+
     suspend fun prefetchMapping(
         animeId: String,
         titles: List<String>,

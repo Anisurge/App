@@ -97,6 +97,7 @@ fun WatchScreen(
     offlinePath: String? = null,
     offlineTitle: String? = null,
     resumeAtSeconds: Double? = null,
+    standaloneExtensionTitle: String? = null,
     viewModel: WatchViewModel,
     isPremiumUser: Boolean = false,
     onBack: () -> Unit,
@@ -171,7 +172,7 @@ fun WatchScreen(
         )
     }
 
-    LaunchedEffect(animeId, episodeNumber, offlinePath, server, lang, offlineTitle, resumeAtSeconds) {
+    LaunchedEffect(animeId, episodeNumber, offlinePath, server, lang, offlineTitle, resumeAtSeconds, standaloneExtensionTitle) {
         viewModel.initialize(
             animeId,
             episodeNumber,
@@ -180,6 +181,7 @@ fun WatchScreen(
             offlinePath,
             offlineTitle,
             resumeFromContinueSeconds = resumeAtSeconds,
+            standaloneExtensionTitle = standaloneExtensionTitle,
         )
     }
 

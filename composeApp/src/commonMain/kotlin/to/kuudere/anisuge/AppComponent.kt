@@ -182,6 +182,25 @@ object AppComponent {
         _pendingExtensionInstall.value = null
     }
 
+    /** For standalone extension play navigation (no main catalog history) */
+    data class StandaloneExtensionPlay(
+        val sourceId: String,
+        val mediaTitle: String,
+        val episodeNumber: Int,
+        val serverId: String,
+    )
+
+    private val _pendingStandaloneExtensionPlay = MutableStateFlow<StandaloneExtensionPlay?>(null)
+    val pendingStandaloneExtensionPlay = _pendingStandaloneExtensionPlay.asStateFlow()
+
+    fun requestStandaloneExtensionPlay(play: StandaloneExtensionPlay) {
+        _pendingStandaloneExtensionPlay.value = play
+    }
+
+    fun clearPendingStandaloneExtensionPlay() {
+        _pendingStandaloneExtensionPlay.value = null
+    }
+
     val latestService: to.kuudere.anisuge.data.services.LatestService by lazy {
         to.kuudere.anisuge.data.services.LatestService(sessionStore, httpClient)
     }
