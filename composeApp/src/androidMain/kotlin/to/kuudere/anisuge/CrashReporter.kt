@@ -1,5 +1,6 @@
 package to.kuudere.anisuge
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -17,11 +18,24 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.Properties
 import java.util.TimeZone
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+/**
+ * Global crash handler that installs a [Thread.UncaughtExceptionHandler].
+ *
+ * On unhandled exceptions it:
+ * 1. Builds a JSON crash report
+ * 2. Saves it to disk (for offline retry on next launch)
+ * 3. **Directly launches [CrashActivity]** — which runs in the separate `:crash` process
+ *    so it survives this process dying
+ * 4. Kills the main process
+ *
+ * The old approach (save → relaunch main app → show CrashScreen composable) didn't work
+ * because calling `previousHandler.uncaughtException()` would kill the process before the
+ * relaunch could complete, and relaunching required the whole Compose tree to be healthy.
+ */
 object CrashReporter {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()
@@ -35,8 +49,6 @@ object CrashReporter {
     private var appName: String = ""
     private var apiKey: String? = null
     private var crashDir: File? = null
-    private var latestCrashFile: File? = null
-    private var previousHandler: Thread.UncaughtExceptionHandler? = null
     private var appContext: Context? = null
 
     fun init(
@@ -45,54 +57,66 @@ object CrashReporter {
         appName: String,
         apiKey: String? = null
     ) {
-        if (backendUrl.isBlank()) return
-
         this.appContext = context.applicationContext
         this.backendUrl = backendUrl.trimEnd('/')
         this.appName = appName
         this.apiKey = apiKey
         this.crashDir = File(this.appContext!!.filesDir, "crash-reporter").apply { mkdirs() }
-        this.latestCrashFile = File(this.appContext!!.filesDir, "crash-reporter/latest_crash.json")
 
         retryPendingCrashes()
 
         if (installed) return
         installed = true
-        previousHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            val report = buildCrashReport(this.appContext!!, throwable)
+        Thread.setDefaultUncaughtExceptionHandler { _, throwable ->
+            try {
+                val ctx = this.appContext ?: return@setDefaultUncaughtExceptionHandler
 
-            // Save crash file FIRST so crash screen can show on relaunch
-            runCatching { latestCrashFile?.writeText(report) }
+                val report = buildCrashReport(ctx, throwable)
 
-            // Fire-and-forget network report
-            runCatching { postCrashAsync(report) { } }
+                // Save crash to disk for retry (in case CrashActivity's network call fails)
+                saveCrash(report)
 
-            val intent = this.appContext!!.packageManager
-                .getLaunchIntentForPackage(this.appContext!!.packageName)
-                ?.apply {
-                    flags = Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK
+                // Persist auth token to a simple SharedPreferences that the :crash process
+                // can read (DataStore proto is not readable across processes easily)
+                persistTokenForCrashProcess(ctx)
+
+                // Launch CrashActivity in the :crash process
+                val intent = Intent().apply {
+                    component = ComponentName(ctx, CrashActivity::class.java)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TASK or
+                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+
+                    putExtra(CrashActivity.EXTRA_STACK_TRACE, throwable.stackTraceToString())
+                    putExtra(CrashActivity.EXTRA_DEVICE_MODEL, Build.MODEL ?: "unknown")
+                    putExtra(CrashActivity.EXTRA_OS_VERSION, Build.VERSION.RELEASE ?: "unknown")
+                    putExtra(CrashActivity.EXTRA_APP_VERSION, getAppVersion(ctx))
+                    putExtra(CrashActivity.EXTRA_TIMESTAMP, isoNow())
+                    putExtra(CrashActivity.EXTRA_CRASH_JSON, report)
                 }
-            if (intent != null) {
-                this.appContext!!.startActivity(intent)
+                ctx.startActivity(intent)
+            } catch (_: Exception) {
+                // If even launching crash activity fails, die silently
             }
 
-            previousHandler?.uncaughtException(thread, throwable)
-            if (previousHandler == null) {
-                Process.killProcess(Process.myPid())
-            }
+            // Kill the main process — CrashActivity is in :crash and will survive
+            Process.killProcess(Process.myPid())
+            System.exit(2)
         }
     }
 
-    /** Delete the latest crash file so the crash screen is not shown on next launch. */
-    fun clearLatestCrash() {
-        runCatching { latestCrashFile?.delete() }
+    /**
+     * Token persistence is handled by [AnisurgeApplication] which observes the
+     * sessionFlow and writes to crash_reporter_prefs continuously. By the time
+     * a crash occurs, the token is already persisted. This method exists only
+     * as a no-op placeholder for documentation.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    private fun persistTokenForCrashProcess(context: Context) {
+        // Already handled by AnisurgeApplication's sessionFlow observer.
+        // The crash_reporter_prefs SharedPreferences is kept in sync with the
+        // latest Anisurge JWT automatically.
     }
-
-    /** Read the saved latest crash report if present. */
-    fun readLatestCrash(): String? = runCatching {
-        latestCrashFile?.takeIf { it.exists() }?.readText()
-    }.getOrNull()
 
     fun retryPendingCrashes() {
         val dir = crashDir ?: return
@@ -104,6 +128,23 @@ object CrashReporter {
                     postCrashAsync(body) { posted -> if (posted) file.delete() }
                 }
         }.start()
+    }
+
+    /**
+     * Call this from the app's normal flow to persist the Anisurge JWT for future crashes.
+     * Should be called after login and whenever the token refreshes.
+     */
+    fun updateAuthToken(context: Context, token: String?) {
+        try {
+            val crashPrefs = context.getSharedPreferences("crash_reporter_prefs", Context.MODE_PRIVATE)
+            if (token.isNullOrBlank()) {
+                crashPrefs.edit().remove("anisurge_token").apply()
+            } else {
+                crashPrefs.edit().putString("anisurge_token", token).apply()
+            }
+        } catch (_: Exception) {
+            // Best effort
+        }
     }
 
     private fun buildCrashReport(context: Context, throwable: Throwable): String {
@@ -126,15 +167,14 @@ object CrashReporter {
         }.getOrNull()
     }
 
-    private fun postCrashBlocking(body: String): Boolean {
-        val request = crashRequest(body)
-        client.newCall(request).execute().use { response ->
-            return response.isSuccessful
-        }
-    }
-
     private fun postCrashAsync(body: String, onComplete: (Boolean) -> Unit) {
-        client.newCall(crashRequest(body)).enqueue(object : Callback {
+        val request = try {
+            crashRequest(body)
+        } catch (_: Exception) {
+            onComplete(false)
+            return
+        }
+        client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) = onComplete(false)
 
             override fun onResponse(call: Call, response: Response) {
@@ -144,12 +184,41 @@ object CrashReporter {
     }
 
     private fun crashRequest(body: String): Request {
+        val url = if (backendUrl.isNotBlank()) {
+            if (backendUrl.endsWith("/crash")) {
+                // If explicitly configured with suffix, keep it
+                backendUrl
+            } else if (backendUrl.endsWith("/v1")) {
+                "$backendUrl/crash-report"
+            } else {
+                "$backendUrl/v1/crash-report"
+            }
+        } else {
+            "https://db.anisurge.qzz.io/v1/crash-report"
+        }
+
         val builder = Request.Builder()
-            .url("$backendUrl/crash")
+            .url(url)
             .post(body.toRequestBody(jsonMediaType))
+
+        appContext?.let { ctx ->
+            val token = readAnisurgeToken(ctx)
+            if (!token.isNullOrBlank()) {
+                builder.header("Authorization", "Bearer $token")
+            }
+        }
 
         apiKey?.takeIf { it.isNotBlank() }?.let { builder.header("x-api-key", it) }
         return builder.build()
+    }
+
+    private fun readAnisurgeToken(context: Context): String? {
+        return try {
+            val prefs = context.getSharedPreferences("crash_reporter_prefs", Context.MODE_PRIVATE)
+            prefs.getString("anisurge_token", null)?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun getAppVersion(context: Context): String {

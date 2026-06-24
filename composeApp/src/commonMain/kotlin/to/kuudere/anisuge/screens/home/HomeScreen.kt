@@ -195,6 +195,7 @@ import to.kuudere.anisuge.screens.chat.LiveChatScreen
 import to.kuudere.anisuge.screens.chat.LiveChatViewModel
 import to.kuudere.anisuge.screens.settings.SettingsScreen
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
+import to.kuudere.anisuge.ui.AnimeCard
 import to.kuudere.anisuge.ui.ConfirmDialog
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.AppStrings
@@ -3925,9 +3926,6 @@ private fun NeoHomeContent(
     onRemoveContinueItem: (ContinueWatchingItem) -> Unit = {},
     showScore: Boolean = true,
 ) {
-    val scrollState = rememberScrollState()
-    val strings = LocalAppStrings.current
-
     LazyColumn(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -3935,7 +3933,7 @@ private fun NeoHomeContent(
         if (state.latestAired.isNotEmpty() || state.trendingWeek.isNotEmpty()) {
             val heroItem = (state.latestAired + state.trendingWeek).distinctBy { it.activeSlug }.firstOrNull()
             heroItem?.let { item ->
-                item {
+                item(key = "neo-hero") {
                     NeoHero(
                         item = item,
                         onWatch = { onWatchClick(item.activeSlug, "sub", 1, null, 0.0) },
@@ -3945,71 +3943,111 @@ private fun NeoHomeContent(
             }
         }
 
-        item { Spacer(Modifier.height(24.dp)) }
+        item(key = "neo-top-spacer") { Spacer(Modifier.height(24.dp)) }
 
-        // Continue - large progress cards
-        if (state.continueWatching.isNotEmpty()) {
-            item { NeoSectionHeader("Continue Watching", onMore = onViewContinueWatchingMore) }
-            item {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    items(state.continueWatching.take(8)) { item ->
-                        NeoContinueCard(item = item, onWatchClick = onWatchClick, onRemove = onRemoveContinueItem)
-                    }
-                }
+        // Greeting (Dantotsu/re f style user welcome for premium personalized feel, different from minimalistic placement)
+        val rawName = state.userProfile?.username?.takeIf { it.isNotBlank() }
+            ?: state.userProfile?.displayName?.takeIf { it.isNotBlank() }
+            ?: state.userProfile?.name?.takeIf { it.isNotBlank() }
+        if (rawName != null) {
+            val first = rawName.split(" ", limit = 2).firstOrNull()?.takeIf { it.isNotBlank() } ?: rawName
+            item(key = "neo-greeting") {
+                Text(
+                    "Welcome back, $first",
+                    color = AppColors.text.copy(alpha = 0.85f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                )
             }
-            item { Spacer(Modifier.height(28.dp)) }
         }
 
-        // Trending - vibrant posters
+        // Continue - use the app's polished ContinueWatchingRow (better UI with progress, hover, remove)
+        if (state.continueWatching.isNotEmpty()) {
+            item(key = "neo-continue-header") { NeoSectionHeader("Continue Watching", onMore = onViewContinueWatchingMore) }
+            item(key = "neo-continue-row") {
+                ContinueWatchingRow(
+                    items = state.continueWatching,
+                    onWatchClick = onWatchClick,
+                    onRemove = onRemoveContinueItem,
+                )
+            }
+            item(key = "neo-continue-spacer") { Spacer(Modifier.height(28.dp)) }
+        }
+
+        // Trending - use AnimeCard (the app's best designed card from ref-inspired UI) for premium feel
         if (state.trendingWeek.isNotEmpty()) {
-            item { NeoSectionHeader("Trending This Week") }
-            item {
+            item(key = "neo-trending-header") { NeoSectionHeader("Trending This Week") }
+            item(key = "neo-trending-row") {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(state.trendingWeek.take(10)) { item ->
-                        NeoPosterCard(item = item, onClick = { onAnimeClick(item.activeSlug) }, showScore = showScore)
+                    items(
+                        items = state.trendingWeek.take(10),
+                        key = { it.activeSlug }
+                    ) { item ->
+                        AnimeCard(
+                            item = item,
+                            modifier = Modifier.width(140.dp),
+                            showScore = showScore,
+                            onClick = { onAnimeClick(item.activeSlug) }
+                        )
                     }
                 }
             }
-            item { Spacer(Modifier.height(28.dp)) }
+            item(key = "neo-trending-spacer") { Spacer(Modifier.height(28.dp)) }
         }
 
-        // Latest - clean rich rows (reuse enhanced)
+        // Latest - use AnimeCard for better consistent premium UI (different from minimalistic's custom rows)
         if (state.latestAired.isNotEmpty()) {
-            item { NeoSectionHeader("Latest Releases") }
-            item {
-                AnimeSection(
-                    title = "",
-                    items = state.latestAired.take(8),
-                    onItemClick = { onAnimeClick(it.activeSlug) },
-                    showLatestLangBadge = true,
-                    compact = false,
-                    showScore = showScore
-                )
+            item(key = "neo-latest-header") { NeoSectionHeader("Latest Releases") }
+            item(key = "neo-latest-row") {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(
+                        items = state.latestAired.take(8),
+                        key = { it.activeSlug }
+                    ) { item ->
+                        AnimeCard(
+                            item = item,
+                            modifier = Modifier.width(155.dp),
+                            showLatestLangBadge = true,
+                            showScore = showScore,
+                            onClick = { onAnimeClick(item.activeSlug) }
+                        )
+                    }
+                }
             }
-            item { Spacer(Modifier.height(28.dp)) }
+            item(key = "neo-latest-spacer") { Spacer(Modifier.height(28.dp)) }
         }
 
-        // New on App
+        // New on App - use AnimeCard
         if (state.newOnSite.isNotEmpty()) {
-            item { NeoSectionHeader("Fresh on App") }
-            item {
-                AnimeSection(
-                    title = "",
-                    items = state.newOnSite.take(8),
-                    onItemClick = { onAnimeClick(it.activeSlug) },
-                    compact = false,
-                    showScore = showScore
-                )
+            item(key = "neo-new-header") { NeoSectionHeader("Fresh on App") }
+            item(key = "neo-new-row") {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(
+                        items = state.newOnSite.take(8),
+                        key = { it.activeSlug }
+                    ) { item ->
+                        AnimeCard(
+                            item = item,
+                            modifier = Modifier.width(155.dp),
+                            showScore = showScore,
+                            onClick = { onAnimeClick(item.activeSlug) }
+                        )
+                    }
+                }
             }
         }
 
-        item { Spacer(Modifier.height(80.dp)) }
+        item(key = "neo-bottom-spacer") { Spacer(Modifier.height(80.dp)) }
     }
 }
 
@@ -4019,7 +4057,7 @@ private fun NeoHero(
     onWatch: () -> Unit,
     onInfo: () -> Unit
 ) {
-    val img = item.bannerUrl ?: item.imageUrl
+    val img = item.bannerUrl?.takeIf { it.isNotBlank() } ?: item.imageUrl.takeIf { it.isNotBlank() } ?: ""
     val scale = 1f  // animation removed to prevent potential recomposition jank / ANR in some scenarios; can be restored with stable layer update later
 
     Box(
@@ -4028,17 +4066,22 @@ private fun NeoHero(
             .height(340.dp)
             .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
     ) {
-        AsyncImage(
-            model = if (img.startsWith("http")) img else "https://api.reanime.to/img/poster/$img",
-            contentDescription = item.resolveDisplayTitle(),
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }
-        )
+        val model = if (img.isBlank()) null else if (img.startsWith("http")) img else "https://api.reanime.to/img/poster/$img"
+        if (model != null) {
+            AsyncImage(
+                model = model,
+                contentDescription = item.resolveDisplayTitle(),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+            )
+        } else {
+            Box(Modifier.fillMaxSize().background(AppColors.surfaceVariant))
+        }
 
         // Premium dark gradient + glass accent
         Box(
@@ -4080,7 +4123,7 @@ private fun NeoHero(
                     ) {
                         Icon(Icons.Filled.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("%.1f".format(it), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(formatFloat(it.toDouble(), 1), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 Text(
@@ -4130,92 +4173,4 @@ private fun NeoSectionHeader(title: String, onMore: (() -> Unit)? = null) {
         }
     }
 }
-
-@Composable
-private fun NeoPosterCard(item: AnimeItem, onClick: () -> Unit, showScore: Boolean) {
-    Column(
-        modifier = Modifier
-            .width(130.dp)
-            .clickable(onClick = onClick)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(AppColors.surfaceVariant)
-        ) {
-            AsyncImage(
-                model = item.imageUrl,
-                contentDescription = item.resolveDisplayTitle(),
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            if (showScore && item.malScore != null && item.malScore > 0) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .background(Color.Black.copy(0.7f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text("%.1f".format(item.malScore), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            item.resolveDisplayTitle(),
-            color = AppColors.text,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun NeoContinueCard(
-    item: ContinueWatchingItem,
-    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
-    onRemove: (ContinueWatchingItem) -> Unit
-) {
-    val animeId = item.effectiveAnimeId.ifBlank { item.animeId }
-    val progress = if (item.duration > 0) (item.progress / item.duration).toFloat().coerceIn(0f, 1f) else 0f
-
-    Box(
-        modifier = Modifier
-            .width(260.dp)
-            .clickable { onWatchClick(animeId, item.language ?: "sub", item.displayEpisode, item.server, item.progress) }
-    ) {
-        AsyncImage(
-            model = item.imageUrl,
-            contentDescription = item.resolveDisplayTitle(),
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(130.dp)
-                .clip(RoundedCornerShape(14.dp))
-        )
-
-        Box(
-            Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .height(4.dp)
-                .background(Color.White.copy(0.3f))
-        ) {
-            Box(Modifier.fillMaxWidth(progress).fillMaxSize().background(AppColors.accent))
-        }
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(12.dp)
-        ) {
-            Text(item.resolveDisplayTitle(), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("EP ${item.displayEpisode}", color = Color.White.copy(0.7f), fontSize = 12.sp)
-        }
-    }
-}
+// Cache invalidation comment to verify compilation status.

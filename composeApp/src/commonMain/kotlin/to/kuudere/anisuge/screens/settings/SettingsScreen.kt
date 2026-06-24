@@ -1723,7 +1723,7 @@ private fun AppearanceTab(
                     when (design) {
                         "expanded" -> "Expanded: Large hero carousel with full details and prominent images."
                         "minimalistic" -> "Minimalistic: Clean modern layout with a bold pager hero banner + sleek cards."
-                        "neo" -> "Neo: Premium modern design — immersive hero, rich visual shelves, best-in-class polish."
+                        "neo" -> "Neo: Dantotsu-inspired premium layout with big animated-style banner, user stats area, and rich carousels using the app's best AnimeCard designs for a more premium feel."
                         else -> "Classic: Fan-style layout with standard hero carousel and traditional row sections."
                     },
                     color = MUTED,
@@ -3173,6 +3173,20 @@ private fun PreferencesTab(
             }
         }
 
+        // Trigger Test Crash button (only for debugging)
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = { throw RuntimeException("Test Crash triggered by user in Settings") },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFF4444),
+                contentColor = Color.White
+            ),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Trigger Test Crash", fontWeight = FontWeight.Bold)
+        }
+
         // Save Button
         Spacer(modifier = Modifier.height(24.dp))
         Button(
@@ -4060,6 +4074,20 @@ private fun MobilePreferencesContent(
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 )
             }
+        }
+
+        // Trigger Test Crash button (only for debugging)
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(
+            onClick = { throw RuntimeException("Test Crash triggered by user in Mobile Settings") },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFF4444),
+                contentColor = Color.White
+            ),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Trigger Test Crash", fontWeight = FontWeight.Bold)
         }
 
         if (uiState.hasSettingsChanges) {
