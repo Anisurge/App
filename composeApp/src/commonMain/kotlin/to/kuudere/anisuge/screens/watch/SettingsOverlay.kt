@@ -4,6 +4,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.*
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import to.kuudere.anisuge.theme.AppUiMetrics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -53,8 +55,12 @@ enum class SettingsMenuPage {
     UTILITIES, AV_SYNC, SUBTITLE_STYLE, SLEEP_TIMER, SEEK_DURATION
 }
 
-private val settingsOverlayAnim = tween<Float>(durationMillis = 160, easing = FastOutSlowInEasing)
-private val settingsOverlayExitAnim = tween<Float>(durationMillis = 130, easing = FastOutSlowInEasing)
+private val settingsOverlayExitAnim = tween<Float>(durationMillis = 85, easing = FastOutSlowInEasing)
+
+private val settingsPopSpring = spring<Float>(
+    dampingRatio = Spring.DampingRatioMediumBouncy,
+    stiffness = Spring.StiffnessHigh
+)
 
 @Composable
 fun AnimatedWatchSettingsOverlay(
@@ -63,10 +69,10 @@ fun AnimatedWatchSettingsOverlay(
 ) {
     AnimatedVisibility(
         visible = visible,
-        enter = scaleIn(initialScale = 0.9f, animationSpec = settingsOverlayAnim) +
-            fadeIn(animationSpec = tween(120)),
-        exit = scaleOut(targetScale = 0.9f, animationSpec = settingsOverlayExitAnim) +
-            fadeOut(animationSpec = tween(100)),
+        enter = scaleIn(initialScale = 0.86f, animationSpec = settingsPopSpring) +
+            fadeIn(animationSpec = tween(70)),
+        exit = scaleOut(targetScale = 0.80f, animationSpec = settingsOverlayExitAnim) +
+            fadeOut(animationSpec = tween(55)),
     ) {
         content()
     }
@@ -158,18 +164,35 @@ fun SettingsOverlay(
                 .clickable(enabled = false, onClick = {}) // block touch propagation
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(vertical = 12.dp)
-                .animateContentSize(animationSpec = tween(durationMillis = 180))
+                .animateContentSize(animationSpec = tween(durationMillis = 110))
         ) {
             AnimatedContent(
                 modifier = Modifier.fillMaxWidth(),
                 targetState = currentPage,
                 transitionSpec = {
+                    val dur = 120
                     if (targetState != SettingsMenuPage.MAIN && initialState == SettingsMenuPage.MAIN) {
-                        (slideInHorizontally { width -> width } + fadeIn()).togetherWith(slideOutHorizontally { width -> -width } + fadeOut())
+                        (slideInHorizontally(
+                            animationSpec = tween(dur),
+                            initialOffsetX = { it }
+                        ) + fadeIn(tween(dur))).togetherWith(
+                            slideOutHorizontally(
+                                animationSpec = tween(dur),
+                                targetOffsetX = { -it }
+                            ) + fadeOut(tween(dur - 30))
+                        )
                     } else if (targetState == SettingsMenuPage.MAIN && initialState != SettingsMenuPage.MAIN) {
-                        (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(slideOutHorizontally { width -> width } + fadeOut())
+                        (slideInHorizontally(
+                            animationSpec = tween(dur),
+                            initialOffsetX = { -it }
+                        ) + fadeIn(tween(dur))).togetherWith(
+                            slideOutHorizontally(
+                                animationSpec = tween(dur),
+                                targetOffsetX = { it }
+                            ) + fadeOut(tween(dur - 30))
+                        )
                     } else {
-                        fadeIn().togetherWith(fadeOut())
+                        fadeIn(tween(dur)).togetherWith(fadeOut(tween(dur - 30)))
                     }
                 }
             ) { page ->

@@ -443,8 +443,8 @@ fun App(
                     navController = navController,
                     startDestination = navStartDestination,
                     // Splash exit: keep it visible while auth fades in on top
-                    enterTransition = { fadeIn(animationSpec = tween(400)) },
-                    exitTransition = { fadeOut(animationSpec = tween(400)) },
+                    enterTransition = { fadeIn(animationSpec = tween(220)) },
+                    exitTransition = { fadeOut(animationSpec = tween(160)) },
                 ) {
                     composable(Screen.Splash.route) {
                         SplashScreen(
@@ -642,10 +642,10 @@ fun App(
 
                     composable(
                         route = Screen.Watch.route,
-                        enterTransition = { slideInVertically(initialOffsetY = { it }, animationSpec = tween(400)) },
-                        exitTransition = { fadeOut(animationSpec = tween(400)) },
-                        popEnterTransition = { fadeIn(animationSpec = tween(400)) },
-                        popExitTransition = { fadeOut(animationSpec = tween(200)) },
+                        enterTransition = { slideInVertically(initialOffsetY = { it }, animationSpec = tween(220)) },
+                        exitTransition = { fadeOut(animationSpec = tween(160)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(180)) },
+                        popExitTransition = { fadeOut(animationSpec = tween(120)) },
                         arguments = listOf(
                             navArgument("animeId") { type = androidx.navigation.NavType.StringType },
                             navArgument("episodeNumber") { type = androidx.navigation.NavType.StringType },

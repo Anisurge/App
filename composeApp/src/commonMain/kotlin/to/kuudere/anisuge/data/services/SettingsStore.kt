@@ -44,6 +44,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val LIQUID_GLASS_BOTTOM_NAV_KEY = booleanPreferencesKey("liquid_glass_bottom_nav")
         val EXPANDED_HERO_CAROUSEL_KEY = booleanPreferencesKey("expanded_hero_carousel")
         val QUICK_ACTION_MENU_KEY = booleanPreferencesKey("quick_action_menu")
+        val HOME_DESIGN_KEY = stringPreferencesKey("home_design")
         val APP_LOCALE_KEY = stringPreferencesKey("app_locale")
         val PREFER_ROMAJI_ANIME_TITLES_KEY = booleanPreferencesKey("prefer_romaji_anime_titles")
         val SHOW_FULL_ANIME_TITLES_KEY = booleanPreferencesKey("show_full_anime_titles")
@@ -53,9 +54,9 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val LEGACY_SCHEDULE_UI_KEY = booleanPreferencesKey("legacy_schedule_ui")
         val HOME_LAYOUT_KEY = stringPreferencesKey("home_layout_v1")
         // Extra Dantotsu-inspired UI design toggles
-        val DANTOTSU_HOME_HEADER_KEY = booleanPreferencesKey("dantotsu_home_header")
         val COMPACT_CARDS_KEY = booleanPreferencesKey("compact_cards")
         val SHOW_SCORE_BADGES_KEY = booleanPreferencesKey("show_score_badges")
+        val SLEEK_HOME_KEY = booleanPreferencesKey("sleek_home")
         val AI_CHAT_HISTORY_KEY = stringPreferencesKey("ai_chat_history")
         val PLAYER_ENHANCEMENTS_KEY = stringPreferencesKey("player_enhancements_v1")
         val PLAYER_UTILITIES_KEY = stringPreferencesKey("player_utilities_v1")
@@ -104,9 +105,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
     val liquidGlassBottomNavFlow: Flow<Boolean> = dataStore.data.map { it[LIQUID_GLASS_BOTTOM_NAV_KEY] ?: false }
     val expandedHeroCarouselFlow: Flow<Boolean> = dataStore.data.map { it[EXPANDED_HERO_CAROUSEL_KEY] ?: false }
     val quickActionMenuFlow: Flow<Boolean> = dataStore.data.map { it[QUICK_ACTION_MENU_KEY] ?: true }
-    val dantotsuHomeHeaderFlow: Flow<Boolean> = dataStore.data.map { it[DANTOTSU_HOME_HEADER_KEY] ?: false }
+    val homeDesignFlow: Flow<String> = dataStore.data.map { it[HOME_DESIGN_KEY] ?: "classic" }
     val compactCardsFlow: Flow<Boolean> = dataStore.data.map { it[COMPACT_CARDS_KEY] ?: false }
     val showScoreBadgesFlow: Flow<Boolean> = dataStore.data.map { it[SHOW_SCORE_BADGES_KEY] ?: true }
+    val sleekHomeFlow: Flow<Boolean> = dataStore.data.map { it[SLEEK_HOME_KEY] ?: false }
     val appLocaleFlow: Flow<String> = dataStore.data.map { it[APP_LOCALE_KEY] ?: "en" }
     val preferRomajiAnimeTitlesFlow: Flow<Boolean> = dataStore.data.map { it[PREFER_ROMAJI_ANIME_TITLES_KEY] ?: false }
     val showFullAnimeTitlesFlow: Flow<Boolean> = dataStore.data.map { it[SHOW_FULL_ANIME_TITLES_KEY] ?: false }
@@ -318,12 +320,12 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[EXPANDED_HERO_CAROUSEL_KEY] = enabled }
     }
 
-    suspend fun setQuickActionMenu(enabled: Boolean) {
-        dataStore.edit { it[QUICK_ACTION_MENU_KEY] = enabled }
+    suspend fun setHomeDesign(design: String) {
+        dataStore.edit { it[HOME_DESIGN_KEY] = design }
     }
 
-    suspend fun setDantotsuHomeHeader(enabled: Boolean) {
-        dataStore.edit { it[DANTOTSU_HOME_HEADER_KEY] = enabled }
+    suspend fun setQuickActionMenu(enabled: Boolean) {
+        dataStore.edit { it[QUICK_ACTION_MENU_KEY] = enabled }
     }
 
     suspend fun setCompactCards(enabled: Boolean) {
@@ -332,6 +334,10 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setShowScoreBadges(enabled: Boolean) {
         dataStore.edit { it[SHOW_SCORE_BADGES_KEY] = enabled }
+    }
+
+    suspend fun setSleekHome(enabled: Boolean) {
+        dataStore.edit { it[SLEEK_HOME_KEY] = enabled }
     }
 
     suspend fun setAppLocale(localeCode: String) {

@@ -3,6 +3,13 @@ package to.kuudere.anisuge.ui
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.hoverable
@@ -28,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,8 +81,23 @@ fun AnimeCard(
     // translateY(-4px) on hover
     val lift by animateDpAsState(if (hovered) 4.dp else 0.dp, tween(200))
 
+    // Dantotsu-inspired fast snappy scale pop on appear (overshoot-like via spring)
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    val enterScale by animateFloatAsState(
+        targetValue = if (entered) 1f else 0.88f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        )
+    )
+
     Column(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = enterScale
+                scaleY = enterScale
+            }
             .hoverable(inter)
             .tvFocusableClick(onClick = onClick)
             .offset(y = -lift)

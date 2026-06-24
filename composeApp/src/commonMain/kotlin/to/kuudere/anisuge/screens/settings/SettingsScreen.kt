@@ -87,12 +87,19 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -172,7 +179,6 @@ import to.kuudere.anisuge.platform.openUrl
 import to.kuudere.anisuge.utils.rememberDownloadDirectoryPicker
 import to.kuudere.anisuge.theme.AppThemeId
 import to.kuudere.anisuge.theme.AppUiMetrics
-import to.kuudere.anisuge.theme.AppUiStyle
 import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -1241,17 +1247,15 @@ private fun MobileSettingsDetail(
                     uiState = uiState,
                     onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                     onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
-                    onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                     onQuickActionMenuChange = viewModel::setQuickActionMenu,
                     onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
                     onShowFullAnimeTitlesChange = viewModel::setShowFullAnimeTitles,
                     onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                     onThemeSelected = viewModel::setThemeId,
-                    onUiStyleSelected = viewModel::setUiStyle,
                     onOpenHomeLayout = onOpenHomeLayout,
-                    onDantotsuHomeHeaderChange = viewModel::setDantotsuHomeHeader,
                     onCompactCardsChange = viewModel::setCompactCards,
                     onShowScoreBadgesChange = viewModel::setShowScoreBadges,
+                    onHomeDesignChange = viewModel::setHomeDesign,
                 )
 
                 is SettingsTab.Sync -> SyncTab(
@@ -1464,17 +1468,15 @@ private fun SettingsContent(
                 uiState = uiState,
                 onFloatingBottomNavChange = viewModel::setFloatingBottomNav,
                 onLiquidGlassBottomNavChange = viewModel::setLiquidGlassBottomNav,
-                onExpandedHeroCarouselChange = viewModel::setExpandedHeroCarousel,
                 onQuickActionMenuChange = viewModel::setQuickActionMenu,
                 onPreferRomajiAnimeTitlesChange = viewModel::setPreferRomajiAnimeTitles,
                 onShowFullAnimeTitlesChange = viewModel::setShowFullAnimeTitles,
                 onLegacyScheduleUiChange = viewModel::setLegacyScheduleUi,
                 onThemeSelected = viewModel::setThemeId,
-                onUiStyleSelected = viewModel::setUiStyle,
                 onOpenHomeLayout = onOpenHomeLayout,
-                onDantotsuHomeHeaderChange = viewModel::setDantotsuHomeHeader,
                 onCompactCardsChange = viewModel::setCompactCards,
                 onShowScoreBadgesChange = viewModel::setShowScoreBadges,
+                onHomeDesignChange = viewModel::setHomeDesign,
             )
 
             is SettingsTab.Sync -> SyncTab(
@@ -1597,17 +1599,15 @@ private fun AppearanceTab(
     uiState: SettingsUiState,
     onFloatingBottomNavChange: (Boolean) -> Unit,
     onLiquidGlassBottomNavChange: (Boolean) -> Unit,
-    onExpandedHeroCarouselChange: (Boolean) -> Unit,
     onQuickActionMenuChange: (Boolean) -> Unit,
     onPreferRomajiAnimeTitlesChange: (Boolean) -> Unit,
     onShowFullAnimeTitlesChange: (Boolean) -> Unit,
     onLegacyScheduleUiChange: (Boolean) -> Unit,
     onThemeSelected: (AppThemeId) -> Unit,
-    onUiStyleSelected: (AppUiStyle) -> Unit,
     onOpenHomeLayout: () -> Unit,
-    onDantotsuHomeHeaderChange: (Boolean) -> Unit,
     onCompactCardsChange: (Boolean) -> Unit,
     onShowScoreBadgesChange: (Boolean) -> Unit,
+    onHomeDesignChange: (String) -> Unit,
 ) {
     val strings = LocalAppStrings.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1619,44 +1619,17 @@ private fun AppearanceTab(
             modifier = Modifier.padding(bottom = 32.dp)
         )
 
+        // Theme selection - now includes Anisurge / Dantotsu / ReDantotsu as full themes
+        // (UI style packages are activated automatically when picking the matching theme)
         SettingCard(
-            title = "UI style",
-            description = "Pick a reference-inspired layout package. Dantotsu uses rounded cards and a solid pill nav; ReDantotsu enables liquid glass and softer sheets.",
+            title = "Theme",
+            description = "Choose a color theme. Picking Dantotsu or ReDantotsu also activates the matching layout style and navigation.",
             modifier = Modifier.fillMaxWidth()
         ) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                AppUiStyle.entries.forEach { style ->
-                    UiStyleChip(
-                        style = style,
-                        selected = uiState.uiStyle == style,
-                        onClick = { onUiStyleSelected(style) },
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        SettingCard(
-            title = "Theme presets",
-            description = "Pick a theme. It instantly recolors the whole app — backgrounds, cards, text and accents.",
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                AppThemeId.entries.forEach { theme ->
-                    ThemePresetChip(
-                        theme = theme,
-                        selected = uiState.themeId == theme,
-                        onClick = { onThemeSelected(theme) },
-                    )
-                }
-            }
+            ThemeDropdown(
+                current = uiState.themeId,
+                onSelect = onThemeSelected
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -1694,11 +1667,72 @@ private fun AppearanceTab(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SettingToggle(
-                    checked = uiState.expandedHeroCarousel,
-                    onCheckedChange = onExpandedHeroCarouselChange,
-                    label = strings.expandedHeroCarousel
+                Text("Home design", color = TEXT, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(6.dp))
+
+                val design = uiState.homeDesign.ifBlank { "classic" }
+
+                // Home design selector as a clear dropdown (consistent with Theme picker)
+                val homeDesigns = listOf(
+                    "classic" to "Classic",
+                    "expanded" to "Expanded",
+                    "minimalistic" to "Minimalistic",
+                    "neo" to "Neo"
                 )
+                var homeDesignExpanded by remember { mutableStateOf(false) }
+
+                @OptIn(ExperimentalMaterial3Api::class)
+                ExposedDropdownMenuBox(
+                    expanded = homeDesignExpanded,
+                    onExpandedChange = { homeDesignExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = homeDesigns.firstOrNull { it.first == design }?.second ?: "Classic",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Home design") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = homeDesignExpanded) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AppColors.accent,
+                            unfocusedBorderColor = BORDER,
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = homeDesignExpanded,
+                        onDismissRequest = { homeDesignExpanded = false }
+                    ) {
+                        homeDesigns.forEach { (value, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    onHomeDesignChange(value)
+                                    homeDesignExpanded = false
+                                },
+                                leadingIcon = if (design == value) {
+                                    { Icon(Icons.Default.Check, null, tint = AppColors.accent) }
+                                } else null
+                            )
+                        }
+                    }
+                }
+                Text(
+                    when (design) {
+                        "expanded" -> "Expanded: Large hero carousel with full details and prominent images."
+                        "minimalistic" -> "Minimalistic: Clean modern layout with a bold pager hero banner + sleek cards."
+                        "neo" -> "Neo: Premium modern design — immersive hero, rich visual shelves, best-in-class polish."
+                        else -> "Classic: Fan-style layout with standard hero carousel and traditional row sections."
+                    },
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp
+                )
+
+                Spacer(Modifier.height(8.dp))
+
                 SettingToggle(
                     checked = uiState.quickActionMenu,
                     onCheckedChange = onQuickActionMenuChange,
@@ -1733,29 +1767,18 @@ private fun AppearanceTab(
         Spacer(modifier = Modifier.height(24.dp))
 
         SettingCard(
-            title = "Dantotsu design tweaks",
-            description = "Extra appearance options inspired by Dantotsu / ReDantotsu for a richer home UX.",
+            title = "Cards & badges",
+            description = "Options for media cards in lists and rows.",
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SettingToggle(
-                    checked = uiState.dantotsuHomeHeader,
-                    onCheckedChange = onDantotsuHomeHeaderChange,
-                    label = "Dantotsu-style home header"
-                )
-                Text(
-                    text = "Show prominent user banner header (KenBurns-style background, stats, quick list cards) on Home.",
-                    color = MUTED,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp
-                )
                 SettingToggle(
                     checked = uiState.compactCards,
                     onCheckedChange = onCompactCardsChange,
                     label = "Compact media cards"
                 )
                 Text(
-                    text = "Use smaller rounded poster cards with corner score badge (Dantotsu compact style) in rows.",
+                    text = "Smaller rounded cards with corner score (Dantotsu style).",
                     color = MUTED,
                     fontSize = 12.sp,
                     lineHeight = 16.sp
@@ -1851,42 +1874,100 @@ private fun themePreviewColor(theme: AppThemeId): Color = when (theme) {
     AppThemeId.ReDantotsu -> Color(0xFF0091FF)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun UiStyleChip(
-    style: AppUiStyle,
-    selected: Boolean,
-    onClick: () -> Unit,
+private fun ThemeDropdown(
+    current: AppThemeId,
+    onSelect: (AppThemeId) -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .widthIn(min = 148.dp)
-            .clip(RoundedCornerShape(AppUiMetrics.cardRadius))
-            .background(if (selected) AppColors.accent.copy(alpha = 0.18f) else BG_HOVER)
-            .border(
-                width = 1.dp,
-                color = if (selected) AppColors.accent else BORDER,
-                shape = RoundedCornerShape(AppUiMetrics.cardRadius),
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
     ) {
-        Text(
-            style.label,
-            color = if (selected) AppColors.accent else TEXT,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
+        OutlinedTextField(
+            value = current.label,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("App theme") },
+            leadingIcon = {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(themePreviewColor(current))
+                        .border(1.dp, Color.Black.copy(alpha = 0.18f), CircleShape)
+                )
+            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = AppColors.accent,
+                unfocusedBorderColor = BORDER,
+                focusedLabelColor = AppColors.accent,
+            )
         )
-        Text(
-            style.description,
-            color = MUTED,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            AppThemeId.entries.forEach { theme ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .background(themePreviewColor(theme))
+                                    .border(1.dp, Color.Black.copy(alpha = 0.15f), CircleShape)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    theme.label,
+                                    color = TEXT,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (theme == current) FontWeight.SemiBold else FontWeight.Medium
+                                )
+                                Text(
+                                    theme.description,
+                                    color = MUTED,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (theme == current) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = AppColors.accent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        onSelect(theme)
+                        expanded = false
+                    },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        }
     }
 }
+
+
 
 @Composable
 private fun SyncTab(

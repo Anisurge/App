@@ -2,7 +2,9 @@ package to.kuudere.anisuge.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -64,13 +66,16 @@ fun ConfirmDialog(
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(220)) + scaleIn(
-                    initialScale = 0.88f,
-                    animationSpec = tween(260, easing = FastOutSlowInEasing),
+                enter = fadeIn(tween(70)) + scaleIn(
+                    initialScale = 0.86f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessHigh
+                    ),
                 ),
-                exit = fadeOut(tween(180)) + scaleOut(
-                    targetScale = 0.88f,
-                    animationSpec = tween(180, easing = FastOutSlowInEasing),
+                exit = fadeOut(tween(55)) + scaleOut(
+                    targetScale = 0.80f,
+                    animationSpec = tween(85, easing = FastOutSlowInEasing),
                 ),
             ) {
                 Column(

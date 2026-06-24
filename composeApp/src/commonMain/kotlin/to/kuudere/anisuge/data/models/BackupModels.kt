@@ -35,6 +35,7 @@ data class BackupSettings(
     val floatingBottomNav: Boolean,
     val liquidGlassBottomNav: Boolean,
     val expandedHeroCarousel: Boolean,
+    val homeDesign: String = "classic",
     val quickActionMenu: Boolean,
     val appLocale: String,
     val preferRomajiTitles: Boolean,

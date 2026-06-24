@@ -15,6 +15,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import to.kuudere.anisuge.data.models.Comment
 import to.kuudere.anisuge.data.models.CommunityCategory
 import to.kuudere.anisuge.data.models.CommunityCommentCreateRequest
@@ -104,9 +108,10 @@ data class SettingsUiState(
     val expandedHeroCarousel: Boolean = false,
     val quickActionMenu: Boolean = true,
     // Dantotsu / extra UI design tweaks
-    val dantotsuHomeHeader: Boolean = false,
     val compactCards: Boolean = false,
     val showScoreBadges: Boolean = true,
+    val sleekHome: Boolean = false,
+    val homeDesign: String = "classic",
     val appLocale: AppLocale = AppLocale.default,
     val preferRomajiAnimeTitles: Boolean = false,
     val showFullAnimeTitles: Boolean = false,
@@ -463,17 +468,17 @@ class SettingsViewModel(
             }
         }
         viewModelScope.launch {
+            settingsStore.homeDesignFlow.collect { v ->
+                _uiState.update { it.copy(homeDesign = v) }
+            }
+        }
+        viewModelScope.launch {
             settingsStore.quickActionMenuFlow.collect { v ->
                 _uiState.update {
                     it.copy(
                         quickActionMenu = v
                     )
                 }
-            }
-        }
-        viewModelScope.launch {
-            settingsStore.dantotsuHomeHeaderFlow.collect { v ->
-                _uiState.update { it.copy(dantotsuHomeHeader = v) }
             }
         }
         viewModelScope.launch {
@@ -484,6 +489,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsStore.showScoreBadgesFlow.collect { v ->
                 _uiState.update { it.copy(showScoreBadges = v) }
+            }
+        }
+        viewModelScope.launch {
+            settingsStore.sleekHomeFlow.collect { v ->
+                _uiState.update { it.copy(sleekHome = v) }
             }
         }
         viewModelScope.launch {
@@ -811,12 +821,33 @@ class SettingsViewModel(
         viewModelScope.launch { settingsStore.setExpandedHeroCarousel(enabled) }
     }
 
-    fun setQuickActionMenu(enabled: Boolean) {
-        viewModelScope.launch { settingsStore.setQuickActionMenu(enabled) }
+    fun setHomeDesign(design: String) {
+        viewModelScope.launch {
+            settingsStore.setHomeDesign(design)
+            // Sync legacy flags for compatibility
+            when (design) {
+                "expanded" -> {
+                    settingsStore.setExpandedHeroCarousel(true)
+                    settingsStore.setSleekHome(false)
+                }
+                "minimalistic" -> {
+                    settingsStore.setExpandedHeroCarousel(false)
+                    settingsStore.setSleekHome(true)
+                }
+                "neo" -> {
+                    settingsStore.setExpandedHeroCarousel(false)
+                    settingsStore.setSleekHome(false)
+                }
+                else -> { // classic
+                    settingsStore.setExpandedHeroCarousel(false)
+                    settingsStore.setSleekHome(false)
+                }
+            }
+        }
     }
 
-    fun setDantotsuHomeHeader(enabled: Boolean) {
-        viewModelScope.launch { settingsStore.setDantotsuHomeHeader(enabled) }
+    fun setQuickActionMenu(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setQuickActionMenu(enabled) }
     }
 
     fun setCompactCards(enabled: Boolean) {
@@ -825,6 +856,10 @@ class SettingsViewModel(
 
     fun setShowScoreBadges(enabled: Boolean) {
         viewModelScope.launch { settingsStore.setShowScoreBadges(enabled) }
+    }
+
+    fun setSleekHome(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setSleekHome(enabled) }
     }
 
     fun setAppLocale(locale: AppLocale) {
@@ -840,7 +875,38 @@ class SettingsViewModel(
     }
 
     fun setThemeId(themeId: AppThemeId) {
-        viewModelScope.launch { settingsStore.setThemeId(themeId.id) }
+        viewModelScope.launch {
+            settingsStore.setThemeId(themeId.id)
+
+            // When selecting the "style" themes (Anisurge/Dantotsu/ReDantotsu), also apply the
+            // full UI style bundle (layout radii, nav style, etc) so they feel complete.
+            val matchingStyle = when (themeId) {
+                AppThemeId.Default -> AppUiStyle.Anisurge
+                AppThemeId.Dantotsu -> AppUiStyle.Dantotsu
+                AppThemeId.ReDantotsu -> AppUiStyle.ReDantotsu
+                else -> null
+            }
+
+            if (matchingStyle != null) {
+                settingsStore.setUiStyle(matchingStyle.id)
+                applyUiStyleMetrics(matchingStyle)
+
+                val bundle = bundleForStyle(matchingStyle)
+                settingsStore.setFloatingBottomNav(bundle.floatingBottomNav)
+                settingsStore.setLiquidGlassBottomNav(bundle.liquidGlassBottomNav)
+
+                _uiState.update {
+                    it.copy(
+                        uiStyle = matchingStyle,
+                        themeId = themeId,
+                        floatingBottomNav = bundle.floatingBottomNav,
+                        liquidGlassBottomNav = bundle.liquidGlassBottomNav,
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(themeId = themeId) }
+            }
+        }
     }
 
     fun setUiStyle(style: AppUiStyle) {
@@ -2980,6 +3046,13 @@ class SettingsViewModel(
         return all
     }
 
+    private fun currentYmdForTracker(): String {
+        val d = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        val m = d.monthNumber.toString().padStart(2, '0')
+        val day = d.dayOfMonth.toString().padStart(2, '0')
+        return "${d.year}-$m-$day"
+    }
+
     private fun formatLibraryImportNotificationBody(prog: WatchHistorySyncProgress): String =
         buildString {
             prog.detail?.trim()?.takeIf { it.isNotEmpty() }?.let {
@@ -3030,9 +3103,19 @@ class SettingsViewModel(
                             val malId = item.anime.malId!!
                             val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
                             val totalEpisodes = item.anime.epCount
-                            val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
-                                ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
-                            trackingService.syncMalProgress(malId, progressEpisode, totalEpisodes)
+                            val rawProg = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
+                                ?: if (normalizedFolder == "COMPLETED") totalEpisodes else null
+                            val progressEpisode = rawProg?.takeIf { it > 0 }
+                            val isComplete = normalizedFolder == "COMPLETED"
+                            val completedAt = if (isComplete) currentYmdForTracker() else null
+                            trackingService.updateMalEntry(
+                                malId = malId,
+                                status = normalizedFolder,
+                                progress = progressEpisode,
+                                totalEpisodes = totalEpisodes,
+                                startedAt = null,
+                                completedAt = completedAt
+                            )
                         }
                     }.awaitAll()
                     success += chunkResults.count { it }
@@ -3098,9 +3181,19 @@ class SettingsViewModel(
                             val anilistId = item.anime.anilistId!!
                             val normalizedFolder = item.effectiveFolder?.trim()?.uppercase().orEmpty()
                             val totalEpisodes = item.anime.epCount
-                            val progressEpisode = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
-                                ?: if (normalizedFolder == "COMPLETED") (totalEpisodes ?: 1) else 1
-                            trackingService.syncAnilistProgress(anilistId, progressEpisode, totalEpisodes)
+                            val rawProg = item.anime.episode?.episodeNumber?.takeIf { it > 0 }
+                                ?: if (normalizedFolder == "COMPLETED") totalEpisodes else null
+                            val progressEpisode = rawProg?.takeIf { it > 0 }
+                            val isComplete = normalizedFolder == "COMPLETED"
+                            val completedAt = if (isComplete) currentYmdForTracker() else null
+                            trackingService.updateAnilistEntry(
+                                anilistId = anilistId,
+                                status = normalizedFolder,
+                                progress = progressEpisode,
+                                totalEpisodes = totalEpisodes,
+                                startedAt = null,
+                                completedAt = completedAt
+                            )
                         }
                     }.awaitAll()
                     success += chunkResults.count { it }

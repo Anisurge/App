@@ -7,8 +7,13 @@ import androidx.compose.material.icons.outlined.Person
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedContent
@@ -55,6 +60,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -67,6 +73,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
@@ -629,10 +636,9 @@ private fun TabContent(
                                 onAnimeClick,
                                 onWatchClick,
                                 onWatchlistClick = onWatchlistClick,
-                                expandedHeroCarousel = settingsState.expandedHeroCarousel,
-                                dantotsuHomeHeader = settingsState.dantotsuHomeHeader,
                                 compactCards = settingsState.compactCards,
                                 showScoreBadges = settingsState.showScoreBadges,
+                                homeDesign = settingsState.homeDesign,
                                 onRefresh = { homeViewModel.refresh(force = true) },
                                 onViewContinueWatchingMore = onViewContinueWatchingMore,
                                 onViewLatestEpisodesMore = onViewLatestEpisodesMore,
@@ -679,10 +685,9 @@ private fun HomeContent(
     onAnimeClick: (String) -> Unit,
     onWatchClick: (String, String, Int, String?, Double?) -> Unit,
     onWatchlistClick: (AnimeItem) -> Unit,
-    expandedHeroCarousel: Boolean = false,
-    dantotsuHomeHeader: Boolean = false,
     compactCards: Boolean = false,
     showScoreBadges: Boolean = true,
+    homeDesign: String = "classic",
     onRefresh: () -> Unit = {},
     onViewContinueWatchingMore: () -> Unit = {},
     onViewLatestEpisodesMore: () -> Unit = {},
@@ -694,123 +699,138 @@ private fun HomeContent(
     val scrollState = rememberScrollState()
     val strings = LocalAppStrings.current
 
-    val innerContent: @Composable () -> Unit = {
-        Column(Modifier.fillMaxSize().verticalScroll(scrollState)) {
-            if (dantotsuHomeHeader) {
-                DantotsuHomeHeader(
-                    userProfile = state.userProfile,
-                    latestForBanner = state.latestAired.firstOrNull(),
-                    onProfileClick = {},
-                    onSearchClick = {},
-                )
-                Spacer(Modifier.height(8.dp))
-            }
+    val design = if (homeDesign.isNullOrBlank()) "classic" else homeDesign
+    val useMinimalistic = design == "minimalistic"
+    val useExpandedCarousel = design == "expanded"
+    val useNeo = design == "neo"
 
-            Box(Modifier.fillMaxWidth()) {
-                // ── Hero Carousel ──────────────────────────────────────────────
-                if (state.latestAired.isNotEmpty()) {
-                    HeroCarousel(
-                        items = state.latestAired,
-                        onAnimeClick = { onAnimeClick(it.activeSlug) },
-                        onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null, null) },
-                        onWatchlistClick = onWatchlistClick,
-                        expandedCarousel = expandedHeroCarousel
+    val innerContent: @Composable () -> Unit = {
+        if (useMinimalistic) {
+            MinimalisticHomeContent(
+                state = state,
+                onAnimeClick = onAnimeClick,
+                onWatchClick = onWatchClick,
+                onViewContinueWatchingMore = onViewContinueWatchingMore,
+                onRemoveContinueItem = onRemoveContinueItem,
+                showScore = showScoreBadges,
+            )
+        } else if (useNeo) {
+            NeoHomeContent(
+                state = state,
+                onAnimeClick = onAnimeClick,
+                onWatchClick = onWatchClick,
+                onViewContinueWatchingMore = onViewContinueWatchingMore,
+                onRemoveContinueItem = onRemoveContinueItem,
+                showScore = showScoreBadges,
+            )
+        } else {
+            Column(Modifier.fillMaxSize().verticalScroll(scrollState)) {
+                Box(Modifier.fillMaxWidth()) {
+                    if (state.latestAired.isNotEmpty()) {
+                        // ── Hero Carousel ──────────────────────────────────────────────
+                        HeroCarousel(
+                            items = state.latestAired,
+                            onAnimeClick = { onAnimeClick(it.activeSlug) },
+                            onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null, null) },
+                            onWatchlistClick = onWatchlistClick,
+                            expandedCarousel = useExpandedCarousel
+                        )
+                    }
+
+                    to.kuudere.anisuge.platform.WindowManagementButtons(
+                        onClose = onExit,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
                     )
                 }
 
-                to.kuudere.anisuge.platform.WindowManagementButtons(
-                    onClose = onExit,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
-                )
-            }
+                Spacer(Modifier.height(24.dp))
 
-            Spacer(Modifier.height(24.dp))
+                val orderedRows = state.layout.rows.filter { it.visible }.map { it.id }
+                val nonEmptyRows = orderedRows.filter { state.hasDataForRow(it) }
+                if (orderedRows.isEmpty()) {
+                    EmptyLayoutPlaceholder(onOpenEditor = onOpenLayoutEditor)
+                } else {
+                    nonEmptyRows.forEach { rowId ->
+                        when (rowId) {
+                            RowId.CONTINUE_WATCHING -> {
+                                SectionHeader(title = strings.rowTitle(rowId), onViewMore = onViewContinueWatchingMore)
+                                ContinueWatchingRow(
+                                    items = state.continueWatching,
+                                    onWatchClick = onWatchClick,
+                                    onRemove = onRemoveContinueItem,
+                                )
+                                Spacer(Modifier.height(24.dp))
+                            }
 
-            val orderedRows = state.layout.rows.filter { it.visible }.map { it.id }
-            val nonEmptyRows = orderedRows.filter { state.hasDataForRow(it) }
-            if (orderedRows.isEmpty()) {
-                EmptyLayoutPlaceholder(onOpenEditor = onOpenLayoutEditor)
-            } else {
-                nonEmptyRows.forEach { rowId ->
-                    when (rowId) {
-                        RowId.CONTINUE_WATCHING -> {
-                            SectionHeader(title = strings.rowTitle(rowId), onViewMore = onViewContinueWatchingMore)
-                            ContinueWatchingRow(
-                                items = state.continueWatching,
-                                onWatchClick = onWatchClick,
-                                onRemove = onRemoveContinueItem,
+                            RowId.LATEST_EPISODES -> AnimeSection(
+                                title = strings.rowTitle(rowId),
+                                items = state.latestAired,
+                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                showLatestLangBadge = true,
+                                onViewMoreClick = onViewLatestEpisodesMore,
+                                compact = compactCards,
+                                showScore = showScoreBadges,
                             )
-                            Spacer(Modifier.height(24.dp))
+
+                            RowId.TRENDING_WEEK -> AnimeSection(
+                                title = strings.rowTitle(rowId),
+                                items = state.trendingWeek,
+                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                showViewMore = false,
+                                compact = compactCards,
+                                showScore = showScoreBadges,
+                            )
+
+                            RowId.NEW_SEASONS -> AnimeSection(
+                                title = strings.rowTitle(rowId),
+                                items = state.newSeasons,
+                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                showViewMore = false,
+                                compact = compactCards,
+                                showScore = showScoreBadges,
+                            )
+
+                            RowId.NEW_ON_APP -> AnimeSection(
+                                title = strings.rowTitle(rowId),
+                                items = state.newOnSite,
+                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                onViewMoreClick = onViewNewOnAppMore,
+                                compact = compactCards,
+                                showScore = showScoreBadges,
+                            )
+
+                            RowId.RECOMMENDED -> AnimeSection(
+                                title = strings.rowTitle(rowId),
+                                items = state.recommended,
+                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                showViewMore = false,
+                                compact = compactCards,
+                                showScore = showScoreBadges,
+                            )
+
+                            RowId.UPCOMING -> AnimeSection(
+                                title = strings.rowTitle(rowId),
+                                items = state.upcoming,
+                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                showViewMore = false,
+                                compact = compactCards,
+                                showScore = showScoreBadges,
+                            )
+
+                            RowId.HIDDEN_GEMS -> AnimeSection(
+                                title = strings.rowTitle(rowId),
+                                items = state.hiddenGems,
+                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                showViewMore = false,
+                                compact = compactCards,
+                                showScore = showScoreBadges,
+                            )
                         }
-
-                        RowId.LATEST_EPISODES -> AnimeSection(
-                            title = strings.rowTitle(rowId),
-                            items = state.latestAired,
-                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                            showLatestLangBadge = true,
-                            onViewMoreClick = onViewLatestEpisodesMore,
-                            compact = compactCards,
-                            showScore = showScoreBadges,
-                        )
-
-                        RowId.TRENDING_WEEK -> AnimeSection(
-                            title = strings.rowTitle(rowId),
-                            items = state.trendingWeek,
-                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                            showViewMore = false,
-                            compact = compactCards,
-                            showScore = showScoreBadges,
-                        )
-
-                        RowId.NEW_SEASONS -> AnimeSection(
-                            title = strings.rowTitle(rowId),
-                            items = state.newSeasons,
-                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                            showViewMore = false,
-                            compact = compactCards,
-                            showScore = showScoreBadges,
-                        )
-
-                        RowId.NEW_ON_APP -> AnimeSection(
-                            title = strings.rowTitle(rowId),
-                            items = state.newOnSite,
-                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                            onViewMoreClick = onViewNewOnAppMore,
-                            compact = compactCards,
-                            showScore = showScoreBadges,
-                        )
-
-                        RowId.RECOMMENDED -> AnimeSection(
-                            title = strings.rowTitle(rowId),
-                            items = state.recommended,
-                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                            showViewMore = false,
-                            compact = compactCards,
-                            showScore = showScoreBadges,
-                        )
-
-                        RowId.UPCOMING -> AnimeSection(
-                            title = strings.rowTitle(rowId),
-                            items = state.upcoming,
-                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                            showViewMore = false,
-                            compact = compactCards,
-                            showScore = showScoreBadges,
-                        )
-
-                        RowId.HIDDEN_GEMS -> AnimeSection(
-                            title = strings.rowTitle(rowId),
-                            items = state.hiddenGems,
-                            onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                            showViewMore = false,
-                            compact = compactCards,
-                            showScore = showScoreBadges,
-                        )
                     }
                 }
-            }
 
-            Spacer(Modifier.height(if (isDesktopPlatform) 48.dp else 156.dp))
+                Spacer(Modifier.height(if (isDesktopPlatform) 48.dp else 156.dp))
+            }
         }
     }
 
@@ -1956,171 +1976,499 @@ private fun resolveProfileImageUrl(raw: String?): String? =
         ?: raw?.takeIf { it.isNotBlank() && !it.startsWith("http", ignoreCase = true) }
             ?.let { "https://api.reanime.to${if (it.startsWith("/")) it else "/$it"}" }
 
-// ── Dantotsu-inspired home header (extra design toggle) ──────────────────────
-@Composable
-private fun DantotsuHomeHeader(
-    userProfile: UserProfile?,
-    latestForBanner: AnimeItem?,
-    onProfileClick: () -> Unit,
-    onSearchClick: () -> Unit,
-) {
-    val bannerUrl = latestForBanner?.bannerUrl ?: latestForBanner?.imageUrl?.let {
-        if (it.startsWith("http")) it else "https://api.reanime.to/img/banner/$it"
-    } ?: ""
-    val avatarUrl = userProfile?.effectiveAvatar ?: userProfile?.avatar
-    val username = userProfile?.username ?: "User"
+// ── Minimalistic Home (homeDesign = "minimalistic", selected via Settings > Appearance) ─────────────────
 
-    Box(
+@Composable
+private fun MinimalisticHomeContent(
+    state: HomeUiState,
+    onAnimeClick: (String) -> Unit,
+    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
+    onViewContinueWatchingMore: () -> Unit = {},
+    onRemoveContinueItem: (ContinueWatchingItem) -> Unit = {},
+    showScore: Boolean = true,
+) {
+    val strings = LocalAppStrings.current
+    val scrollState = rememberScrollState()
+
+    Column(
         Modifier
-            .fillMaxWidth()
-            .height(210.dp)
-            .padding(horizontal = 12.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .fillMaxSize()
+            .verticalScroll(scrollState)
     ) {
-        // Background image or solid gradient fallback (Dantotsu KenBurns vibe)
-        if (bannerUrl.isNotBlank()) {
-            AsyncImage(
-                model = bannerUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+        // Top hero - immersive modern
+        if (state.latestAired.isNotEmpty() || state.trendingWeek.isNotEmpty()) {
+            val heroItems = (state.latestAired + state.trendingWeek).distinctBy { it.activeSlug }.take(5)
+            if (heroItems.isNotEmpty()) {
+                MinimalisticHero(
+                    items = heroItems,
+                    onAnimeClick = { onAnimeClick(it.activeSlug) },
+                    onWatchClick = { item ->
+                        onWatchClick(item.activeSlug, "sub", 1, null, null)
+                    }
+                )
+            }
+        } else {
+            // Fallback header height
+            Spacer(Modifier.height(280.dp))
+        }
+
+        // Greeting
+        val rawName = state.userProfile?.username?.takeIf { it.isNotBlank() }
+            ?: state.userProfile?.displayName?.takeIf { it.isNotBlank() }
+            ?: state.userProfile?.name?.takeIf { it.isNotBlank() }
+        if (rawName != null) {
+            val first = rawName.split(" ", limit = 2).firstOrNull()?.takeIf { it.isNotBlank() } ?: rawName
+            Text(
+                "Welcome back, $first",
+                color = AppColors.text.copy(alpha = 0.85f),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
             )
         } else {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0xFF1F1B2E), Color(0xFF2C2540))
-                        )
-                    )
+            Spacer(Modifier.height(12.dp))
+        }
+
+        // Continue Watching
+        if (state.continueWatching.isNotEmpty()) {
+            MinimalisticSectionHeader(title = strings.continueWatchingTitle ?: "Continue Watching", onMore = onViewContinueWatchingMore)
+            MinimalisticContinueRow(
+                items = state.continueWatching,
+                onWatchClick = onWatchClick,
+                onRemove = onRemoveContinueItem,
+            )
+            Spacer(Modifier.height(20.dp))
+        }
+
+        // Trending
+        if (state.trendingWeek.isNotEmpty()) {
+            MinimalisticSectionHeader(title = strings.trendingWeekTitle ?: "Trending this week")
+            MinimalisticMediaRow(
+                items = state.trendingWeek,
+                onItemClick = { onAnimeClick(it.activeSlug) },
+                showScore = showScore,
             )
         }
 
-        // Dark gradient overlay like Dantotsu
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.25f),
-                        0.45f to Color.Black.copy(alpha = 0.45f),
-                        1f to Color.Black.copy(alpha = 0.65f)
-                    )
+        // Latest Episodes
+        if (state.latestAired.isNotEmpty()) {
+            MinimalisticSectionHeader(title = strings.latestEpisodesTitle ?: "Latest episodes")
+            MinimalisticMediaRow(
+                items = state.latestAired,
+                onItemClick = { onAnimeClick(it.activeSlug) },
+                showScore = showScore,
+            )
+        }
+
+        // New on App
+        if (state.newOnSite.isNotEmpty()) {
+            MinimalisticSectionHeader(title = strings.newOnAppTitle ?: "New on Anisurge")
+            MinimalisticMediaRow(
+                items = state.newOnSite,
+                onItemClick = { onAnimeClick(it.activeSlug) },
+                showScore = showScore,
+            )
+        }
+
+        // Recommended or New Seasons if present
+        if (state.recommended.isNotEmpty()) {
+            MinimalisticSectionHeader(title = strings.recommendedTitle ?: "Recommended for you")
+            MinimalisticMediaRow(
+                items = state.recommended,
+                onItemClick = { onAnimeClick(it.activeSlug) },
+                showScore = showScore,
+            )
+        } else if (state.newSeasons.isNotEmpty()) {
+            MinimalisticSectionHeader(title = strings.newSeasonsTitle ?: "New seasons")
+            MinimalisticMediaRow(
+                items = state.newSeasons,
+                onItemClick = { onAnimeClick(it.activeSlug) },
+                showScore = showScore,
+            )
+        }
+
+        Spacer(Modifier.height(if (isDesktopPlatform) 64.dp else 180.dp))
+    }
+}
+
+@Composable
+private fun MinimalisticHero(
+    items: List<AnimeItem>,
+    onAnimeClick: (AnimeItem) -> Unit,
+    onWatchClick: (AnimeItem) -> Unit,
+) {
+    val pagerState = rememberPagerState(pageCount = { items.size })
+    val current = items.getOrNull(pagerState.currentPage) ?: items.first()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(310.dp)
+    ) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            val item = items.getOrNull(page) ?: return@HorizontalPager
+            val img = item.bannerUrl ?: item.imageUrl
+
+            Box(Modifier.fillMaxSize()) {
+                AsyncImage(
+                    model = if (img.startsWith("http")) img else "https://api.reanime.to/img/poster/$img",
+                    contentDescription = item.resolveDisplayTitle(),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
                 )
-        )
 
-        // Top user row: name + stats + avatar + search (mimics top of Dantotsu header)
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-        ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column {
-                    Text(
-                        username,
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Default // Poppins-ish via system
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            "EP 128",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            "CH 42",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Search pill like Dantotsu
-                    Box(
-                        Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(Color(0x33FFFFFF))
-                            .clickable { onSearchClick() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Search, null, tint = Color.White, modifier = Modifier.size(22.dp))
-                    }
-                    // Avatar
-                    Box(
-                        Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(AppColors.surfaceVariant)
-                            .clickable { onProfileClick() }
-                            .border(2.dp, Color.White.copy(alpha = 0.7f), CircleShape)
-                    ) {
-                        if (!avatarUrl.isNullOrBlank()) {
-                            AsyncImage(
-                                model = avatarUrl,
-                                contentDescription = username,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
+                // Sleek modern overlays: strong bottom gradient + subtle side
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                0.45f to Color.Black.copy(alpha = 0.35f),
+                                0.68f to Color.Black.copy(alpha = 0.75f),
+                                1f to Color.Black.copy(alpha = 0.92f)
                             )
-                        } else {
-                            Icon(Icons.Outlined.Person, null, tint = Color.White, modifier = Modifier.size(26.dp).align(Alignment.Center))
+                        )
+                )
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                0f to Color.Black.copy(alpha = 0.45f),
+                                0.35f to Color.Transparent,
+                                0.8f to Color.Transparent
+                            )
+                        )
+                )
+
+                // Content
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 20.dp, end = 20.dp, bottom = 22.dp)
+                ) {
+                    // Title
+                    Text(
+                        item.resolveDisplayTitle(),
+                        color = Color.White,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 30.sp
+                    )
+
+                    Spacer(Modifier.height(6.dp))
+
+                    // Meta row
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (item.malScore != null && item.malScore > 0) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Icon(Icons.Filled.Star, null, tint = Color(0xFFFFC107), modifier = Modifier.size(13.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    String.format("%.1f", item.malScore),
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        val meta = listOfNotNull(
+                            item.year?.toString(),
+                            item.status?.takeIf { it.isNotBlank() }
+                        ).joinToString("  •  ")
+                        if (meta.isNotBlank()) {
+                            Text(
+                                meta,
+                                color = Color.White.copy(alpha = 0.75f),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    // CTAs
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = { onWatchClick(item) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AppColors.accent,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(999.dp),
+                            contentPadding = PaddingValues(horizontal = 22.dp, vertical = 10.dp)
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Watch", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = { onAnimeClick(item) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f)),
+                            shape = RoundedCornerShape(999.dp),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)
+                        ) {
+                            Icon(Icons.Filled.Info, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Details", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                         }
                     }
                 }
             }
+        }
 
-            Spacer(Modifier.weight(1f))
-
-            // Quick list access cards (Anime List / Manga style)
+        // Minimal elegant page indicator
+        if (items.size > 1) {
             Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 92.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                // Anime list card
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color.Black.copy(alpha = 0.55f))
-                        .clickable { /* could navigate to watchlist or search */ }
-                        .border(1.dp, Color.White.copy(0.15f), RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("ANIME", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Box(Modifier.width(36.dp).height(2.dp).background(AppColors.accent))
-                    }
-                }
-                // Watchlist / planning card
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color.Black.copy(alpha = 0.55f))
-                        .clickable { /* navigate bookmarks */ }
-                        .border(1.dp, Color.White.copy(0.15f), RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("WATCHLIST", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Box(Modifier.width(36.dp).height(2.dp).background(AppColors.accent))
-                    }
+                repeat(items.size) { i ->
+                    val active = i == pagerState.currentPage
+                    Box(
+                        Modifier
+                            .size(if (active) 7.dp else 5.dp)
+                            .clip(CircleShape)
+                            .background(if (active) AppColors.accent else Color.White.copy(alpha = 0.4f))
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun MinimalisticSectionHeader(title: String, onMore: (() -> Unit)? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            title,
+            color = AppColors.text,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        if (onMore != null) {
+            Text(
+                "See all",
+                color = AppColors.accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.clickable { onMore() }.padding(4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MinimalisticContinueRow(
+    items: List<ContinueWatchingItem>,
+    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
+    onRemove: (ContinueWatchingItem) -> Unit,
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        itemsIndexed(items) { _, item ->
+            val animeId = item.effectiveAnimeId.ifBlank { item.animeId }
+            val lang = item.language ?: "sub"
+            val server = item.server
+            val ep = item.displayEpisode.coerceAtLeast(1)
+            val progress = if (item.duration > 0) (item.progress / item.duration).toFloat().coerceIn(0f, 1f) else 0f
+
+            Column(
+                modifier = Modifier
+                    .width(210.dp)
+                    .clickable { onWatchClick(animeId, lang, ep, server, item.progress) }
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .clip(RoundedCornerShape(10.dp))
+                ) {
+                    AsyncImage(
+                        model = item.imageUrl,
+                        contentDescription = item.resolveDisplayTitle(),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // Sleek bottom progress
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(Color.White.copy(alpha = 0.25f))
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(progress)
+                                .fillMaxSize()
+                                .background(AppColors.accent)
+                        )
+                    }
+
+                    // Episode pill
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(5.dp))
+                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                    ) {
+                        Text("EP $ep", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    // Remove
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(6.dp)
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f))
+                            .clickable { onRemove(item) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(13.dp))
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    item.resolveDisplayTitle(),
+                    color = AppColors.text,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MinimalisticMediaRow(
+    items: List<AnimeItem>,
+    onItemClick: (AnimeItem) -> Unit,
+    showScore: Boolean = true,
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        itemsIndexed(items) { _, item ->
+            val cardW = 130.dp
+            Column(
+                Modifier
+                    .width(cardW)
+                    .clickable { onItemClick(item) }
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(0.72f)
+                        .clip(RoundedCornerShape(11.dp))
+                ) {
+                    val poster = if (item.imageUrl.startsWith("http")) item.imageUrl else "https://api.reanime.to/img/poster/${item.imageUrl}"
+                    AsyncImage(
+                        model = poster,
+                        contentDescription = item.resolveDisplayTitle(),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // Subtle top gradient for badge area
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to Color.Black.copy(alpha = 0.45f),
+                                    1f to Color.Transparent
+                                )
+                            )
+                    )
+
+                    if (showScore && item.malScore != null && item.malScore > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
+                                .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(999.dp))
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                String.format("%.1f", item.malScore),
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // Status indicator
+                    if (!item.status.isNullOrBlank()) {
+                        val isOn = item.status.contains("Ongoing", ignoreCase = true) || item.status.contains("Airing", ignoreCase = true)
+                        if (isOn) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(6.dp)
+                                    .background(AppColors.accent, RoundedCornerShape(3.dp))
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                Text("ONGOING", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    item.resolveDisplayTitle(),
+                    color = AppColors.text,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 15.sp
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(18.dp))
 }
 
 @Composable
@@ -3561,6 +3909,313 @@ private fun CardActionCell(
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )
+        }
+    }
+}
+
+// ── NEO: The Best Modern Home Design ─────────────────
+// Completely different from Classic/Expanded/Minimalistic
+// Inspired by top modern streaming UIs (Netflix shelves + premium anime apps from ref like Dantotsu banners, Anymex carousels) + 2025 trends: immersive visuals, rich horizontal shelves, glass accents, high polish.
+@Composable
+private fun NeoHomeContent(
+    state: HomeUiState,
+    onAnimeClick: (String) -> Unit,
+    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
+    onViewContinueWatchingMore: () -> Unit = {},
+    onRemoveContinueItem: (ContinueWatchingItem) -> Unit = {},
+    showScore: Boolean = true,
+) {
+    val scrollState = rememberScrollState()
+    val strings = LocalAppStrings.current
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Immersive Neo Hero - premium, different from others
+        if (state.latestAired.isNotEmpty() || state.trendingWeek.isNotEmpty()) {
+            val heroItem = (state.latestAired + state.trendingWeek).distinctBy { it.activeSlug }.firstOrNull()
+            heroItem?.let { item ->
+                item {
+                    NeoHero(
+                        item = item,
+                        onWatch = { onWatchClick(item.activeSlug, "sub", 1, null, 0.0) },
+                        onInfo = { onAnimeClick(item.activeSlug) }
+                    )
+                }
+            }
+        }
+
+        item { Spacer(Modifier.height(24.dp)) }
+
+        // Continue - large progress cards
+        if (state.continueWatching.isNotEmpty()) {
+            item { NeoSectionHeader("Continue Watching", onMore = onViewContinueWatchingMore) }
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    items(state.continueWatching.take(8)) { item ->
+                        NeoContinueCard(item = item, onWatchClick = onWatchClick, onRemove = onRemoveContinueItem)
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(28.dp)) }
+        }
+
+        // Trending - vibrant posters
+        if (state.trendingWeek.isNotEmpty()) {
+            item { NeoSectionHeader("Trending This Week") }
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(state.trendingWeek.take(10)) { item ->
+                        NeoPosterCard(item = item, onClick = { onAnimeClick(item.activeSlug) }, showScore = showScore)
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(28.dp)) }
+        }
+
+        // Latest - clean rich rows (reuse enhanced)
+        if (state.latestAired.isNotEmpty()) {
+            item { NeoSectionHeader("Latest Releases") }
+            item {
+                AnimeSection(
+                    title = "",
+                    items = state.latestAired.take(8),
+                    onItemClick = { onAnimeClick(it.activeSlug) },
+                    showLatestLangBadge = true,
+                    compact = false,
+                    showScore = showScore
+                )
+            }
+            item { Spacer(Modifier.height(28.dp)) }
+        }
+
+        // New on App
+        if (state.newOnSite.isNotEmpty()) {
+            item { NeoSectionHeader("Fresh on App") }
+            item {
+                AnimeSection(
+                    title = "",
+                    items = state.newOnSite.take(8),
+                    onItemClick = { onAnimeClick(it.activeSlug) },
+                    compact = false,
+                    showScore = showScore
+                )
+            }
+        }
+
+        item { Spacer(Modifier.height(80.dp)) }
+    }
+}
+
+@Composable
+private fun NeoHero(
+    item: AnimeItem,
+    onWatch: () -> Unit,
+    onInfo: () -> Unit
+) {
+    val img = item.bannerUrl ?: item.imageUrl
+    val scale = 1f  // animation removed to prevent potential recomposition jank / ANR in some scenarios; can be restored with stable layer update later
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(340.dp)
+            .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
+    ) {
+        AsyncImage(
+            model = if (img.startsWith("http")) img else "https://api.reanime.to/img/poster/$img",
+            contentDescription = item.resolveDisplayTitle(),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+        )
+
+        // Premium dark gradient + glass accent
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(0.25f),
+                        0.4f to Color.Black.copy(0.55f),
+                        0.75f to Color.Black.copy(0.88f),
+                        1f to Color.Black.copy(0.95f)
+                    )
+                )
+        )
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(20.dp)
+        ) {
+            Text(
+                item.resolveDisplayTitle(),
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                item.malScore?.let {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(Color.White.copy(0.15f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Filled.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("%.1f".format(it), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Text(
+                    listOfNotNull(item.year?.toString(), item.status).joinToString(" • "),
+                    color = Color.White.copy(0.7f),
+                    fontSize = 13.sp
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onWatch,
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.PlayArrow, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Watch Now", fontWeight = FontWeight.SemiBold)
+                }
+                OutlinedButton(
+                    onClick = onInfo,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(0.5f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) {
+                    Text("More Info")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NeoSectionHeader(title: String, onMore: (() -> Unit)? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, color = AppColors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        if (onMore != null) {
+            Text("See all", color = AppColors.accent, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.clickable(onClick = onMore))
+        }
+    }
+}
+
+@Composable
+private fun NeoPosterCard(item: AnimeItem, onClick: () -> Unit, showScore: Boolean) {
+    Column(
+        modifier = Modifier
+            .width(130.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(AppColors.surfaceVariant)
+        ) {
+            AsyncImage(
+                model = item.imageUrl,
+                contentDescription = item.resolveDisplayTitle(),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            if (showScore && item.malScore != null && item.malScore > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .background(Color.Black.copy(0.7f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("%.1f".format(item.malScore), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            item.resolveDisplayTitle(),
+            color = AppColors.text,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun NeoContinueCard(
+    item: ContinueWatchingItem,
+    onWatchClick: (String, String, Int, String?, Double?) -> Unit,
+    onRemove: (ContinueWatchingItem) -> Unit
+) {
+    val animeId = item.effectiveAnimeId.ifBlank { item.animeId }
+    val progress = if (item.duration > 0) (item.progress / item.duration).toFloat().coerceIn(0f, 1f) else 0f
+
+    Box(
+        modifier = Modifier
+            .width(260.dp)
+            .clickable { onWatchClick(animeId, item.language ?: "sub", item.displayEpisode, item.server, item.progress) }
+    ) {
+        AsyncImage(
+            model = item.imageUrl,
+            contentDescription = item.resolveDisplayTitle(),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(130.dp)
+                .clip(RoundedCornerShape(14.dp))
+        )
+
+        Box(
+            Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .height(4.dp)
+                .background(Color.White.copy(0.3f))
+        ) {
+            Box(Modifier.fillMaxWidth(progress).fillMaxSize().background(AppColors.accent))
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(12.dp)
+        ) {
+            Text(item.resolveDisplayTitle(), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("EP ${item.displayEpisode}", color = Color.White.copy(0.7f), fontSize = 12.sp)
         }
     }
 }

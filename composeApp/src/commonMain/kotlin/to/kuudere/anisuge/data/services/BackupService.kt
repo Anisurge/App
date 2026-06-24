@@ -43,6 +43,7 @@ class BackupService(
             floatingBottomNav = settingsStore.floatingBottomNavFlow.first(),
             liquidGlassBottomNav = settingsStore.liquidGlassBottomNavFlow.first(),
             expandedHeroCarousel = settingsStore.expandedHeroCarouselFlow.first(),
+            homeDesign = settingsStore.homeDesignFlow.first(),
             quickActionMenu = settingsStore.quickActionMenuFlow.first(),
             appLocale = settingsStore.appLocaleFlow.first(),
             preferRomajiTitles = settingsStore.preferRomajiAnimeTitlesFlow.first(),
@@ -168,6 +169,7 @@ class BackupService(
         settingsStore.setFloatingBottomNav(value.floatingBottomNav)
         settingsStore.setLiquidGlassBottomNav(value.liquidGlassBottomNav)
         settingsStore.setExpandedHeroCarousel(value.expandedHeroCarousel)
+        settingsStore.setHomeDesign(value.homeDesign)
         settingsStore.setQuickActionMenu(value.quickActionMenu)
         settingsStore.setAppLocale(value.appLocale)
         settingsStore.setPreferRomajiAnimeTitles(value.preferRomajiTitles)

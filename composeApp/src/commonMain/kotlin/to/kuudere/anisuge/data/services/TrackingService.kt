@@ -25,6 +25,10 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+
 class TrackingService(
     private val httpClient: HttpClient,
     private val sessionStore: SessionStore,
@@ -37,6 +41,13 @@ class TrackingService(
         private const val ANILIST_GRAPHQL = "https://graphql.anilist.co"
         private const val LUNAR_REFRESH_ENDPOINT = "https://www.anisurge.lol/api/lunar/refresh"
         private val anilistJson = Json { ignoreUnknownKeys = true }
+    }
+
+    private fun currentYmd(): String {
+        val d = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        val m = d.monthNumber.toString().padStart(2, '0')
+        val day = d.dayOfMonth.toString().padStart(2, '0')
+        return "${d.year}-$m-$day"
     }
 
     // ── Login URLs ──────────────────────────────────────────────────────────
@@ -125,22 +136,12 @@ class TrackingService(
             if (!refreshMalToken()) return false
         }
         val token = settingsStore.getMalAccessToken() ?: return false
-        val status = if (totalEpisodes != null && episodeNumber >= totalEpisodes) "completed" else "watching"
-        return try {
-            val response = httpClient.patch("$MAL_API_BASE/anime/$malId/my_list_status") {
-                header("Authorization", "Bearer $token")
-                header("Content-Type", "application/x-www-form-urlencoded")
-                setBody("status=$status&num_watched_episodes=$episodeNumber")
-            }
-            if (!response.status.isSuccess()) {
-                println("[TrackingService] MAL sync failed for $malId: HTTP ${response.status.value}")
-                return false
-            }
-            true
-        } catch (e: Exception) {
-            println("[TrackingService] MAL sync exception for $malId: ${e.message}")
-            false
-        }
+        val completing = totalEpisodes != null && episodeNumber >= totalEpisodes
+        val status = if (completing) "completed" else "watching"
+        val now = currentYmd()
+        val startedAt = if (episodeNumber <= 1) now else null
+        val completedAt = if (completing) now else null
+        return updateMalEntry(malId, status, episodeNumber, totalEpisodes, startedAt, completedAt)
     }
 
     suspend fun updateMalEntry(
@@ -227,49 +228,12 @@ class TrackingService(
         if (anilistId <= 0 || episodeNumber <= 0) return false
         val token = settingsStore.getAnilistAccessToken() ?: return false
         if (settingsStore.getAnilistIsExpired()) return false // No refresh, prompt relogin
-        val status = if (totalEpisodes != null && episodeNumber >= totalEpisodes) "COMPLETED" else "CURRENT"
-        val query = """
-            mutation(${'$'}mediaId: Int, ${'$'}progress: Int, ${'$'}status: MediaListStatus) {
-              SaveMediaListEntry(mediaId: ${'$'}mediaId, progress: ${'$'}progress, status: ${'$'}status) {
-                id
-                status
-                progress
-              }
-            }
-        """.trimIndent()
-        return try {
-            val response = httpClient.post(ANILIST_GRAPHQL) {
-                header("Authorization", "Bearer $token")
-                contentType(ContentType.Application.Json)
-                setBody(
-                    buildJsonObject {
-                        put("query", query)
-                        put(
-                            "variables",
-                            buildJsonObject {
-                                put("mediaId", anilistId)
-                                put("progress", episodeNumber)
-                                put("status", status)
-                            }
-                        )
-                    }
-                )
-            }
-            if (!response.status.isSuccess()) {
-                println("[TrackingService] AniList sync failed for $anilistId: HTTP ${response.status.value}")
-                return false
-            }
-            val bodyText = response.bodyAsText()
-            val envelope = anilistJson.parseToJsonElement(bodyText).jsonObject
-            val hasErrors = envelope["errors"] != null
-            if (hasErrors) {
-                println("[TrackingService] AniList sync API errors for $anilistId: $bodyText")
-            }
-            !hasErrors
-        } catch (e: Exception) {
-            println("[TrackingService] AniList sync exception for $anilistId: ${e.message}")
-            false
-        }
+        val completing = totalEpisodes != null && episodeNumber >= totalEpisodes
+        val status = if (completing) "COMPLETED" else "CURRENT"
+        val now = currentYmd()
+        val startedAt = if (episodeNumber <= 1) now else null
+        val completedAt = if (completing) now else null
+        return updateAnilistEntry(anilistId, status, episodeNumber, totalEpisodes, startedAt, completedAt)
     }
 
     suspend fun updateAnilistEntry(

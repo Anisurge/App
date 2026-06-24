@@ -1382,14 +1382,26 @@ class WatchViewModel(
         _uiState.update { it.copy(didMarkWatched = true) }
 
         val animeTitle = _uiState.value.episodeData?.anime?.title?.displayTitle?.takeIf { it.isNotBlank() }
+        val dataAl = _uiState.value.episodeData?.anilistId ?: _uiState.value.episodeData?.anime?.anilistId
+        val dataMal = _uiState.value.episodeData?.malId ?: _uiState.value.episodeData?.anime?.malId
+        val initialAl = anilistId?.takeIf { it > 0 } ?: dataAl?.takeIf { it > 0 }
+        val initialMal = malId?.takeIf { it > 0 } ?: dataMal?.takeIf { it > 0 }
 
         syncManager?.let { mgr ->
             viewModelScope.launch {
+                var finalAl = initialAl
+                var finalMal = initialMal
+                if (finalAl == null && finalMal == null) {
+                    val details = infoService.getAnimeDetails(currentAnimeId, includeEpisodes = false)
+                    finalAl = details?.anilistId?.takeIf { it > 0 }
+                    finalMal = details?.malId?.takeIf { it > 0 }
+                }
+                val effectiveTotal = totalEpisodes ?: _uiState.value.episodeData?.anime?.epCount
                 mgr.syncEpisodeComplete(
-                    malId = malId,
-                    anilistId = anilistId,
+                    malId = finalMal,
+                    anilistId = finalAl,
                     episodeNumber = episodeNumber,
-                    totalEpisodes = totalEpisodes,
+                    totalEpisodes = effectiveTotal,
                     animeTitle = animeTitle
                 )
             }

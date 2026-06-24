@@ -415,14 +415,14 @@ fun WatchScreen(
 
                         AnimatedVisibility(
                             visible = isPanelActive,
-                            enter = slideInHorizontally(animationSpec = tween(300)) { it } + expandHorizontally(
-                                animationSpec = tween(300),
+                            enter = slideInHorizontally(animationSpec = tween(180)) { it } + expandHorizontally(
+                                animationSpec = tween(180),
                                 expandFrom = Alignment.Start
-                            ) + fadeIn(animationSpec = tween(300)),
-                            exit = slideOutHorizontally(animationSpec = tween(300)) { it } + shrinkHorizontally(
-                                animationSpec = tween(300),
+                            ) + fadeIn(animationSpec = tween(140)),
+                            exit = slideOutHorizontally(animationSpec = tween(140)) { it } + shrinkHorizontally(
+                                animationSpec = tween(140),
                                 shrinkTowards = Alignment.Start
-                            ) + fadeOut(animationSpec = tween(300))
+                            ) + fadeOut(animationSpec = tween(100))
                         ) {
                             Box(Modifier.width(sidePanelWidth).fillMaxHeight()) {
                                 SidePanelContent(uiState, viewModel, animeId)

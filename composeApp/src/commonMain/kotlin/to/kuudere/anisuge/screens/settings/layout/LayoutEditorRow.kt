@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragIndicator
@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import to.kuudere.anisuge.data.models.LayoutRow
@@ -63,42 +64,54 @@ fun LayoutEditorRow(
             }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(
             Icons.Default.DragIndicator,
             contentDescription = null,
             tint = AppColors.textMuted,
-            modifier = Modifier.pointerInput(row.id, index) {
-                detectDragGestures(
-                    onDrag = { _, amount -> dragY += amount.y },
-                    onDragEnd = {
-                        onDragEnd(dragY)
-                        dragY = 0f
-                    },
-                    onDragCancel = { dragY = 0f },
-                )
-            },
+            modifier = Modifier
+                .size(20.dp)
+                .pointerInput(row.id, index) {
+                    detectDragGestures(
+                        onDrag = { _, amount -> dragY += amount.y },
+                        onDragEnd = {
+                            onDragEnd(dragY)
+                            dragY = 0f
+                        },
+                        onDragCancel = { dragY = 0f },
+                    )
+                },
         )
         Column(Modifier.weight(1f)) {
-            Text(title, color = AppColors.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                title,
+                color = AppColors.text,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text(visibility, color = AppColors.textMuted, fontSize = 12.sp)
         }
         Switch(checked = row.visible, onCheckedChange = onToggle)
-        Spacer(Modifier.width(4.dp))
         IconButton(
             onClick = onMoveUp,
             enabled = index > 0,
-            modifier = Modifier.semantics { if (index == 0) disabled() },
+            modifier = Modifier
+                .size(32.dp)
+                .semantics { if (index == 0) disabled() },
         ) {
-            Icon(Icons.Default.KeyboardArrowUp, contentDescription = strings.moveUp, tint = AppColors.text)
+            Icon(Icons.Default.KeyboardArrowUp, contentDescription = strings.moveUp, tint = AppColors.text, modifier = Modifier.size(18.dp))
         }
         IconButton(
             onClick = onMoveDown,
             enabled = index < total - 1,
-            modifier = Modifier.semantics { if (index == total - 1) disabled() },
+            modifier = Modifier
+                .size(32.dp)
+                .semantics { if (index == total - 1) disabled() },
         ) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = strings.moveDown, tint = AppColors.text)
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = strings.moveDown, tint = AppColors.text, modifier = Modifier.size(18.dp))
         }
     }
 }

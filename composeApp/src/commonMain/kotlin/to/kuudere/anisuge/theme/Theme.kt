@@ -7,15 +7,15 @@ import androidx.compose.ui.graphics.Color
 
 enum class AppThemeId(val id: String, val label: String, val description: String) {
     Light("light", "Light", "Clean light theme"),
-    Default("default", "Dark", "Clean black and white"),
+    Default("default", "Anisurge", "Default Anisurge dark theme"),
     Amoled("amoled", "AMOLED", "Pure black with soft gray surfaces"),
     Purple("purple", "Purple", "Kuudere purple accent"),
     Red("red", "Cinema Red", "Streaming-style red accent"),
     Ocean("ocean", "Ocean", "Deep blue with cyan accent"),
     Midnight("midnight", "Midnight", "Indigo night with soft violet accent"),
     HighContrast("high_contrast", "High Contrast", "Brighter borders and controls"),
-    Dantotsu("dantotsu", "Dantotsu Blue", "Poppins-forward anime app with violet accent"),
-    ReDantotsu("redantotsu", "Liquid Glass", "Frosted dark UI with iOS-blue highlights");
+    Dantotsu("dantotsu", "Dantotsu", "Dantotsu reference style with violet accent"),
+    ReDantotsu("redantotsu", "ReDantotsu", "ReDantotsu reference style with liquid glass and blue accent");
 
     companion object {
         fun fromId(id: String?): AppThemeId = entries.firstOrNull { it.id == id } ?: Default
