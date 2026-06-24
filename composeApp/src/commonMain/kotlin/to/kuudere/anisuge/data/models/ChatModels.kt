@@ -68,6 +68,20 @@ data class ChatMessageMetadata(
     val anime: ChatAnimeCard? = null,
     val sticker: StickerMessage? = null,
     val image: ChatImageAttachment? = null,
+    val extension: ChatExtensionShare? = null,
+)
+
+@Serializable
+data class ChatExtensionShare(
+    /** "repo" for a full repository (multiple extensions), "source" for a single extension/app */
+    val type: String = "source",
+    val url: String = "",
+    val name: String = "",
+    val engine: String? = null,
+    val iconUrl: String? = null,
+    val version: String? = null,
+    /** For single source shares, the originating repo URL so receiver can ensure it's registered */
+    val repoUrl: String? = null,
 )
 
 @Serializable

@@ -48,6 +48,9 @@ import to.kuudere.anisuge.screens.search.KUUDERE_GENRES
 import to.kuudere.anisuge.screens.info.AnimeInfoScreen
 import to.kuudere.anisuge.screens.info.AnimeInfoViewModel
 import to.kuudere.anisuge.screens.watch.WatchScreen
+import to.kuudere.anisuge.data.models.ChatExtensionShare
+import to.kuudere.anisuge.utils.Uri
+import kotlinx.coroutines.launch
 import to.kuudere.anisuge.screens.watch.WatchViewModel
 import to.kuudere.anisuge.screens.watchlist.WatchlistViewModel
 import to.kuudere.anisuge.screens.schedule.ScheduleViewModel
@@ -71,6 +74,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.rememberCoroutineScope
 import to.kuudere.anisuge.screens.update.UpdateScreen
 import to.kuudere.anisuge.screens.update.UpdateViewModel
 import to.kuudere.anisuge.platform.LockScreenOrientation
@@ -272,9 +276,27 @@ fun App(
         val appStrings = appStringsFor(AppLocale.fromCode(appLocaleCode))
         val preferRomajiAnimeTitles by AppComponent.settingsStore.preferRomajiAnimeTitlesFlow.collectAsState(initial = false)
         val uriHandler = LocalUriHandler.current
+        val scope = rememberCoroutineScope()
+
         val handleChatAction: (String) -> Unit = { raw ->
             val deeplink = raw.trim()
             when {
+                deeplink.startsWith("anisurge://extensions/install", ignoreCase = true) -> {
+                    val params = Uri.parseQueryParams(deeplink)
+                    val reconstructed = ChatExtensionShare(
+                        type = params["type"] ?: "source",
+                        url = params["url"] ?: "",
+                        name = params["name"] ?: "Extension",
+                        engine = params["engine"],
+                        iconUrl = params["iconUrl"],
+                        version = params["version"],
+                        repoUrl = params["repoUrl"],
+                    )
+                    AppComponent.triggerExtensionInstallFromShare(reconstructed)
+                    navController.navigate(
+                        Screen.Home(startTab = "Settings", startSettingsTab = "extensions").route
+                    ) { launchSingleTop = true }
+                }
                 deeplink.startsWith("anisurge://anime/", ignoreCase = true) -> {
                     val animeId = deeplink.removePrefix("anisurge://anime/").substringBefore("/")
                     if (animeId.isNotBlank()) {

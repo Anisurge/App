@@ -728,10 +728,13 @@ class ExtensionManager(
         genericJsSources(root, repoUrl, ExtensionEngine.SORA)
 
     private fun genericJsSources(root: JsonElement, repoUrl: String, engine: ExtensionEngine): List<ExtensionSource> {
-        val array = root as? JsonArray
-            ?: (root as? JsonObject)?.get("sources") as? JsonArray
-            ?: (root as? JsonObject)?.get("extensions") as? JsonArray
-            ?: JsonArray(emptyList())
+        val array = when {
+            root is JsonArray -> root
+            root is JsonObject && root["sourceName"] != null -> JsonArray(listOf(root))
+            else -> (root as? JsonObject)?.get("sources") as? JsonArray
+                ?: (root as? JsonObject)?.get("extensions") as? JsonArray
+                ?: JsonArray(emptyList())
+        }
         return array.mapNotNull { element ->
             val o = element as? JsonObject ?: return@mapNotNull null
             val name = o.string("name") ?: o.string("sourceName") ?: return@mapNotNull null
@@ -743,7 +746,7 @@ class ExtensionManager(
                 version = o.string("version") ?: "",
                 latestVersion = o.string("version") ?: "",
                 iconUrl = o.string("iconUrl") ?: o.string("icon"),
-                downloadUrl = o.string("url") ?: o.string("sourceUrl") ?: o.string("downloadUrl") ?: o.string("sourceCodeUrl"),
+                downloadUrl = o.string("url") ?: o.string("scriptUrl") ?: o.string("sourceUrl") ?: o.string("downloadUrl") ?: o.string("sourceCodeUrl"),
                 repositoryUrl = repoUrl,
                 runtimeId = o.string("id"),
                 isAnime = engine != ExtensionEngine.MANGAYOMI &&
@@ -758,6 +761,9 @@ class ExtensionManager(
     ): String? = if (isInstalledSource(source, installedById)) extensionDownloadPath(source) else null
 
     private fun detectEngine(root: JsonElement, body: String): ExtensionEngine {
+        if (root is JsonObject && root["sourceName"] != null &&
+            (root["scriptUrl"] != null || root["sourceUrl"] != null)
+        ) return ExtensionEngine.SORA
         val items = when {
             root is JsonArray -> root
             root is JsonObject -> root["extensions"] as? JsonArray

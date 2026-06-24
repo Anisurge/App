@@ -37,10 +37,12 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -78,9 +80,12 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.PaddingValues
 import coil3.compose.AsyncImage
+import to.kuudere.anisuge.theme.AppColors
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -95,10 +100,12 @@ import org.jetbrains.compose.resources.painterResource
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ChatAction
 import to.kuudere.anisuge.data.models.ChatAnimeCard
+import to.kuudere.anisuge.data.models.ChatExtensionShare
 import to.kuudere.anisuge.data.models.ChatImageAttachment
 import to.kuudere.anisuge.data.models.ChatMessage
+import to.kuudere.anisuge.extensions.ExtensionEngine
 import to.kuudere.anisuge.platform.ChatImagePick
-import to.kuudere.anisuge.theme.AppColors
+import to.kuudere.anisuge.utils.Uri
 import to.kuudere.anisuge.ui.ChatUsernameLabel
 import to.kuudere.anisuge.ui.ChatDecoratedAvatar
 import to.kuudere.anisuge.ui.StickerInline
@@ -771,6 +778,15 @@ private fun ChatMessageRow(
                                     onClick = { onActionClick("anisurge://anime/${anime.animeId}") },
                                 )
                             }
+                            message.metadata.extension?.let { ext ->
+                                ChatExtensionCardView(
+                                    ext = ext,
+                                    onInstallClick = {
+                                        val deeplink = buildExtensionInstallDeeplink(ext)
+                                        onActionClick(deeplink)
+                                    },
+                                )
+                            }
                             if (message.metadata.actions.isNotEmpty()) {
                                 ChatActionButtons(
                                     actions = message.metadata.actions,
@@ -1263,6 +1279,110 @@ private fun ChatAnimeCardView(
                     maxLines = 3,
                 )
             }
+        }
+    }
+}
+
+private fun buildExtensionInstallDeeplink(ext: ChatExtensionShare): String {
+    val type = if (ext.type == "repo") "repo" else "source"
+    val params = buildList {
+        add("type=$type")
+        if (ext.url.isNotBlank()) add("url=${Uri.encodeForQuery(ext.url)}")
+        if (ext.name.isNotBlank()) add("name=${Uri.encodeForQuery(ext.name)}")
+        ext.engine?.let { add("engine=${Uri.encodeForQuery(it)}") }
+        ext.iconUrl?.takeIf { it.isNotBlank() }?.let { add("iconUrl=${Uri.encodeForQuery(it)}") }
+        ext.version?.takeIf { it.isNotBlank() }?.let { add("version=${Uri.encodeForQuery(it)}") }
+        ext.repoUrl?.takeIf { it.isNotBlank() }?.let { add("repoUrl=${Uri.encodeForQuery(it)}") }
+    }.joinToString("&")
+    return "anisurge://extensions/install?$params"
+}
+
+@Composable
+private fun ChatExtensionCardView(
+    ext: ChatExtensionShare,
+    onInstallClick: () -> Unit,
+) {
+    val isRepo = ext.type.equals("repo", ignoreCase = true)
+    val accent = when (ext.engine?.uppercase()) {
+        "ANIYOMI" -> Color(0xFF3F51B5)
+        "CLOUDSTREAM" -> Color(0xFF42A5F5)
+        "MANGAYOMI" -> Color(0xFFE53935)
+        "SORA" -> Color(0xFF8D6E63)
+        else -> AppColors.accent
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color.Black.copy(alpha = 0.30f))
+            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        // Icon area
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(accent.copy(alpha = 0.25f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (!ext.iconUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = ext.iconUrl,
+                    contentDescription = ext.name,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Icon(
+                    Icons.Default.Extension,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+
+        Column(Modifier.weight(1f)) {
+            Text(
+                ext.name.ifBlank { if (isRepo) "Extension Repository" else "Extension" },
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                (if (isRepo) "Repository" else "Extension") + (ext.engine?.let { " · $it" } ?: ""),
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 11.sp,
+                maxLines = 1,
+            )
+            if (ext.version?.isNotBlank() == true) {
+                Text(
+                    "v${ext.version}",
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontSize = 10.sp,
+                )
+            }
+        }
+
+        Button(
+            onClick = onInstallClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = accent,
+                contentColor = Color.White,
+            ),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.height(32.dp),
+        ) {
+            Icon(Icons.Default.Download, null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(if (isRepo) "Add Repo" else "Install", fontSize = 11.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

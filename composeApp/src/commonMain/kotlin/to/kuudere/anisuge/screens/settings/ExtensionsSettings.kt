@@ -44,10 +44,12 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -90,7 +92,10 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.AppComponent
+import to.kuudere.anisuge.data.models.ChatExtensionShare
+import to.kuudere.anisuge.data.models.ChatMessageMetadata
 import to.kuudere.anisuge.extensions.CloudflareBypassDialog
+import androidx.compose.runtime.collectAsState
 import to.kuudere.anisuge.extensions.CloudflareBypassButton
 import to.kuudere.anisuge.extensions.ExtensionEngine
 import to.kuudere.anisuge.extensions.ExtensionManager
@@ -139,6 +144,7 @@ fun ExtensionsSettings(
     var operationError by remember { mutableStateOf<String?>(null) }
     var operationMessage by remember { mutableStateOf<String?>(null) }
     var animatingOutIds by remember { mutableStateOf(setOf<String>()) }
+    var isConfirmInstalling by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     val chipScrollState = rememberScrollState()
@@ -161,6 +167,8 @@ fun ExtensionsSettings(
         }
     }
 
+    val pendingShare by AppComponent.pendingExtensionInstall.collectAsState()
+
     val actualRepoDialog = repoDialogVisible ?: localRepoDialog
     val actualRuntimeDialog = runtimeDialogVisible ?: localRuntimeDialog
     val actualSortDialog = sortDialogVisible ?: localSortDialog
@@ -182,6 +190,37 @@ fun ExtensionsSettings(
                 val cause = generateSequence(e) { it.cause }.last()
                 operationError = cause.message?.takeIf { it.isNotBlank() }
                     ?: cause::class.simpleName ?: "Extension operation failed"
+            }
+        }
+    }
+
+    fun shareExtensionSourceToChat(source: ExtensionSource) {
+        scope.launch {
+            operationError = null
+            operationMessage = null
+            runCatching {
+                val meta = ChatMessageMetadata(
+                    kind = "extension",
+                    extension = ChatExtensionShare(
+                        type = "source",
+                        url = source.downloadUrl.orEmpty(),
+                        name = source.name,
+                        engine = source.engine.name,
+                        iconUrl = source.iconUrl,
+                        version = source.version,
+                        repoUrl = source.repositoryUrl.takeIf { it.isNotBlank() },
+                    )
+                )
+                val body = "Shared extension: ${source.name}\n${source.downloadUrl ?: ""}"
+                val res = AppComponent.chatService.postMessage(body = body, metadata = meta)
+                if (res.isSuccess) {
+                    operationMessage = "Shared ${source.name} to global chat"
+                } else {
+                    operationError = res.exceptionOrNull()?.message ?: "Failed to share"
+                }
+            }.onFailure { e ->
+                val cause = generateSequence(e) { it.cause }.last()
+                operationError = cause.message?.takeIf { it.isNotBlank() } ?: "Share failed"
             }
         }
     }
@@ -355,6 +394,7 @@ fun ExtensionsSettings(
                             onRepair = { source ->
                                 guarded { operationMessage = manager.repairSource(source) }
                             },
+                            onShare = { source -> shareExtensionSourceToChat(source) },
                         )
                     }
                     if (availableItems.isNotEmpty()) {
@@ -373,6 +413,7 @@ fun ExtensionsSettings(
                             onUpdate = { _ -> },
                             onUninstall = ::uninstallWithAnimation,
                             onRepair = { _ -> },
+                            onShare = { source -> shareExtensionSourceToChat(source) },
                         )
                     }
                 }
@@ -382,6 +423,56 @@ fun ExtensionsSettings(
                 )
             }
         }
+    }
+
+    // Confirmation dialog for shared extension/repo from chat
+    pendingShare?.let { share ->
+        ExtensionInstallConfirmDialog(
+            share = share,
+            isInstalling = isConfirmInstalling,
+            onDismiss = {
+                if (!isConfirmInstalling) AppComponent.clearPendingExtensionInstall()
+            },
+            onConfirm = {
+                isConfirmInstalling = true
+                scope.launch {
+                    operationError = null
+                    operationMessage = null
+                    runCatching {
+                        if (share.type.equals("repo", ignoreCase = true)) {
+                            manager.addRepositoryAutoDetect(share.url)
+                            operationMessage = "Added repository \"${share.name}\""
+                        } else {
+                            if (!share.repoUrl.isNullOrBlank()) {
+                                runCatching { manager.addRepositoryAutoDetect(share.repoUrl) }
+                            }
+                            val engine = ExtensionEngine.entries.firstOrNull {
+                                it.name.equals(share.engine, ignoreCase = true)
+                            } ?: ExtensionEngine.ANIYOMI
+                            val tempSource = ExtensionSource(
+                                id = share.name,
+                                name = share.name,
+                                engine = engine,
+                                downloadUrl = share.url,
+                                repositoryUrl = share.repoUrl ?: "",
+                                version = share.version ?: "",
+                                iconUrl = share.iconUrl,
+                                installed = false,
+                                latestVersion = share.version ?: "",
+                            )
+                            manager.install(tempSource)
+                            operationMessage = "Installed ${share.name}"
+                        }
+                        runCatching { manager.refresh() }
+                    }.onFailure { e ->
+                        val cause = generateSequence(e) { it.cause }.last()
+                        operationError = cause.message?.takeIf { it.isNotBlank() } ?: "Failed to install"
+                    }
+                    isConfirmInstalling = false
+                    AppComponent.clearPendingExtensionInstall()
+                }
+            }
+        )
     }
 }
 
@@ -394,6 +485,7 @@ private fun LazyListScope.extensionListItems(
     onUpdate: (ExtensionSource) -> Unit,
     onUninstall: (ExtensionSource) -> Unit,
     onRepair: (ExtensionSource) -> Unit,
+    onShare: (ExtensionSource) -> Unit,
 ) {
     items(items, key = { extensionItemKey(it) }) { source ->
         val itemKey = extensionItemKey(source)
@@ -412,6 +504,7 @@ private fun LazyListScope.extensionListItems(
                 onUpdate = { onUpdate(source) },
                 onUninstall = { onUninstall(source) },
                 onRepair = { onRepair(source) },
+                onShare = { onShare(source) },
             )
         }
     }
@@ -491,6 +584,7 @@ private fun ExtensionSourceCard(
     onUpdate: () -> Unit,
     onUninstall: () -> Unit,
     onRepair: () -> Unit,
+    onShare: () -> Unit,
 ) {
     val accent = EngineAccent[source.engine] ?: AppColors.accent
     val engineName = source.engine.displayName
@@ -545,8 +639,16 @@ private fun ExtensionSourceCard(
                 }
             }
             Spacer(Modifier.width(8.dp))
-            if (source.installed) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                ActionIconButton(
+                    icon = Icons.Default.Share,
+                    containerColor = AppColors.surfaceVariant,
+                    iconColor = AppColors.text,
+                    contentDesc = "Share to chat",
+                    onClick = onShare,
+                    enabled = !isBusy,
+                )
+                if (source.installed) {
                     if (source.hasUpdate) {
                         ActionIconButton(
                             icon = Icons.Default.Update,
@@ -573,7 +675,6 @@ private fun ExtensionSourceCard(
                         onClick = onUninstall,
                         enabled = !isBusy,
                     )
-                }
                 } else {
                     Box(
                         modifier = Modifier
@@ -605,6 +706,7 @@ private fun ExtensionSourceCard(
                         }
                     }
                 }
+            }
         }
     }
 }
@@ -868,6 +970,26 @@ private fun RepoManagementDialog(
                                 )
                             }
                             IconButton(onClick = {
+                                scope.launch {
+                                    val meta = ChatMessageMetadata(
+                                        kind = "extension",
+                                        extension = ChatExtensionShare(
+                                            type = "repo",
+                                            url = repo.url,
+                                            name = repo.name ?: repo.engine.displayName,
+                                            engine = repo.engine.name,
+                                        )
+                                    )
+                                    val body = "Shared extension repository: ${repo.name ?: repo.engine.displayName}\n${repo.url}"
+                                    val res = AppComponent.chatService.postMessage(body = body, metadata = meta)
+                                    if (res.isSuccess) {
+                                        // non blocking notice via parent if possible; dialog just posts
+                                    }
+                                }
+                            }) {
+                                Icon(Icons.Default.Share, "Share to chat", tint = AppColors.accent, modifier = Modifier.size(18.dp))
+                            }
+                            IconButton(onClick = {
                                 scope.launch { onRemoveRepo(repo) }
                             }) {
                                 Icon(Icons.Default.Delete, "Remove", tint = Color(0xFFE53935), modifier = Modifier.size(18.dp))
@@ -1041,6 +1163,110 @@ private fun RuntimeStatusDialog(
             }
         }
     }
+}
+
+@Composable
+private fun ExtensionInstallConfirmDialog(
+    share: ChatExtensionShare,
+    isInstalling: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val isRepo = share.type.equals("repo", ignoreCase = true)
+    val actionLabel = if (isRepo) "Add Repository" else "Install Extension"
+    val accent = when (share.engine?.uppercase()) {
+        "ANIYOMI" -> Color(0xFF3F51B5)
+        "CLOUDSTREAM" -> Color(0xFF42A5F5)
+        "MANGAYOMI" -> Color(0xFFE53935)
+        "SORA" -> Color(0xFF8D6E63)
+        else -> AppColors.accent
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            if (isInstalling) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = accent
+                    )
+                    Text("Installing...", color = AppColors.text)
+                }
+            } else {
+                Button(
+                    onClick = onConfirm,
+                    colors = ButtonDefaults.buttonColors(containerColor = accent)
+                ) {
+                    Text(actionLabel)
+                }
+            }
+        },
+        dismissButton = {
+            if (!isInstalling) {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        },
+        title = {
+            Text(if (isRepo) "Add Extension Repository?" else "Install this Extension?")
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(accent.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!share.iconUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = share.iconUrl,
+                                contentDescription = share.name,
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(6.dp)),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(Icons.Default.Extension, null, tint = accent, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            share.name.ifBlank { "Unnamed" },
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp,
+                            color = AppColors.text
+                        )
+                        Text(
+                            if (isRepo) "Repository • ${share.engine ?: "Unknown"}" else "Extension • ${share.engine ?: "Unknown"}",
+                            fontSize = 12.sp,
+                            color = AppColors.textMuted
+                        )
+                        if (!share.version.isNullOrBlank()) {
+                            Text("v${share.version}", fontSize = 11.sp, color = AppColors.textMuted)
+                        }
+                    }
+                }
+
+                Text(
+                    if (isRepo)
+                        "This will add the repository and let you browse/install extensions from it."
+                    else
+                        "This will download and install the shared extension/plugin.",
+                    fontSize = 13.sp,
+                    color = AppColors.textMuted
+                )
+            }
+        }
+    )
 }
 
 @Composable

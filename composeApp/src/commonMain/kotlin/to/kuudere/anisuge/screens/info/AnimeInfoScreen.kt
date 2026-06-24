@@ -3119,7 +3119,7 @@ private fun ExtensionMappingChip(
     val label = when (status) {
         ExtensionMappingStatus.Searching -> "Extension: Searching…"
         ExtensionMappingStatus.Mapped -> "Extension: Found — ${mappedTitle.orEmpty()}"
-        ExtensionMappingStatus.Failed -> "Extension: Not found — tap to retry"
+        ExtensionMappingStatus.Failed -> "Extension: No match found — tap to retry"
         ExtensionMappingStatus.NeedsPick -> "Extension: Pick correct title"
         ExtensionMappingStatus.Idle -> return
     }

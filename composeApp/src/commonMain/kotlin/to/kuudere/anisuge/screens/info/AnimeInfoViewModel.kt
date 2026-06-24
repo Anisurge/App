@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.first
 import to.kuudere.anisuge.data.models.AnimeDetails
 import to.kuudere.anisuge.data.services.SettingsStore
 import to.kuudere.anisuge.extensions.ExtensionManager
+import to.kuudere.anisuge.extensions.ExtensionPrefetchResult
+import to.kuudere.anisuge.extensions.isBridgeCapableOnPlatform
+import to.kuudere.anisuge.extensions.selectableServerId
 import to.kuudere.anisuge.extensions.serverId
 import to.kuudere.anisuge.data.models.RecommendationItem
 import to.kuudere.anisuge.data.models.EpisodeItem
@@ -297,7 +300,8 @@ class AnimeInfoViewModel(
             if (extensionManager.busy.value) {
                 extensionManager.busy.first { !it }
             }
-            if (extensionManager.installed.value.isEmpty()) {
+            val installed = extensionManager.installed.value.filter { it.isBridgeCapableOnPlatform() }
+            if (installed.isEmpty()) {
                 _uiState.update {
                     it.copy(
                         extensionMappingStatus = ExtensionMappingStatus.Idle,
@@ -308,45 +312,73 @@ class AnimeInfoViewModel(
                 return@launch
             }
             val priority = settingsStore.serverPriorityFlow.first()
-            val serverId = extensionManager.preferredExtensionServerId(priority)
-                ?: extensionManager.installed.value.firstOrNull()?.serverId()
-                ?: return@launch
+            val preferred = extensionManager.preferredExtensionServerId(priority)
+            // Build candidates: preferred first (if bridge), then all other bridge-capable
+            val candidateIds = buildList {
+                if (preferred != null && installed.any { it.selectableServerId() == preferred || it.selectableServerId(dub = true) == preferred }) {
+                    add(preferred)
+                }
+                installed.forEach { src ->
+                    val nonDub = src.selectableServerId(dub = false)
+                    val dub = src.selectableServerId(dub = true)
+                    if (nonDub !in this) add(nonDub)
+                    if (dub !in this) add(dub)
+                }
+            }.distinct()
+
             val animeId = details.animeId.ifBlank { details.id }
             val titles = extensionSearchTitles(details)
             val synonyms = details.synonyms.filter { it.isNotBlank() }
+
             _uiState.update {
                 it.copy(
                     extensionMappingStatus = ExtensionMappingStatus.Searching,
                     extensionMappedTitle = null,
-                    extensionPrefetchServerId = serverId,
+                    extensionPrefetchServerId = null,
                 )
             }
-            try {
-                val result = extensionManager.prefetchMapping(
-                    animeId = animeId,
-                    titles = titles,
-                    synonyms = synonyms,
-                    serverId = serverId,
-                )
+
+            var successServer: String? = null
+            var successResult: ExtensionPrefetchResult? = null
+
+            for (serverId in candidateIds) {
+                try {
+                    val result = extensionManager.prefetchMapping(
+                        animeId = animeId,
+                        titles = titles,
+                        synonyms = synonyms,
+                        serverId = serverId,
+                    )
+                    successServer = serverId
+                    successResult = result
+                    break
+                } catch (e: Exception) {
+                    println("[AnimeInfoVM] extension prefetch failed for $serverId: ${e.message}")
+                    // try next extension
+                }
+            }
+
+            if (successServer != null && successResult != null) {
                 _uiState.update {
                     it.copy(
                         extensionMappingStatus = ExtensionMappingStatus.Mapped,
-                        extensionMappedTitle = result.mappedTitle,
-                        extensionPrefetchServerId = serverId,
+                        extensionMappedTitle = successResult.mappedTitle,
+                        extensionPrefetchServerId = successServer,
                     )
                 }
-            } catch (e: Exception) {
-                println("[AnimeInfoVM] extension prefetch error: ${e.message}")
+            } else {
+                println("[AnimeInfoVM] extension prefetch failed for all installed sources")
                 val status = if (extensionManager.pendingMatch.value != null) {
                     ExtensionMappingStatus.NeedsPick
                 } else {
                     ExtensionMappingStatus.Failed
                 }
+                // Use first candidate as fallback for retry id
                 _uiState.update {
                     it.copy(
                         extensionMappingStatus = status,
                         extensionMappedTitle = null,
-                        extensionPrefetchServerId = serverId,
+                        extensionPrefetchServerId = candidateIds.firstOrNull(),
                     )
                 }
             }

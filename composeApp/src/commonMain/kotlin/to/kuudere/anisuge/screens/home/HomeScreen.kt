@@ -435,7 +435,7 @@ fun HomeScreen(
                             .hazeSource(state = hazeState)
                             .padding(
                                 top = topBarHeight,
-                                bottom = if (useFloatingBottomBar) 0.dp else bottomBarHeight
+                                bottom = if (useFloatingBottomBar) 72.dp else bottomBarHeight
                             )
                     ) {
                         AnimatedContent(

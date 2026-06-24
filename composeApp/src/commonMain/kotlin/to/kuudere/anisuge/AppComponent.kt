@@ -11,7 +11,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
+import to.kuudere.anisuge.data.models.ChatExtensionShare
 import to.kuudere.anisuge.data.repository.ServerRepository
 import to.kuudere.anisuge.data.services.AuthService
 import to.kuudere.anisuge.data.services.SessionStore
@@ -165,6 +168,18 @@ object AppComponent {
 
     val extensionManager: to.kuudere.anisuge.extensions.ExtensionManager by lazy {
         to.kuudere.anisuge.extensions.ExtensionManager(httpClient, extensionStore, extensionRuntime)
+    }
+
+    /** Pending extension/repo share from chat to show confirm dialog on extensions page. */
+    private val _pendingExtensionInstall = MutableStateFlow<ChatExtensionShare?>(null)
+    val pendingExtensionInstall = _pendingExtensionInstall.asStateFlow()
+
+    fun triggerExtensionInstallFromShare(share: ChatExtensionShare) {
+        _pendingExtensionInstall.value = share
+    }
+
+    fun clearPendingExtensionInstall() {
+        _pendingExtensionInstall.value = null
     }
 
     val latestService: to.kuudere.anisuge.data.services.LatestService by lazy {

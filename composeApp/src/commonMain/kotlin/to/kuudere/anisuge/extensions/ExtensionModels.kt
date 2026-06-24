@@ -221,8 +221,8 @@ fun ExtensionSource.isBridgeCapableOnPlatform(): Boolean {
     return when (engine) {
         ExtensionEngine.ANIYOMI, ExtensionEngine.CLOUDSTREAM -> true
         ExtensionEngine.MANGAYOMI, ExtensionEngine.SORA -> {
-            val path = installedPath.orEmpty()
-            path.endsWith(".apk", ignoreCase = true)
+            val ext = artifactExtension()
+            ext == "apk" || ext == "js" || ext == "dart"
         }
     }
 }
