@@ -28,6 +28,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -418,14 +421,75 @@ fun W2gPlayerScreen(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                     Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        if (state.isLoadingPlayback) "Loading stream..."
-                                        else "${state.roomDetail?.server ?: "suzu"} \u00b7 ${state.roomDetail?.language ?: "sub"} \u00b7 auto",
-                                        color = Color.Gray,
-                                        fontSize = 14.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                    // Server info — clickable dropdown for host
+                                    if (state.isHost && state.availableServers.isNotEmpty()) {
+                                        var serverMenuOpen by remember { mutableStateOf(false) }
+                                        val currentSrvId = (state.roomDetail?.server ?: "suzu").let { if (it.endsWith("-dub", true)) it.dropLast(4) else it }
+                                        val currentServerLabel = state.availableServers.firstOrNull {
+                                            it.id.equals(currentSrvId, true) || it.id.equals(state.roomDetail?.server ?: "suzu", true)
+                                        }?.label?.let { lbl -> lbl.removeSuffix(" (Sub)").removeSuffix(" (Dub)").trim().ifBlank { lbl } } 
+                                            ?: currentSrvId
+
+                                        Box {
+                                            Row(
+                                                modifier = Modifier.clickable { serverMenuOpen = true },
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Text(
+                                                    currentServerLabel,
+                                                    color = AppColors.accent,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                                Spacer(Modifier.width(4.dp))
+                                                Icon(
+                                                    Icons.Default.KeyboardArrowDown,
+                                                    contentDescription = "Change server",
+                                                    tint = AppColors.accent,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                            DropdownMenu(
+                                                expanded = serverMenuOpen,
+                                                onDismissRequest = { serverMenuOpen = false },
+                                            ) {
+                                                Text(
+                                                    "Change Server",
+                                                    color = Color.Gray,
+                                                    fontSize = 11.sp,
+                                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                                )
+                                                state.availableServers.forEach { srv ->
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Text(
+                                                                srv.label,
+                                                                color = if (srv.id == (state.roomDetail?.server ?: "suzu")) AppColors.accent else Color.White,
+                                                                fontWeight = if (srv.id == (state.roomDetail?.server ?: "suzu")) FontWeight.Bold else FontWeight.Normal,
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            serverMenuOpen = false
+                                                            if (srv.id != (state.roomDetail?.server ?: "suzu")) {
+                                                                viewModel.changeServer(srv.id)
+                                                            }
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            if (state.isLoadingPlayback) "Loading stream..."
+                                            else "${state.roomDetail?.server ?: "suzu"} \u00b7 ${state.roomDetail?.language ?: "sub"} \u00b7 auto",
+                                            color = Color.Gray,
+                                            fontSize = 14.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 } else if (state.isHost) {
                                     Button(
                                         onClick = { viewModel.openHostPicker() },
@@ -484,10 +548,13 @@ fun W2gPlayerScreen(
                                 server = detail.server ?: "suzu",
                                 language = detail.language,
                                 quality = detail.quality,
+                                availableServers = state.availableServers,
                                 onChangeAnime = { viewModel.openHostPicker() },
                                 onChangeEpisode = { animeId, ep, server, lang, quality ->
                                     viewModel.changeEpisode(animeId, ep, server, lang, quality)
                                 },
+                                onServerChange = { viewModel.changeServer(it) },
+                                onLanguageChange = { viewModel.changeLanguage(it) },
                             )
                         }
 
@@ -981,9 +1048,21 @@ private fun RoomControls(
     server: String,
     language: String?,
     quality: String?,
+    availableServers: List<ServerInfo> = emptyList(),
     onChangeAnime: () -> Unit,
     onChangeEpisode: (String, Int, String, String?, String?) -> Unit,
+    onServerChange: (String) -> Unit = {},
+    onLanguageChange: (String) -> Unit = {},
 ) {
+    var serverMenuExpanded by remember { mutableStateOf(false) }
+    var langMenuExpanded by remember { mutableStateOf(false) }
+    val currentServerId = server.let { if (it.endsWith("-dub", ignoreCase = true)) it.dropLast(4) else it }
+    val currentServerLabel = availableServers.firstOrNull { 
+        it.id.equals(currentServerId, true) || it.id.equals(server, true) 
+    }?.label?.let { lbl ->
+        lbl.removeSuffix(" (Sub)").removeSuffix(" (Dub)").trim().ifBlank { lbl }
+    } ?: currentServerId
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -994,6 +1073,131 @@ private fun RoomControls(
     ) {
         Text("Host Controls", color = AppColors.accent, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         Spacer(Modifier.height(8.dp))
+
+        // Audio + Server side-by-side in one line to save space
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // Audio (sub/dub) - small compact dropdown on the left
+            val currentLangLabel = (language ?: "sub").uppercase()
+            val audioWeight = if (availableServers.isNotEmpty()) 0.38f else 1f
+            Box(modifier = Modifier.weight(audioWeight)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .clickable { langMenuExpanded = true }
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Audio: $currentLangLabel",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.width(2.dp))
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Change audio",
+                        tint = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.size(13.dp),
+                    )
+                }
+                DropdownMenu(
+                    expanded = langMenuExpanded,
+                    onDismissRequest = { langMenuExpanded = false },
+                ) {
+                    Text(
+                        "Audio",
+                        color = Color.Gray,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                    listOf("sub", "dub").forEach { lang ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    lang.uppercase(),
+                                    color = if (lang == (language ?: "sub")) AppColors.accent else Color.White,
+                                    fontWeight = if (lang == (language ?: "sub")) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 13.sp,
+                                )
+                            },
+                            onClick = {
+                                langMenuExpanded = false
+                                if (lang != (language ?: "sub")) {
+                                    onLanguageChange(lang)
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Server dropdown - takes remaining space (only base names; audio chosen separately)
+            val baseServers = availableServers
+                .filter { !it.id.endsWith("-dub", ignoreCase = true) }
+                .map { srv ->
+                    val cl = srv.label.removeSuffix(" (Sub)").removeSuffix(" (Dub)").trim()
+                    srv.copy(
+                        label = cl.ifBlank { srv.label },
+                        id = if (srv.id.endsWith("-dub", true)) srv.id.dropLast(4) else srv.id
+                    )
+                }
+                .distinctBy { it.id.lowercase() }
+            if (baseServers.isNotEmpty()) {
+                Box(modifier = Modifier.weight(0.62f)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .clickable { serverMenuExpanded = true }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Server: $currentServerLabel",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.6f),
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = serverMenuExpanded,
+                        onDismissRequest = { serverMenuExpanded = false },
+                    ) {
+                        baseServers.forEach { srv ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        srv.label,
+                                        color = if (srv.id == currentServerId) AppColors.accent else Color.White,
+                                        fontWeight = if (srv.id == currentServerId) FontWeight.Bold else FontWeight.Normal,
+                                    )
+                                },
+                                onClick = {
+                                    serverMenuExpanded = false
+                                    if (srv.id != currentServerId) onServerChange(srv.id)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

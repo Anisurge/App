@@ -122,6 +122,7 @@ class WatchViewModel(
     private val serverRepository: ServerRepository,
     private val extensionManager: to.kuudere.anisuge.extensions.ExtensionManager,
     private val aniskipService: to.kuudere.anisuge.data.services.AniskipService,
+    private val anizipService: to.kuudere.anisuge.data.services.AniZipService,
     private val syncManager: SyncManager? = null,
     private val trackingService: TrackingService? = null,
 ) : ViewModel() {
@@ -257,6 +258,7 @@ class WatchViewModel(
                 currentServer = server?.lowercase().orEmpty().ifBlank { if (newAnime) "" else it.currentServer },
                 introSkip = if (newAnime) null else it.introSkip,
                 outroSkip = if (newAnime) null else it.outroSkip,
+                thumbnails = if (newAnime) emptyMap() else it.thumbnails,
             )
         }
 
@@ -399,6 +401,9 @@ class WatchViewModel(
 
         if (data != null) {
             val slug = data.anime?.animeId?.takeIf { it.isNotBlank() } ?: currentAnimeId
+            // Resolve anilistId reliably like AnimeInfoViewModel (uses /anime details endpoint which includes anilist_id)
+            val resolvedAnilistId = data.anilistId?.takeIf { it > 0 }
+                ?: runCatching { infoService.getAnimeDetails(slug, includeEpisodes = false)?.anilistId }.getOrNull()?.takeIf { it > 0 }
             val initialEpisodes = data.episodes
                 ?.takeIf { it.isNotEmpty() }
                 ?: cachedEpisodeList?.takeIf { cachedEpisodeListKey == slug && it.isNotEmpty() }
@@ -427,7 +432,7 @@ class WatchViewModel(
             coroutineScope {
                 val streamJob = launch {
                     if (_uiState.value.offlinePath == null && coroutineContext.isActive) {
-                        loadVideoStream(streamServer, data.anilistId)
+                        loadVideoStream(streamServer, resolvedAnilistId ?: data.anilistId)
                     }
                 }
                 val loadedEpisodesDeferred = async {
@@ -435,6 +440,16 @@ class WatchViewModel(
                 }
                 val progressDeferred = async {
                     fetchEpisodeProgress(currentAnimeId, data)
+                }
+                val thumbnailsDeferred = async {
+                    // Prefer the reliably resolved anilistId (from details API like info page) for AniZip episode thumbs
+                    val alId = resolvedAnilistId ?: data.anilistId?.takeIf { it > 0 }
+                    println("[WatchVM] Thumbnails: anilistId=$alId for anime=$currentAnimeId (slug=$slug)")
+                    alId?.let { id ->
+                        val thumbs = runCatching { anizipService.getEpisodeThumbnails(id) }.getOrNull()
+                        println("[WatchVM] Thumbnails: got ${thumbs?.size ?: 0} entries for anilist=$id")
+                        thumbs ?: emptyMap()
+                    } ?: emptyMap()
                 }
 
                 val loadedEpisodes = loadedEpisodesDeferred.await()
@@ -450,12 +465,14 @@ class WatchViewModel(
                 cachedEpisodeListKey = slug
                 val dataWithEpisodes = data.copy(episodes = mergedEpisodes.takeIf { it.isNotEmpty() })
                 val progressMap = progressDeferred.await()
+                val thumbnailMap = thumbnailsDeferred.await()
 
                 if (coroutineContext.isActive && _uiState.value.offlinePath == null) {
                     _uiState.update { state ->
                         state.copy(
                             episodeData = dataWithEpisodes,
                             episodeProgress = progressMap,
+                            thumbnails = thumbnailMap,
                         )
                     }
                 }
@@ -837,7 +854,8 @@ class WatchViewModel(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            println("[WatchVM] extension stream error server=$serverName: ${e.message}")
+            val detail = e.message ?: e::class.simpleName ?: "unknown error"
+            println("[WatchVM] extension stream error server=$serverName: $detail")
             if (generation == streamLoadGeneration) {
                 _uiState.update {
                     it.copy(
@@ -845,10 +863,32 @@ class WatchViewModel(
                         loadingMessage = null,
                         offlinePath = null,
                         pendingExtensionStreams = null,
-                        berriesToast = e.message ?: "Extension stream failed",
+                        berriesToast = "Extension error: $detail",
                     )
                 }
             }
+        }
+    }
+
+    fun clearExtensionMappingAndReload() {
+        val serverId = _uiState.value.currentServer
+        if (parseExtensionServerId(serverId) == null) return
+        val animeId = currentAnimeId
+        if (animeId.isBlank()) return
+        loadJob?.cancel()
+        streamLoadGeneration++
+        cachedExtensionStreamResult = null
+        cachedExtensionVideos = null
+        _uiState.update {
+            it.copy(
+                streamingData = null,
+                pendingExtensionStreams = null,
+                berriesToast = null,
+            )
+        }
+        viewModelScope.launch {
+            extensionManager.clearMapping(animeId, serverId)
+            fetchEpisodeData(_uiState.value.currentEpisodeNumber)
         }
     }
 

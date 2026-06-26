@@ -91,6 +91,7 @@ data class W2gUiState(
     val isLoadingStickers: Boolean = false,
     val stickerError: String? = null,
     val purchasingStickerId: String? = null,
+    val availableServers: List<ServerInfo> = emptyList(),
 ) {
     val filteredRooms: List<W2gRoomSummary>
         get() = if (searchQuery.isBlank()) rooms
@@ -363,13 +364,13 @@ class W2gViewModel(
         val servers = serverRepository.getAvailableServers().ifEmpty { FALLBACK_SERVERS }
         val detail = _state.value.roomDetail
         val initialLanguage = detail?.language?.takeIf { it == "sub" || it == "dub" }
-        val initialServers = servers.filterForLanguage(initialLanguage)
+        val initialServers = servers.toBaseServersForW2g()
         _state.value = _state.value.copy(
             hostPicker = W2gHostPickerState(
                 isOpen = true,
                 episode = (detail?.episodeNumber ?: 1).toString(),
                 language = initialLanguage,
-                server = detail?.server?.takeIf { id -> initialServers.any { it.id == id } },
+                server = detail?.server?.takeIf { id -> initialServers.any { it.id.equals(id.removeSuffix("-dub"), true) } },
                 servers = initialServers,
             ),
         )
@@ -415,7 +416,7 @@ class W2gViewModel(
             anime.dubbed >= episode -> "dub"
             else -> null
         }
-        val servers = serverRepository.getAvailableServers().ifEmpty { FALLBACK_SERVERS }.filterForLanguage(language)
+        val servers = serverRepository.getAvailableServers().ifEmpty { FALLBACK_SERVERS }.toBaseServersForW2g()
         _state.value = _state.value.copy(
             hostPicker = _state.value.hostPicker.copy(
                 selectedAnime = anime,
@@ -455,7 +456,7 @@ class W2gViewModel(
     }
 
     fun setHostLanguage(language: String) {
-        val servers = serverRepository.getAvailableServers().ifEmpty { FALLBACK_SERVERS }.filterForLanguage(language)
+        val servers = serverRepository.getAvailableServers().ifEmpty { FALLBACK_SERVERS }.toBaseServersForW2g()
         _state.value = _state.value.copy(
             hostPicker = _state.value.hostPicker.copy(
                 language = language,
@@ -551,6 +552,26 @@ class W2gViewModel(
         }.filter { it.active }.ifEmpty { this }
     }
 
+    /** For W2G server list: always show only base server names (no -dub variants).
+     *  Audio (sub/dub) is chosen in separate dropdown. */
+    private fun List<ServerInfo>.toBaseServersForW2g(): List<ServerInfo> {
+        val seen = mutableSetOf<String>()
+        return mapNotNull { srv ->
+            val baseId = if (srv.id.endsWith("-dub", ignoreCase = true)) srv.id.dropLast(4) else srv.id
+            if (baseId in seen) return@mapNotNull null
+            seen.add(baseId)
+            val cleanLabel = srv.label
+                .removeSuffix(" (Sub)")
+                .removeSuffix(" (Dub)")
+                .trim()
+            srv.copy(
+                id = baseId,
+                label = cleanLabel.ifEmpty { srv.label },
+                type = "sub_dub"
+            )
+        }
+    }
+
     suspend fun createRoom(request: W2gRoomCreateRequest): String? {
         disconnect()
         clearActiveRoom(loadingMessage = "Creating room...")
@@ -561,6 +582,7 @@ class W2gViewModel(
             setCurrentUserId(room.hostUserId)
         }
         if (room != null) {
+            val servers = serverRepository.getAvailableServers().ifEmpty { FALLBACK_SERVERS }
             _state.value = _state.value.copy(
                 loadingMessage = null,
                 roomDetail = room,
@@ -568,6 +590,7 @@ class W2gViewModel(
                 playerState = room.playerState ?: W2gPlayerState(),
                 isHost = isCurrentUserHost(room.hostUserId),
                 error = null,
+                availableServers = servers,
             )
             loadPlaybackFor(room)
             loadRooms()
@@ -582,11 +605,13 @@ class W2gViewModel(
         val response = roomService.joinRoom(inviteCode, password)
         val room = response?.room
         if (room != null) {
+            val servers = serverRepository.getAvailableServers().ifEmpty { FALLBACK_SERVERS }
             _state.value = _state.value.copy(
                 roomDetail = room,
                 members = room.members,
                 playerState = room.playerState ?: W2gPlayerState(),
                 isHost = isCurrentUserHost(room.hostUserId),
+                availableServers = servers,
             )
             loadPlaybackFor(room)
             return Result.success(room)
@@ -617,9 +642,11 @@ class W2gViewModel(
             userId != null &&
             (existingRoom.hostUserId == userId || existingRoom.members.any { it.userId == userId })
         if (alreadyInRoom) {
+            val servers = if (_state.value.availableServers.isNotEmpty()) _state.value.availableServers else serverRepository.getAvailableServers().ifEmpty { FALLBACK_SERVERS }
             _state.value = _state.value.copy(
                 loadingMessage = null,
                 isHost = isCurrentUserHost(existingRoom.hostUserId),
+                availableServers = servers,
             )
             println("[W2gViewModel] using existing room invite=$inviteCode host=${existingRoom.hostUserId} self=$userId isHost=${_state.value.isHost}")
             connect(inviteCode)
@@ -850,7 +877,6 @@ class W2gViewModel(
         playbackLoadJob?.cancel()
         playbackLoadJob = viewModelScope.launch {
             loadPlaybackFor(_state.value.roomDetail)
-            // After resolution, streamUrl/streamHeaders are set on roomDetail
             val detail = _state.value.roomDetail
             wsClient?.sendChangeEpisode(
                 animeId,
@@ -866,6 +892,31 @@ class W2gViewModel(
                 streamHeaders = detail?.streamHeaders,
             )
         }
+    }
+
+    fun changeServer(newServerId: String) {
+        val detail = _state.value.roomDetail ?: return
+        val animeId = detail.animeId ?: return
+        val ep = detail.episodeNumber ?: 1
+        val lang = detail.language
+        val quality = detail.quality
+        changeEpisode(animeId, ep, newServerId, lang, quality)
+    }
+
+    fun changeLanguage(newLanguage: String) {
+        val detail = _state.value.roomDetail ?: return
+        val animeId = detail.animeId ?: return
+        val ep = detail.episodeNumber ?: 1
+        val quality = detail.quality
+
+        // Select a server appropriate for the new language (sub/dub kept as separate concept per preference)
+        val serversForLang = _state.value.availableServers.filterForLanguage(newLanguage)
+        val preferredServer = serversForLang.firstOrNull { it.id == detail.server }?.id
+            ?: serversForLang.firstOrNull()?.id
+            ?: detail.server
+            ?: "suzu"
+
+        changeEpisode(animeId, ep, preferredServer, newLanguage, quality)
     }
 
     fun sendMessage(body: String) = wsClient?.sendChat(body)

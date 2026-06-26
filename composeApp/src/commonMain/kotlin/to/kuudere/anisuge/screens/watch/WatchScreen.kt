@@ -461,6 +461,10 @@ fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: S
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: String = "") {
+    val activeWatchLang = uiState.targetLang ?: if (uiState.defaultLang) "dub" else "sub"
+    val dubServers = uiState.servers.filter { to.kuudere.anisuge.extensions.isDubSelectableServerId(it.id) }
+    val hasDubServers = dubServers.isNotEmpty()
+
     Column(
         Modifier
             .fillMaxSize()
@@ -888,6 +892,36 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                                             )
                                                         }
 
+                                                        if (hasDubServers && activeWatchLang.isNotBlank()) {
+                                                            val langLabel = activeWatchLang.uppercase()
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .padding(start = 8.dp)
+                                                                    .clip(RoundedCornerShape(6.dp))
+                                                                    .background(Color(0xFF333333))
+                                                                    .clickable { viewModel.switchAudioLang(if (activeWatchLang.lowercase() == "dub") "sub" else "dub") }
+                                                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                                            ) {
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                                ) {
+                                                                    Text(
+                                                                        text = langLabel,
+                                                                        color = Color.White,
+                                                                        fontSize = 10.sp,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                    )
+                                                                    Icon(
+                                                                        Icons.Default.KeyboardArrowDown,
+                                                                        contentDescription = "Switch sub/dub",
+                                                                        tint = Color.White.copy(alpha = 0.7f),
+                                                                        modifier = Modifier.size(14.dp),
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+
                                                         if (searchQuery.isBlank() && pageGroups.size > 1) {
                                                             Icon(
                                                                 imageVector = if (isPageDropdownExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -989,7 +1023,8 @@ fun SidePanelContent(uiState: WatchUiState, viewModel: WatchViewModel, animeId: 
                                     } else {
                                         items(visibleEpisodes, key = { it.number }) { episode ->
                                             val isSelected = episode.number == uiState.currentEpisodeNumber
-                                            val thumbnail = uiState.thumbnails[episode.number.toString()]
+                                            val cover = uiState.episodeData?.anime?.coverImage?.bestUrl
+                                            val thumbnail = uiState.thumbnails[episode.number.toString()] ?: cover
 
                                             Row(
                                                 Modifier
@@ -1175,7 +1210,10 @@ private fun AndroidWatchPageLayout(
     var commentsSheetOpen by remember { mutableStateOf(false) }
     var downloadSheetOpen by remember { mutableStateOf(false) }
     val playerKey = "$animeId-${uiState.currentEpisodeNumber}-${offlinePath ?: "online"}"
+
     val activeWatchLang = uiState.targetLang ?: if (uiState.defaultLang) "dub" else "sub"
+    val dubServers = uiState.servers.filter { to.kuudere.anisuge.extensions.isDubSelectableServerId(it.id) }
+    val hasDubServers = dubServers.isNotEmpty()
 
     BoxWithConstraints(
         modifier = Modifier
@@ -1257,6 +1295,9 @@ private fun AndroidWatchPageLayout(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
+                        currentLang = activeWatchLang,
+                        onLangChange = { viewModel.switchAudioLang(it) },
+                        showLangSelector = hasDubServers,
                     )
                 }
             }
@@ -1286,6 +1327,9 @@ private fun AndroidWatchPageLayout(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
+                        currentLang = activeWatchLang,
+                        onLangChange = { viewModel.switchAudioLang(it) },
+                        showLangSelector = hasDubServers,
                     )
                 }
             }
@@ -1321,7 +1365,6 @@ private fun InlineServerSelector(
         else -> "sub"
     }
     val visibleServers = if (activeLang == "dub") dubServers else subServers
-    var langMenuExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -1335,80 +1378,19 @@ private fun InlineServerSelector(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.padding(start = 12.dp)) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF333333))
-                        .clickable { langMenuExpanded = true }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = activeLang.uppercase(),
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Icon(
-                        Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Audio language",
-                        tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-                DropdownMenu(
-                    expanded = langMenuExpanded,
-                    onDismissRequest = { langMenuExpanded = false },
-                    modifier = Modifier.background(AppColors.surface),
-                ) {
-                    listOf("sub" to "Sub", "dub" to "Dub").forEach { (key, label) ->
-                        val selected = activeLang == key
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        label,
-                                        color = Color.White,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                    )
-                                    if (selected) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = AppColors.accent,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                }
-                            },
-                            onClick = {
-                                langMenuExpanded = false
-                                if (!selected) onLangChange(key)
-                            },
-                        )
-                    }
-                }
-            }
-
             if (visibleServers.isNotEmpty()) {
                 ServerChipRow(
                     servers = visibleServers,
                     currentServerId = currentServerId,
                     onServerSelected = onServerSelected,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).padding(start = 12.dp),
                 )
             } else {
                 Text(
                     text = "No ${activeLang.uppercase()} servers",
                     color = Color.White.copy(alpha = 0.45f),
                     fontSize = 11.sp,
-                    modifier = Modifier.padding(start = 8.dp, end = 12.dp),
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp),
                 )
             }
         }
@@ -1817,6 +1799,9 @@ private fun EpisodeListContent(
     onCommentsClick: (() -> Unit)? = null,
     onDownloadClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    currentLang: String = "sub",
+    onLangChange: ((String) -> Unit)? = null,
+    showLangSelector: Boolean = false,
 ) {
     val episodes = uiState.episodeData?.episodes ?: emptyList()
     val totalEpisodes = episodes.size
@@ -1965,6 +1950,9 @@ private fun EpisodeListContent(
                                 (offset.y - outerBoxOffset.y).toInt(),
                             )
                         },
+                        currentLang = currentLang,
+                        onLangChange = onLangChange,
+                        showLangSelector = showLangSelector,
                     )
                 }
 
@@ -1981,12 +1969,14 @@ private fun EpisodeListContent(
                     }
                 } else {
                     items(visibleEpisodes, key = { it.number }) { episode ->
+                        val cover = uiState.episodeData?.anime?.coverImage?.bestUrl
                         EpisodeListRow(
                             episode = episode,
                             isSelected = episode.number == uiState.currentEpisodeNumber,
                             watchedEpisode = watchedEpisode,
                             currentProgressSeconds = currentProgressSeconds,
                             episodeProgress = uiState.episodeProgress[episode.number],
+                            thumbnail = uiState.thumbnails[episode.number.toString()] ?: cover,
                             onClick = { viewModel.onEpisodeSelected(episode.number) },
                         )
                     }
@@ -2067,6 +2057,9 @@ private fun EpisodeListHeader(
     downloadProgress: Float? = null,
     downloadButtonLabel: String = "Download",
     onAnchorPositioned: (IntSize, androidx.compose.ui.geometry.Offset) -> Unit,
+    currentLang: String = "sub",
+    onLangChange: ((String) -> Unit)? = null,
+    showLangSelector: Boolean = false,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (onCommentsClick != null || onDownloadClick != null) {
@@ -2126,6 +2119,37 @@ private fun EpisodeListHeader(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+
+                if (showLangSelector && onLangChange != null) {
+                    val langLabel = currentLang.uppercase()
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF333333))
+                            .clickable { onLangChange(if (currentLang.lowercase() == "dub") "sub" else "dub") }
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = langLabel,
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Switch sub/dub",
+                                tint = Color.White.copy(alpha = 0.7f),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                }
+
                 if (canPickRange) {
                     Icon(
                         imageVector = if (isPageDropdownExpanded) {
@@ -2215,6 +2239,7 @@ private fun EpisodeListRow(
     watchedEpisode: Int?,
     currentProgressSeconds: Double?,
     episodeProgress: WatchEpisodeProgress?,
+    thumbnail: String? = null,
     onClick: () -> Unit,
 ) {
     val progressFraction = if (episodeProgress != null && episodeProgress.duration > 0) {
@@ -2242,19 +2267,30 @@ private fun EpisodeListRow(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier
-                    .size(width = 64.dp, height = 48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = episode.number.toString(),
-                    color = Color.White.copy(alpha = 0.72f),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
+            if (thumbnail != null) {
+                AsyncImage(
+                    model = thumbnail,
+                    contentDescription = "Episode ${episode.number} Thumbnail",
+                    modifier = Modifier
+                        .size(width = 96.dp, height = 48.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop,
                 )
+            } else {
+                Box(
+                    Modifier
+                        .size(width = 96.dp, height = 48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.08f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = episode.number.toString(),
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
 
             Column(
