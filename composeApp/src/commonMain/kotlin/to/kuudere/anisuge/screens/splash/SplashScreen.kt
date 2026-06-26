@@ -46,9 +46,9 @@ fun SplashScreen(
         enableSubs   = false,
     )
 
-    // Timeout fallback - reduced to 3s for faster loading
+    // Timeout fallback for faster app opening (users report slow startup)
     LaunchedEffect(Unit) {
-        delay(3000)
+        delay(1500)
         videoFinished = true
     }
 

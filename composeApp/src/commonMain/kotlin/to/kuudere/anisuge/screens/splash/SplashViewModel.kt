@@ -61,13 +61,7 @@ class SplashViewModel(
         authJob.join()
         val authResult = authService.authState.value
 
-        if (authResult is SessionCheckResult.Valid || authResult is SessionCheckResult.NetworkError) {
-            _status.value = "Loading home data..."
-            runCatching {
-                withTimeout(15_000) { homeService.fetchHomeData() }
-            }
-        }
-
+        // Do not block splash on home data fetch — HomeScreen will load it lazily for faster perceived startup
         updateJob.join()
 
         _status.value = "Ready"
