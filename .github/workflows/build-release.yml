@@ -229,25 +229,7 @@ jobs:
         run: |
           $nativeDir = "composeApp\src\desktopMain\resources\native"
           New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
-          # Robust download with retries + curl fallback for 7zr.exe (7-zip.org often times out on GH Windows runners)
-          $maxRetries = 6
-          $downloaded = $false
-          for ($i = 1; $i -le $maxRetries; $i++) {
-              try {
-                  Write-Host "Attempt $i/$maxRetries to download 7zr.exe..."
-                  if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-                      curl.exe -L --max-time 120 -o 7zr.exe "https://www.7-zip.org/a/7zr.exe"
-                  } else {
-                      Invoke-WebRequest -Uri "https://www.7-zip.org/a/7zr.exe" -OutFile "7zr.exe" -UseBasicParsing -TimeoutSec 120 -UserAgent "Mozilla/5.0"
-                  }
-                  if (Test-Path "7zr.exe") { $downloaded = $true; break }
-              } catch {
-                  Write-Host "Attempt $i failed: $_"
-                  if ($i -eq $maxRetries) { throw "Failed to download 7zr.exe after $maxRetries attempts" }
-                  Start-Sleep -Seconds (15 * $i)
-              }
-          }
-          if (-not $downloaded) { throw "Could not obtain 7zr.exe" }
+          # Use built-in 7z on windows-latest runner (no external download needed, avoids 7-zip.org timeouts)
           $headers = @{ "User-Agent" = "Mozilla/5.0"; "Authorization" = "Bearer $env:GH_TOKEN" }
           $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" -Headers $headers
           # Stricter search: must contain mpv + x86_64 (or x64) + .7z. Prefer dev builds.
@@ -261,7 +243,7 @@ jobs:
           }
           Write-Host "Selected MPV asset: $($asset.name)"
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "mpv-dev.7z" -Headers $headers
-          .\7zr.exe x mpv-dev.7z -ompv-extracted
+          7z x mpv-dev.7z -ompv-extracted -y
           $dlls = Get-ChildItem -Path "mpv-extracted" -Recurse -Filter "*.dll" -ErrorAction SilentlyContinue
           if (-not $dlls) { 
             Write-Host "Extracted contents (first 30):"
