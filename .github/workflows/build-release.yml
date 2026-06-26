@@ -243,19 +243,24 @@ jobs:
           }
           $headers = @{ "User-Agent" = "Mozilla/5.0"; "Authorization" = "Bearer $env:GH_TOKEN" }
           $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" -Headers $headers
-          # More flexible search for mpv dev builds (naming can vary: mpv-dev-*, mpv-x86_64-*, etc.)
+          # Stricter search: must contain mpv + x86_64 (or x64) + .7z. Prefer dev builds.
           $asset = $releases | ForEach-Object { $_.assets } | Where-Object { 
-            ($_.name -like "*x86_64*" -or $_.name -like "*x64*") -and ($_.name -like "*.7z" -or $_.name -like "*mpv*") 
+            $_.name -like "*mpv*" -and ($_.name -like "*x86_64*" -or $_.name -like "*x64*") -and $_.name -like "*.7z"
           } | Select-Object -First 1
           if (-not $asset) { 
-            Write-Host "Available assets from recent releases:"
-            $releases | ForEach-Object { $_.assets } | Select-Object -First 10 name, browser_download_url | Format-Table -AutoSize
+            Write-Host "Available mpv-related assets from recent releases:"
+            $releases | ForEach-Object { $_.assets } | Where-Object { $_.name -like "*mpv*" -or $_.name -like "*.7z" } | Select-Object -First 15 name, browser_download_url | Format-Table -AutoSize
             throw "Could not find a suitable mpv x86_64 .7z release asset" 
           }
+          Write-Host "Selected MPV asset: $($asset.name)"
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "mpv-dev.7z" -Headers $headers
           .\7zr.exe x mpv-dev.7z -ompv-extracted
-          $dlls = Get-ChildItem -Path "mpv-extracted" -Recurse -Filter "*.dll"
-          if (-not $dlls) { throw "No DLLs were found in the extracted MPV archive" }
+          $dlls = Get-ChildItem -Path "mpv-extracted" -Recurse -Filter "*.dll" -ErrorAction SilentlyContinue
+          if (-not $dlls) { 
+            Write-Host "Extracted contents (first 30):"
+            Get-ChildItem "mpv-extracted" -Recurse | Select-Object -First 30 FullName, Length | Format-Table
+            throw "No DLLs were found in the extracted MPV archive (asset was: $($asset.name))" 
+          }
           foreach ($dll in $dlls) {
             Copy-Item $dll.FullName (Join-Path $nativeDir $dll.Name) -Force
           }
