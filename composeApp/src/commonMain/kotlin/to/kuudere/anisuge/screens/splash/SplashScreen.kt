@@ -38,23 +38,15 @@ fun SplashScreen(
     val status by viewModel.status.collectAsState()
     var videoFinished by remember { mutableStateOf(false) }
 
-    val playerState = rememberVideoPlayerState(
-        url          = "composeResources/anisurge.composeapp.generated.resources/drawable/splash.mp4",
-        loop         = false,
-        muted        = true,
-        showControls = false,
-        enableSubs   = false,
-    )
-
     // Timeout fallback for faster app opening (users report slow startup)
     LaunchedEffect(Unit) {
-        delay(1500)
+        delay(1200)
         videoFinished = true
     }
 
-    // Navigate when both video finished AND destination resolved
+    // Navigate when destination resolved (video removed for instant open; status shows progress)
     LaunchedEffect(destination, videoFinished) {
-        if (videoFinished && destination != SplashDestination.Waiting) {
+        if (destination != SplashDestination.Waiting) {
             when (destination) {
                 is SplashDestination.GoHome,
                 is SplashDestination.GoHomeOffline -> onNavigateToHome()
@@ -76,11 +68,12 @@ fun SplashScreen(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            VideoPlayerSurface(
-                state      = playerState,
-                modifier   = Modifier.fillMaxSize(),
-                onFinished = { videoFinished = true },
-            )
+            // Lightweight static splash for fast perceived startup (no heavy video player init)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("ANISURGE", color = Color.White, fontSize = 36.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                Text("Loading...", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+            }
 
             // Status text at bottom center
             Column(
