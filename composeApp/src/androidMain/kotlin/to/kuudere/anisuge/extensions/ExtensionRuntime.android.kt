@@ -215,11 +215,7 @@ actual class ExtensionRuntime actual constructor() {
         return source.runtimeId ?: source.id
     }
 
-    private fun bridgeIsAnime(source: ExtensionSource): Boolean =
-        when (source.engine) {
-            ExtensionEngine.MANGAYOMI -> false
-            else -> source.isAnime
-        }
+    private fun bridgeIsAnime(source: ExtensionSource): Boolean = source.isAnime
 
     private fun mangayomiUsesMangaBridge(source: ExtensionSource): Boolean =
         source.engine == ExtensionEngine.MANGAYOMI &&
@@ -251,6 +247,13 @@ actual class ExtensionRuntime actual constructor() {
                 Log.i(TAG, "reloadBridge: anime extensions (${parsed.size}) for ${source.name}")
             }
         }
+    }
+
+    actual suspend fun reloadAndResolveBridgeId(source: ExtensionSource): String? = withContext(Dispatchers.IO) {
+        ensureReady()
+        // Force-reload the bridge to pick up any newly installed sources
+        reloadBridgeForSource(source, force = true)
+        resolveBridgeSourceId(source)
     }
 
     actual suspend fun loadInstalledSources(paths: List<String>): List<ExtensionSource> = withContext(Dispatchers.IO) {
@@ -313,7 +316,7 @@ actual class ExtensionRuntime actual constructor() {
         val rtId = resolveBridgeSourceId(source)
         Log.i(TAG, "search: engine=${source.engine.name} runtimeId=$rtId query=$query")
         val raw = when (source.engine) {
-            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA -> invoke(
+            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA, ExtensionEngine.MANGAYOMI -> invoke(
                 "aniyomiSearch",
                 androidAppContext,
                 rtId,
@@ -322,20 +325,6 @@ actual class ExtensionRuntime actual constructor() {
                 1,
                 requestParams(),
             )
-            ExtensionEngine.MANGAYOMI -> {
-                require(mangayomiUsesMangaBridge(source)) {
-                    "${source.name} is a Mangayomi script source — install the APK variant or use Aniyomi extensions"
-                }
-                invoke(
-                    "aniyomiSearch",
-                    androidAppContext,
-                    rtId,
-                    bridgeIsAnime(source),
-                    query,
-                    1,
-                    requestParams(),
-                )
-            }
             ExtensionEngine.CLOUDSTREAM -> invoke(
                 "csSearch", androidAppContext, query, rtId, 1, requestParams()
             )
@@ -353,7 +342,7 @@ actual class ExtensionRuntime actual constructor() {
         reloadBridgeForSource(source)
         val rtId = resolveBridgeSourceId(source)
         val raw = when (source.engine) {
-            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA -> invoke(
+            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA, ExtensionEngine.MANGAYOMI -> invoke(
                 "aniyomiGetDetail",
                 androidAppContext,
                 rtId,
@@ -366,24 +355,6 @@ actual class ExtensionRuntime actual constructor() {
                 ),
                 requestParams(),
             )
-            ExtensionEngine.MANGAYOMI -> {
-                require(mangayomiUsesMangaBridge(source)) {
-                    "${source.name} is a Mangayomi script source — install the APK variant or use Aniyomi extensions"
-                }
-                invoke(
-                    "aniyomiGetDetail",
-                    androidAppContext,
-                    rtId,
-                    bridgeIsAnime(source),
-                    mapOf(
-                        "title" to media.title,
-                        "url" to media.url,
-                        "thumbnail_url" to media.thumbnailUrl,
-                        "description" to media.description,
-                    ),
-                    requestParams(),
-                )
-            }
             ExtensionEngine.CLOUDSTREAM -> invoke(
                 "csGetDetail", androidAppContext, rtId, media.url, requestParams()
             )
@@ -438,7 +409,7 @@ actual class ExtensionRuntime actual constructor() {
         val episodePayload = episodePayload(episode)
         Log.i(TAG, "videos: engine=${source.engine.name} runtimeId=$rtId episode=${episode.name} url=${episode.url}")
         val raw = when (source.engine) {
-            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA -> invoke(
+            ExtensionEngine.ANIYOMI, ExtensionEngine.SORA, ExtensionEngine.MANGAYOMI -> invoke(
                 "aniyomiGetVideoList",
                 androidAppContext,
                 rtId,
@@ -446,19 +417,6 @@ actual class ExtensionRuntime actual constructor() {
                 episodePayload,
                 requestParams(),
             )
-            ExtensionEngine.MANGAYOMI -> {
-                require(mangayomiUsesMangaBridge(source)) {
-                    "${source.name} is a Mangayomi script source — install the APK variant or use Aniyomi extensions"
-                }
-                invoke(
-                    "aniyomiGetVideoList",
-                    androidAppContext,
-                    rtId,
-                    bridgeIsAnime(source),
-                    episodePayload,
-                    requestParams(),
-                )
-            }
             ExtensionEngine.CLOUDSTREAM -> invoke(
                 "csGetVideoList", androidAppContext, rtId, episode.url, requestParams()
             )
@@ -529,7 +487,8 @@ actual class ExtensionRuntime actual constructor() {
                 error("Runtime method $name/${args.size} is unavailable")
             }
         return try {
-            method.invoke(target, *args)
+            val result = method.invoke(target, *args)
+            unwrapRxJavaResponse(result)
         } catch (error: Throwable) {
             val cause = error.rootCause()
             val detail = cause.message?.takeIf { it.isNotBlank() } ?: cause::class.java.simpleName
@@ -554,6 +513,40 @@ actual class ExtensionRuntime actual constructor() {
                     (type == java.lang.Integer::class.java && value is Int)
             }
         }
+
+    /**
+     * Some Aniyomi extensions return raw OkHttp Response objects through RxJava
+     * instead of parsed data. This unwraps them by reading the response body as JSON.
+     */
+    private fun unwrapRxJavaResponse(result: Any?): Any? {
+        if (result == null) return null
+        // Check if it's an OkHttp Response
+        val className = result.javaClass.name
+        if (className.contains("Response") && className.contains("okhttp3")) {
+            try {
+                val bodyMethod = result.javaClass.getMethod("body")
+                val body = bodyMethod.invoke(result)
+                if (body != null) {
+                    val stringMethod = body.javaClass.getMethod("string")
+                    val jsonStr = stringMethod.invoke(body) as? String
+                    if (!jsonStr.isNullOrBlank()) {
+                        Log.i(TAG, "Unwrapped okhttp3.Response to JSON string (${jsonStr.length} chars)")
+                        log("Unwrapped OkHttp Response → JSON")
+                        val json = Json { ignoreUnknownKeys = true }
+                        return try {
+                            json.parseToJsonElement(jsonStr)
+                        } catch (_: Exception) {
+                            jsonStr
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to unwrap Response: ${e.message}")
+            }
+            return null
+        }
+        return result
+    }
 
     private fun ensureReady() {
         if (!_state.value.ready) error("Install the extension runtime first")

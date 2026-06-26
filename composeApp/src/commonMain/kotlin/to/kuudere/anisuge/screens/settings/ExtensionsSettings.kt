@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,6 +46,10 @@ import androidx.compose.foundation.layout.heightIn
 import to.kuudere.anisuge.extensions.ExtensionMedia
 import to.kuudere.anisuge.extensions.ExtensionEpisode
 import to.kuudere.anisuge.extensions.selectableServerId
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Update
@@ -54,6 +59,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -488,39 +494,135 @@ fun ExtensionsSettings(
     if (browseSourceId != null) {
         Dialog(onDismissRequest = { browseSourceId = null }) {
             val manager = AppComponent.extensionManager
-            var q by remember { mutableStateOf("") }
-            var res by remember { mutableStateOf(listOf<ExtensionMedia>()) }
-            var sel by remember { mutableStateOf<ExtensionMedia?>(null) }
-            var epList by remember { mutableStateOf(listOf<ExtensionEpisode>()) }
-            val s = rememberCoroutineScope()
-            Column(Modifier.padding(12.dp).heightIn(max = 480.dp)) {
-                Row {
-                    IconButton(onClick = { browseSourceId = null }) { Icon(Icons.Default.Close, null) }
-                    Text("Browse extension standalone (internal only)", fontWeight = FontWeight.Bold)
+            var mode by remember { mutableStateOf("latest") }
+            var query by remember { mutableStateOf("") }
+            var results by remember { mutableStateOf(listOf<ExtensionMedia>()) }
+            var selected by remember { mutableStateOf<ExtensionMedia?>(null) }
+            var episodes by remember { mutableStateOf(listOf<ExtensionEpisode>()) }
+            val scope = rememberCoroutineScope()
+
+            // Default to Latest (Aniyomi)
+            LaunchedEffect(browseSourceId) {
+                browseSourceId?.let {
+                    mode = "latest"
+                    query = ""
+                    results = manager.searchExtension(it, "")
                 }
-                OutlinedTextField(value = q, onValueChange = { q = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Search") })
-                Button(onClick = { s.launch { res = manager.searchExtension(browseSourceId!!, q) } }) { Text("Search") }
-                LazyColumn(Modifier.weight(1f)) {
-                    items(res) { m ->
-                        Text(m.title, modifier = Modifier.clickable {
-                            sel = m
-                            s.launch { epList = manager.getExtensionEpisodes(browseSourceId!!, m) }
-                        }.padding(6.dp))
+            }
+
+            Column(Modifier.padding(12.dp).heightIn(max = 520.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { browseSourceId = null }) {
+                        Icon(Icons.Default.Close, "Close")
+                    }
+                    Text("Browse extension", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                }
+
+                // Aniyomi-style: Latest + Search chips
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                    FilterChip(
+                        selected = mode == "latest",
+                        onClick = {
+                            mode = "latest"
+                            query = ""
+                            scope.launch { results = manager.searchExtension(browseSourceId!!, "") }
+                        },
+                        label = { Text("Latest") }
+                    )
+                    FilterChip(
+                        selected = mode == "search",
+                        onClick = { mode = "search" },
+                        label = { Text("Search") }
+                    )
+                }
+
+                // Search bar (An iyomi toolbar)
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { newQ ->
+                        query = newQ
+                        if (newQ.isNotBlank() || mode == "search") {
+                            mode = "search"
+                            scope.launch { results = manager.searchExtension(browseSourceId!!, newQ) }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text(if (mode == "latest") "Type to search..." else "Search titles...") },
+                    singleLine = true
+                )
+
+                // Grid results (like Aniyomi source grid)
+                if (results.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text(if (mode == "latest") "Loading latest from extension..." else "No results", color = AppColors.textMuted, fontSize = 12.sp)
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(105.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(4.dp)
+                    ) {
+                        items(results) { media ->
+                            Column(
+                                modifier = Modifier.padding(4.dp).clickable {
+                                    selected = media
+                                    scope.launch {
+                                        episodes = manager.getExtensionEpisodes(browseSourceId!!, media)
+                                    }
+                                }
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(0.7f)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(AppColors.surfaceVariant)
+                                ) {
+                                    if (!media.thumbnailUrl.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = media.thumbnailUrl,
+                                            contentDescription = media.title,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(3.dp))
+                                Text(media.title, maxLines = 2, fontSize = 10.sp, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
                     }
                 }
-                sel?.let { m ->
-                    Text("Episodes for ${m.title}")
-                    LazyColumn(Modifier.heightIn(max = 180.dp)) {
-                        items(epList) { e ->
-                            Text(e.name, modifier = Modifier.clickable {
-                                val src = installed.firstOrNull { it.id == browseSourceId } ?: available.firstOrNull { it.id == browseSourceId }
-                                src?.let {
-                                    AppComponent.requestStandaloneExtensionPlay(
-                                        AppComponent.StandaloneExtensionPlay(browseSourceId!!, m.title, e.number.toInt(), it.selectableServerId())
-                                    )
+
+                // Anime info + episodes (An iyomi click flow)
+                selected?.let { m ->
+                    Spacer(Modifier.height(6.dp))
+                    Column {
+                        Text(m.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        if (!m.description.isNullOrBlank()) {
+                            Text(m.description.take(100), fontSize = 10.sp, color = AppColors.textMuted, maxLines = 2)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text("${episodes.size} episodes", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        LazyColumn(Modifier.heightIn(max = 140.dp)) {
+                            items(episodes) { ep ->
+                                Row(
+                                    Modifier.fillMaxWidth().clickable {
+                                        val src = installed.firstOrNull { it.id == browseSourceId }
+                                            ?: available.firstOrNull { it.id == browseSourceId }
+                                        src?.let {
+                                            AppComponent.requestStandaloneExtensionPlay(
+                                                AppComponent.StandaloneExtensionPlay(browseSourceId!!, m.title, ep.number.toInt(), it.selectableServerId())
+                                            )
+                                        }
+                                        browseSourceId = null
+                                    }.padding(vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(ep.name.ifBlank { "Ep ${ep.number}" }, Modifier.weight(1f), fontSize = 12.sp)
+                                    Icon(Icons.Default.PlayArrow, null, tint = AppColors.accent, modifier = Modifier.size(16.dp))
                                 }
-                                browseSourceId = null
-                            }.padding(4.dp))
+                            }
                         }
                     }
                 }
@@ -705,16 +807,6 @@ private fun ExtensionSourceCard(
                     onClick = onShare,
                     enabled = !isBusy,
                 )
-                if (source.installed) {
-                    ActionIconButton(
-                        icon = Icons.Default.PlayArrow,
-                        containerColor = AppColors.accent.copy(alpha = 0.15f),
-                        iconColor = AppColors.accent,
-                        contentDesc = "Browse standalone (like Aniyomi)",
-                        onClick = { onBrowse(source) },
-                        enabled = !isBusy,
-                    )
-                }
                 if (source.installed) {
                     if (source.hasUpdate) {
                         ActionIconButton(

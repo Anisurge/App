@@ -136,6 +136,10 @@ object AppComponent {
         to.kuudere.anisuge.data.services.CommentService(sessionStore, httpClient)
     }
 
+    val anizipService: to.kuudere.anisuge.data.services.AniZipService by lazy {
+        to.kuudere.anisuge.data.services.AniZipService(httpClient)
+    }
+
     val settingsStore: to.kuudere.anisuge.data.services.SettingsStore by lazy {
         to.kuudere.anisuge.data.services.SettingsStore(dataStore)
     }

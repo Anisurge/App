@@ -46,13 +46,14 @@ data class AnimeInfoUiState(
     val details: AnimeDetails? = null,
     val error: String? = null,
     val notificationCount: String = "0",
-    
+
     val isLoadingEpisodes: Boolean = false,
     val episodes: List<EpisodeItem> = emptyList(),
-    
+    val episodeThumbnails: Map<String, String> = emptyMap(),
+
     val isLoadingRecommendations: Boolean = false,
     val recommendations: List<RecommendationItem> = emptyList(),
-    
+
     val isUpdatingWatchlist: Boolean = false,
     val inWatchlist: Boolean = false,
     val folder: String? = null,
@@ -72,6 +73,7 @@ class AnimeInfoViewModel(
     private val homeService: HomeService,
     private val extensionManager: ExtensionManager,
     private val settingsStore: SettingsStore,
+    private val anizipService: to.kuudere.anisuge.data.services.AniZipService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AnimeInfoUiState())
@@ -142,6 +144,18 @@ class AnimeInfoViewModel(
                     loadRecommendations(id)
                     loadFranchiseOrder(details)
                     prefetchExtensionMapping(details)
+                    // Fetch episode thumbnails from ani.zip
+                    val anilistId = details.anilistId
+                    if (anilistId != null && anilistId > 0) {
+                        viewModelScope.launch {
+                            val thumbs = runCatching {
+                                anizipService.getEpisodeThumbnails(anilistId)
+                            }.getOrNull() ?: emptyMap()
+                            if (thumbs.isNotEmpty()) {
+                                _uiState.update { it.copy(episodeThumbnails = thumbs) }
+                            }
+                        }
+                    }
                 } else {
                     _uiState.update { it.copy(isLoading = false, error = "Failed to load anime details.") }
                 }

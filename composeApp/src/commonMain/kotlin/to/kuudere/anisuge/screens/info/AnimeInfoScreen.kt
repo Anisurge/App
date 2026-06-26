@@ -2,6 +2,8 @@ package to.kuudere.anisuge.screens.info
 
 import to.kuudere.anisuge.utils.formatFloat
 import androidx.compose.animation.*
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -36,6 +38,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -1333,6 +1336,11 @@ private fun MobileLayout(
                 }
                 val bgImage = bannerUrl ?: anime.bestCoverImage()
                 val hasBanner = bannerUrl != null
+                val bannerParallax by animateFloatAsState(
+                    targetValue = 1.1f,
+                    animationSpec = tween(6000, easing = LinearEasing),
+                    label = "bannerParallax"
+                )
                 AsyncImage(
                     model = bgImage,
                     contentDescription = "Background",
@@ -1340,6 +1348,10 @@ private fun MobileLayout(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(250.dp)
+                        .graphicsLayer {
+                            scaleX = bannerParallax
+                            scaleY = bannerParallax
+                        }
                         .blur(if (hasBanner) 16.dp else 48.dp)
                         .alpha(if (hasBanner) 0.6f else 0.75f)
                 )
@@ -2437,7 +2449,7 @@ private fun DesktopLayout(
                                     items(filteredEpisodes, key = { it.number }) { episode ->
                                         DesktopEpisodeCard(
                                             episode = episode,
-                                            thumbnail = anime.bestCoverImage(),
+                                            thumbnail = state.episodeThumbnails[episode.number.toString()] ?: anime.bestCoverImage(),
                                             watchedEpisode = anime.watchProgress?.episode,
                                             currentProgressSeconds = anime.watchProgress?.currentTime,
                                             episodeProgress = state.episodeProgress[episode.number],
@@ -3377,7 +3389,7 @@ private fun EpisodeListSection(
             filtered.forEach { episode ->
                 EpisodeItemRow(
                     episode = episode,
-                    thumbnail = state.details?.image ?: state.details?.poster ?: state.details?.cover,
+                    thumbnail = state.episodeThumbnails[episode.number.toString()] ?: state.details?.image ?: state.details?.poster ?: state.details?.cover,
                     watchedEpisode = watchedEpisode,
                     currentProgressSeconds = currentProgressSeconds,
                     episodeProgress = state.episodeProgress[episode.number],

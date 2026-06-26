@@ -38,15 +38,24 @@ fun SplashScreen(
     val status by viewModel.status.collectAsState()
     var videoFinished by remember { mutableStateOf(false) }
 
-    // Timeout fallback for faster app opening (users report slow startup)
+    val playerState = rememberVideoPlayerState(
+        url = "composeResources/anisurge.composeapp.generated.resources/drawable/splash.mp4",
+        loop = false,
+        muted = true,
+        showControls = false,
+        enableSubs = false,
+    )
+
+    // Timeout fallback - splash video plays while we do parallel init work
     LaunchedEffect(Unit) {
-        delay(1200)
+        delay(3000)
         videoFinished = true
     }
 
-    // Navigate when destination resolved (video removed for instant open; status shows progress)
+    // Navigate when splash video is done AND destination is resolved.
+    // All heavy compute (auth, update, etc.) runs in parallel in SplashViewModel while this plays.
     LaunchedEffect(destination, videoFinished) {
-        if (destination != SplashDestination.Waiting) {
+        if (videoFinished && destination != SplashDestination.Waiting) {
             when (destination) {
                 is SplashDestination.GoHome,
                 is SplashDestination.GoHomeOffline -> onNavigateToHome()
@@ -68,14 +77,13 @@ fun SplashScreen(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            // Lightweight static splash for fast perceived startup (no heavy video player init)
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("ANISURGE", color = Color.White, fontSize = 36.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
-                Text("Loading...", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
-            }
+            VideoPlayerSurface(
+                state = playerState,
+                modifier = Modifier.fillMaxSize(),
+                onFinished = { videoFinished = true },
+            )
 
-            // Status text at bottom center
+            // Status text at bottom center (shows progress of parallel work)
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

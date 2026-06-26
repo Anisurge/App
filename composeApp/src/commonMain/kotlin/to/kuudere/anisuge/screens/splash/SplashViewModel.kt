@@ -41,9 +41,11 @@ class SplashViewModel(
     }
 
     private fun performInitialChecks() = viewModelScope.launch {
-        // Step 1 & 2: Parallelize User Verification and Update Check
         _status.value = "Initializing..."
-        
+
+        // Launch ALL needed compute in parallel immediately.
+        // The splash video plays while this work happens in the background.
+        // Destination resolves as soon as auth+update finish; other work (home prefetch) continues in parallel.
         val authJob = viewModelScope.launch {
             _status.value = "Verifying user..."
             runCatching {
@@ -58,15 +60,22 @@ class SplashViewModel(
             }
         }
 
-        authJob.join()
-        val authResult = authService.authState.value
+        // Home prefetch runs in parallel (helps make home screen snappy when we navigate after splash).
+        // Do NOT join on it — it must not delay splash video or destination resolution.
+        viewModelScope.launch {
+            runCatching {
+                withTimeout(15_000) { homeService.fetchHomeData() }
+            }
+        }
 
-        // Do not block splash on home data fetch — HomeScreen will load it lazily for faster perceived startup
+        // Wait only for the checks that decide where to go after splash.
+        authJob.join()
         updateJob.join()
 
+        val authResult = authService.authState.value
+
         _status.value = "Ready"
-        
-        // Final destination resolution
+
         _destination.value = when (authResult) {
             is SessionCheckResult.Valid        -> SplashDestination.GoHome
             is SessionCheckResult.NetworkError -> SplashDestination.GoHomeOffline

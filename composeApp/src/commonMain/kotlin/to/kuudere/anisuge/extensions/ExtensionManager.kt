@@ -340,22 +340,49 @@ class ExtensionManager(
         synonyms: List<String> = emptyList(),
     ): ExtensionStreamResult {
         ensureBridgeReady()
-        val parsed = parseExtensionServerId(serverId) ?: error("Invalid extension server")
-        val source = findInstalledSource(serverId) ?: error("Extension is not installed")
+        val parsed = parseExtensionServerId(serverId) ?: error("Invalid extension server: $serverId")
+        val source = findInstalledSource(serverId) ?: error("Extension not installed: ${parsed.engine.name} ${parsed.sourceId}")
         require(source.isBridgeCapableOnPlatform()) {
-            "${source.name} requires the AnymeX JS runtime (Mangayomi/Sora scripts are not supported on Android yet)"
+            "${source.name} requires the AnymeX runtime (Mangayomi/Sora scripts are not supported on this platform yet)"
         }
         if (source.engine == ExtensionEngine.ANIYOMI || source.engine == ExtensionEngine.SORA) {
-            require(source.hasNumericBridgeId()) {
-                "${source.name} is not loaded in the extension bridge — open Settings → Extensions and refresh"
+            if (!source.hasNumericBridgeId()) {
+                // Try to reload bridge to get numeric IDs
+                try {
+                    runtime.reloadAndResolveBridgeId(source)
+                } catch (_: Exception) {}
+                // Re-check after reload
+                if (!source.hasNumericBridgeId() && findInstalledSource(serverId)?.hasNumericBridgeId() != true) {
+                    error("${source.name} is not loaded in the extension bridge — open Settings → Extensions and refresh")
+                }
             }
         }
         val compositeId = compositeSourceId(source)
-        val prefetch = prefetchMapping(animeId, titles, synonyms, serverId)
+        val prefetch = try {
+            prefetchMapping(animeId, titles, synonyms, serverId)
+        } catch (e: Exception) {
+            // Retry once with bridge reload
+            try {
+                runtime.reloadAndResolveBridgeId(source)
+                prefetchMapping(animeId, titles, synonyms, serverId)
+            } catch (e2: Exception) {
+                error("Failed to map ${source.name}: ${e2.message ?: e.message ?: "unknown error"}")
+            }
+        }
         val episode = findExtensionEpisode(prefetch.episodes, episodeNumber, preferDub = parsed.dub)
-            ?: error("Episode $episodeNumber was not found in ${source.name}")
-        val videos = runtime.videosStream(source, episode)
-        require(videos.isNotEmpty()) { "No playable streams returned by ${source.name}" }
+            ?: error("Episode $episodeNumber not found in ${source.name} (got ${prefetch.episodes.size} episodes)")
+        val videos = try {
+            runtime.videosStream(source, episode)
+        } catch (e: Exception) {
+            // Retry once with fresh bridge
+            try {
+                runtime.reloadAndResolveBridgeId(source)
+                runtime.videosStream(source, episode)
+            } catch (e2: Exception) {
+                error("${source.name} failed to load video: ${e2.message ?: e.message ?: "unknown error"}")
+            }
+        }
+        require(videos.isNotEmpty()) { "${source.name} returned no playable streams for Episode $episodeNumber" }
         return ExtensionStreamResult(prefetch.source, prefetch.media, episode, videos)
     }
 
@@ -625,6 +652,7 @@ class ExtensionManager(
     private fun findInstalledSource(serverId: String): ExtensionSource? {
         val parsed = parseExtensionServerId(serverId) ?: return null
         val grouped = _installed.value.groupBy { variantGroupKey(it) }
+        // 1. Match by bridge source ID (most reliable)
         val byBridgeId = _installed.value.filter { source ->
             source.engine == parsed.engine && source.bridgeSourceId() == parsed.sourceId
         }
@@ -635,12 +663,31 @@ class ExtensionManager(
                 extensionVariantIsExplicitDub(source, siblings) == parsed.dub
             } ?: byBridgeId.first()
         }
+        // 2. Match by runtime ID
+        val byRuntimeId = _installed.value.filter { source ->
+            source.engine == parsed.engine && source.runtimeId == parsed.sourceId
+        }
+        if (byRuntimeId.isNotEmpty()) return byRuntimeId.first()
+        // 3. Match by pkgName
+        val byPkg = _installed.value.filter { source ->
+            source.engine == parsed.engine && source.pkgName == parsed.sourceId
+        }
+        if (byPkg.isNotEmpty()) return byPkg.first()
+        // 4. Match by selectable server ID
+        val byServerId = _installed.value.filter { source ->
+            source.engine == parsed.engine && (
+                source.selectableServerId(dub = false) == serverId ||
+                    source.selectableServerId(dub = true) == serverId
+                )
+        }
+        if (byServerId.isNotEmpty()) return byServerId.first()
+        // 5. Fuzzy match by name or ID
         return _installed.value.firstOrNull { source ->
             source.engine == parsed.engine && (
                 source.id == parsed.sourceId ||
-                    source.pkgName == parsed.sourceId ||
-                    source.selectableServerId(dub = false) == serverId ||
-                    source.selectableServerId(dub = true) == serverId
+                    source.id.contains(parsed.sourceId, ignoreCase = true) ||
+                    parsed.sourceId.contains(source.id, ignoreCase = true) ||
+                    source.name.equals(parsed.sourceId, ignoreCase = true)
                 )
         }
     }

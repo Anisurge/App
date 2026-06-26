@@ -1,15 +1,24 @@
 package to.kuudere.anisuge
 
 import android.app.Application
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.request.crossfade
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.platform.androidAppContext
 
-class AnisurgeApplication : Application() {
+class AnisurgeApplication : Application(), SingletonImageLoader.Factory {
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun newImageLoader(context: coil3.PlatformContext): ImageLoader {
+        return ImageLoader.Builder(context)
+            .crossfade(300)
+            .build()
+    }
 
     override fun onCreate() {
         super.onCreate()

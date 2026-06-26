@@ -16,10 +16,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import to.kuudere.anisuge.navigation.Screen
 import to.kuudere.anisuge.navigation.NotificationLaunch
 import to.kuudere.anisuge.data.models.SessionCheckResult
@@ -89,6 +92,8 @@ import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.LocalPreferRomajiAnimeTitles
 import to.kuudere.anisuge.i18n.appStringsFor
 
+// AnyMex-style easeInOutCubic for smooth transitions
+private val EaseInOutCubic = CubicBezierEasing(0.65f, 0f, 0.35f, 1f)
 
 /** Compat helper: reads a String from the new KMP SavedState arguments type. */
 private fun SavedState?.str(key: String): String? =
@@ -157,6 +162,7 @@ fun App(
                 AppComponent.homeService,
                 AppComponent.extensionManager,
                 AppComponent.settingsStore,
+                AppComponent.anizipService,
             )
         }
         val watchVm = remember {
@@ -169,6 +175,7 @@ fun App(
                 AppComponent.serverRepository,
                 AppComponent.extensionManager,
                 AppComponent.aniskipService,
+                AppComponent.anizipService,
                 AppComponent.syncManager,
                 AppComponent.trackingService,
             )
@@ -466,8 +473,8 @@ fun App(
                     navController = navController,
                     startDestination = navStartDestination,
                     // Splash exit: keep it visible while auth fades in on top
-                    enterTransition = { fadeIn(animationSpec = tween(220)) },
-                    exitTransition = { fadeOut(animationSpec = tween(160)) },
+                    enterTransition = { fadeIn(animationSpec = tween(300, easing = EaseInOutCubic)) + slideInVertically(initialOffsetY = { it / 15 }, animationSpec = tween(350, easing = EaseInOutCubic)) },
+                    exitTransition = { fadeOut(animationSpec = tween(200, easing = EaseInOutCubic)) },
                 ) {
                     composable(Screen.Splash.route) {
                         SplashScreen(
@@ -628,7 +635,13 @@ fun App(
                         )
                     }
 
-                    composable(Screen.Info.route) { backStackEntry ->
+                    composable(
+                        route = Screen.Info.route,
+                        enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(350, easing = EaseInOutCubic)) + fadeIn(animationSpec = tween(250, easing = EaseInOutCubic)) },
+                        exitTransition = { fadeOut(animationSpec = tween(200, easing = EaseInOutCubic)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(250, easing = EaseInOutCubic)) },
+                        popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300, easing = EaseInOutCubic)) + fadeOut(animationSpec = tween(200, easing = EaseInOutCubic)) },
+                    ) { backStackEntry ->
                         val animeId = backStackEntry.arguments.str("animeId") ?: ""
                         AnimeInfoScreen(
                             animeId = animeId,
@@ -665,10 +678,10 @@ fun App(
 
                     composable(
                         route = Screen.Watch.route,
-                        enterTransition = { slideInVertically(initialOffsetY = { it }, animationSpec = tween(220)) },
-                        exitTransition = { fadeOut(animationSpec = tween(160)) },
-                        popEnterTransition = { fadeIn(animationSpec = tween(180)) },
-                        popExitTransition = { fadeOut(animationSpec = tween(120)) },
+                        enterTransition = { slideInVertically(initialOffsetY = { it }, animationSpec = tween(350, easing = EaseInOutCubic)) + fadeIn(animationSpec = tween(250, easing = EaseInOutCubic)) },
+                        exitTransition = { fadeOut(animationSpec = tween(200, easing = EaseInOutCubic)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(250, easing = EaseInOutCubic)) },
+                        popExitTransition = { slideOutVertically(targetOffsetY = { it }, animationSpec = tween(300, easing = EaseInOutCubic)) + fadeOut(animationSpec = tween(200, easing = EaseInOutCubic)) },
                         arguments = listOf(
                             navArgument("animeId") { type = androidx.navigation.NavType.StringType },
                             navArgument("episodeNumber") { type = androidx.navigation.NavType.StringType },

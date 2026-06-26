@@ -48,6 +48,7 @@ import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.theme.AppColors
+import to.kuudere.anisuge.utils.formatDuration
 import to.kuudere.anisuge.utils.latestPerAnime
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -137,7 +138,10 @@ fun ContinueWatchingScreen(
                                 modifier = Modifier.padding(bottom = 2.dp)
                             )
                         }
-                        items(latestItems) { item ->
+                        items(
+                            items = latestItems,
+                            key = { it.animeId }
+                        ) { item ->
                             ContinueWatchingGridCard(
                                 item = item,
                                 onDelete = { viewModel.removeContinueItem(item) },
@@ -241,17 +245,19 @@ private fun ContinueWatchingGridCard(
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             )
 
-            Text(
-                "${item.progress}/${item.duration}",
-                color = Color.White,
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 8.dp, bottom = 10.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color.Black.copy(alpha = 0.72f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
+            if (item.duration > 0) {
+                Text(
+                    "${formatDuration(item.progress)} / ${formatDuration(item.duration)}",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 8.dp, bottom = 10.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Black.copy(alpha = 0.72f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
         }
 
         Spacer(Modifier.height(8.dp))

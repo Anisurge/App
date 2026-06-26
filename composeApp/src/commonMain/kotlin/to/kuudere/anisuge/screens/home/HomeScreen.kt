@@ -105,12 +105,7 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Info
@@ -132,13 +127,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -197,6 +185,9 @@ import to.kuudere.anisuge.screens.settings.SettingsScreen
 import to.kuudere.anisuge.screens.settings.SettingsViewModel
 import to.kuudere.anisuge.ui.AnimeCard
 import to.kuudere.anisuge.ui.ConfirmDialog
+import to.kuudere.anisuge.ui.animateItemEntrance
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import to.kuudere.anisuge.i18n.LocalAppStrings
 import to.kuudere.anisuge.i18n.AppStrings
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
@@ -602,9 +593,9 @@ private fun TabContent(
                 ) { isLoading ->
                     when {
                         isLoading ->
-                            Box(Modifier.fillMaxSize(), Alignment.Center) {
-                                CircularProgressIndicator(color = AppColors.accent, strokeWidth = 3.dp)
-                            }
+                            to.kuudere.anisuge.ui.ShimmerHomeContent(
+                                modifier = Modifier.fillMaxSize()
+                            )
 
                         homeState.isOffline && homeState.latestAired.isEmpty() ->
                             to.kuudere.anisuge.ui.OfflineState(
@@ -697,7 +688,6 @@ private fun HomeContent(
     onOpenLayoutEditor: () -> Unit = {},
     onRemoveContinueItem: (ContinueWatchingItem) -> Unit = {},
 ) {
-    val scrollState = rememberScrollState()
     val strings = LocalAppStrings.current
 
     val design = if (homeDesign.isNullOrBlank()) "classic" else homeDesign
@@ -725,112 +715,150 @@ private fun HomeContent(
                 showScore = showScoreBadges,
             )
         } else {
-            Column(Modifier.fillMaxSize().verticalScroll(scrollState)) {
-                Box(Modifier.fillMaxWidth()) {
-                    if (state.latestAired.isNotEmpty()) {
-                        // ── Hero Carousel ──────────────────────────────────────────────
-                        HeroCarousel(
-                            items = state.latestAired,
-                            onAnimeClick = { onAnimeClick(it.activeSlug) },
-                            onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null, null) },
-                            onWatchlistClick = onWatchlistClick,
-                            expandedCarousel = useExpandedCarousel
+            val listState = rememberLazyListState()
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item(key = "hero") {
+                    Box(Modifier.fillMaxWidth()) {
+                        if (state.latestAired.isNotEmpty()) {
+                            // ── Hero Carousel ──────────────────────────────────────────────
+                            HeroCarousel(
+                                items = state.latestAired,
+                                onAnimeClick = { onAnimeClick(it.activeSlug) },
+                                onWatchClick = { item, lang, ep -> onWatchClick(item.activeSlug, lang, ep, null, null) },
+                                onWatchlistClick = onWatchlistClick,
+                                expandedCarousel = useExpandedCarousel
+                            )
+                        }
+
+                        to.kuudere.anisuge.platform.WindowManagementButtons(
+                            onClose = onExit,
+                            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
                         )
                     }
-
-                    to.kuudere.anisuge.platform.WindowManagementButtons(
-                        onClose = onExit,
-                        modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
-                    )
                 }
 
-                Spacer(Modifier.height(24.dp))
+                item(key = "hero-spacer") { Spacer(Modifier.height(24.dp)) }
 
                 val orderedRows = state.layout.rows.filter { it.visible }.map { it.id }
                 val nonEmptyRows = orderedRows.filter { state.hasDataForRow(it) }
                 if (orderedRows.isEmpty()) {
-                    EmptyLayoutPlaceholder(onOpenEditor = onOpenLayoutEditor)
+                    item(key = "empty") { EmptyLayoutPlaceholder(onOpenEditor = onOpenLayoutEditor) }
                 } else {
                     nonEmptyRows.forEach { rowId ->
                         when (rowId) {
                             RowId.CONTINUE_WATCHING -> {
-                                SectionHeader(title = strings.rowTitle(rowId), onViewMore = onViewContinueWatchingMore)
-                                ContinueWatchingRow(
-                                    items = state.continueWatching,
-                                    onWatchClick = onWatchClick,
-                                    onRemove = onRemoveContinueItem,
-                                )
-                                Spacer(Modifier.height(24.dp))
+                                item(key = "continue-watching-header") {
+                                    SectionHeader(title = strings.rowTitle(rowId), onViewMore = onViewContinueWatchingMore)
+                                }
+                                item(key = "continue-watching-row") {
+                                    ContinueWatchingRow(
+                                        items = state.continueWatching,
+                                        onWatchClick = onWatchClick,
+                                        onRemove = onRemoveContinueItem,
+                                    )
+                                }
+                                item(key = "continue-watching-spacer") { Spacer(Modifier.height(24.dp)) }
                             }
 
-                            RowId.LATEST_EPISODES -> AnimeSection(
-                                title = strings.rowTitle(rowId),
-                                items = state.latestAired,
-                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                                showLatestLangBadge = true,
-                                onViewMoreClick = onViewLatestEpisodesMore,
-                                compact = compactCards,
-                                showScore = showScoreBadges,
-                            )
+                            RowId.LATEST_EPISODES -> {
+                                item(key = "latest-episodes") {
+                                    AnimeSection(
+                                        title = strings.rowTitle(rowId),
+                                        items = state.latestAired,
+                                        onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                        showLatestLangBadge = true,
+                                        onViewMoreClick = onViewLatestEpisodesMore,
+                                        compact = compactCards,
+                                        showScore = showScoreBadges,
+                                    )
+                                }
+                            }
 
-                            RowId.TRENDING_WEEK -> AnimeSection(
-                                title = strings.rowTitle(rowId),
-                                items = state.trendingWeek,
-                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                                showViewMore = false,
-                                compact = compactCards,
-                                showScore = showScoreBadges,
-                            )
+                            RowId.TRENDING_WEEK -> {
+                                item(key = "trending-week") {
+                                    AnimeSection(
+                                        title = strings.rowTitle(rowId),
+                                        items = state.trendingWeek,
+                                        onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                        showViewMore = false,
+                                        compact = compactCards,
+                                        showScore = showScoreBadges,
+                                    )
+                                }
+                            }
 
-                            RowId.NEW_SEASONS -> AnimeSection(
-                                title = strings.rowTitle(rowId),
-                                items = state.newSeasons,
-                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                                showViewMore = false,
-                                compact = compactCards,
-                                showScore = showScoreBadges,
-                            )
+                            RowId.NEW_SEASONS -> {
+                                item(key = "new-seasons") {
+                                    AnimeSection(
+                                        title = strings.rowTitle(rowId),
+                                        items = state.newSeasons,
+                                        onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                        showViewMore = false,
+                                        compact = compactCards,
+                                        showScore = showScoreBadges,
+                                    )
+                                }
+                            }
 
-                            RowId.NEW_ON_APP -> AnimeSection(
-                                title = strings.rowTitle(rowId),
-                                items = state.newOnSite,
-                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                                onViewMoreClick = onViewNewOnAppMore,
-                                compact = compactCards,
-                                showScore = showScoreBadges,
-                            )
+                            RowId.NEW_ON_APP -> {
+                                item(key = "new-on-app") {
+                                    AnimeSection(
+                                        title = strings.rowTitle(rowId),
+                                        items = state.newOnSite,
+                                        onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                        onViewMoreClick = onViewNewOnAppMore,
+                                        compact = compactCards,
+                                        showScore = showScoreBadges,
+                                    )
+                                }
+                            }
 
-                            RowId.RECOMMENDED -> AnimeSection(
-                                title = strings.rowTitle(rowId),
-                                items = state.recommended,
-                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                                showViewMore = false,
-                                compact = compactCards,
-                                showScore = showScoreBadges,
-                            )
+                            RowId.RECOMMENDED -> {
+                                item(key = "recommended") {
+                                    AnimeSection(
+                                        title = strings.rowTitle(rowId),
+                                        items = state.recommended,
+                                        onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                        showViewMore = false,
+                                        compact = compactCards,
+                                        showScore = showScoreBadges,
+                                    )
+                                }
+                            }
 
-                            RowId.UPCOMING -> AnimeSection(
-                                title = strings.rowTitle(rowId),
-                                items = state.upcoming,
-                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                                showViewMore = false,
-                                compact = compactCards,
-                                showScore = showScoreBadges,
-                            )
+                            RowId.UPCOMING -> {
+                                item(key = "upcoming") {
+                                    AnimeSection(
+                                        title = strings.rowTitle(rowId),
+                                        items = state.upcoming,
+                                        onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                        showViewMore = false,
+                                        compact = compactCards,
+                                        showScore = showScoreBadges,
+                                    )
+                                }
+                            }
 
-                            RowId.HIDDEN_GEMS -> AnimeSection(
-                                title = strings.rowTitle(rowId),
-                                items = state.hiddenGems,
-                                onItemClick = { item -> onAnimeClick(item.activeSlug) },
-                                showViewMore = false,
-                                compact = compactCards,
-                                showScore = showScoreBadges,
-                            )
+                            RowId.HIDDEN_GEMS -> {
+                                item(key = "hidden-gems") {
+                                    AnimeSection(
+                                        title = strings.rowTitle(rowId),
+                                        items = state.hiddenGems,
+                                        onItemClick = { item -> onAnimeClick(item.activeSlug) },
+                                        showViewMore = false,
+                                        compact = compactCards,
+                                        showScore = showScoreBadges,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(if (isDesktopPlatform) 48.dp else 156.dp))
+                item(key = "bottom-spacer") { Spacer(Modifier.height(if (isDesktopPlatform) 48.dp else 156.dp)) }
             }
         }
     }
@@ -971,13 +999,23 @@ private fun HeroCarousel(
                 ) { targetIndex ->
                     val animItem = items[targetIndex]
                     val imageUrl = animItem.bannerUrl ?: animItem.imageUrl
+                    val parallaxScale by animateFloatAsState(
+                        targetValue = 1.08f,
+                        animationSpec = tween(8000, easing = LinearEasing),
+                        label = "parallax"
+                    )
                     Box(Modifier.fillMaxSize()) {
 
                         AsyncImage(
                             model = imageUrl,
                             contentDescription = animItem.resolveDisplayTitle(),
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    scaleX = parallaxScale
+                                    scaleY = parallaxScale
+                                },
                         )
 
                         // Slide continues...
@@ -1702,7 +1740,10 @@ private fun ContinueWatchingRow(
             }
         )
     ) {
-        itemsIndexed(items) { _, item ->
+        itemsIndexed(
+            items = items,
+            key = { _, item -> item.effectiveAnimeId.ifBlank { item.animeId } }
+        ) { index, item ->
             val inter = remember { MutableInteractionSource() }
             val hovered by inter.collectIsHoveredAsState()
             val animeId = item.effectiveAnimeId.ifBlank { item.animeId }
@@ -1713,6 +1754,7 @@ private fun ContinueWatchingRow(
             Column(
                 Modifier
                     .width(190.dp)
+                    .animateItemEntrance(index)
                     .hoverable(inter)
                     .clickable { onWatchClick(animeId, lang, episode, server, item.progress) }
             ) {
@@ -1729,8 +1771,13 @@ private fun ContinueWatchingRow(
                         modifier = Modifier.fillMaxSize(),
                     )
                     // Progress bar
-                    val progress =
+                    val targetProgress =
                         if (item.duration > 0) (item.progress / item.duration).toFloat().coerceIn(0f, 1f) else 0f
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = targetProgress,
+                        animationSpec = tween(600, easing = FastOutSlowInEasing),
+                        label = "progressBar"
+                    )
                     Box(
                         Modifier
                             .align(Alignment.BottomStart)
@@ -1740,7 +1787,7 @@ private fun ContinueWatchingRow(
                     ) {
                         Box(
                             Modifier
-                                .fillMaxWidth(progress)
+                                .fillMaxWidth(animatedProgress)
                                 .fillMaxSize()
                                 .background(Color(0xFFE50914))
                         )
@@ -1847,10 +1894,15 @@ private fun AnimeSection(
                     }
                 )
             ) {
-                itemsIndexed(items) { _, item ->
+                itemsIndexed(
+                    items = items,
+                    key = { _, item -> item.activeSlug }
+                ) { index, item ->
                     to.kuudere.anisuge.ui.AnimeCard(
                         item = item,
-                        modifier = Modifier.width(cardWidth),
+                        modifier = Modifier
+                            .width(cardWidth)
+                            .animateItemEntrance(index),
                         showLatestLangBadge = showLatestLangBadge,
                         showScore = showScore,
                         compact = compact,
@@ -1884,8 +1936,20 @@ private fun SectionHeader(title: String, onViewMore: (() -> Unit)?) {
             Text(title, color = AppColors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
         if (onViewMore != null) {
+            val seeAllInter = remember { MutableInteractionSource() }
+            val seeAllHovered by seeAllInter.collectIsHoveredAsState()
+            val seeAllScale by animateFloatAsState(
+                targetValue = if (seeAllHovered) 1.05f else 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessHigh
+                ),
+                label = "seeAllScale"
+            )
             Row(
                 Modifier
+                    .graphicsLayer { scaleX = seeAllScale; scaleY = seeAllScale }
+                    .hoverable(seeAllInter)
                     .clip(RoundedCornerShape(6.dp))
                     .clickable { onViewMore() }
                     .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -1989,28 +2053,27 @@ private fun MinimalisticHomeContent(
     showScore: Boolean = true,
 ) {
     val strings = LocalAppStrings.current
-    val scrollState = rememberScrollState()
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize()
     ) {
         // Top hero - immersive modern
         if (state.latestAired.isNotEmpty() || state.trendingWeek.isNotEmpty()) {
             val heroItems = (state.latestAired + state.trendingWeek).distinctBy { it.activeSlug }.take(5)
             if (heroItems.isNotEmpty()) {
-                MinimalisticHero(
-                    items = heroItems,
-                    onAnimeClick = { onAnimeClick(it.activeSlug) },
-                    onWatchClick = { item ->
-                        onWatchClick(item.activeSlug, "sub", 1, null, null)
-                    }
-                )
+                item(key = "minimal-hero") {
+                    MinimalisticHero(
+                        items = heroItems,
+                        onAnimeClick = { onAnimeClick(it.activeSlug) },
+                        onWatchClick = { item ->
+                            onWatchClick(item.activeSlug, "sub", 1, null, null)
+                        }
+                    )
+                }
             }
         } else {
             // Fallback header height
-            Spacer(Modifier.height(280.dp))
+            item(key = "minimal-hero-fallback") { Spacer(Modifier.height(280.dp)) }
         }
 
         // Greeting
@@ -2019,76 +2082,92 @@ private fun MinimalisticHomeContent(
             ?: state.userProfile?.name?.takeIf { it.isNotBlank() }
         if (rawName != null) {
             val first = rawName.split(" ", limit = 2).firstOrNull()?.takeIf { it.isNotBlank() } ?: rawName
-            Text(
-                "Welcome back, $first",
-                color = AppColors.text.copy(alpha = 0.85f),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
-            )
+            item(key = "minimal-greeting") {
+                Text(
+                    "Welcome back, $first",
+                    color = AppColors.text.copy(alpha = 0.85f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                )
+            }
         } else {
-            Spacer(Modifier.height(12.dp))
+            item(key = "minimal-greeting-spacer") { Spacer(Modifier.height(12.dp)) }
         }
 
         // Continue Watching
         if (state.continueWatching.isNotEmpty()) {
-            MinimalisticSectionHeader(title = strings.continueWatchingTitle ?: "Continue Watching", onMore = onViewContinueWatchingMore)
-            MinimalisticContinueRow(
-                items = state.continueWatching,
-                onWatchClick = onWatchClick,
-                onRemove = onRemoveContinueItem,
-            )
-            Spacer(Modifier.height(20.dp))
+            item(key = "minimal-continue-header") {
+                MinimalisticSectionHeader(title = strings.continueWatchingTitle ?: "Continue Watching", onMore = onViewContinueWatchingMore)
+            }
+            item(key = "minimal-continue-row") {
+                MinimalisticContinueRow(
+                    items = state.continueWatching,
+                    onWatchClick = onWatchClick,
+                    onRemove = onRemoveContinueItem,
+                )
+            }
+            item(key = "minimal-continue-spacer") { Spacer(Modifier.height(20.dp)) }
         }
 
         // Trending
         if (state.trendingWeek.isNotEmpty()) {
-            MinimalisticSectionHeader(title = strings.trendingWeekTitle ?: "Trending this week")
-            MinimalisticMediaRow(
-                items = state.trendingWeek,
-                onItemClick = { onAnimeClick(it.activeSlug) },
-                showScore = showScore,
-            )
+            item(key = "minimal-trending") {
+                MinimalisticSectionHeader(title = strings.trendingWeekTitle ?: "Trending this week")
+                MinimalisticMediaRow(
+                    items = state.trendingWeek,
+                    onItemClick = { onAnimeClick(it.activeSlug) },
+                    showScore = showScore,
+                )
+            }
         }
 
         // Latest Episodes
         if (state.latestAired.isNotEmpty()) {
-            MinimalisticSectionHeader(title = strings.latestEpisodesTitle ?: "Latest episodes")
-            MinimalisticMediaRow(
-                items = state.latestAired,
-                onItemClick = { onAnimeClick(it.activeSlug) },
-                showScore = showScore,
-            )
+            item(key = "minimal-latest") {
+                MinimalisticSectionHeader(title = strings.latestEpisodesTitle ?: "Latest episodes")
+                MinimalisticMediaRow(
+                    items = state.latestAired,
+                    onItemClick = { onAnimeClick(it.activeSlug) },
+                    showScore = showScore,
+                )
+            }
         }
 
         // New on App
         if (state.newOnSite.isNotEmpty()) {
-            MinimalisticSectionHeader(title = strings.newOnAppTitle ?: "New on Anisurge")
-            MinimalisticMediaRow(
-                items = state.newOnSite,
-                onItemClick = { onAnimeClick(it.activeSlug) },
-                showScore = showScore,
-            )
+            item(key = "minimal-new") {
+                MinimalisticSectionHeader(title = strings.newOnAppTitle ?: "New on Anisurge")
+                MinimalisticMediaRow(
+                    items = state.newOnSite,
+                    onItemClick = { onAnimeClick(it.activeSlug) },
+                    showScore = showScore,
+                )
+            }
         }
 
         // Recommended or New Seasons if present
         if (state.recommended.isNotEmpty()) {
-            MinimalisticSectionHeader(title = strings.recommendedTitle ?: "Recommended for you")
-            MinimalisticMediaRow(
-                items = state.recommended,
-                onItemClick = { onAnimeClick(it.activeSlug) },
-                showScore = showScore,
-            )
+            item(key = "minimal-recommended") {
+                MinimalisticSectionHeader(title = strings.recommendedTitle ?: "Recommended for you")
+                MinimalisticMediaRow(
+                    items = state.recommended,
+                    onItemClick = { onAnimeClick(it.activeSlug) },
+                    showScore = showScore,
+                )
+            }
         } else if (state.newSeasons.isNotEmpty()) {
-            MinimalisticSectionHeader(title = strings.newSeasonsTitle ?: "New seasons")
-            MinimalisticMediaRow(
-                items = state.newSeasons,
-                onItemClick = { onAnimeClick(it.activeSlug) },
-                showScore = showScore,
-            )
+            item(key = "minimal-new-seasons") {
+                MinimalisticSectionHeader(title = strings.newSeasonsTitle ?: "New seasons")
+                MinimalisticMediaRow(
+                    items = state.newSeasons,
+                    onItemClick = { onAnimeClick(it.activeSlug) },
+                    showScore = showScore,
+                )
+            }
         }
 
-        Spacer(Modifier.height(if (isDesktopPlatform) 64.dp else 180.dp))
+        item(key = "minimal-bottom-spacer") { Spacer(Modifier.height(if (isDesktopPlatform) 64.dp else 180.dp)) }
     }
 }
 
@@ -2296,7 +2375,10 @@ private fun MinimalisticContinueRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        itemsIndexed(items) { _, item ->
+        items(
+            items = items,
+            key = { it.effectiveAnimeId.ifBlank { it.animeId } }
+        ) { item ->
             val animeId = item.effectiveAnimeId.ifBlank { item.animeId }
             val lang = item.language ?: "sub"
             val server = item.server
@@ -2388,7 +2470,10 @@ private fun MinimalisticMediaRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        itemsIndexed(items) { _, item ->
+        items(
+            items = items,
+            key = { it.activeSlug }
+        ) { item ->
             val cardW = 130.dp
             Column(
                 Modifier
@@ -3958,13 +4043,16 @@ private fun NeoHomeContent(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                        .animateItemEntrance(0)
                 )
             }
         }
 
         // Continue - use the app's polished ContinueWatchingRow (better UI with progress, hover, remove)
         if (state.continueWatching.isNotEmpty()) {
-            item(key = "neo-continue-header") { NeoSectionHeader("Continue Watching", onMore = onViewContinueWatchingMore) }
+            item(key = "neo-continue-header") {
+                NeoSectionHeader("Continue Watching", onMore = onViewContinueWatchingMore)
+            }
             item(key = "neo-continue-row") {
                 ContinueWatchingRow(
                     items = state.continueWatching,
@@ -3983,13 +4071,15 @@ private fun NeoHomeContent(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = state.trendingWeek.take(10),
-                        key = { it.activeSlug }
-                    ) { item ->
+                        key = { _, item -> item.activeSlug }
+                    ) { index, item ->
                         AnimeCard(
                             item = item,
-                            modifier = Modifier.width(140.dp),
+                            modifier = Modifier
+                                .width(140.dp)
+                                .animateItemEntrance(index),
                             showScore = showScore,
                             onClick = { onAnimeClick(item.activeSlug) }
                         )
@@ -4007,13 +4097,15 @@ private fun NeoHomeContent(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = state.latestAired.take(8),
-                        key = { it.activeSlug }
-                    ) { item ->
+                        key = { _, item -> item.activeSlug }
+                    ) { index, item ->
                         AnimeCard(
                             item = item,
-                            modifier = Modifier.width(155.dp),
+                            modifier = Modifier
+                                .width(155.dp)
+                                .animateItemEntrance(index),
                             showLatestLangBadge = true,
                             showScore = showScore,
                             onClick = { onAnimeClick(item.activeSlug) }
@@ -4032,13 +4124,15 @@ private fun NeoHomeContent(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(
+                    itemsIndexed(
                         items = state.newOnSite.take(8),
-                        key = { it.activeSlug }
-                    ) { item ->
+                        key = { _, item -> item.activeSlug }
+                    ) { index, item ->
                         AnimeCard(
                             item = item,
-                            modifier = Modifier.width(155.dp),
+                            modifier = Modifier
+                                .width(155.dp)
+                                .animateItemEntrance(index),
                             showScore = showScore,
                             onClick = { onAnimeClick(item.activeSlug) }
                         )
@@ -4058,7 +4152,11 @@ private fun NeoHero(
     onInfo: () -> Unit
 ) {
     val img = item.bannerUrl?.takeIf { it.isNotBlank() } ?: item.imageUrl.takeIf { it.isNotBlank() } ?: ""
-    val scale = 1f  // animation removed to prevent potential recomposition jank / ANR in some scenarios; can be restored with stable layer update later
+    val parallaxScale by animateFloatAsState(
+        targetValue = 1.05f,
+        animationSpec = tween(8000, easing = LinearEasing),
+        label = "neoParallax"
+    )
 
     Box(
         modifier = Modifier
@@ -4075,8 +4173,8 @@ private fun NeoHero(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
+                        scaleX = parallaxScale
+                        scaleY = parallaxScale
                     }
             )
         } else {

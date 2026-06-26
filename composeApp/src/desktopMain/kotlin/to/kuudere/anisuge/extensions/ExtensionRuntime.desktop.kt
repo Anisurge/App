@@ -176,6 +176,10 @@ actual class ExtensionRuntime actual constructor() {
         }
     }
 
+    actual suspend fun reloadAndResolveBridgeId(source: ExtensionSource): String? {
+        return source.runtimeId?.takeIf { it.isNotBlank() } ?: source.id
+    }
+
     actual fun logs(): List<String> = logLines.toList()
 
     actual suspend fun setCookies(url: String, cookieString: String) {

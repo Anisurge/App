@@ -46,6 +46,7 @@ import coil3.compose.AsyncImage
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.ui.OfflineState
+import to.kuudere.anisuge.ui.animateItemEntrance
 import to.kuudere.anisuge.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -121,9 +122,11 @@ fun SearchScreen(
 
                     if (state.isLoading && state.results.isEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
-                            Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = AppColors.accent)
-                            }
+                            to.kuudere.anisuge.ui.ShimmerGrid(
+                                columns = if (isSmall) 3 else 5,
+                                rows = 3,
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                            )
                         }
                     } else if (!state.isLoading && state.results.isEmpty()) {
                         // No results found state
@@ -159,10 +162,15 @@ fun SearchScreen(
                             }
                         }
                     } else {
-                        items(state.results) { anime ->
+                        itemsIndexed(
+                            items = state.results,
+                            key = { _, item -> item.activeSlug }
+                        ) { index, anime ->
                             to.kuudere.anisuge.ui.AnimeCard(
                                 item = anime,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .animateItemEntrance(index),
                                 onClick = { onAnimeClick(anime.activeSlug) }
                             )
                         }

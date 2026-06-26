@@ -17,6 +17,9 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,9 +80,27 @@ fun AnimeCard(
 ) {
     val inter   = remember { MutableInteractionSource() }
     val hovered by inter.collectIsHoveredAsState()
+    val pressed by inter.collectIsPressedAsState()
 
     // translateY(-4px) on hover
     val lift by animateDpAsState(if (hovered) 4.dp else 0.dp, tween(200))
+
+    // Haptic feedback on press (Dantotsu-style tactile response)
+    val haptic = LocalHapticFeedback.current
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
+
+    // Press scale feedback — shrinks slightly when tapped
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.96f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        )
+    )
 
     // Dantotsu-inspired fast snappy scale pop on appear (overshoot-like via spring)
     var entered by remember { mutableStateOf(false) }
@@ -95,8 +116,9 @@ fun AnimeCard(
     Column(
         modifier = modifier
             .graphicsLayer {
-                scaleX = enterScale
-                scaleY = enterScale
+                scaleX = enterScale * pressScale
+                scaleY = enterScale * pressScale
+                shadowElevation = if (hovered) 8f else 2f
             }
             .hoverable(inter)
             .tvFocusableClick(onClick = onClick)

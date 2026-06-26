@@ -18,6 +18,7 @@ expect class ExtensionRuntime() {
         episode: ExtensionEpisode,
         onVideo: (suspend (ExtensionVideo) -> Unit)? = null,
     ): List<ExtensionVideo>
+    suspend fun reloadAndResolveBridgeId(source: ExtensionSource): String?
     suspend fun cancel(token: String)
     fun logs(): List<String>
 
