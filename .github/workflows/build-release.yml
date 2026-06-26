@@ -232,14 +232,14 @@ jobs:
           # Use built-in 7z on windows-latest runner (no external download needed, avoids 7-zip.org timeouts)
           $headers = @{ "User-Agent" = "Mozilla/5.0"; "Authorization" = "Bearer $env:GH_TOKEN" }
           $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" -Headers $headers
-          # Stricter search: must contain mpv + x86_64 (or x64) + .7z. Prefer dev builds.
+          # Must be mpv + x86_64/x64 + .7z, exclude debug builds (debug ones have .pdb not DLLs)
           $asset = $releases | ForEach-Object { $_.assets } | Where-Object { 
-            $_.name -like "*mpv*" -and ($_.name -like "*x86_64*" -or $_.name -like "*x64*") -and $_.name -like "*.7z"
+            $_.name -like "*mpv*" -and ($_.name -like "*x86_64*" -or $_.name -like "*x64*") -and $_.name -like "*.7z" -and $_.name -notlike "*debug*"
           } | Select-Object -First 1
           if (-not $asset) { 
             Write-Host "Available mpv-related assets from recent releases:"
             $releases | ForEach-Object { $_.assets } | Where-Object { $_.name -like "*mpv*" -or $_.name -like "*.7z" } | Select-Object -First 15 name, browser_download_url | Format-Table -AutoSize
-            throw "Could not find a suitable mpv x86_64 .7z release asset" 
+            throw "Could not find a suitable non-debug mpv x86_64 .7z release asset" 
           }
           Write-Host "Selected MPV asset: $($asset.name)"
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "mpv-dev.7z" -Headers $headers
