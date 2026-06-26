@@ -229,18 +229,25 @@ jobs:
         run: |
           $nativeDir = "composeApp\src\desktopMain\resources\native"
           New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
-          # Robust download with retries for 7zr.exe (frequent timeout on Windows runners)
-          $maxRetries = 5
+          # Robust download with retries + curl fallback for 7zr.exe (7-zip.org often times out on GH Windows runners)
+          $maxRetries = 6
+          $downloaded = $false
           for ($i = 1; $i -le $maxRetries; $i++) {
               try {
-                  Write-Host "Downloading 7zr.exe (attempt $i/$maxRetries)..."
-                  Invoke-WebRequest -Uri "https://www.7-zip.org/a/7zr.exe" -OutFile "7zr.exe" -UseBasicParsing -TimeoutSec 120
-                  break
+                  Write-Host "Attempt $i/$maxRetries to download 7zr.exe..."
+                  if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+                      curl.exe -L --max-time 120 -o 7zr.exe "https://www.7-zip.org/a/7zr.exe"
+                  } else {
+                      Invoke-WebRequest -Uri "https://www.7-zip.org/a/7zr.exe" -OutFile "7zr.exe" -UseBasicParsing -TimeoutSec 120 -UserAgent "Mozilla/5.0"
+                  }
+                  if (Test-Path "7zr.exe") { $downloaded = $true; break }
               } catch {
-                  if ($i -eq $maxRetries) { throw "Failed to download 7zr.exe after $maxRetries attempts: $_" }
-                  Start-Sleep -Seconds (10 * $i)
+                  Write-Host "Attempt $i failed: $_"
+                  if ($i -eq $maxRetries) { throw "Failed to download 7zr.exe after $maxRetries attempts" }
+                  Start-Sleep -Seconds (15 * $i)
               }
           }
+          if (-not $downloaded) { throw "Could not obtain 7zr.exe" }
           $headers = @{ "User-Agent" = "Mozilla/5.0"; "Authorization" = "Bearer $env:GH_TOKEN" }
           $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" -Headers $headers
           # Stricter search: must contain mpv + x86_64 (or x64) + .7z. Prefer dev builds.
