@@ -229,7 +229,18 @@ jobs:
         run: |
           $nativeDir = "composeApp\src\desktopMain\resources\native"
           New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
-          Invoke-WebRequest -Uri "https://www.7-zip.org/a/7zr.exe" -OutFile "7zr.exe"
+          # Robust download with retries for 7zr.exe (frequent timeout on Windows runners)
+          $maxRetries = 5
+          for ($i = 1; $i -le $maxRetries; $i++) {
+              try {
+                  Write-Host "Downloading 7zr.exe (attempt $i/$maxRetries)..."
+                  Invoke-WebRequest -Uri "https://www.7-zip.org/a/7zr.exe" -OutFile "7zr.exe" -UseBasicParsing -TimeoutSec 120
+                  break
+              } catch {
+                  if ($i -eq $maxRetries) { throw "Failed to download 7zr.exe after $maxRetries attempts: $_" }
+                  Start-Sleep -Seconds (10 * $i)
+              }
+          }
           $headers = @{ "User-Agent" = "Mozilla/5.0"; "Authorization" = "Bearer $env:GH_TOKEN" }
           $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" -Headers $headers
           # More flexible search for mpv dev builds (naming can vary: mpv-dev-*, mpv-x86_64-*, etc.)
