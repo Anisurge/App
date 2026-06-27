@@ -155,15 +155,17 @@ class SearchViewModel(private val searchService: SearchService) : ViewModel() {
 
             if (response != null) {
                 val newItems = response.results
-                val nextOffset = (if (loadMore) currentState.currentOffset else 0) + newItems.size
+                val existingSlugs = if (loadMore) _uiState.value.results.map { it.activeSlug }.toSet() else emptySet()
+                val uniqueNew = newItems.filter { it.activeSlug !in existingSlugs }
+                val nextOffset = (if (loadMore) currentState.currentOffset else 0) + uniqueNew.size
                 val total = response.total
                 _uiState.value = _uiState.value.copy(
-                    results = if (loadMore) _uiState.value.results + newItems else newItems,
+                    results = if (loadMore) _uiState.value.results + uniqueNew else uniqueNew,
                     isLoading = false,
                     isLoadingMore = false,
                     isOffline = false,
                     total = total,
-                    hasMore = nextOffset < total && newItems.isNotEmpty(),
+                    hasMore = nextOffset < total && uniqueNew.isNotEmpty(),
                     currentOffset = nextOffset,
                 )
             } else {

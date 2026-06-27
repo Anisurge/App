@@ -118,9 +118,9 @@ class HomeViewModel(
                         isLoading = false,
                         isOffline = false,
                         error = null,
-                        latestAired = homeData?.latestAired ?: emptyList(),
-                        newOnSite = homeData?.newOnSite ?: emptyList(),
-                        upcoming = homeData?.upcoming ?: emptyList(),
+                        latestAired = homeData?.latestAired?.distinctBy { it.activeSlug } ?: emptyList(),
+                        newOnSite = homeData?.newOnSite?.distinctBy { it.activeSlug } ?: emptyList(),
+                        upcoming = homeData?.upcoming?.distinctBy { it.activeSlug } ?: emptyList(),
                     )
                 }
             } catch (e: Exception) {
@@ -164,11 +164,12 @@ class HomeViewModel(
                 }.orEmpty()
             }
 
-            val topItems = top.await()
-            val seasonItems = seasons.await()
+            val topItems = top.await().distinctBy { it.activeSlug }
+            val seasonItems = seasons.await().distinctBy { it.activeSlug }
             // Hidden gems = highly rated but under a popularity threshold (underrated).
             val gemItems = gems.await()
                 .filter { (it.popularity ?: Int.MAX_VALUE) < HIDDEN_GEM_MAX_POPULARITY }
+                .distinctBy { it.activeSlug }
                 .take(20)
 
             _uiState.update {
@@ -203,6 +204,7 @@ class HomeViewModel(
                 ?.recommendations
                 .orEmpty()
                 .map { it.toAnimeItem() }
+                .distinctBy { it.activeSlug }
             if (recs.isNotEmpty()) {
                 _uiState.update { it.copy(recommended = recs) }
             }

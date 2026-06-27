@@ -137,7 +137,7 @@ fun NewOnAppScreen(
                         }
                     }
                 } else {
-                    items(state.results) { anime ->
+                    items(state.results, key = { it.activeSlug }) { anime ->
                         AnimeCard(
                             item = anime,
                             modifier = Modifier.fillMaxWidth(),
