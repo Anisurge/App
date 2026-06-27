@@ -229,13 +229,12 @@ jobs:
         run: |
           $nativeDir = "composeApp\src\desktopMain\resources\native"
           New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
-          Invoke-WebRequest -Uri "https://www.7-zip.org/a/7zr.exe" -OutFile "7zr.exe"
           $headers = @{ "User-Agent" = "Mozilla/5.0"; "Authorization" = "Bearer $env:GH_TOKEN" }
           $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/zhongfly/mpv-winbuild/releases?per_page=20" -Headers $headers
           $asset = $releases | ForEach-Object { $_.assets } | Where-Object { $_.name -like "mpv-dev-x86_64-v3-*.7z" -or $_.name -like "mpv-dev-x86_64-*.7z" } | Select-Object -First 1
           if (-not $asset) { throw "Could not find an mpv-dev x86_64 release asset" }
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "mpv-dev.7z" -Headers $headers
-          .\7zr.exe x mpv-dev.7z -ompv-extracted
+          7z x mpv-dev.7z -ompv-extracted
           $dlls = Get-ChildItem -Path "mpv-extracted" -Recurse -Filter "*.dll"
           if (-not $dlls) { throw "No DLLs were found in the extracted MPV archive" }
           foreach ($dll in $dlls) {
