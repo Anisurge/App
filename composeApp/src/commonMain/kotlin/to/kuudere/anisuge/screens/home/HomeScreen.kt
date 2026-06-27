@@ -164,6 +164,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalWindowInfo
 import kotlin.math.absoluteValue
 import coil3.compose.AsyncImage
+import androidx.compose.ui.platform.LocalContext
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.ContinueWatchingItem
 import to.kuudere.anisuge.data.models.RowId
@@ -1342,7 +1343,10 @@ private fun HeroCarouselExpanded(
                     .clickable { if (pageOffset < 0.5f) onAnimeClick(item) }
             ) {
                 AsyncImage(
-                    model = heroUrl,
+                    model = coil3.request.ImageRequest.Builder(LocalContext.current)
+                        .data(heroUrl)
+                        .size(400, 600) // downsample large hero to avoid OOM on high-res banners
+                        .build(),
                     contentDescription = item.resolveDisplayTitle(),
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()

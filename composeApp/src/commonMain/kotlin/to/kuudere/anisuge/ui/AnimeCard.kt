@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import androidx.compose.ui.platform.LocalContext
 import to.kuudere.anisuge.data.models.AnimeItem
 import to.kuudere.anisuge.data.models.LatestEpisodeLang
 import to.kuudere.anisuge.theme.AppColors
@@ -140,7 +141,10 @@ fun AnimeCard(
                 else                              -> ""
             }
             AsyncImage(
-                model              = url,
+                model = coil3.request.ImageRequest.Builder(LocalContext.current)
+                    .data(url)
+                    .size(200, 267) // force downsample for memory safety on grids
+                    .build(),
                 contentDescription = item.resolveDisplayTitle(),
                 contentScale       = ContentScale.Crop,
                 modifier           = Modifier.fillMaxSize()

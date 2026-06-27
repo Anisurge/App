@@ -17,6 +17,17 @@ class AnisurgeApplication : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: coil3.PlatformContext): ImageLoader {
         return ImageLoader.Builder(context)
             .crossfade(300)
+            .memoryCache {
+                coil3.memory.MemoryCache.Builder(context)
+                    .maxSizeBytes(128 * 1024 * 1024) // 128MB to reduce OOM risk on image-heavy screens
+                    .build()
+            }
+            .diskCache {
+                coil3.disk.DiskCache.Builder()
+                    .directory(context.cacheDir.resolve("coil"))
+                    .maxSizeBytes(256 * 1024 * 1024) // 256MB disk cache
+                    .build()
+            }
             .build()
     }
 
