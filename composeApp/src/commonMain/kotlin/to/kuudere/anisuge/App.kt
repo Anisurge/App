@@ -169,6 +169,7 @@ fun App(
                 AppComponent.serverRepository,
                 AppComponent.extensionManager,
                 AppComponent.aniskipService,
+                AppComponent.anizipService,
                 AppComponent.syncManager,
                 AppComponent.trackingService,
             )

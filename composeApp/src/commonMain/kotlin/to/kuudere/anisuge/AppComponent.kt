@@ -241,6 +241,10 @@ object AppComponent {
         to.kuudere.anisuge.data.services.AniskipService(httpClient, malAnilistIdCache)
     }
 
+    val anizipService: to.kuudere.anisuge.data.services.AniZipService by lazy {
+        to.kuudere.anisuge.data.services.AniZipService(httpClient)
+    }
+
     val watchHistorySyncService: to.kuudere.anisuge.data.services.WatchHistorySyncService by lazy {
         to.kuudere.anisuge.data.services.WatchHistorySyncService(
             httpClient,
