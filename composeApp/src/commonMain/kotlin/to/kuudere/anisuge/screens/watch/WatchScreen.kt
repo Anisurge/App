@@ -2710,8 +2710,7 @@ fun WatchVideoPlayer(
             LaunchedEffect(playerState.error) {
                 val error = playerState.error ?: return@LaunchedEffect
                 if (error.contains("trying another server", ignoreCase = true)) {
-                    playerState.error = "Stream failed to start — choose another server in Settings"
-                    viewModel.tryNextServerAfterPlaybackFailure(0.0)
+                    playerState.error = "Stream failed to start — choose another server"
                 }
             }
 
@@ -3493,11 +3492,6 @@ fun WatchVideoPlayer(
                         },
                         onServerSelected = { serverLabel ->
                             if (isOffline) return@SettingsOverlay
-                            val currentAudioLabel =
-                                playerState.audioTracks.firstOrNull { it.first == playerState.selectedAudioTrack }?.second?.lowercase()
-                                    ?: ""
-                            val currentTrackLang = if (currentAudioLabel.contains("eng")) "dub" else "sub"
-
                             val currentSubData =
                                 uiState.availableSubtitles.firstOrNull { it.url == uiState.currentSubtitleUrl }
                             val targetSubtitleLang = currentSubData?.title ?: currentSubData?.resolvedLang
@@ -3506,7 +3500,7 @@ fun WatchVideoPlayer(
                             viewModel.changeServerWithState(
                                 newServer = serverLabel,
                                 position = playerState.position,
-                                targetAudioLang = currentTrackLang,
+                                targetAudioLang = uiState.targetLang,
                                 targetSubtitleLang = targetSubtitleLang,
                                 targetSubtitleLangCode = targetSubtitleLangCode
                             )
@@ -3588,7 +3582,7 @@ fun WatchVideoPlayer(
                         viewModel.changeServerWithState(
                             newServer = serverLabel,
                             position = uiState.savedWatchPosition,
-                            targetAudioLang = null,
+                            targetAudioLang = uiState.targetLang,
                             targetSubtitleLang = null,
                             targetSubtitleLangCode = null
                         )

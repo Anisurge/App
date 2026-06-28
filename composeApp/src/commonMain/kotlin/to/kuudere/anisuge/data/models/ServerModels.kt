@@ -137,4 +137,6 @@ val FALLBACK_SERVERS = listOf(
     ServerInfo(id = "anitaku-1", label = "Anitaku 1", type = "sub", active = true),
     ServerInfo(id = "anitaku", label = "Anitaku", type = "sub", active = true),
     ServerInfo(id = "anikage", label = "Anikage", type = "sub_dub", active = true),
+    ServerInfo(id = "comti", label = "Comti", type = "sub_dub", active = true),
+    ServerInfo(id = "oush", label = "Oush", type = "sub_dub", active = true),
 )

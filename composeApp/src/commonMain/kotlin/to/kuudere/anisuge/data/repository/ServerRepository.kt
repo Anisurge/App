@@ -31,6 +31,7 @@ import to.kuudere.anisuge.data.models.hidesServer
 import to.kuudere.anisuge.data.models.orderSelectableServerIds
 import to.kuudere.anisuge.data.services.SettingsStore
 import to.kuudere.anisuge.extensions.ExtensionManager
+import to.kuudere.anisuge.extensions.isDubSelectableServerId
 
 class ServerRepository(
     private val httpClient: HttpClient,
@@ -45,7 +46,7 @@ class ServerRepository(
         private const val CACHE_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000L
 
         /** Default stream `source` order when the user has not saved a custom priority (matches api.md / site catalog). */
-        val DEFAULT_STREAM_SOURCE_ORDER = listOf("zen2", "zen", "allmanga", "suzu")
+        val DEFAULT_STREAM_SOURCE_ORDER = listOf("zen2", "zen", "allmanga", "suzu", "comti", "oush")
 
         /**
          * Order for the Settings servers list — one row per provider (Sub/Dub chosen at playback).
@@ -128,6 +129,10 @@ class ServerRepository(
 
     fun getServerById(id: String): ServerInfo? {
         return _servers.value.find { it.id.equals(id, ignoreCase = true) }
+            ?: if (isDubSelectableServerId(id)) {
+                val baseId = id.removeSuffix("-dub").removeSuffix(":dub")
+                _servers.value.find { it.id.equals(baseId, ignoreCase = true) }
+            } else null
     }
 
     private fun priorityCatalog(): List<ServerInfo> =

@@ -150,8 +150,6 @@ class WatchViewModel(
     private var lastPlaybackPositionSec = 0.0
     private var lastPlaybackLanguage = "sub"
     private var lastSavedProgressKey: String? = null
-    private var lastAutoServerFallbackKey: String? = null
-
     /** Server explicitly chosen in player settings (not the Settings → priority list default). */
     private var userPinnedStreamServer: String? = null
     private var hasSessionEnhancementOverride = false
@@ -248,9 +246,9 @@ class WatchViewModel(
                 subtitlesDisabled = false,
                 currentFontsDir = null,
                 savedWatchPosition = resumeFromContinueSeconds?.takeIf { it >= 1.0 } ?: 0.0,
-                targetLang = null,
-                targetSubtitleLang = null,
-                targetSubtitleLangCode = null,
+                targetLang = if (newAnime) null else it.targetLang,
+                targetSubtitleLang = if (newAnime) null else it.targetSubtitleLang,
+                targetSubtitleLangCode = if (newAnime) null else it.targetSubtitleLangCode,
                 didMarkWatched = false,
                 offlinePath = offlinePath,
                 standaloneExtensionTitle = standaloneExtensionTitle,
@@ -1114,7 +1112,6 @@ class WatchViewModel(
         loadJob?.cancel()
         streamLoadGeneration++
         cachedStreamSection = null
-        lastAutoServerFallbackKey = null
         _uiState.update {
             it.copy(
                 currentServer = server,
@@ -1168,11 +1165,13 @@ class WatchViewModel(
 
     fun switchServer(serverId: String) {
         val state = _uiState.value
+        val targetAudioLang = state.targetLang
+            ?: if (to.kuudere.anisuge.extensions.isDubSelectableServerId(serverId)) "dub" else if (state.defaultLang) "dub" else "sub"
         val resumePosition = lastPlaybackPositionSec.coerceAtLeast(state.savedWatchPosition)
         changeServerWithState(
             newServer = serverId,
             position = resumePosition,
-            targetAudioLang = lastPlaybackLanguage,
+            targetAudioLang = targetAudioLang,
             targetSubtitleLang = state.currentSubtitleUrl?.let {
                 state.availableSubtitles.firstOrNull { s -> s.url == it }?.title
                     ?: state.availableSubtitles.firstOrNull { s -> s.url == it }?.resolvedLang
@@ -1191,6 +1190,12 @@ class WatchViewModel(
         targetSubtitleLang: String?,
         targetSubtitleLangCode: String? = null
     ) {
+        val state = _uiState.value
+        val preferenceIfUnset = if (state.defaultLang) "dub" else "sub"
+        val resolvedTargetAudioLang = normalizeWatchLang(
+            targetAudioLang ?: state.targetLang ?: if (to.kuudere.anisuge.extensions.isDubSelectableServerId(newServer)) "dub" else null,
+            preferenceIfUnset,
+        )
         userPinnedStreamServer = newServer.lowercase()
         loadJob?.cancel()
         streamLoadGeneration++
@@ -1198,7 +1203,7 @@ class WatchViewModel(
         _uiState.update {
             it.copy(
                 savedWatchPosition = position,
-                targetLang = targetAudioLang,
+                targetLang = resolvedTargetAudioLang,
                 targetSubtitleLang = targetSubtitleLang,
                 targetSubtitleLangCode = targetSubtitleLangCode,
                 showSettingsOverlay = false,
@@ -1218,44 +1223,7 @@ class WatchViewModel(
     }
 
     fun tryNextServerAfterPlaybackFailure(position: Double) {
-        val state = _uiState.value
-        val current = state.currentServer.ifBlank { userPinnedStreamServer.orEmpty() }
-        if (current.isBlank()) return
-        val key = "${state.animeId}|${state.currentEpisodeNumber}|$current"
-        if (lastAutoServerFallbackKey == key) return
-
-        val currentLang = state.targetLang ?: if (current.endsWith("-dub", ignoreCase = true)) "dub" else "sub"
-        fun supports(server: ServerInfo): Boolean = when (currentLang) {
-            "dub" -> server.supportsDub
-            "sub" -> server.supportsSub
-            else -> true
-        }
-
-        val selectable = state.servers
-            .filter { supports(it) && !it.id.equals(current, ignoreCase = true) }
-        if (selectable.isEmpty()) {
-            println("[WatchVM] playback failed on $current; no fallback server available")
-            return
-        }
-
-        val currentIndex = state.servers.indexOfFirst { it.id.equals(current, ignoreCase = true) }
-        val next = if (currentIndex >= 0) {
-            selectable.firstOrNull { candidate ->
-                state.servers.indexOfFirst { it.id.equals(candidate.id, ignoreCase = true) } > currentIndex
-            } ?: selectable.first()
-        } else {
-            selectable.first()
-        }
-
-        lastAutoServerFallbackKey = key
-        println("[WatchVM] playback failed on $current; trying fallback server=${next.id}")
-        changeServerWithState(
-            newServer = next.id,
-            position = position.takeIf { it >= 5.0 } ?: 0.0,
-            targetAudioLang = currentLang,
-            targetSubtitleLang = state.targetSubtitleLang,
-            targetSubtitleLangCode = state.targetSubtitleLangCode,
-        )
+        // Auto-server fallback removed — user must pick a server manually
     }
 
     /**
@@ -1328,7 +1296,6 @@ class WatchViewModel(
             lastKnownDurationSec = 0.0
             lastPlaybackPositionSec = 0.0
             lastSavedProgressKey = null
-            lastAutoServerFallbackKey = null
         }
         loadJob?.cancel()
         streamLoadGeneration++
