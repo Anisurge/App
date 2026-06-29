@@ -367,7 +367,6 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Sync, strings.sync, Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Backup, "Backup & Restore", Icons.Default.Storage))
         add(SettingsNavItem(SettingsTab.Connect, "Connect", Icons.Default.Link))
-        add(SettingsNavItem(SettingsTab.Discord, "Discord RPC", Icons.Default.PlayArrow))
         // Community — not ready yet
         // add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
         add(SettingsNavItem(SettingsTab.Storage, strings.storage, Icons.Default.Storage))
