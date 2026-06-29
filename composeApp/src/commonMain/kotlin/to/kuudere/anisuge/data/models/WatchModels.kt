@@ -71,6 +71,8 @@ data class StreamInfo(
     val quality: String? = null,
     val headers: StreamHeaders? = null,
     val subtitles: List<StreamSubtitle> = emptyList(),
+    /** Embed/iframe page URL — set when the source returns a player page rather than a direct media URL. */
+    val embedUrl: String? = null,
 )
 
 @Serializable
@@ -107,7 +109,9 @@ data class StreamingData(
     val intro: SkipData? = null,
     val outro: SkipData? = null,
     val chapters: List<ChapterData>? = null,
-    val headers: Map<String, String>? = null
+    val headers: Map<String, String>? = null,
+    /** Embed/iframe page URL — non-null when the server uses a WebView player instead of direct media. */
+    val embedUrl: String? = null,
 )
 
 @Serializable

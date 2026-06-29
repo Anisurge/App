@@ -2571,10 +2571,125 @@ fun WatchVideoPlayer(
             }
         }
     } else {
+        val embedUrl = uiState.embedUrl
+
+        // ── WebView / iframe server path ─────────────────────────────────────
+        if (embedUrl != null) {
+            val embedPlayerState = rememberVideoPlayerState(
+                url = embedUrl,
+                mediaKey = "${uiState.animeId}:${uiState.currentEpisodeNumber}:webview",
+                autoPlay = uiState.autoPlay,
+                speed = if (uiState.isBoostSpeedActive) 2.0 else uiState.playbackSpeed,
+            )
+
+            LaunchedEffect(uiState.currentEpisodeNumber, embedUrl) {
+                embedPlayerState.peakPlaybackPosition = 0.0
+                embedPlayerState.peakPlaybackDuration = 0.0
+            }
+
+            LaunchedEffect(embedPlayerState.position) {
+                if (embedPlayerState.position > embedPlayerState.peakPlaybackPosition)
+                    embedPlayerState.peakPlaybackPosition = embedPlayerState.position
+            }
+
+            LaunchedEffect(embedPlayerState.duration) {
+                if (embedPlayerState.duration > embedPlayerState.peakPlaybackDuration)
+                    embedPlayerState.peakPlaybackDuration = embedPlayerState.duration
+            }
+
+            // Progress flush on dispose
+            DisposableEffect(embedUrl, uiState.currentEpisodeNumber) {
+                onDispose {
+                    if (embedPlayerState.position >= 5.0) {
+                        val duration = embedPlayerState.duration.takeIf { it > 0 }
+                            ?: (embedPlayerState.position + 120.0)
+                        viewModel.flushWatchProgress(
+                            embedPlayerState.position,
+                            duration,
+                            uiState.targetLang ?: "sub",
+                        )
+                    }
+                }
+            }
+
+            // Auto intro/outro skip — works the same as mpv path via position events from JS bridge
+            val skipIntro = uiState.effectiveIntroSkip()
+            val skipOutro = uiState.effectiveOutroSkip()
+            LaunchedEffect(embedPlayerState.position, embedPlayerState.isPlaying, embedPlayerState.isPaused) {
+                if (!embedPlayerState.isPlaying || embedPlayerState.isPaused) return@LaunchedEffect
+                val current = embedPlayerState.position
+                val sinceSeek = Clock.System.now().toEpochMilliseconds() - embedPlayerState.lastUserSeekAtMs
+                if (sinceSeek < 1500L) return@LaunchedEffect
+                if (uiState.autoSkipIntro && skipIntro != null &&
+                    skipIntro.start != null && skipIntro.end != null &&
+                    current >= skipIntro.start && current < skipIntro.end - 0.5 &&
+                    embedPlayerState.position > 2.0
+                ) {
+                    val safeEnd = (skipIntro.end - 0.75).coerceAtLeast(0.0)
+                    embedPlayerState.seekTarget = safeEnd
+                }
+                if (uiState.autoSkipOutro && skipOutro != null &&
+                    skipOutro.start != null && skipOutro.end != null &&
+                    current >= skipOutro.start && current < skipOutro.end - 0.5 &&
+                    embedPlayerState.position > 2.0
+                ) {
+                    val safeEnd = (skipOutro.end - 0.75).coerceAtLeast(0.0)
+                    embedPlayerState.seekTarget = safeEnd
+                }
+            }
+
+            // Auto-next episode
+            LaunchedEffect(embedPlayerState.position, embedPlayerState.isPlaying, embedPlayerState.isPaused) {
+                if (!uiState.autoNext) return@LaunchedEffect
+                val dur = maxOf(embedPlayerState.duration, embedPlayerState.peakPlaybackDuration)
+                if (dur < 60.0) return@LaunchedEffect
+                val pos = embedPlayerState.peakPlaybackPosition
+                val syncPct = uiState.syncPercentage
+                val threshold = dur * (syncPct / 100.0)
+                if (pos >= threshold && !embedPlayerState.isPaused) {
+                    val sinceSeek = Clock.System.now().toEpochMilliseconds() - embedPlayerState.lastUserSeekAtMs
+                    if (sinceSeek > 3000L) {
+                        viewModel.tryAutoAdvanceToNextEpisode(
+                            embedPlayerState.position,
+                            dur,
+                            embedPlayerState.peakPlaybackPosition,
+                            embedPlayerState.lastUserSeekAtMs,
+                        )
+                    }
+                }
+            }
+
+            to.kuudere.anisuge.player.WebViewVideoPlayerSurface(
+                embedUrl = embedUrl,
+                state = embedPlayerState,
+                modifier = Modifier.fillMaxSize(),
+                headers = null,
+                onFinished = {
+                    if (uiState.sleepAfterEpisode) {
+                        embedPlayerState.pauseRequested = true
+                        viewModel.setSleepAfterEpisode(false)
+                        embedPlayerState.indicatorText = "Sleep timer finished"
+                        viewModel.flushWatchProgress(
+                            embedPlayerState.position,
+                            maxOf(embedPlayerState.duration, embedPlayerState.peakPlaybackDuration),
+                            uiState.targetLang ?: "sub",
+                        )
+                    } else {
+                        viewModel.tryAutoAdvanceToNextEpisode(
+                            embedPlayerState.position,
+                            maxOf(embedPlayerState.duration, embedPlayerState.peakPlaybackDuration),
+                            embedPlayerState.peakPlaybackPosition,
+                            embedPlayerState.lastUserSeekAtMs,
+                        )
+                    }
+                },
+            )
+        }
+
         val currentUrl = uiState.availableQualities.find { it.first == uiState.currentQuality }?.second
             ?: uiState.availableQualities.firstOrNull()?.second
 
-        if (currentUrl != null) {
+        if (embedUrl == null && currentUrl != null) {
             // Get headers from the matching source in streamingData
             val currentSource = uiState.streamingData?.sources?.find { it.url == currentUrl }
             val streamHeaders = currentSource?.headers ?: uiState.streamingData?.headers
@@ -3528,7 +3643,7 @@ fun WatchVideoPlayer(
                     )
                 }
             }
-        } else if (!uiState.isLoading && !uiState.isLoadingVideo) {
+        } else if (embedUrl == null && !uiState.isLoading && !uiState.isLoadingVideo) {
             Box(modifier = modifier.background(Color.Black)) {
                 Column(
                     modifier = Modifier.align(Alignment.Center),

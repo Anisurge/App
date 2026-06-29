@@ -203,7 +203,7 @@ fun extensionLanguageLabel(code: String): String = when (code.lowercase()) {
 
 fun buildExtensionServerLabel(source: ExtensionSource, siblings: List<ExtensionSource>): String {
     val langSuffix = if (siblings.size > 1) " · ${extensionLanguageLabel(source.language)}" else ""
-    return "${source.name}$langSuffix · ${source.engine.displayName} · Extension"
+    return "[EXT] ${source.name}$langSuffix · ${source.engine.displayName}"
 }
 
 /** Numeric bridge id for Aniyomi/Mangayomi APK sources; provider name for CloudStream. */

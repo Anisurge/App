@@ -100,6 +100,8 @@ data class WatchUiState(
     val servers: List<ServerInfo> = emptyList(),
     val pendingExtensionStreams: PendingExtensionStreams? = null,
     val standaloneExtensionTitle: String? = null,
+    /** Non-null when the current server is a WebView/iframe server. Contains the embed page URL. */
+    val embedUrl: String? = null,
 )
 
 data class WatchEpisodeProgress(
@@ -633,17 +635,75 @@ class WatchViewModel(
         val apiSource = if (legacyDub) serverName.dropLast(4) else serverName
         val meta = serverRepository.getServerById(serverName)
             ?: serverRepository.getServerById(apiSource)
+        val isMegaplay = apiSource.equals("megaplay", ignoreCase = true)
         val isDub = legacyDub || when (meta?.type) {
             "sub" -> false
             "dub" -> true
             else -> currState.targetLang == "dub"
         }
 
+        // ── WebView / iframe server path ─────────────────────────────────────
+        if (isMegaplay || meta?.playerType == to.kuudere.anisuge.data.models.PlayerType.WEBVIEW) {
+            _uiState.update {
+                it.copy(
+                    isLoadingVideo = true,
+                    currentServer = serverName,
+                    loadingMessage = "Fetching embed URL...",
+                )
+            }
+            try {
+                val iframeUrl = if (isMegaplay) {
+                    val lang = if (isDub) "dub" else "sub"
+                    "https://megaplay.buzz/stream/ani/$anilistId/$episodeNum/$lang"
+                } else {
+                    val response = infoService.getVideoStream(anilistId, episodeNum, apiSource)
+                    if (!coroutineContext.isActive || generation != streamLoadGeneration) return
+                    val streamSection = if (isDub) response?.dub else response?.sub
+                        ?: response?.sub ?: response?.dub
+                    // Prefer an explicit embedUrl field, then fall back to episodeId (which many
+                    // embed-based providers use as the iframe URL).
+                    streamSection?.streams?.firstOrNull()?.embedUrl
+                        ?: streamSection?.episodeId?.takeIf { it.startsWith("http", ignoreCase = true) }
+                }
+                if (iframeUrl != null) {
+                    println("[WatchVM] webview server=$serverName embedUrl=$iframeUrl")
+                    _uiState.update { state ->
+                        state.copy(
+                            isLoadingVideo = false,
+                            loadingMessage = null,
+                            embedUrl = iframeUrl,
+                            streamingData = to.kuudere.anisuge.data.models.StreamingData(
+                                embedUrl = iframeUrl,
+                            ),
+                            availableQualities = emptyList(),
+                            availableSubtitles = emptyList(),
+                            currentSubtitleUrl = null,
+                            offlinePath = null,
+                        )
+                    }
+                } else {
+                    println("[WatchVM] webview server=$serverName — no embed URL found, falling back to mpv path")
+                    _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, embedUrl = null) }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("[WatchVM] webview loadVideoStream error server=$serverName: ${e.message}")
+                if (generation == streamLoadGeneration) {
+                    _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, embedUrl = null) }
+                }
+            }
+            return
+        }
+
+        // ── Normal mpv path — clear any stale embedUrl ───────────────────────
+        _uiState.update { if (it.embedUrl != null) it.copy(embedUrl = null) else it }
+
         _uiState.update {
             it.copy(
                 isLoadingVideo = true,
                 currentServer = serverName,
-                loadingMessage = "Fetching streaming URL..."
+                loadingMessage = "Fetching streaming URL...",
             )
         }
 
@@ -822,6 +882,7 @@ class WatchViewModel(
                     loadingMessage = "Loading extension stream...",
                     pendingExtensionStreams = null,
                     streamingData = null,
+                    embedUrl = null,
                 )
             }
             val result = extensionManager.resolveStream(
@@ -1210,6 +1271,7 @@ class WatchViewModel(
                 isLoadingVideo = true,
                 loadingMessage = "Fetching streaming URL...",
                 streamingData = null,
+                embedUrl = null,
                 availableQualities = emptyList(),
                 availableSubtitles = emptyList(),
                 currentSubtitleUrl = null,

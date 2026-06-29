@@ -1,6 +1,13 @@
 package to.kuudere.anisuge.data.models
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+
+@Serializable
+enum class PlayerType {
+    @SerialName("mpv") MPV,
+    @SerialName("webview") WEBVIEW
+}
 
 @Serializable
 data class ServerInfo(
@@ -8,6 +15,7 @@ data class ServerInfo(
     val label: String,
     val type: String = "sub_dub",
     val active: Boolean = true,
+    val playerType: PlayerType = PlayerType.MPV,
 ) {
     val supportsDub: Boolean
         get() = type == "sub_dub" || type == "dub"
@@ -139,4 +147,6 @@ val FALLBACK_SERVERS = listOf(
     ServerInfo(id = "anikage", label = "Anikage", type = "sub_dub", active = true),
     ServerInfo(id = "comti", label = "Comti", type = "sub_dub", active = true),
     ServerInfo(id = "oush", label = "Oush", type = "sub_dub", active = true),
+    // WebView / iframe servers
+    ServerInfo(id = "megaplay", label = "Megaplay", type = "sub_dub", active = true, playerType = PlayerType.WEBVIEW),
 )

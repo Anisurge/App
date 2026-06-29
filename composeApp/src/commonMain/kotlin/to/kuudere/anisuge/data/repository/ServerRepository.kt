@@ -46,7 +46,7 @@ class ServerRepository(
         private const val CACHE_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000L
 
         /** Default stream `source` order when the user has not saved a custom priority (matches api.md / site catalog). */
-        val DEFAULT_STREAM_SOURCE_ORDER = listOf("zen2", "zen", "allmanga", "suzu", "comti", "oush")
+        val DEFAULT_STREAM_SOURCE_ORDER = listOf("zen2", "zen", "allmanga", "suzu", "comti", "oush", "megaplay")
 
         /**
          * Order for the Settings servers list — one row per provider (Sub/Dub chosen at playback).
@@ -121,7 +121,15 @@ class ServerRepository(
     }
 
     private fun publishServers() {
-        _servers.value = apiServers + extensionManager.servers()
+        val apiIds = apiServers.map { it.id.lowercase() }.toSet()
+        // The remote catalog is authoritative for normal scrape providers, but local
+        // WebView/test providers may not exist there yet. Keep those visible.
+        val localWebViewServers = FALLBACK_SERVERS.filter { server ->
+            server.active &&
+                server.playerType == to.kuudere.anisuge.data.models.PlayerType.WEBVIEW &&
+                server.id.lowercase() !in apiIds
+        }
+        _servers.value = apiServers + localWebViewServers + extensionManager.servers()
     }
 
     val serverIds: List<String>
