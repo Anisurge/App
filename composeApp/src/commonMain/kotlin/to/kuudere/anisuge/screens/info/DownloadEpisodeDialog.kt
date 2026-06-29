@@ -34,6 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.launch
 import to.kuudere.anisuge.data.models.ServerInfo
+import to.kuudere.anisuge.data.models.PlayerType
 import to.kuudere.anisuge.data.models.BatchScrapeResponse
 import to.kuudere.anisuge.data.models.expandForSelection
 import to.kuudere.anisuge.data.models.excludingHidden
@@ -177,6 +178,7 @@ fun DownloadEpisodeDialog(
             .expandForSelection()
             .excludingHidden(hiddenServerIds.value)
             .filterNot { it.id.equals("animepahe", ignoreCase = true) }
+            .filterNot { it.playerType == PlayerType.WEBVIEW }
     }
 
     // Filter servers by the chosen sub/dub type

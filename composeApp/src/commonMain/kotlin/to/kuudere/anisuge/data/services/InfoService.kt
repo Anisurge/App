@@ -209,4 +209,29 @@ class InfoService(
             null
         }
     }
+
+    suspend fun reportMegaplayMissing(anilistId: Int, episodeNumber: Int): Boolean {
+        if (anilistId <= 0 || episodeNumber <= 0) return false
+        return try {
+            val payload = buildJsonObject {
+                put("id_type", "AniList")
+                put("external_id", anilistId)
+                put("episode", episodeNumber.toString())
+                put("message", "Missing AniList title reported from my app")
+            }
+            val response = httpClient.post("https://megaplay.buzz/api/mapping-request") {
+                contentType(ContentType.Application.Json)
+                setBody(payload.toString())
+            }
+            val ok = response.status.value in 200..299
+            if (!ok) {
+                val errBody = runCatching { response.body<String>() }.getOrNull()
+                println("[InfoService] reportMegaplayMissing failed HTTP ${response.status.value}: $errBody")
+            }
+            ok
+        } catch (e: Exception) {
+            println("[InfoService] reportMegaplayMissing error anilist=$anilistId episode=$episodeNumber: ${e.message}")
+            false
+        }
+    }
 }

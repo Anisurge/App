@@ -46,7 +46,7 @@ class ServerRepository(
         private const val CACHE_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000L
 
         /** Default stream `source` order when the user has not saved a custom priority (matches api.md / site catalog). */
-        val DEFAULT_STREAM_SOURCE_ORDER = listOf("zen2", "zen", "allmanga", "suzu", "comti", "oush", "megaplay")
+        val DEFAULT_STREAM_SOURCE_ORDER = listOf("anikoto", "megaplay", "zen2", "zen", "allmanga", "suzu", "comti", "oush")
 
         /**
          * Order for the Settings servers list — one row per provider (Sub/Dub chosen at playback).
@@ -121,15 +121,17 @@ class ServerRepository(
     }
 
     private fun publishServers() {
-        val apiIds = apiServers.map { it.id.lowercase() }.toSet()
-        // The remote catalog is authoritative for normal scrape providers, but local
-        // WebView/test providers may not exist there yet. Keep those visible.
-        val localWebViewServers = FALLBACK_SERVERS.filter { server ->
-            server.active &&
-                server.playerType == to.kuudere.anisuge.data.models.PlayerType.WEBVIEW &&
-                server.id.lowercase() !in apiIds
+        val localWebViewById = FALLBACK_SERVERS
+            .filter { it.active && it.playerType == to.kuudere.anisuge.data.models.PlayerType.WEBVIEW }
+            .associateBy { it.id.lowercase() }
+        val mergedApiServers = apiServers.map { server ->
+            localWebViewById[server.id.lowercase()]?.let { local ->
+                server.copy(label = local.label, type = local.type, playerType = local.playerType)
+            } ?: server
         }
-        _servers.value = apiServers + localWebViewServers + extensionManager.servers()
+        val apiIds = mergedApiServers.map { it.id.lowercase() }.toSet()
+        val localOnlyWebViewServers = localWebViewById.values.filter { it.id.lowercase() !in apiIds }
+        _servers.value = mergedApiServers + localOnlyWebViewServers + extensionManager.servers()
     }
 
     val serverIds: List<String>

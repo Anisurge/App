@@ -249,6 +249,7 @@ sealed class SettingsTab {
     data object Discord : SettingsTab()
     data object Community : SettingsTab()
     data object Servers : SettingsTab()
+    data object Status : SettingsTab()
     data object Extensions : SettingsTab()
     data object Notifications : SettingsTab()
     data object Shop : SettingsTab()

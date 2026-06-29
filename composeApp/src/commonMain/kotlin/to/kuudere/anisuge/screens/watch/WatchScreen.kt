@@ -1209,11 +1209,33 @@ private fun AndroidWatchPageLayout(
 ) {
     var commentsSheetOpen by remember { mutableStateOf(false) }
     var downloadSheetOpen by remember { mutableStateOf(false) }
+    var showMegaplayReportDialog by remember { mutableStateOf(false) }
     val playerKey = "$animeId-${uiState.currentEpisodeNumber}-${offlinePath ?: "online"}"
 
     val activeWatchLang = uiState.targetLang ?: if (uiState.defaultLang) "dub" else "sub"
     val dubServers = uiState.servers.filter { to.kuudere.anisuge.extensions.isDubSelectableServerId(it.id) }
     val hasDubServers = dubServers.isNotEmpty()
+    val currentServerIsMegaplay = uiState.currentServer.equals("megaplay", ignoreCase = true) ||
+        uiState.currentServer.equals("megaplay-dub", ignoreCase = true)
+
+    if (showMegaplayReportDialog) {
+        AlertDialog(
+            onDismissRequest = { showMegaplayReportDialog = false },
+            title = { Text("Report MegaPlay") },
+            text = { Text("Is this anime/episode not playing on MegaPlay?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showMegaplayReportDialog = false
+                        viewModel.reportMegaplayNotPlaying()
+                    },
+                ) { Text("Yes, report") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMegaplayReportDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -1291,7 +1313,12 @@ private fun AndroidWatchPageLayout(
                         uiState = uiState,
                         viewModel = viewModel,
                         onCommentsClick = { commentsSheetOpen = true },
-                        onDownloadClick = { downloadSheetOpen = true },
+                        onDownloadClick = if (currentServerIsMegaplay) {
+                            { showMegaplayReportDialog = true }
+                        } else {
+                            { downloadSheetOpen = true }
+                        },
+                        downloadActionLabel = if (currentServerIsMegaplay) "Report" else "Download",
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
@@ -1323,7 +1350,12 @@ private fun AndroidWatchPageLayout(
                         uiState = uiState,
                         viewModel = viewModel,
                         onCommentsClick = { commentsSheetOpen = true },
-                        onDownloadClick = { downloadSheetOpen = true },
+                        onDownloadClick = if (currentServerIsMegaplay) {
+                            { showMegaplayReportDialog = true }
+                        } else {
+                            { downloadSheetOpen = true }
+                        },
+                        downloadActionLabel = if (currentServerIsMegaplay) "Report" else "Download",
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
@@ -1798,6 +1830,7 @@ private fun EpisodeListContent(
     viewModel: WatchViewModel,
     onCommentsClick: (() -> Unit)? = null,
     onDownloadClick: (() -> Unit)? = null,
+    downloadActionLabel: String = "Download",
     modifier: Modifier = Modifier,
     currentLang: String = "sub",
     onLangChange: ((String) -> Unit)? = null,
@@ -1942,7 +1975,9 @@ private fun EpisodeListContent(
                         onCommentsClick = onCommentsClick,
                         onDownloadClick = onDownloadClick,
                         downloadProgress = downloadButtonProgress,
-                        downloadButtonLabel = downloadButtonLabel,
+                        downloadButtonLabel = if (downloadActionLabel == "Download") downloadButtonLabel else downloadActionLabel,
+                        reportMessage = uiState.reportSnackbar,
+                        onReportMessageDismiss = viewModel::dismissReportSnackbar,
                         onAnchorPositioned = { size, offset ->
                             pageDropdownAnchorSize = size
                             pageDropdownAnchorOffset = IntOffset(
@@ -2056,6 +2091,8 @@ private fun EpisodeListHeader(
     onDownloadClick: (() -> Unit)? = null,
     downloadProgress: Float? = null,
     downloadButtonLabel: String = "Download",
+    reportMessage: String? = null,
+    onReportMessageDismiss: (() -> Unit)? = null,
     onAnchorPositioned: (IntSize, androidx.compose.ui.geometry.Offset) -> Unit,
     currentLang: String = "sub",
     onLangChange: ((String) -> Unit)? = null,
@@ -2078,10 +2115,28 @@ private fun EpisodeListHeader(
                 onDownloadClick?.let { onClick ->
                     WatchEpisodeActionButton(
                         label = downloadButtonLabel,
-                        icon = Icons.Default.Download,
+                        icon = if (downloadButtonLabel == "Report") Icons.Default.ReportProblem else Icons.Default.Download,
                         modifier = Modifier.weight(1f),
                         progress = downloadProgress,
                         onClick = onClick,
+                    )
+                }
+            }
+
+            reportMessage?.let { message ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onReportMessageDismiss?.invoke() },
+                    color = Color.Black.copy(alpha = 0.78f),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text(
+                        text = message,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                     )
                 }
             }
@@ -2578,6 +2633,7 @@ fun WatchVideoPlayer(
             val embedPlayerState = rememberVideoPlayerState(
                 url = embedUrl,
                 mediaKey = "${uiState.animeId}:${uiState.currentEpisodeNumber}:webview",
+                startPosition = uiState.savedWatchPosition,
                 autoPlay = uiState.autoPlay,
                 speed = if (uiState.isBoostSpeedActive) 2.0 else uiState.playbackSpeed,
             )
@@ -2595,6 +2651,23 @@ fun WatchVideoPlayer(
             LaunchedEffect(embedPlayerState.duration) {
                 if (embedPlayerState.duration > embedPlayerState.peakPlaybackDuration)
                     embedPlayerState.peakPlaybackDuration = embedPlayerState.duration
+            }
+
+            var lastEmbedProgressSaveBucket by remember(embedUrl, uiState.currentEpisodeNumber) { mutableStateOf(-1) }
+            LaunchedEffect(embedUrl, uiState.currentEpisodeNumber, uiState.targetLang) {
+                while (true) {
+                    kotlinx.coroutines.delay(5000)
+                    val position = embedPlayerState.position
+                    if (position < 5.0) continue
+                    val duration = embedPlayerState.duration.takeIf { it > 0 }
+                        ?: embedPlayerState.peakPlaybackDuration.takeIf { it > 0 }
+                        ?: (position + 120.0)
+                    val bucket = position.toInt() / 5
+                    if (bucket != lastEmbedProgressSaveBucket) {
+                        lastEmbedProgressSaveBucket = bucket
+                        viewModel.saveProgress(position, duration, uiState.targetLang ?: "sub")
+                    }
+                }
             }
 
             // Progress flush on dispose
@@ -2684,6 +2757,7 @@ fun WatchVideoPlayer(
                     }
                 },
             )
+
         }
 
         val currentUrl = uiState.availableQualities.find { it.first == uiState.currentQuality }?.second

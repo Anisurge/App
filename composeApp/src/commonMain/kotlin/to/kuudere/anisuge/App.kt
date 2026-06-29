@@ -110,6 +110,7 @@ private fun settingsTabFromKey(key: String?): SettingsTab? = when (key?.lowercas
     "sync" -> SettingsTab.Sync
     "connect" -> SettingsTab.Connect
     "servers" -> SettingsTab.Servers
+    "status" -> SettingsTab.Status
     "notifications" -> SettingsTab.Notifications
     "shop", "store" -> SettingsTab.Shop
     "berries" -> SettingsTab.Berries

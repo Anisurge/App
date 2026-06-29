@@ -221,14 +221,9 @@ actual class ExtensionRuntime actual constructor() {
             else -> source.isAnime
         }
 
-    private fun mangayomiUsesMangaBridge(source: ExtensionSource): Boolean =
-        source.engine == ExtensionEngine.MANGAYOMI &&
-            source.installedPath?.endsWith(".apk", ignoreCase = true) == true
-
     private fun reloadBridgeForSource(source: ExtensionSource, force: Boolean = false) {
         when (source.engine) {
             ExtensionEngine.MANGAYOMI -> {
-                if (!mangayomiUsesMangaBridge(source)) return
                 val now = System.currentTimeMillis()
                 if (!force && now - lastMangaBridgeReloadAt < BRIDGE_RELOAD_COOLDOWN_MS) return
                 lastMangaBridgeReloadAt = now
@@ -323,9 +318,6 @@ actual class ExtensionRuntime actual constructor() {
                 requestParams(),
             )
             ExtensionEngine.MANGAYOMI -> {
-                require(mangayomiUsesMangaBridge(source)) {
-                    "${source.name} is a Mangayomi script source — install the APK variant or use Aniyomi extensions"
-                }
                 invoke(
                     "aniyomiSearch",
                     androidAppContext,
@@ -367,9 +359,6 @@ actual class ExtensionRuntime actual constructor() {
                 requestParams(),
             )
             ExtensionEngine.MANGAYOMI -> {
-                require(mangayomiUsesMangaBridge(source)) {
-                    "${source.name} is a Mangayomi script source — install the APK variant or use Aniyomi extensions"
-                }
                 invoke(
                     "aniyomiGetDetail",
                     androidAppContext,
@@ -447,9 +436,6 @@ actual class ExtensionRuntime actual constructor() {
                 requestParams(),
             )
             ExtensionEngine.MANGAYOMI -> {
-                require(mangayomiUsesMangaBridge(source)) {
-                    "${source.name} is a Mangayomi script source — install the APK variant or use Aniyomi extensions"
-                }
                 invoke(
                     "aniyomiGetVideoList",
                     androidAppContext,

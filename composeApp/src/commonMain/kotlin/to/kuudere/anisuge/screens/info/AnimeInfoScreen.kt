@@ -69,6 +69,7 @@ import to.kuudere.anisuge.theme.AppColors
 import to.kuudere.anisuge.i18n.resolveDisplayTitle
 import to.kuudere.anisuge.ui.WatchlistBottomSheet
 import to.kuudere.anisuge.data.models.EpisodeItem
+import to.kuudere.anisuge.data.models.PlayerType
 import to.kuudere.anisuge.platform.isAndroidTvPlatform
 import to.kuudere.anisuge.ui.tvFocusableClick
 
@@ -2733,6 +2734,7 @@ private fun SeasonBatchPickerDialog(
     val batchServers = remember(catalogServers) {
         val available = catalogServers
             .filterNot { it.id.equals("animepahe", ignoreCase = true) }
+            .filterNot { it.playerType == PlayerType.WEBVIEW }
         val byId = available.associateBy { it.id.lowercase() }
         val recommended = BATCH_RECOMMENDED_SERVERS.mapNotNull { id ->
             byId[id.lowercase()] ?: when (id.lowercase()) {

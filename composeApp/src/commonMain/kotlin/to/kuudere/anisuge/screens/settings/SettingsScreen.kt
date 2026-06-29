@@ -183,6 +183,8 @@ import to.kuudere.anisuge.theme.AppColors
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import io.ktor.client.call.body
+import io.ktor.client.request.get
 
 // ── Colors ── theme-driven (see theme/AppColors.kt) ──────────────────────────────
 private val BG: Color get() = AppColors.background
@@ -192,6 +194,7 @@ private val BORDER: Color get() = AppColors.border
 private val MUTED: Color get() = AppColors.textMuted
 private val TEXT: Color get() = AppColors.text
 
+private const val ANISURGE_STATUS_URL = "https://status.anisurge.lol/"
 private const val ANISURGE_DISCORD_URL = "https://discord.gg/yR4T2dbeCx"
 private const val ANISURGE_TELEGRAM_URL = "https://t.me/anisurge"
 private val PREMIUM_BENEFITS = listOf(
@@ -357,6 +360,7 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Profile, strings.profile, Icons.Default.Person))
         add(SettingsNavItem(SettingsTab.Shop, "Store", Icons.Default.ShoppingBag))
         add(SettingsNavItem(SettingsTab.Berries, "Berries", Icons.Default.Star, useBeliIcon = true))
+        add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
         add(SettingsNavItem(SettingsTab.Extensions, "Extensions", Icons.Default.Extension))
         add(SettingsNavItem(SettingsTab.Preferences, strings.preferences, Icons.Default.Settings))
         add(SettingsNavItem(SettingsTab.Appearance, strings.appearance, Icons.Default.Visibility))
@@ -366,8 +370,8 @@ fun SettingsScreen(
         add(SettingsNavItem(SettingsTab.Discord, "Discord RPC", Icons.Default.PlayArrow))
         // Community — not ready yet
         // add(SettingsNavItem(SettingsTab.Community, "Community", Icons.Default.Sync))
-        add(SettingsNavItem(SettingsTab.Servers, strings.servers, Icons.Default.Dns))
         add(SettingsNavItem(SettingsTab.Storage, strings.storage, Icons.Default.Storage))
+        add(SettingsNavItem(SettingsTab.Status, "Status", Icons.Default.Info))
         if (!isDesktopPlatform) {
             add(SettingsNavItem(SettingsTab.Notifications, strings.notifications, Icons.Default.Notifications))
         }
@@ -1357,6 +1361,8 @@ private fun MobileSettingsDetail(
                     onServerVisibilityChange = viewModel::setServerVisible,
                 )
 
+                is SettingsTab.Status -> StatusTab(onOpenStatus = { uriHandler.openUri(ANISURGE_STATUS_URL) })
+
         is SettingsTab.Extensions -> ExtensionsSettings(
             modifier = Modifier.fillMaxSize(),
             sortDialogVisible = exSortDialog,
@@ -1577,6 +1583,8 @@ private fun SettingsContent(
                 onServerVisibilityChange = viewModel::setServerVisible,
             )
 
+            is SettingsTab.Status -> StatusTab(onOpenStatus = { uriHandler.openUri(ANISURGE_STATUS_URL) })
+
             is SettingsTab.Extensions -> ExtensionsSettings()
 
             is SettingsTab.Notifications -> NotificationsTab(
@@ -1594,6 +1602,97 @@ private fun SettingsContent(
 }
 
 // ── Preferences Tab ─────────────────────────────────────────────────────────────
+@Composable
+private fun StatusTab(onOpenStatus: () -> Unit) {
+    var isLoading by remember { mutableStateOf(true) }
+    var statusTitle by remember { mutableStateOf("Checking status...") }
+    var lastUpdated by remember { mutableStateOf<String?>(null) }
+    var statusError by remember { mutableStateOf<String?>(null) }
+
+    fun stripHtml(value: String): String = value
+        .replace(Regex("<[^>]+>"), " ")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+    LaunchedEffect(Unit) {
+        isLoading = true
+        statusError = null
+        try {
+            val html = to.kuudere.anisuge.AppComponent.httpClient
+                .get("${ANISURGE_STATUS_URL}overview")
+                .body<String>()
+            statusTitle = Regex("<h1[^>]*>(.*?)</h1>", RegexOption.DOT_MATCHES_ALL)
+                .find(html)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let(::stripHtml)
+                ?.takeIf { it.isNotBlank() }
+                ?: "Status unavailable"
+            lastUpdated = Regex("Last updated on ([^<]+)")
+                .find(html)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let(::stripHtml)
+        } catch (e: Exception) {
+            statusTitle = "Status unavailable"
+            statusError = e.message ?: "Could not load status"
+        } finally {
+            isLoading = false
+        }
+    }
+
+    val isHealthy = statusTitle.contains("operational", ignoreCase = true) ||
+        statusTitle.contains("up", ignoreCase = true)
+    val statusColor = when {
+        isLoading -> AppColors.accent
+        isHealthy -> Color(0xFF4ADE80)
+        statusError != null -> Color(0xFFF87171)
+        else -> Color(0xFFF87171)
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Status",
+            color = TEXT,
+            fontSize = AppUiMetrics.settingsTitleSize.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 24.dp),
+        )
+
+        SettingCard(
+            title = "Anisurge API status",
+            description = "Live status from Better Stack.",
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(statusColor),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(statusTitle, color = TEXT, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        lastUpdated?.let { Text("Last updated $it", color = MUTED, fontSize = 12.sp) }
+                        statusError?.let { Text(it, color = Color(0xFFF87171), fontSize = 12.sp) }
+                    }
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    }
+                }
+                OutlinedButton(onClick = onOpenStatus) {
+                    Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Details")
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun AppearanceTab(
     uiState: SettingsUiState,

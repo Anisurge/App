@@ -66,6 +66,7 @@ data class WatchUiState(
     val videoScaleMode: String = "Fit",
     val isBoostSpeedActive: Boolean = false,
     val savedWatchPosition: Double = 0.0,
+    val streamingAnilistId: Int? = null,
     val showSettingsOverlay: Boolean = false,
     val initialSettingsPage: SettingsMenuPage? = SettingsMenuPage.MAIN,
     val activeSidePanel: String? = null, // "episodes" or "comments"
@@ -97,6 +98,7 @@ data class WatchUiState(
     val isSyncingAnilist: Boolean = false,
     val syncSnackbar: String? = null,
     val berriesToast: String? = null,
+    val reportSnackbar: String? = null,
     val servers: List<ServerInfo> = emptyList(),
     val pendingExtensionStreams: PendingExtensionStreams? = null,
     val standaloneExtensionTitle: String? = null,
@@ -186,9 +188,13 @@ class WatchViewModel(
                 serverRepository.userPriority,
                 serverRepository.hiddenServerIds,
             ) { list, priority, hidden ->
-                val expanded = list.expandForSelection().filterNot { hidden.hidesServer(it.id) }
+                val localWebViewServers = to.kuudere.anisuge.data.models.FALLBACK_SERVERS.filter {
+                    it.active && it.playerType == to.kuudere.anisuge.data.models.PlayerType.WEBVIEW
+                }
+                val mergedList = (localWebViewServers + list).distinctBy { it.id.lowercase() }
+                val expanded = mergedList.expandForSelection().filterNot { hidden.hidesServer(it.id) }
                 val order = orderSelectableServerIds(
-                    list,
+                    mergedList,
                     priority,
                     ServerRepository.DEFAULT_STREAM_SOURCE_ORDER,
                 ).filterNot { hidden.hidesServer(it) }
@@ -248,6 +254,7 @@ class WatchViewModel(
                 subtitlesDisabled = false,
                 currentFontsDir = null,
                 savedWatchPosition = resumeFromContinueSeconds?.takeIf { it >= 1.0 } ?: 0.0,
+                streamingAnilistId = null,
                 targetLang = if (newAnime) null else it.targetLang,
                 targetSubtitleLang = if (newAnime) null else it.targetSubtitleLang,
                 targetSubtitleLangCode = if (newAnime) null else it.targetSubtitleLangCode,
@@ -418,6 +425,7 @@ class WatchViewModel(
                     isLoading = false,
                     loadingMessage = "Fetching streaming URL...",
                     savedWatchPosition = mergedResume,
+                    streamingAnilistId = resolvedAnilistId ?: data.anilistId?.takeIf { it > 0 },
                     episodeData = initialData,
                 )
             }
@@ -654,15 +662,17 @@ class WatchViewModel(
             try {
                 val iframeUrl = if (isMegaplay) {
                     val lang = if (isDub) "dub" else "sub"
-                    "https://megaplay.buzz/stream/ani/$anilistId/$episodeNum/$lang"
+                    val resume = currState.savedWatchPosition.coerceAtLeast(0.0).toInt()
+                    "https://meg.anisurge.lol/mega/$anilistId/$episodeNum?category=$lang&start_at=$resume"
                 } else {
                     val response = infoService.getVideoStream(anilistId, episodeNum, apiSource)
                     if (!coroutineContext.isActive || generation != streamLoadGeneration) return
                     val streamSection = if (isDub) response?.dub else response?.sub
                         ?: response?.sub ?: response?.dub
-                    // Prefer an explicit embedUrl field, then fall back to episodeId (which many
-                    // embed-based providers use as the iframe URL).
+                    // Prefer an explicit embedUrl, then stream URL for iframe sources like Anikoto,
+                    // then episodeId (which many embed providers use as the iframe URL).
                     streamSection?.streams?.firstOrNull()?.embedUrl
+                        ?: streamSection?.streams?.firstOrNull()?.url?.takeIf { it.startsWith("http", ignoreCase = true) }
                         ?: streamSection?.episodeId?.takeIf { it.startsWith("http", ignoreCase = true) }
                 }
                 if (iframeUrl != null) {
@@ -1412,6 +1422,7 @@ class WatchViewModel(
         val progressKey = "$animeId|$episodeId|${currentTime.toInt()}"
         if (progressKey == lastSavedProgressKey) return
         lastSavedProgressKey = progressKey
+        println("[WatchVM] saveProgress queued anime=$animeId ep=$episodeId time=${currentTime.toInt()} dur=${effectiveDuration.toInt()} server=$server lang=$language")
 
         viewModelScope.launch {
             val result = infoService.saveProgress(
@@ -1424,6 +1435,7 @@ class WatchViewModel(
                 server = server,
                 language = language,
             )
+            println("[WatchVM] saveProgress done anime=$animeId ep=$episodeId time=${currentTime.toInt()} ok=${result != null}")
             val reward = result?.reward
             if (reward?.granted == true && reward.amount > 0) {
                 _uiState.update {
@@ -1435,6 +1447,29 @@ class WatchViewModel(
 
     fun dismissBerriesToast() {
         _uiState.update { it.copy(berriesToast = null) }
+    }
+
+    fun reportMegaplayNotPlaying() {
+        val state = _uiState.value
+        val anilistId = state.streamingAnilistId
+            ?: state.episodeData?.anime?.anilistId?.takeIf { it > 0 }
+            ?: state.episodeData?.anilistId?.takeIf { it > 0 }
+        val episode = state.currentEpisodeNumber
+        if (anilistId == null || anilistId <= 0 || episode <= 0) {
+            _uiState.update { it.copy(reportSnackbar = "Missing AniList ID for report") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(reportSnackbar = "Sending MegaPlay report...") }
+            val ok = infoService.reportMegaplayMissing(anilistId, episode)
+            _uiState.update {
+                it.copy(reportSnackbar = if (ok) "MegaPlay report sent" else "MegaPlay report failed")
+            }
+        }
+    }
+
+    fun dismissReportSnackbar() {
+        _uiState.update { it.copy(reportSnackbar = null) }
     }
 
     /** Call when leaving the player so continue-watching is updated even if playback paused. */
