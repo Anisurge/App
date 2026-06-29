@@ -6955,7 +6955,10 @@ private fun ConnectTab(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         ServiceLogo(
                             model = null,
                             fallbackText = "D",
@@ -6963,16 +6966,25 @@ private fun ConnectTab(
                             modifier = Modifier.size(40.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 "Discord Account",
                                 color = TEXT,
                                 fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
-                            Text("Link Discord for server roles and account perks", color = MUTED, fontSize = 12.sp)
+                            Text(
+                                "Link Discord for server roles and account perks",
+                                color = MUTED,
+                                fontSize = 12.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
+                    Spacer(modifier = Modifier.width(12.dp))
                     if (uiState.isConnectingDiscordAccount) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
