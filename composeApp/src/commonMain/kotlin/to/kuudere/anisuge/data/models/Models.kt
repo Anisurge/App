@@ -88,6 +88,8 @@ data class UserProfile(
     val equipped: JsonObject? = null,
     val reanimeConnected: Boolean = false,
     val reanimeUsername: String? = null,
+    val discordConnected: Boolean = false,
+    val discordUsername: String? = null,
     val isPremium: Boolean = false,
     val premiumPlan: String? = null,
     val premiumExpiresAt: String? = null,

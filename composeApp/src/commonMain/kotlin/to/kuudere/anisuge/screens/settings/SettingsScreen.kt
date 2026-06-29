@@ -1286,6 +1286,9 @@ private fun MobileSettingsDetail(
                     uiState = uiState,
                     onConnectReanime = viewModel::connectReanime,
                     onDisconnectReanime = viewModel::disconnectReanime,
+                    onConnectDiscord = { viewModel.connectDiscordAccount { url -> openUrl(url) } },
+                    onDisconnectDiscord = viewModel::disconnectDiscordAccount,
+                    onRefreshProfile = viewModel::loadUserProfile,
                     onSyncLibrary = viewModel::syncLibraryWithReanime,
                     onImportReanime = viewModel::importLibraryFromReanime,
                     onExportReanime = viewModel::exportLibraryToReanime,
@@ -1509,6 +1512,9 @@ private fun SettingsContent(
                 uiState = uiState,
                 onConnectReanime = viewModel::connectReanime,
                 onDisconnectReanime = viewModel::disconnectReanime,
+                onConnectDiscord = { viewModel.connectDiscordAccount { url -> openUrl(url) } },
+                onDisconnectDiscord = viewModel::disconnectDiscordAccount,
+                onRefreshProfile = viewModel::loadUserProfile,
                 onSyncLibrary = viewModel::syncLibraryWithReanime,
                 onImportReanime = viewModel::importLibraryFromReanime,
                 onExportReanime = viewModel::exportLibraryToReanime,
@@ -6513,6 +6519,9 @@ private fun ConnectTab(
     uiState: SettingsUiState,
     onConnectReanime: (String, String) -> Unit,
     onDisconnectReanime: () -> Unit,
+    onConnectDiscord: () -> Unit,
+    onDisconnectDiscord: () -> Unit,
+    onRefreshProfile: () -> Unit,
     onSyncLibrary: () -> Unit,
     onImportReanime: () -> Unit,
     onExportReanime: () -> Unit,
@@ -6845,6 +6854,140 @@ private fun ConnectTab(
                         }
                     }
                     Text("Connect", color = Color(0xFFBF80FF), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            "Discord",
+            color = TEXT,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        if (uiState.userProfile?.discordConnected == true) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BG_CARD)
+                    .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+                    .padding(16.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ServiceLogo(
+                                model = null,
+                                fallbackText = "D",
+                                backgroundColor = Color(0xFF5865F2),
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    "Discord Account",
+                                    color = TEXT,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "Connected${uiState.userProfile.discordUsername?.takeIf { it.isNotBlank() }?.let { " as @$it" } ?: ""}",
+                                    color = MUTED,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Button(
+                            onClick = onDisconnectDiscord,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE50914)),
+                            shape = RoundedCornerShape(8.dp),
+                            enabled = !uiState.isDisconnectingDiscordAccount
+                        ) {
+                            if (uiState.isDisconnectingDiscordAccount) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("Disconnect", color = Color.White, fontSize = 12.sp, maxLines = 1)
+                            }
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = onRefreshProfile,
+                        enabled = !uiState.isLoadingProfile,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Text("Refresh connection", color = TEXT)
+                    }
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BG_CARD)
+                    .border(1.dp, BORDER, RoundedCornerShape(14.dp))
+                    .clickable { if (!uiState.isConnectingDiscordAccount) onConnectDiscord() }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ServiceLogo(
+                            model = null,
+                            fallbackText = "D",
+                            backgroundColor = BG_HOVER,
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                "Discord Account",
+                                color = TEXT,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text("Link Discord for server roles and account perks", color = MUTED, fontSize = 12.sp)
+                        }
+                    }
+                    if (uiState.isConnectingDiscordAccount) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            "Connect",
+                            color = Color(0xFF5865F2),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }

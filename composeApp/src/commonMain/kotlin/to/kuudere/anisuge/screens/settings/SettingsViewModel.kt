@@ -233,6 +233,8 @@ data class SettingsUiState(
     val isLoadingBerryPacks: Boolean = false,
     val isConnectingReanime: Boolean = false,
     val isDisconnectingReanime: Boolean = false,
+    val isConnectingDiscordAccount: Boolean = false,
+    val isDisconnectingDiscordAccount: Boolean = false,
     val isImportingReanime: Boolean = false,
     val isExportingReanime: Boolean = false,
     val isStartingPremiumCheckout: Boolean = false,
@@ -3413,6 +3415,56 @@ class SettingsViewModel(
                         )
                     }
                 }
+            )
+        }
+    }
+
+    fun connectDiscordAccount(openUrl: (String) -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isConnectingDiscordAccount = true, errorMessage = null, successMessage = null) }
+            bffMeService.startDiscordConnect().fold(
+                onSuccess = { url ->
+                    openUrl(url)
+                    _uiState.update {
+                        it.copy(
+                            isConnectingDiscordAccount = false,
+                            successMessage = "Finish Discord login in your browser, then refresh this page."
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isConnectingDiscordAccount = false,
+                            errorMessage = e.message ?: "Failed to start Discord connection"
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    fun disconnectDiscordAccount() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDisconnectingDiscordAccount = true, errorMessage = null, successMessage = null) }
+            bffMeService.disconnectDiscordAccount().fold(
+                onSuccess = { updatedProfile ->
+                    _uiState.update {
+                        it.copy(
+                            isDisconnectingDiscordAccount = false,
+                            userProfile = updatedProfile,
+                            successMessage = "Discord account disconnected successfully."
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(
+                            isDisconnectingDiscordAccount = false,
+                            errorMessage = e.message ?: "Failed to disconnect Discord account"
+                        )
+                    }
+                },
             )
         }
     }

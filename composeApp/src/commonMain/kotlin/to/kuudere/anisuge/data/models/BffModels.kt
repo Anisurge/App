@@ -66,6 +66,19 @@ data class BffPublicUser(
     val premiumExpiresAt: String? = null,
     val reanimeConnected: Boolean? = null,
     val reanimeUsername: String? = null,
+    val integrations: BffUserIntegrations? = null,
+)
+
+@Serializable
+data class BffUserIntegrations(
+    val discord: BffDiscordIntegration? = null,
+)
+
+@Serializable
+data class BffDiscordIntegration(
+    val connected: Boolean = false,
+    val username: String? = null,
+    val globalName: String? = null,
 )
 
 fun BffPublicUser.toUserProfile(): UserProfile {
@@ -113,6 +126,9 @@ fun BffPublicUser.toUserProfile(): UserProfile {
         equipped = equippedMap,
         reanimeConnected = reanimeConnected == true,
         reanimeUsername = reanimeUsername,
+        discordConnected = integrations?.discord?.connected == true,
+        discordUsername = integrations?.discord?.globalName?.takeIf { it.isNotBlank() }
+            ?: integrations?.discord?.username,
         isPremium = isPremium,
         premiumPlan = resolvedPremiumPlan,
         premiumExpiresAt = resolvedPremiumExpiresAt,

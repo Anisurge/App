@@ -242,6 +242,46 @@ class BffMeService(
         }
     }
 
+    suspend fun startDiscordConnect(): Result<String> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.get("${AnisurgeApi.v1Base}/auth/discord/start") {
+                applyAnisurgeAuth(stored)
+            }
+            if (response.status.isSuccess()) {
+                val body: BffDiscordStartResponse = response.body()
+                Result.success(body.url)
+            } else {
+                val message = runCatching {
+                    json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+                }.getOrElse { "Failed to start Discord connection (${response.status.value})" }
+                Result.failure(Exception(message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun disconnectDiscordAccount(): Result<UserProfile> {
+        val stored = sessionStore.get() ?: return Result.failure(IllegalStateException("Not signed in"))
+        return try {
+            val response = httpClient.post("${AnisurgeApi.v1Base}/me/discord/disconnect") {
+                applyAnisurgeAuth(stored)
+            }
+            if (response.status.isSuccess()) {
+                val body: BffMeResponse = response.body()
+                Result.success(body.user.toUserProfile())
+            } else {
+                val message = runCatching {
+                    json.decodeFromString<BffErrorResponse>(response.bodyAsText()).displayMessage()
+                }.getOrElse { "Failed to disconnect Discord (${response.status.value})" }
+                Result.failure(Exception(message))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
 
     companion object {
         private const val CHAT_IMAGE_MAX_BYTES = (2.5 * 1024 * 1024).toLong()
@@ -330,4 +370,9 @@ data class BffPremiumCheckoutSessionResponse(
     val id: String,
     val checkoutUrl: String,
     val expiresAt: String,
+)
+
+@Serializable
+private data class BffDiscordStartResponse(
+    val url: String,
 )
