@@ -5,8 +5,8 @@
 <h1 align="center">Anisurge</h1>
 
 <p align="center">
-  <b>High-performance anime client</b><br>
-  Experience seamless anime streaming across Android, Linux, Windows, and iOS.
+  <b>Modern, multiplatform anime streaming client</b><br>
+  Watch, chat, and sync across Android, Linux, macOS, and Windows.
 </p>
 
 <p align="center">
@@ -16,56 +16,121 @@
   <img src="https://img.shields.io/github/license/Anisurge/App?style=flat-square" alt="license">
 </p>
 
-<h2 align="center">Download</h2>
-
 <p align="center">
-  Get the latest version of Anisurge for your platform from the <b><a href="https://github.com/Anisurge/App/releases">Releases</a></b> page.
+  <a href="https://anisurge.lol"><b>anisurge.lol</b></a>
+  &nbsp;•&nbsp;
+  <a href="https://github.com/Anisurge/App/releases"><b>Download</b></a>
 </p>
-
-## Visitors
-
-<img src="https://count.getloli.com/@anisurge?name=App&theme=rule34&padding=8&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" />
 
 ---
 
-## Features
+## ✨ Features
 
-*   **Native Performance**: Hardware-accelerated playback via libmpv integration across all platforms (Desktop and Android).
-*   **Modern Interface**: Clean, responsive UI built with Jetpack Compose.
-*   **Portable Desktop**: Windows support includes a zero-install Portable ZIP distribution.
-*   **Linux Native**: Full integration with global media keys and native package formats (DEB, RPM, AppImage).
-*   **Multi-Platform**: Unified experience across mobile and desktop devices.
+### 🎬 Streaming
+- **Multi-source extensions** — Stream from Suzu, AnimePahe, Anitaku, and more via a Mangayomi-style extension system
+- **Sub/Dub support** — Choose between subbed and dubbed sources per show
+- **Hardware-accelerated playback** — libmpv-powered on desktop, Media3 on Android
+- **Intro/outro skip** — Auto-skip (powered by Aniskip API)
+- **Continue watching** — Cross-device progress sync
 
-## Build from Source
+### 👥 Watch Together (W2G / S2G)
+- Create or join rooms to watch anime in sync with friends
+- Built-in chat with AI assistant support
+- Sub/dub room options
+
+### 🛒 Cosmetics & Berries
+- **Berries** — Earnable in-app currency for cosmetics
+- **Profile frames, animated pfps, and shop items** — Customize your profile (cosmetic-only, never pay-to-win)
+
+### 🧠 AI Chat
+- In-app AI assistant for anime recommendations, episode discussions, and general Q&A
+
+### 📥 Downloads
+- Download episodes for offline viewing
+- Hardware-compatible remuxing on Android
+
+### 🗄️ Library & Sync
+- Watchlist with folders: Watching, Planning, Completed, Paused, Dropped
+- Two-way library sync with your account
+- MAL/AniList integration
+
+### 🔗 Integrations
+- **Discord login** — Connect your Discord account
+- **Cloudflare bypass** — Built-in Cloudflare challenge resolution for supported sources
+
+---
+
+## 🖥️ Platforms
+
+| Platform | Status | Formats |
+| :--- | :--- | :--- |
+| **Android** (Phone) | ✅ Stable | APK |
+| **Android** (TV) | ✅ Stable | APK |
+| **Linux** | ✅ Stable | DEB, RPM, AppImage, portable ZIP |
+| **Windows** | ✅ Stable | Portable ZIP | 
+| **macOS** | ✅ Stable | DMG (x64 & ARM64), portable ZIP |
+
+---
+
+## 📸 Screenshots
+
+> Coming soon
+
+---
+
+## 🛠️ Build from Source
 
 ### Prerequisites
 
 | Tool | Requirement |
 | :--- | :--- |
-| **JDK** | Java 17 (Temurin 17.0.13+11 recommended) |
-| **SDK** | Android SDK (for Mobile builds) |
+| **JDK** | Java 17+ (Temurin 17.0.13+11 recommended) |
+| **SDK** | Android SDK (for mobile builds) |
 | **CLI** | ImageMagick (optional, for icon generation) |
 
-### Automation
-
-Execute the build pipeline using the provided script:
+### One-command build
 
 ```bash
 ./build.sh <version> <build_number>
 ```
 
-The script automates the generation of Android APKs, Linux distributions, and Windows portable artifacts. 
+This generates Android APKs, Linux distributions, and Windows portable artifacts in one pass.
 
-## Technical Details
+### Manual build
 
-### Linux Support
-The application utilizes `JNativeHook` for system-wide media playback control. For enhanced security and compatibility, native libraries are extracted to the user's home directory (`~/.anisurge/native/`).
+```bash
+# Desktop (Linux/macOS/Windows)
+./gradlew :composeApp:packageReleaseDistributionForCurrentOS
 
-### Windows Support
-Windows distributions support PFX-based code signing. The portable distribution allows the application to run directly from the directory without system modifications.
+# Android (Phone)
+./gradlew :composeApp:assemblePhoneRelease
+
+# Android (TV)
+./gradlew :composeApp:assembleTvRelease
+
+# All tests
+./gradlew :composeApp:allTests
+```
+
+---
+
+## 🏗️ Tech Stack
+
+- **Language**: Kotlin Multiplatform
+- **UI**: Jetpack Compose Multiplatform
+- **Playback**: libmpv (Desktop), Media3 ExoPlayer (Android)
+- **Networking**: Ktor
+- **Extensions**: Mangayomi-style extension framework
+- **Build**: Gradle 8.13
+
+---
+
+## 🤝 Contributing
+
+PRs and ideas are welcome! Check the [AGENTS.md](AGENTS.md) for detailed architecture and dev notes.
 
 ---
 
 <p align="center">
-  Copyright © 2026 Anisurge. Developed for the anime community.
+  Copyright © 2026 Anisurge. Built for the anime community.
 </p>

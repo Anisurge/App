@@ -388,9 +388,20 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn("checkAndroidForegroundServicePermissions")
 }
 
-// TV flavor does not use Firebase notifications; skip Google Services processing for TV variants.
-tasks.matching { it.name.startsWith("processTv") && it.name.endsWith("GoogleServices") }.configureEach {
-    enabled = false
+val googleServicesJsonCandidates = listOf(
+    project.file("src/phone/debug/google-services.json"),
+    project.file("src/debug/phone/google-services.json"),
+    project.file("src/phone/google-services.json"),
+    project.file("src/debug/google-services.json"),
+    project.file("google-services.json")
+)
+val hasGoogleServicesJson = googleServicesJsonCandidates.any { it.isFile }
+
+// TV flavor does not use Firebase notifications. Phone builds use Firebase only when
+// a private google-services.json is available, so local/open-source builds still compile.
+tasks.matching { it.name.endsWith("GoogleServices") }.configureEach {
+    val isTvVariant = name.startsWith("processTv")
+    enabled = !isTvVariant && hasGoogleServicesJson
 }
 
 compose {
