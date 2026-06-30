@@ -18,6 +18,7 @@ import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.StreamingData
 import to.kuudere.anisuge.data.models.WatchInfoResponse
 import to.kuudere.anisuge.data.models.expandForSelection
+import to.kuudere.anisuge.data.models.excludingUnsupportedPlatformServers
 import to.kuudere.anisuge.data.models.hidesServer
 import to.kuudere.anisuge.data.models.orderSelectableServerIds
 import to.kuudere.anisuge.data.models.SubtitleData
@@ -191,7 +192,9 @@ class WatchViewModel(
                 val localWebViewServers = to.kuudere.anisuge.data.models.FALLBACK_SERVERS.filter {
                     it.active && it.playerType == to.kuudere.anisuge.data.models.PlayerType.WEBVIEW
                 }
-                val mergedList = (localWebViewServers + list).distinctBy { it.id.lowercase() }
+                val mergedList = (localWebViewServers + list)
+                    .distinctBy { it.id.lowercase() }
+                    .excludingUnsupportedPlatformServers()
                 val expanded = mergedList.expandForSelection().filterNot { hidden.hidesServer(it.id) }
                 val order = orderSelectableServerIds(
                     mergedList,

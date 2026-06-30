@@ -3805,7 +3805,9 @@ fun WatchVideoPlayer(
 private fun shouldUseLocalStreamProxy(url: String): Boolean {
     val lower = url.substringBefore('#').lowercase()
     val path = lower.substringBefore('?')
-    return HlsPngTsStrip.isDisguisedTsCdnHost(url) ||
+    val host = lower.substringAfter("://", "").substringBefore('/')
+    return host.contains("flixcloud.cc") ||
+        HlsPngTsStrip.isDisguisedTsCdnHost(url) ||
         HlsPngTsStrip.isVibeplayerHlsHost(url) ||
         HlsPngTsStrip.isAnikageHlsHost(url) ||
         ProgressiveStreamAccel.shouldAccelerate(url) ||

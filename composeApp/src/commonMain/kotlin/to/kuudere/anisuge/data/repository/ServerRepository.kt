@@ -27,6 +27,7 @@ import to.kuudere.anisuge.data.models.ServerInfo
 import to.kuudere.anisuge.data.models.collapseToBaseServerPriority
 import to.kuudere.anisuge.data.models.expandForSelection
 import to.kuudere.anisuge.data.models.excludingHidden
+import to.kuudere.anisuge.data.models.excludingUnsupportedPlatformServers
 import to.kuudere.anisuge.data.models.hidesServer
 import to.kuudere.anisuge.data.models.orderSelectableServerIds
 import to.kuudere.anisuge.data.services.SettingsStore
@@ -46,7 +47,7 @@ class ServerRepository(
         private const val CACHE_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000L
 
         /** Default stream `source` order when the user has not saved a custom priority (matches api.md / site catalog). */
-        val DEFAULT_STREAM_SOURCE_ORDER = listOf("anikoto", "megaplay", "zen2", "zen", "allmanga", "suzu", "comti", "oush")
+        val DEFAULT_STREAM_SOURCE_ORDER = listOf("anikoto", "megaplay", "flix-if", "flix", "zen2", "zen", "allmanga", "suzu", "comti", "oush")
 
         /**
          * Order for the Settings servers list — one row per provider (Sub/Dub chosen at playback).
@@ -121,17 +122,17 @@ class ServerRepository(
     }
 
     private fun publishServers() {
-        val localWebViewById = FALLBACK_SERVERS
-            .filter { it.active && it.playerType == to.kuudere.anisuge.data.models.PlayerType.WEBVIEW }
+        val localByLowerId = FALLBACK_SERVERS
+            .filter { it.active }
             .associateBy { it.id.lowercase() }
         val mergedApiServers = apiServers.map { server ->
-            localWebViewById[server.id.lowercase()]?.let { local ->
+            localByLowerId[server.id.lowercase()]?.let { local ->
                 server.copy(label = local.label, type = local.type, playerType = local.playerType)
             } ?: server
         }
         val apiIds = mergedApiServers.map { it.id.lowercase() }.toSet()
-        val localOnlyWebViewServers = localWebViewById.values.filter { it.id.lowercase() !in apiIds }
-        _servers.value = mergedApiServers + localOnlyWebViewServers + extensionManager.servers()
+        val localOnlyServers = localByLowerId.values.filter { it.id.lowercase() !in apiIds }
+        _servers.value = mergedApiServers + localOnlyServers + extensionManager.servers()
     }
 
     val serverIds: List<String>
@@ -146,13 +147,20 @@ class ServerRepository(
     }
 
     private fun priorityCatalog(): List<ServerInfo> =
-        _servers.value.expandForSelection().excludingHidden(_hiddenServerIds.value)
+        _servers.value
+            .excludingUnsupportedPlatformServers()
+            .expandForSelection()
+            .excludingHidden(_hiddenServerIds.value)
 
     fun getFallbackPriority(): List<String> {
         val hidden = _hiddenServerIds.value
-        val catalog = _servers.value
+        val catalog = _servers.value.excludingUnsupportedPlatformServers()
         val ordered = if (catalog.isEmpty()) {
-            orderSelectableServerIds(FALLBACK_SERVERS, emptyList(), DEFAULT_STREAM_SOURCE_ORDER)
+            orderSelectableServerIds(
+                FALLBACK_SERVERS.excludingUnsupportedPlatformServers(),
+                emptyList(),
+                DEFAULT_STREAM_SOURCE_ORDER,
+            )
         } else {
             orderSelectableServerIds(catalog, _userPriority.value, DEFAULT_STREAM_SOURCE_ORDER)
         }

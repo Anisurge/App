@@ -8,6 +8,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.coroutines.sync.Mutex
@@ -48,6 +49,9 @@ class InfoService(
     private val videoStreamCache = mutableMapOf<String, CachedVideoStream>()
     private val videoStreamCacheLock = Mutex()
     private val videoStreamCacheTtlMs = 3 * 60 * 1000L
+    private val flixIpCacheLock = Mutex()
+    private var flixIpCache: Pair<String, Long>? = null
+    private val flixIpCacheTtlMs = 10 * 60 * 1000L
 
     suspend fun getAnimeDetails(slug: String, includeEpisodes: Boolean = true): AnimeDetails? {
         return try {
@@ -122,7 +126,18 @@ class InfoService(
         server: String
     ): BatchScrapeResponse? {
         val normalizedServer = server.lowercase()
-        val cacheKey = "$anilistId:$episodeNumber:$normalizedServer"
+        val flixIp = if (normalizedServer == "flix") resolveFlixClientIp() else null
+        val cacheKey = buildString {
+            append(anilistId)
+            append(':')
+            append(episodeNumber)
+            append(':')
+            append(normalizedServer)
+            if (!flixIp.isNullOrBlank()) {
+                append(':')
+                append(flixIp)
+            }
+        }
         val now = currentTimeMillis()
         videoStreamCacheLock.withLock {
             videoStreamCache[cacheKey]
@@ -136,6 +151,7 @@ class InfoService(
                 parameter("anilistId", anilistId)
                 parameter("episode", episodeNumber)
                 parameter("source", server)
+                flixIp?.let { parameter("ip", it) }
             }
             response.body<BatchScrapeResponse>().also { body ->
                 videoStreamCacheLock.withLock {
@@ -149,6 +165,37 @@ class InfoService(
             println("[InfoService] getVideoStream error: ${e.message}")
             null
         }
+    }
+
+    private val ipServices = listOf(
+        "https://api.ipify.org",
+        "https://ifconfig.me/ip",
+        "https://icanhazip.com",
+        "https://checkip.amazonaws.com",
+        "https://ipinfo.io/ip",
+    )
+
+    private suspend fun fetchIp(service: String): String? = try {
+        httpClient.get(service).bodyAsText().trim().takeIf { it.isNotBlank() && it != "127.0.0.1" && it != "0.0.0.0" && !it.startsWith("127.") }
+    } catch (e: Exception) {
+        println("[InfoService] resolveFlixClientIp $service error: ${e.message}")
+        null
+    }
+
+    private suspend fun resolveFlixClientIp(): String? {
+        val now = currentTimeMillis()
+        flixIpCacheLock.withLock {
+            flixIpCache?.takeIf { now - it.second <= flixIpCacheTtlMs }?.first
+        }?.let { return it }
+
+        val ip = ipServices.firstNotNullOfOrNull { fetchIp(it) }
+
+        if (!ip.isNullOrBlank()) {
+            flixIpCacheLock.withLock {
+                flixIpCache = ip to currentTimeMillis()
+            }
+        }
+        return ip
     }
 
     suspend fun fetchSuzuEmbedStreams(embedUrl: String): List<SuzuEmbedStream>? {

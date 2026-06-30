@@ -2,6 +2,7 @@ package to.kuudere.anisuge.data.models
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import to.kuudere.anisuge.platform.isDesktopPlatform
 
 @Serializable
 enum class PlayerType {
@@ -68,6 +69,9 @@ fun Set<String>.isServerVisibleInSettings(server: ServerInfo): Boolean {
 
 fun List<ServerInfo>.excludingHidden(hiddenIds: Set<String>): List<ServerInfo> =
     if (hiddenIds.isEmpty()) this else filterNot { hiddenIds.hidesServer(it.id) }
+
+fun List<ServerInfo>.excludingUnsupportedPlatformServers(): List<ServerInfo> =
+    if (!isDesktopPlatform) this else filterNot { it.playerType == PlayerType.WEBVIEW }
 
 /** Split catalog `sub_dub` rows into separate Sub vs Dub stream source ids (`base` and `base-dub`) for UI and priority. */
 fun ServerInfo.expandToSelectable(): List<ServerInfo> = when (type) {
@@ -142,6 +146,7 @@ val FALLBACK_SERVERS = listOf(
     ServerInfo(id = "zen", label = "Zen", type = "sub_dub", active = true),
     ServerInfo(id = "allmanga", label = "All anime", type = "sub_dub", active = true),
     ServerInfo(id = "suzu", label = "Suzu", type = "sub_dub", active = true),
+    ServerInfo(id = "flix", label = "Flix", type = "sub_dub", active = true),
     ServerInfo(id = "anitaku-1", label = "Anitaku 1", type = "sub", active = true),
     ServerInfo(id = "anitaku", label = "Anitaku", type = "sub", active = true),
     ServerInfo(id = "anikage", label = "Anikage", type = "sub_dub", active = true),
@@ -150,4 +155,5 @@ val FALLBACK_SERVERS = listOf(
     // WebView / iframe servers
     ServerInfo(id = "megaplay", label = "Megaplay", type = "sub_dub", active = true, playerType = PlayerType.WEBVIEW),
     ServerInfo(id = "anikoto", label = "Aniko", type = "sub_dub", active = true, playerType = PlayerType.WEBVIEW),
+    ServerInfo(id = "flix-if", label = "Flix-IF", type = "sub_dub", active = true, playerType = PlayerType.WEBVIEW),
 )

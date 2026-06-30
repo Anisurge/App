@@ -3428,9 +3428,10 @@ class SettingsViewModel(
                     _uiState.update {
                         it.copy(
                             isConnectingDiscordAccount = false,
-                            successMessage = "Finish Discord login in your browser, then refresh this page."
+                            successMessage = "Finish logging in with Discord. Auto-refreshing..."
                         )
                     }
+                    pollForDiscordConnection()
                 },
                 onFailure = { e ->
                     _uiState.update {
@@ -3441,6 +3442,35 @@ class SettingsViewModel(
                     }
                 },
             )
+        }
+    }
+
+    private suspend fun pollForDiscordConnection() {
+        var attempts = 0
+        val maxAttempts = 30
+        while (attempts < maxAttempts) {
+            delay(2000)
+            attempts++
+            val result = bffMeService.fetchMe()
+            result.onSuccess { profile ->
+                if (profile.discordConnected) {
+                    _uiState.update {
+                        it.copy(
+                            userProfile = profile,
+                            successMessage = "Discord account connected!",
+                        )
+                    }
+                    prefetchEquippedFrame(profile)
+                    return
+                }
+            }
+        }
+        if (_uiState.value.userProfile?.discordConnected != true) {
+            _uiState.update {
+                it.copy(
+                    errorMessage = "Discord connection not detected. Tap 'Refresh connection' once you've finished in the browser."
+                )
+            }
         }
     }
 
