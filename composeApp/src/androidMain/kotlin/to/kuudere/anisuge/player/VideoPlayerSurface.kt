@@ -253,12 +253,11 @@ actual fun VideoPlayerSurface(
 
                 override fun surfaceDestroyed(holder: SurfaceHolder) {
                     MPVLib.setPropertyString("vo", "null")
-                    // Defer detach to avoid races with Compose view removal during
-                    // recomposition / pending apply (contributes to "pending composition"
-                    // crashes when combined with focus/navigation).
-                    Handler(Looper.getMainLooper()).post {
+                    // Defer to avoid races. See the longer explanation in the DisposableEffect onDispose.
+                    // Uses the same 50 ms delay + reattachment recovery model.
+                    Handler(Looper.getMainLooper()).postDelayed({
                         MPVLib.detachSurface()
-                    }
+                    }, 50L)
                 }
             })
 
@@ -602,13 +601,23 @@ actual fun VideoPlayerSurface(
 
         onDispose {
             MPVLib.removeObserver(observer)
-            // IMPORTANT: Defer native surface teardown to the next frame / after current
+            // Defer native surface teardown to the next frame (or soon after) the current
             // Compose apply pass. This prevents "pending composition has not been applied"
-            // errors when Compose (during navigation, fullscreen toggle, orientation change)
-            // removes the AndroidView/SurfaceView while a recomposition is still pending.
-            // Direct detach during onDispose can race with view hierarchy removal + focus
-            // system (requestFocus paths in the stack).
-            Handler(Looper.getMainLooper()).post {
+            // errors when Compose removes the AndroidView/SurfaceView during navigation,
+            // fullscreen toggle or orientation change (the view removal + focus system can
+            // race with a still-pending recomposition).
+            //
+            // Remaining concern: Handler.post()/postDelayed has no hard timeout — if the
+            // main looper task never executes (e.g. activity fully destroyed before it runs),
+            // the native surface might stay attached a bit longer than ideal. However:
+            // - surfaceCreated() on re-use will re-attach the surface and recover.
+            // - scheduleMpvStopIfSurfaceNotReattached() already has its own 1500 ms delayed
+            //   path that checks the current path and forces stop if still the same URL.
+            // - The posted lambda does not hold a strong reference to the SurfaceView itself,
+            //   only the URL string, so no view leak is introduced by the deferred task.
+            // Using a short bounded delay gives the composition a chance to settle while
+            // still guaranteeing the work will be attempted soon.
+            Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     // Compose tears down this SurfaceView during Android fullscreen/orientation
                     // handoff, then immediately attaches a new one for the same loaded URL.
@@ -620,7 +629,7 @@ actual fun VideoPlayerSurface(
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
-            }
+            }, 50L)  // ~one frame; small enough not to be noticeable, large enough to dodge pending apply
             // We NO LONGER call MPVLib.destroy() here.
             // Destroying the MPVLib singleton while its native threads (e.g. decoder, event loop)
             // are active causes the app to natively crash with SIGABRT (pthread_mutex_lock on destroyed mutex).
