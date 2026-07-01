@@ -87,7 +87,7 @@ object DownloadManager {
     private const val DIRECT_MP4_PROBE_TIMEOUT_MS = 8_000L
     private const val DIRECT_MP4_USER_AGENT =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    private const val ANDROID_HLS_PARALLELISM = 4
+    private const val ANDROID_HLS_PARALLELISM = 2
     private const val DESKTOP_HLS_PARALLELISM = 6
     private const val SEASON_BATCH_DOWNLOAD_CONCURRENCY = 3
     const val MAX_SEASON_BATCH_EPISODES = 1000
@@ -1117,7 +1117,10 @@ object DownloadManager {
         val raw = httpClient.get(segmentUrl) {
             requestHeaders.forEach { (k, v) -> header(k, v) }
         }.readRawBytes()
-        return HlsPngTsStrip.stripSegmentPayloadIfNeeded(segmentUrl, raw)
+        val stripped = HlsPngTsStrip.stripSegmentPayloadIfNeeded(segmentUrl, raw)
+        // Drop the original raw reference as soon as possible (important for large PNG-TS segments on low-RAM devices)
+        // The stripped (or original) is what we keep for write.
+        return stripped
     }
 
     private suspend fun downloadHlsSegmentsToFile(

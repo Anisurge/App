@@ -280,7 +280,7 @@ class SettingsViewModel(
 
     private companion object {
         const val SHOP_PAGE_SIZE = 15
-        const val SHOP_PREFETCH_CONCURRENCY = 6
+        const val SHOP_PREFETCH_CONCURRENCY = 2
         const val TRACKING_SYNC_CONCURRENCY = 3
         const val TRACKING_IMPORT_CONCURRENCY = 3
     }
@@ -1255,7 +1255,7 @@ class SettingsViewModel(
                             shopCatalogTotal = body.catalogTotal,
                         )
                     }
-                    prefetchShopCatalogFrames(body.catalog)
+                    warmShopCatalogFramesToDisk(body.catalog)
                 },
                 onFailure = { e ->
                     _uiState.update {
@@ -1300,7 +1300,7 @@ class SettingsViewModel(
                             shopCatalogTotal = body.catalogTotal,
                         )
                     }
-                    prefetchShopCatalogFrames(body.catalog)
+                    warmShopCatalogFramesToDisk(body.catalog)
                 },
                 onFailure = { e ->
                     _uiState.update {
@@ -1314,8 +1314,8 @@ class SettingsViewModel(
         }
     }
 
-    /** Store tab only — catalog page bytes; does not block UI (owned frames prefetched via [loadShopInventory]). */
-    private fun prefetchShopCatalogFrames(catalog: List<to.kuudere.anisuge.data.models.BffShopItem>) {
+    /** Store tab — warm *disk* only for catalog to avoid OOM from bulk raw frames in memory. Visible grid items load+promote on demand. */
+    private fun warmShopCatalogFramesToDisk(catalog: List<to.kuudere.anisuge.data.models.BffShopItem>) {
         if (catalog.isEmpty()) return
         val entries = catalog.filter { it.kind == "avatar_frame" }.mapNotNull { item ->
             val url = resolveProfileMediaUrl(item.assetUrl) ?: return@mapNotNull null
@@ -1323,7 +1323,7 @@ class SettingsViewModel(
         }
         if (entries.isEmpty()) return
         viewModelScope.launch(Dispatchers.Default) {
-            AnimatedFrameBytesCache.prefetchEntries(entries, concurrency = SHOP_PREFETCH_CONCURRENCY)
+            AnimatedFrameBytesCache.warmDiskOnly(entries, concurrency = SHOP_PREFETCH_CONCURRENCY)
         }
     }
 
@@ -1456,7 +1456,7 @@ class SettingsViewModel(
                             successMessage = "Purchased ${body.item.name}",
                         )
                     }
-                    prefetchShopCatalogFrames(listOf(body.item))
+                    AnimatedFrameBytesCache.prefetch(listOfNotNull(resolveProfileMediaUrl(body.item.assetUrl)), concurrency = 1)
                 },
                 onFailure = { e ->
                     _uiState.update {

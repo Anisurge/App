@@ -8,7 +8,7 @@ import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 /** Warms APNG frame bytes for chat avatars in parallel (history, live messages, profile). */
 object ChatFramePrefetch {
     /** Keep headroom so Coil can load profile photos while frames prefetch. */
-    private const val CONCURRENCY = 5
+    private const val CONCURRENCY = 3
 
     fun entriesFrom(messages: Collection<ChatMessage>): List<Pair<String, String?>> {
         val seen = LinkedHashSet<String>()

@@ -2,6 +2,7 @@ package to.kuudere.anisuge
 
 import android.app.ActivityManager
 import android.app.Application
+import android.content.ComponentCallbacks2
 import coil3.ImageLoader
 import coil3.memory.MemoryCache
 import coil3.SingletonImageLoader
@@ -9,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import to.kuudere.anisuge.data.services.AnimatedFrameBytesCache
 import to.kuudere.anisuge.platform.androidAppContext
 
 class AnisurgeApplication : Application() {
@@ -34,6 +36,24 @@ class AnisurgeApplication : Application() {
             // Primary OOM mitigation is the reduced memory cache on low-RAM devices.
             .build()
         SingletonImageLoader.setUnsafe(coilImageLoader)
+
+        // React to system memory pressure: drop APNG raw byte cache (decoded frames are per-composable and GC'd on dispose)
+        val appCtx = this
+        registerComponentCallbacks(object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+                    level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+                ) {
+                    AnimatedFrameBytesCache.onLowMemory()
+                    SingletonImageLoader.get(appCtx).memoryCache?.clear()
+                }
+            }
+            override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {}
+            override fun onLowMemory() {
+                AnimatedFrameBytesCache.onLowMemory()
+                SingletonImageLoader.get(appCtx).memoryCache?.clear()
+            }
+        })
 
         CrashReporter.init(
             context = this,

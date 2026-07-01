@@ -107,6 +107,7 @@ fun ProfileFramePickerSection(
                         frameUrl = item.assetUrl,
                         frameCacheKey = item.id,
                         showBundledTestFrame = false,
+                        playVideo = false,
                     )
                 }
             }

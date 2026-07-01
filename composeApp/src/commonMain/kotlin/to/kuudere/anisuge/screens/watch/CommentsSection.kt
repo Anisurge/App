@@ -166,7 +166,7 @@ fun CommentsSection(
         if (entries.isEmpty()) return
         scope.launch {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                AnimatedFrameBytesCache.prefetchEntries(entries.values.toList(), concurrency = 5)
+                AnimatedFrameBytesCache.prefetchEntries(entries.values.toList(), concurrency = 3)
             }
         }
     }

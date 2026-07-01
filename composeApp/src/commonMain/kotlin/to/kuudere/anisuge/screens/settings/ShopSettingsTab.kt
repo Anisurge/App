@@ -329,6 +329,7 @@ private fun ShopItemCard(
                 frameUrl = item.assetUrl,
                 frameCacheKey = item.id,
                 showBundledTestFrame = false,
+                playVideo = false,
                 contentDescription = item.name,
                 modifier = Modifier.padding(4.dp),
             )
