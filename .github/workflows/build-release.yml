@@ -141,11 +141,11 @@ jobs:
       - name: Collect Android APKs
         run: |
           mkdir -p dist
-          VER="${{ needs.resolve-version.outputs.version_name }}"
-          BUILD="${{ needs.resolve-version.outputs.build_num }}"
           for apk in composeApp/build/outputs/apk/phone/release/*.apk; do
             base=$(basename "$apk")
-            cp "$apk" "dist/Anisurge-${VER}.${BUILD}-${base}"
+            # Strip version prefix so filenames are stable across releases
+            new_name="Anisurge-${base#anisurge-}"
+            cp "$apk" "dist/$new_name"
           done
           ls -lh dist/
 
@@ -188,18 +188,17 @@ jobs:
       - name: Collect Linux Artifacts
         run: |
           mkdir -p dist
-          VER="${{ needs.resolve-version.outputs.version_name }}"
-          BUILD="${{ needs.resolve-version.outputs.build_num }}"
           ARCH="amd64"
           DEB_FILE=$(find composeApp/build/compose/binaries/main/deb/ -name '*.deb' | head -n 1 || true)
           RPM_FILE=$(find composeApp/build/compose/binaries/main/rpm/ -name '*.rpm' | head -n 1 || true)
           APPIMAGE_FILE=$(find composeApp/build/compose/binaries/main/app/ -name '*.AppImage' | head -n 1 || true)
           ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
 
-          [[ -n "$DEB_FILE" ]] && cp "$DEB_FILE" "dist/Anisurge-${VER}.${BUILD}-linux-${ARCH}.deb"
-          [[ -n "$RPM_FILE" ]] && cp "$RPM_FILE" "dist/Anisurge-${VER}.${BUILD}-linux-${ARCH}.rpm"
-          [[ -n "$APPIMAGE_FILE" ]] && cp "$APPIMAGE_FILE" "dist/Anisurge-${VER}.${BUILD}-linux-${ARCH}.AppImage"
-          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-${VER}.${BUILD}-linux-${ARCH}-portable.zip"
+          # Strip version from filenames for stable download URLs
+          [[ -n "$DEB_FILE" ]] && cp "$DEB_FILE" "dist/Anisurge-linux-${ARCH}.deb"
+          [[ -n "$RPM_FILE" ]] && cp "$RPM_FILE" "dist/Anisurge-linux-${ARCH}.rpm"
+          [[ -n "$APPIMAGE_FILE" ]] && cp "$APPIMAGE_FILE" "dist/Anisurge-linux-${ARCH}.AppImage"
+          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-linux-${ARCH}-portable.zip"
           ls -lh dist/
 
       - name: Upload Linux Artifacts
@@ -307,16 +306,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          VER="${{ needs.resolve-version.outputs.version_name }}"
-          BUILD="${{ needs.resolve-version.outputs.build_num }}"
           ARCH="x86_64"
           MSI_FILE=$(find composeApp/build/compose/binaries/main/msi/ -name '*.msi' | head -n 1 || true)
           EXE_FILE=$(find composeApp/build/compose/binaries/main/exe/ -name '*.exe' | head -n 1 || true)
           ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
 
-          [[ -n "$MSI_FILE" ]] && cp "$MSI_FILE" "dist/Anisurge-${VER}.${BUILD}-win-${ARCH}.msi"
-          [[ -n "$EXE_FILE" ]] && cp "$EXE_FILE" "dist/Anisurge-${VER}.${BUILD}-win-${ARCH}-setup.exe"
-          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-${VER}.${BUILD}-win-${ARCH}-portable.zip"
+          # Strip version from filenames for stable download URLs
+          [[ -n "$MSI_FILE" ]] && cp "$MSI_FILE" "dist/Anisurge-win-${ARCH}.msi"
+          [[ -n "$EXE_FILE" ]] && cp "$EXE_FILE" "dist/Anisurge-win-${ARCH}-setup.exe"
+          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-win-${ARCH}-portable.zip"
           ls -lh dist/
 
       - name: Upload Windows Artifacts
@@ -360,8 +358,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          VER="${{ needs.resolve-version.outputs.version_name }}"
-          BUILD="${{ needs.resolve-version.outputs.build_num }}"
           DMG_FILE=$(find composeApp/build/compose/binaries/main/dmg/ -name '*.dmg' | head -n 1 || true)
           ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
 
@@ -369,8 +365,9 @@ jobs:
             echo "::error::No .dmg produced — check packageDistributionForCurrentOS logs"
             exit 1
           fi
-          cp "$DMG_FILE" "dist/Anisurge-${VER}.${BUILD}-macos.dmg"
-          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-${VER}.${BUILD}-macos-portable.zip"
+          # Strip version from filenames for stable download URLs
+          cp "$DMG_FILE" "dist/Anisurge-macos.dmg"
+          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-macos-portable.zip"
           ls -lh dist/
 
       - name: Upload macOS Artifacts
