@@ -146,7 +146,7 @@ val FALLBACK_SERVERS = listOf(
     ServerInfo(id = "zen", label = "Zen", type = "sub_dub", active = true),
     ServerInfo(id = "allmanga", label = "All anime", type = "sub_dub", active = true),
     ServerInfo(id = "suzu", label = "Suzu", type = "sub_dub", active = true),
-    ServerInfo(id = "flix", label = "Flix", type = "sub_dub", active = true),
+    ServerInfo(id = "flix", label = "Flix", type = "sub_dub", active = false),
     ServerInfo(id = "anitaku-1", label = "Anitaku 1", type = "sub", active = true),
     ServerInfo(id = "anitaku", label = "Anitaku", type = "sub", active = true),
     ServerInfo(id = "anikage", label = "Anikage", type = "sub_dub", active = true),
@@ -155,5 +155,5 @@ val FALLBACK_SERVERS = listOf(
     // WebView / iframe servers
     ServerInfo(id = "megaplay", label = "Megaplay", type = "sub_dub", active = true, playerType = PlayerType.WEBVIEW),
     ServerInfo(id = "anikoto", label = "Aniko", type = "sub_dub", active = true, playerType = PlayerType.WEBVIEW),
-    ServerInfo(id = "flix-if", label = "Flix-IF", type = "sub_dub", active = true, playerType = PlayerType.WEBVIEW),
+    ServerInfo(id = "flix-if", label = "Flix-IF", type = "sub_dub", active = false, playerType = PlayerType.WEBVIEW),
 )
