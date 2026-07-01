@@ -253,7 +253,12 @@ actual fun VideoPlayerSurface(
 
                 override fun surfaceDestroyed(holder: SurfaceHolder) {
                     MPVLib.setPropertyString("vo", "null")
-                    MPVLib.detachSurface()
+                    // Defer detach to avoid races with Compose view removal during
+                    // recomposition / pending apply (contributes to "pending composition"
+                    // crashes when combined with focus/navigation).
+                    Handler(Looper.getMainLooper()).post {
+                        MPVLib.detachSurface()
+                    }
                 }
             })
 
@@ -597,16 +602,24 @@ actual fun VideoPlayerSurface(
 
         onDispose {
             MPVLib.removeObserver(observer)
-            try {
-                // Compose tears down this SurfaceView during Android fullscreen/orientation
-                // handoff, then immediately attaches a new one for the same loaded URL.
-                // Stopping mpv here races that handoff and can leave fullscreen stuck on
-                // the loading UI. URL/episode/server changes are still handled by the
-                // next surfaceCreated() loadfile call when current path differs.
-                MPVLib.detachSurface()
-                scheduleMpvStopIfSurfaceNotReattached(resolvedUrl)
-            } catch (e: Exception) {
-                e.printStackTrace()
+            // IMPORTANT: Defer native surface teardown to the next frame / after current
+            // Compose apply pass. This prevents "pending composition has not been applied"
+            // errors when Compose (during navigation, fullscreen toggle, orientation change)
+            // removes the AndroidView/SurfaceView while a recomposition is still pending.
+            // Direct detach during onDispose can race with view hierarchy removal + focus
+            // system (requestFocus paths in the stack).
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    // Compose tears down this SurfaceView during Android fullscreen/orientation
+                    // handoff, then immediately attaches a new one for the same loaded URL.
+                    // Stopping mpv here races that handoff and can leave fullscreen stuck on
+                    // the loading UI. URL/episode/server changes are still handled by the
+                    // next surfaceCreated() loadfile call when current path differs.
+                    MPVLib.detachSurface()
+                    scheduleMpvStopIfSurfaceNotReattached(resolvedUrl)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
             // We NO LONGER call MPVLib.destroy() here.
             // Destroying the MPVLib singleton while its native threads (e.g. decoder, event loop)

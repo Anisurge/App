@@ -111,7 +111,7 @@ object AnimatedFrameBytesCache {
         }
     }
 
-    suspend fun prefetch(urls: List<String>, concurrency: Int = 12) {
+    suspend fun prefetch(urls: List<String>, concurrency: Int = 6) {
         prefetchEntries(
             urls.map { url -> url to null },
             concurrency = concurrency,
@@ -120,7 +120,7 @@ object AnimatedFrameBytesCache {
 
     suspend fun prefetchEntries(
         entries: List<Pair<String, String?>>,
-        concurrency: Int = 20,
+        concurrency: Int = 6,
     ) {
         val pending = entries
             .mapNotNull { (rawUrl, itemId) ->

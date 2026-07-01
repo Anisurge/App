@@ -3255,11 +3255,22 @@ fun WatchVideoPlayer(
 
             val pipManager = rememberPipManager()
 
+            // Only attach focusRequester + focusable on desktop to avoid unnecessary
+            // focus system work (and potential requestFocus during teardown) on phones.
+            // Phone navigation can remove the SurfaceView while Compose is applying,
+            // leading to the "pending composition" crash if focus is involved.
+            val playerInteractionModifier = if (isDesktopPlatform) {
+                Modifier
+                    .focusRequester(focusRequester)
+                    .focusable()
+            } else {
+                Modifier
+            }
+
             Box(
                 modifier = modifier
                     .background(Color.Black)
-                    .focusRequester(focusRequester)
-                    .focusable()
+                    .then(playerInteractionModifier)
                     .onKeyEvent { event ->
                         if (isDesktopPlatform) {
                             val boostActive = event.isShiftPressed && event.type == KeyEventType.KeyDown
@@ -3407,7 +3418,7 @@ fun WatchVideoPlayer(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
                     ) {
-                        focusRequester.requestFocus()
+                        if (isDesktopPlatform) focusRequester.requestFocus()
                     }
             ) {
                 VideoPlayerSurface(

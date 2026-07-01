@@ -3374,9 +3374,12 @@ private fun EpisodeListSection(
             inRange && (matchNum || titleMatches)
         }.sortedBy { it.number }
 
-        // List of episodes
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            filtered.forEach { episode ->
+        // List of episodes - use Lazy to avoid composing all page items and reduce memory pressure / OOM
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)
+        ) {
+            items(filtered, key = { it.number }) { episode ->
                 EpisodeItemRow(
                     episode = episode,
                     thumbnail = state.details?.image ?: state.details?.poster ?: state.details?.cover,

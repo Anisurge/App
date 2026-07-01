@@ -1,6 +1,10 @@
 package to.kuudere.anisuge
 
+import android.app.ActivityManager
 import android.app.Application
+import coil3.ImageLoader
+import coil3.memory.MemoryCache
+import coil3.SingletonImageLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,6 +19,21 @@ class AnisurgeApplication : Application() {
         super.onCreate()
         // Initialize context for DataStore access before any Activity/Service runs
         androidAppContext = applicationContext
+
+        // Initialize Coil with memory limits to prevent OOM on low-RAM devices (4GB budget phones)
+        // This addresses OOM crashes by reducing the default ~25% heap memory cache.
+        val activityManager = getSystemService(ActivityManager::class.java)
+        val isLowRamDevice = activityManager?.isLowRamDevice ?: false
+        val memoryCachePercent = if (isLowRamDevice) 0.12 else 0.20
+        val memoryCache = MemoryCache.Builder()
+            .maxSizePercent(this, memoryCachePercent)
+            .build()
+        val coilImageLoader = ImageLoader.Builder(this)
+            .memoryCache(memoryCache)
+            // Disk cache left at Coil default.
+            // Primary OOM mitigation is the reduced memory cache on low-RAM devices.
+            .build()
+        SingletonImageLoader.setUnsafe(coilImageLoader)
 
         CrashReporter.init(
             context = this,

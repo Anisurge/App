@@ -76,6 +76,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalFocusManager
+import kotlinx.coroutines.delay
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -200,10 +202,12 @@ fun AuthScreen(
 
 @Composable
 private fun TvPasswordAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
-    LaunchedEffect(Unit) {
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(state.mode) {
         // TV should default to classic credential login (no QR pairing).
         // If the user previously navigated to forgot/reset flows, force back to LOGIN on TV.
         if (state.mode != AuthMode.LOGIN) {
+            focusManager.clearFocus()
             viewModel.setMode(AuthMode.LOGIN)
         }
     }
@@ -343,6 +347,7 @@ private fun MobileAuthLayout(state: AuthUiState, viewModel: AuthViewModel) {
 private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boolean) {
     val passwordFocus = remember { FocusRequester() }
     val otpFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
 
     Column(horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start) {
         AnimatedContent(
@@ -387,6 +392,18 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
 
     Spacer(Modifier.height(28.dp))
 
+    // Auto-focus the relevant field safely when mode changes (hoisted to avoid conditional LaunchedEffect)
+    LaunchedEffect(state.mode) {
+        when (state.mode) {
+            AuthMode.RESET_PASSWORD -> {
+                // small delay to ensure the node is attached after the if-blocks recompose
+                delay(80)
+                otpFocus.requestFocus()
+            }
+            else -> {}
+        }
+    }
+
     // Register: username
     if (state.mode == AuthMode.REGISTER) {
         AnisugTextField(
@@ -419,7 +436,10 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
             placeholder = if (state.mode == AuthMode.LOGIN) "Enter your email or username" else "Enter your email address",
             keyboardType = KeyboardType.Email,
             imeAction = ImeAction.Next,
-            onImeAction = { passwordFocus.requestFocus() },
+            onImeAction = {
+                if (state.mode == AuthMode.FORGOT_PASSWORD) viewModel.submit()
+                else passwordFocus.requestFocus()
+            },
         )
         Spacer(Modifier.height(16.dp))
     }
@@ -463,10 +483,6 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
             focusRequester = otpFocus,
         )
         Spacer(Modifier.height(16.dp))
-
-        LaunchedEffect(Unit) {
-            otpFocus.requestFocus()
-        }
     }
 
     // Password field
@@ -514,7 +530,10 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
         Column(modifier = Modifier.fillMaxWidth()) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                 TextButton(
-                    onClick = { viewModel.setMode(AuthMode.FORGOT_PASSWORD) },
+                    onClick = {
+                        focusManager.clearFocus()
+                        viewModel.setMode(AuthMode.FORGOT_PASSWORD)
+                    },
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Text(
@@ -583,6 +602,7 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
         }
         TextButton(
             onClick = {
+                focusManager.clearFocus()
                 if (state.mode == AuthMode.LOGIN || state.mode == AuthMode.REGISTER) viewModel.toggleMode()
                 else viewModel.setMode(AuthMode.LOGIN)
             },

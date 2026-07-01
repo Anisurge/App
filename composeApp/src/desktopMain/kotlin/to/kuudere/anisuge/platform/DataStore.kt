@@ -1,8 +1,10 @@
 package to.kuudere.anisuge.platform
 
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
 import okio.Path.Companion.toPath
 
 actual fun createDataStore(): DataStore<Preferences> {
@@ -11,6 +13,7 @@ actual fun createDataStore(): DataStore<Preferences> {
     // Ensure directory exists
     java.io.File(path).parentFile?.mkdirs()
     return PreferenceDataStoreFactory.createWithPath(
+        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
         produceFile = { path.toPath() }
     )
 }

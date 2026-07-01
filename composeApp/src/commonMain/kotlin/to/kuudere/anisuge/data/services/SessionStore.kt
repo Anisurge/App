@@ -4,11 +4,13 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.flow.Flow
+import androidx.datastore.preferences.core.emptyPreferences
 import to.kuudere.anisuge.data.models.SessionInfo
 
 class SessionStore(private val dataStore: DataStore<Preferences>) {
@@ -19,6 +21,7 @@ class SessionStore(private val dataStore: DataStore<Preferences>) {
     }
 
     val sessionFlow: Flow<SessionInfo?> = dataStore.data
+        .catch { emit(emptyPreferences()) }
         .map { prefs ->
             prefs[SESSION_KEY]?.let {
                 try { json.decodeFromString<SessionInfo>(it) } catch (_: Exception) { null }
