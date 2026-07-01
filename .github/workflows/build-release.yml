@@ -473,4 +473,4 @@ jobs:
             ad.mp4
           generate_release_notes: false
           draft: false
-          prerelease: false
+          prerelease: true
