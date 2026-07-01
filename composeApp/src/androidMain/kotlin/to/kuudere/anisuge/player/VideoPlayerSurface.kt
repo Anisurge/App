@@ -50,7 +50,10 @@ private fun ensureAndroidShaderFiles(context: android.content.Context, preset: S
 
 private fun applyAndroidEnhancements(context: android.content.Context, settings: PlayerEnhancementSettings) {
     val safe = settings.sanitized()
-    safe.mpvProperties().forEach { (property, value) ->
+    val props = safe.mpvProperties()
+    println("[AnisugePlayer] applyEnhancements: mode=${safe.interpolationMode} quality=${safe.interpolationQuality} props=$props")
+    Log.w("AnisugePlayer", "applyEnhancements: mode=${safe.interpolationMode} quality=${safe.interpolationQuality} props=$props")
+    props.forEach { (property, value) ->
         runCatching { MPVLib.setPropertyString(property, value) }
             .onFailure { Log.w("AnisugeShaders", "mpv rejected $property=$value", it) }
     }
@@ -342,8 +345,8 @@ actual fun VideoPlayerSurface(
         // Fix video freeze/desync - prevent frame dropping that causes video to fall behind audio
         MPVLib.setOptionString("framedrop", "no")             // Never drop frames
         MPVLib.setOptionString("video-latency-hacks", "no")   // Don't sacrifice sync for latency
-        MPVLib.setOptionString("interpolation", "no")         // Disable interpolation that can cause stutter
-        MPVLib.setOptionString("video-sync", "audio")         // Sync video to audio (default but explicit)
+        // video-sync and interpolation are controlled at runtime via PlayerEnhancementSettings
+        // Default to audio-sync; interpolation overrides to display-resample when enabled
 
         // Network optimizations for HTTP/HLS streaming
         MPVLib.setOptionString("network-timeout", "10")       // Fail fast → retry faster

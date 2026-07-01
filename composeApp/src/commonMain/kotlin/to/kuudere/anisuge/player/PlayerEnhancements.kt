@@ -26,7 +26,8 @@ data class PlayerEnhancementSettings(
     val gamma: Int = 0,
     val hue: Int = 0,
     val deband: Boolean = false,
-    val interpolation: Boolean = false,
+    val interpolationMode: String = "off",
+    val interpolationQuality: String = "oversample",
     val scale: String = "bilinear",
     val cscale: String = "bilinear",
     val dscale: String = "bilinear",
@@ -51,6 +52,8 @@ data class PlayerEnhancementSettings(
         toneMapping = toneMapping.takeIf { it in PlayerEnhancementOptions.toneMappings } ?: "auto",
         videoSync = videoSync.takeIf { it in PlayerEnhancementOptions.videoSyncModes } ?: "audio",
         decoder = decoder.takeIf { it in PlayerEnhancementOptions.decoders } ?: "auto",
+        interpolationMode = interpolationMode.takeIf { it in PlayerEnhancementOptions.interpolationModes } ?: "off",
+        interpolationQuality = interpolationQuality.takeIf { it in PlayerEnhancementOptions.interpolationQualities } ?: "oversample",
     )
 
     fun withColorPreset(preset: ColorPreset): PlayerEnhancementSettings = copy(
@@ -181,24 +184,42 @@ object PlayerEnhancementOptions {
     val toneMappings = listOf("auto", "clip", "mobius", "reinhard", "hable")
     val videoSyncModes = listOf("audio", "display-resample", "display-vdrop")
     val decoders = listOf("auto", "no")
+    val interpolationModes = listOf("off", "auto", "60", "90", "120")
+    val interpolationQualities = listOf("oversample", "mitchell", "spline36", "ginseng")
 }
 
-fun PlayerEnhancementSettings.mpvProperties(): Map<String, String> = linkedMapOf(
-    "brightness" to brightness.toString(),
-    "contrast" to contrast.toString(),
-    "saturation" to saturation.toString(),
-    "gamma" to gamma.toString(),
-    "hue" to hue.toString(),
-    "deband" to if (deband) "yes" else "no",
-    "deband-iterations" to if (deband) "2" else "1",
-    "deband-threshold" to if (deband) "48" else "64",
-    "interpolation" to if (interpolation) "yes" else "no",
-    "scale" to scale,
-    "cscale" to cscale,
-    "dscale" to dscale,
-    "dither-depth" to ditherDepth,
-    "temporal-dither" to if (temporalDither) "yes" else "no",
-    "tone-mapping" to toneMapping,
-    "video-sync" to videoSync,
-    "hwdec" to decoder,
-)
+fun PlayerEnhancementSettings.mpvProperties(): Map<String, String> = buildMap {
+    put("brightness", brightness.toString())
+    put("contrast", contrast.toString())
+    put("saturation", saturation.toString())
+    put("gamma", gamma.toString())
+    put("hue", hue.toString())
+    put("deband", if (deband) "yes" else "no")
+    put("deband-iterations", if (deband) "2" else "1")
+    put("deband-threshold", if (deband) "48" else "64")
+    put("scale", scale)
+    put("cscale", cscale)
+    put("dscale", dscale)
+    put("dither-depth", ditherDepth)
+    put("temporal-dither", if (temporalDither) "yes" else "no")
+    put("tone-mapping", toneMapping)
+    put("hwdec", decoder)
+
+    when (interpolationMode) {
+        "off" -> {
+            put("interpolation", "no")
+            put("video-sync", videoSync)
+        }
+        "auto" -> {
+            put("interpolation", "yes")
+            put("video-sync", "display-resample")
+            put("tscale", interpolationQuality)
+        }
+        else -> {
+            put("interpolation", "yes")
+            put("video-sync", "display-resample")
+            put("tscale", interpolationQuality)
+            put("display-fps-override", interpolationMode)
+        }
+    }
+}

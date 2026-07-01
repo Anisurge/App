@@ -3510,7 +3510,44 @@ private fun GlobalEnhancementSettings(
         }
 
         SettingToggle(settings.deband, { onChange(settings.copy(deband = it)) }, "Debanding")
-        SettingToggle(settings.interpolation, { onChange(settings.copy(interpolation = it)) }, "Frame interpolation")
+        SettingsChoice(
+            "Interpolation mode",
+            settings.interpolationMode,
+            listOf(
+                "off" to "Off",
+                "auto" to "Auto",
+                "60" to "60fps",
+                "90" to "90fps",
+                "120" to "120fps",
+            ),
+        ) { onChange(settings.copy(interpolationMode = it)) }
+        if (settings.interpolationMode != "off") {
+            SettingsChoice(
+                "Interpolation quality",
+                settings.interpolationQuality,
+                listOf(
+                    "oversample" to "Fast",
+                    "mitchell" to "Balanced",
+                    "spline36" to "Quality",
+                    "ginseng" to "Best",
+                ),
+            ) { onChange(settings.copy(interpolationQuality = it)) }
+            if (settings.interpolationMode == "auto") {
+                Text(
+                    "Uses extra GPU — recommended for powerful devices",
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+                )
+            } else {
+                Text(
+                    "Explicit FPS targets are heavy — use Auto on mobile",
+                    color = MUTED,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+                )
+            }
+        }
         SettingToggle(settings.temporalDither, { onChange(settings.copy(temporalDither = it)) }, "Temporal dithering")
 
         TextButton(onClick = { showAdvanced = !showAdvanced }) {

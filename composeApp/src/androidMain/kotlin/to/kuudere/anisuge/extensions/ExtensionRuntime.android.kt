@@ -1,18 +1,25 @@
 package to.kuudere.anisuge.extensions
 
+import android.annotation.SuppressLint
 import android.util.Log
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
 import dalvik.system.DexClassLoader
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -20,12 +27,14 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import to.kuudere.anisuge.platform.androidAppContext
 import java.io.File
 import java.lang.reflect.Method
+import java.util.UUID
 
 actual class ExtensionRuntime actual constructor() {
     private val _state = MutableStateFlow(ExtensionRuntimeState())
@@ -38,6 +47,14 @@ actual class ExtensionRuntime actual constructor() {
     private var cachedLoadedSourcesAt = 0L
     private var lastAnimeBridgeReloadAt = 0L
     private var lastMangaBridgeReloadAt = 0L
+    private val soraJson = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val soraHttp = OkHttpClient.Builder()
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .build()
+    private val soraResults = mutableMapOf<String, CompletableDeferred<String>>()
+    private var soraWebView: WebView? = null
+    private var soraWebViewReady = false
     private val runtimeFile get() = File(ExtensionPlatformFiles.rootDir(), "runtime/anymex_runtime_host.apk")
 
     init {
@@ -75,6 +92,16 @@ actual class ExtensionRuntime actual constructor() {
     }
 
     actual suspend fun installExtension(path: String, isAnime: Boolean): Boolean = withContext(Dispatchers.IO) {
+        if (isIntegratedScriptPath(path)) {
+            val srcFile = File(path)
+            if (!srcFile.exists() || !srcFile.canRead()) {
+                log("Sora install failed: cannot read staged file $path")
+                return@withContext false
+            }
+            log("Installed Sora source: ${srcFile.name} → ${srcFile.absolutePath}")
+            return@withContext true
+        }
+
         ensureReady()
         val ctx = androidAppContext
         val dirName = if (isAnime) "exts" else "exts_manga"
@@ -248,8 +275,7 @@ actual class ExtensionRuntime actual constructor() {
         }
     }
 
-    actual suspend fun loadInstalledSources(paths: List<String>): List<ExtensionSource> = withContext(Dispatchers.IO) {
-        ensureReady()
+    actual suspend fun loadInstalledSources(paths: List<String>): List<ExtensionSource> = withContext<List<ExtensionSource>>(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         if (
             cachedLoadedSources.isNotEmpty() &&
@@ -257,6 +283,21 @@ actual class ExtensionRuntime actual constructor() {
         ) {
             return@withContext cachedLoadedSources
         }
+        val integratedScriptPaths = paths.filter { path ->
+            isIntegratedScriptPath(path)
+        }
+        val integratedScriptSources = integratedScriptPaths.mapNotNull { parseInstalledScriptSource(it) }
+        val bridgePaths = paths.filterNot { it in integratedScriptPaths }
+        val hasAnimeApks = animeExtensionsDir().listFiles()?.any { it.isFile && it.extension == "apk" } == true
+        val hasMangaApks = mangaExtensionsDir().listFiles()?.any { it.isFile && it.extension == "apk" } == true
+        if (bridgePaths.isEmpty() && !hasAnimeApks && !hasMangaApks) {
+            updateBridgeRegistry(integratedScriptSources)
+            cachedLoadedSources = integratedScriptSources
+            cachedLoadedSourcesAt = now
+            return@withContext integratedScriptSources
+        }
+
+        ensureReady()
         val mangaPaths = paths.filter { path ->
             !path.endsWith(".cs3") && (path.contains("/exts_manga/") || path.contains("/mangayomi/"))
         }
@@ -266,20 +307,16 @@ actual class ExtensionRuntime actual constructor() {
                 !path.contains("/mangayomi/") &&
                 !path.contains("/sora/")
         }
-        val soraPaths = paths.filter { path ->
-            !path.endsWith(".cs3") && path.contains("/sora/")
-        }
         val cloudStreamPaths = paths.filter { it.endsWith(".cs3") }
-        val hasAnimeApks = animeExtensionsDir().listFiles()?.any { it.isFile && it.extension == "apk" } == true
-        val hasMangaApks = mangaExtensionsDir().listFiles()?.any { it.isFile && it.extension == "apk" } == true
         val loaded = buildList {
-            if (animePaths.isNotEmpty() || soraPaths.isNotEmpty() || hasAnimeApks) {
+            addAll(integratedScriptSources)
+            if (animePaths.isNotEmpty() || integratedScriptPaths.any { it.contains("/sora/") } || hasAnimeApks) {
                 val raw = invoke("getInstalledAnimeExtensions", androidAppContext, appFilesDir())
-                val hintPaths = (animePaths + soraPaths).ifEmpty { paths }
+                val hintPaths = (animePaths + integratedScriptPaths.filter { it.contains("/sora/") }).ifEmpty { paths }
                 val parsed = parseSources(raw, ExtensionEngine.ANIYOMI, hintPaths)
                 addAll(
                     parsed.map { source ->
-                        val soraPath = soraPaths.firstOrNull { path -> pathMatchesSource(path, source) }
+                        val soraPath = integratedScriptPaths.firstOrNull { path -> path.contains("/sora/") && pathMatchesSource(path, source) }
                         if (soraPath != null) source.copy(engine = ExtensionEngine.SORA) else source
                     },
                 )
@@ -303,6 +340,7 @@ actual class ExtensionRuntime actual constructor() {
     }
 
     actual suspend fun search(source: ExtensionSource, query: String): List<ExtensionMedia> = withContext(Dispatchers.IO) {
+        if (source.usesIntegratedScriptRuntime()) return@withContext scriptSearch(source, query)
         ensureReady()
         reloadBridgeForSource(source)
         val rtId = resolveBridgeSourceId(source)
@@ -341,6 +379,7 @@ actual class ExtensionRuntime actual constructor() {
         source: ExtensionSource,
         media: ExtensionMedia,
     ): Pair<ExtensionMedia, List<ExtensionEpisode>> = withContext(Dispatchers.IO) {
+        if (source.usesIntegratedScriptRuntime()) return@withContext scriptDetails(source, media)
         ensureReady()
         reloadBridgeForSource(source)
         val rtId = resolveBridgeSourceId(source)
@@ -420,7 +459,8 @@ actual class ExtensionRuntime actual constructor() {
         result
     }
 
-    private fun fetchVideos(source: ExtensionSource, episode: ExtensionEpisode): List<ExtensionVideo> {
+    private suspend fun fetchVideos(source: ExtensionSource, episode: ExtensionEpisode): List<ExtensionVideo> {
+        if (source.usesIntegratedScriptRuntime()) return scriptVideos(source, episode)
         ensureReady()
         reloadBridgeForSource(source)
         val rtId = resolveBridgeSourceId(source)
@@ -592,9 +632,232 @@ actual class ExtensionRuntime actual constructor() {
         ctx.startActivity(intent)
     }
 
+    private fun parseInstalledScriptSource(path: String): ExtensionSource? {
+        val file = File(path)
+        if (!file.exists() || !file.isFile || !file.extension.equals("js", ignoreCase = true)) return null
+        val stem = file.nameWithoutExtension
+        val engine = if (path.contains("/sora/") || path.contains("\\sora\\")) ExtensionEngine.SORA else ExtensionEngine.MANGAYOMI
+        return ExtensionSource(
+            id = stem,
+            name = stem.replace('_', ' ').replaceFirstChar { it.uppercase() },
+            engine = engine,
+            language = "all",
+            installedPath = file.absolutePath,
+            runtimeId = stem,
+            pkgName = stem,
+            installed = true,
+        )
+    }
+
+    private fun scriptSourcePath(source: ExtensionSource): String =
+        source.installedPath?.takeIf { it.isNotBlank() } ?: ExtensionPlatformFiles.stagingPathFor(source)
+
+    private suspend fun scriptSearch(source: ExtensionSource, query: String): List<ExtensionMedia> {
+        val raw = callScript(source, if (source.engine == ExtensionEngine.SORA) "searchResults" else "search", listOf(query))
+        val array = raw.parseJsonArrayOrEmpty()
+        return array.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val title = item.string("title") ?: item.string("name") ?: return@mapNotNull null
+            val url = item.string("href") ?: item.string("url") ?: return@mapNotNull null
+            ExtensionMedia(
+                title = title,
+                url = url,
+                thumbnailUrl = item.string("image") ?: item.string("thumbnail") ?: item.string("poster"),
+            )
+        }
+    }
+
+    private suspend fun scriptDetails(source: ExtensionSource, media: ExtensionMedia): Pair<ExtensionMedia, List<ExtensionEpisode>> {
+        if (source.engine == ExtensionEngine.MANGAYOMI) {
+            val raw = callScript(source, "getDetail", listOf(media.url))
+            return parseScriptDetailObject(raw, media)
+        }
+        val detailsRaw = callScript(source, "extractDetails", listOf(media.url))
+        val details = detailsRaw.parseJsonArrayOrEmpty().firstOrNull() as? JsonObject
+        val episodesRaw = callScript(source, "extractEpisodes", listOf(media.url))
+        val episodes = episodesRaw.parseJsonArrayOrEmpty().mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val href = item.string("href") ?: item.string("url") ?: return@mapNotNull null
+            val number = item.double("number") ?: item.double("episode") ?: 0.0
+            ExtensionEpisode(
+                name = item.string("name") ?: "Episode ${number.toInt().takeIf { it > 0 } ?: number}",
+                url = href,
+                number = number,
+            )
+        }
+        return media.copy(
+            description = details?.string("description") ?: media.description,
+        ) to episodes
+    }
+
+    private suspend fun scriptVideos(source: ExtensionSource, episode: ExtensionEpisode): List<ExtensionVideo> {
+        if (source.engine == ExtensionEngine.MANGAYOMI) {
+            val raw = callScript(source, "getVideoList", listOf(episode.url))
+            return parseScriptVideos(raw)
+        }
+        val url = callScript(source, "extractStreamUrl", listOf(episode.url)).trim().trim('"')
+        if (url.isBlank()) return emptyList()
+        return listOf(ExtensionVideo(url = url, quality = "Auto"))
+    }
+
+    private suspend fun callScript(source: ExtensionSource, method: String, args: List<String>): String {
+        val sourceFile = File(scriptSourcePath(source))
+        require(sourceFile.exists()) { "${source.name} script is missing — reinstall the extension" }
+        val sourceCode = sourceFile.readText()
+        val requestId = UUID.randomUUID().toString()
+        val deferred = CompletableDeferred<String>()
+        synchronized(soraResults) { soraResults[requestId] = deferred }
+        val jsArgs = args.joinToString(",") { JsonPrimitive(it).toString() }
+        val moduleName = source.id.replace(Regex("[^A-Za-z0-9_]"), "_")
+        val script = """
+            (async function() {
+              try {
+                const __anisurgeFetch = async function(url, h, m, b) {
+                  const t = AnisurgeSora.fetch(String(url), JSON.stringify(h || {}), m || 'GET', b == null ? null : String(b));
+                  if (typeof t === 'string' && t.startsWith('__ERROR__:')) throw new Error(t.substring(10));
+                  return { ok: true, status: 200, text: async function() { return t; }, json: async function() { return JSON.parse(t); } };
+                };
+                globalThis.fetch = async function(url, opts) {
+                  opts = opts || {};
+                  return await __anisurgeFetch(url, opts.headers || {}, opts.method || 'GET', opts.body == null ? null : opts.body);
+                };
+                globalThis.fetchv2 = __anisurgeFetch;
+                globalThis['$moduleName'] = (function() {
+                  $sourceCode
+                  const __exports = {};
+                  if (typeof searchResults === 'function') __exports.searchResults = searchResults;
+                  if (typeof extractDetails === 'function') __exports.extractDetails = extractDetails;
+                  if (typeof extractEpisodes === 'function') __exports.extractEpisodes = extractEpisodes;
+                  if (typeof extractStreamUrl === 'function') __exports.extractStreamUrl = extractStreamUrl;
+                  return __exports;
+                })();
+                const target = globalThis['$moduleName'];
+                if (!target || typeof target['$method'] !== 'function') throw new Error('Sora method missing: $method');
+                const result = await target['$method']($jsArgs);
+                AnisurgeSora.resolve('$requestId', JSON.stringify({ ok: true, value: result == null ? '' : (typeof result === 'string' ? result : JSON.stringify(result)) }));
+              } catch (e) {
+                AnisurgeSora.resolve('$requestId', JSON.stringify({ ok: false, error: String((e && e.stack) || e) }));
+              }
+            })();
+        """.trimIndent()
+        withContext(Dispatchers.Main) {
+            val wv = ensureSoraWebView()
+            wv.evaluateJavascript(script, null)
+        }
+        val payload = deferred.await()
+        val obj = soraJson.parseToJsonElement(payload).jsonObject
+        if (obj["ok"]?.jsonPrimitive?.contentOrNull == "false") {
+            error(obj["error"]?.jsonPrimitive?.contentOrNull ?: "Sora script failed")
+        }
+        return obj["value"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    }
+
+    private fun isIntegratedScriptPath(path: String): Boolean =
+        path.endsWith(".js", ignoreCase = true) && (
+            path.contains("/sora/") || path.contains("\\sora\\") ||
+                path.contains("/exts_manga/") || path.contains("\\exts_manga\\") ||
+                path.contains("/mangayomi/") || path.contains("\\mangayomi\\")
+            )
+
+    private fun ExtensionSource.usesIntegratedScriptRuntime(): Boolean =
+        engine == ExtensionEngine.SORA || (engine == ExtensionEngine.MANGAYOMI && artifactExtension() == "js")
+
+    private fun parseScriptDetailObject(raw: String, fallback: ExtensionMedia): Pair<ExtensionMedia, List<ExtensionEpisode>> {
+        val obj = raw.parseJsonObjectOrNull() ?: return fallback to emptyList()
+        val episodesArray = (obj["episodes"] as? JsonArray)
+            ?: (obj["chapters"] as? JsonArray)
+            ?: JsonArray(emptyList())
+        val episodes = episodesArray.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val url = item.string("url") ?: item.string("link") ?: return@mapNotNull null
+            val number = item.double("episode_number") ?: item.double("number") ?: item.double("chapterNumber") ?: 0.0
+            ExtensionEpisode(
+                name = item.string("name") ?: item.string("title") ?: "Episode ${number.toInt().takeIf { it > 0 } ?: number}",
+                url = url,
+                number = number,
+            )
+        }
+        return fallback.copy(
+            title = obj.string("title") ?: obj.string("name") ?: fallback.title,
+            thumbnailUrl = obj.string("thumbnailUrl") ?: obj.string("imageUrl") ?: obj.string("cover") ?: fallback.thumbnailUrl,
+            description = obj.string("description") ?: fallback.description,
+        ) to episodes
+    }
+
+    private fun parseScriptVideos(raw: String): List<ExtensionVideo> {
+        val array = raw.parseJsonArrayOrEmpty()
+        return array.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val url = item.string("url") ?: item.string("link") ?: return@mapNotNull null
+            ExtensionVideo(url, item.string("quality") ?: item.string("name") ?: "Auto")
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun ensureSoraWebView(): WebView {
+        soraWebView?.let { return it }
+        val readyLatch = java.util.concurrent.CountDownLatch(1)
+        val webView = WebView(androidAppContext).apply {
+            settings.javaScriptEnabled = true
+            addJavascriptInterface(SoraJsBridge(), "AnisurgeSora")
+            webViewClient = object : android.webkit.WebViewClient() {
+                override fun onPageFinished(view: WebView, url: String) {
+                    readyLatch.countDown()
+                }
+            }
+            loadUrl("about:blank")
+        }
+        soraWebView = webView
+        // wait for about:blank to finish so the JS bridge is ready
+        // use a short timeout to avoid deadlock
+        kotlin.runCatching { readyLatch.await(2, java.util.concurrent.TimeUnit.SECONDS) }
+        return webView
+    }
+
+    private inner class SoraJsBridge {
+        @JavascriptInterface
+        fun resolve(id: String, payload: String) {
+            synchronized(soraResults) { soraResults.remove(id) }?.complete(payload)
+        }
+
+        @JavascriptInterface
+        fun fetch(url: String, headersJson: String, method: String?, body: String?): String {
+            val result = runCatching {
+                val builder = Request.Builder().url(url)
+                    .header("User-Agent", DEFAULT_SCRIPT_USER_AGENT)
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("Referer", url.substringBefore("?"))
+                runCatching { soraJson.parseToJsonElement(headersJson).jsonObject }.getOrNull()?.forEach { (key, value) ->
+                    value.jsonPrimitive.contentOrNull?.takeIf { it.isNotBlank() }?.let { builder.header(key, it) }
+                }
+                val verb = method?.uppercase()?.takeIf { it.isNotBlank() } ?: "GET"
+                val requestBody = if (verb == "GET" || verb == "HEAD") null else (body ?: "").toRequestBody("text/plain; charset=utf-8".toMediaTypeOrNull())
+                val request = builder.method(verb, requestBody).build()
+                soraHttp.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@runCatching "__ERROR__:HTTP ${response.code}"
+                    val bodyText = response.body.string()
+                    if (bodyText.length < 5000) log("fetch OK: $url → ${bodyText.take(200)}")
+                    bodyText
+                }
+            }.getOrElse { e ->
+                val msg = "__ERROR__:${e.message ?: e.toString()}"
+                log("fetch FAILED: $url → $msg")
+                msg
+            }
+            return result
+        }
+
+        private fun log(msg: String) {
+            android.util.Log.d(TAG, msg)
+        }
+    }
+
     companion object {
         private const val TAG = "AnisurgeExtensions"
         private const val BRIDGE_RELOAD_COOLDOWN_MS = 15_000L
+        private const val DEFAULT_SCRIPT_USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36"
         private const val RUNTIME_URL =
             "https://github.com/RyanYuuki/AnymeXExtensionRuntimeBridge/releases/download/v1.8.2/anymex_runtime_host.apk"
     }
@@ -705,6 +968,7 @@ actual object ExtensionPlatformFiles {
             }
         }.distinct()
     }
+
 }
 
 private class ChildFirstClassLoader(
@@ -867,3 +1131,20 @@ private fun parseVideos(raw: Any?): List<ExtensionVideo> =
         val allSubtitles = (subtitles + audios).distinctBy { it.url }
         ExtensionVideo(url, map["quality"]?.toString() ?: map["name"]?.toString() ?: "Auto", headers, allSubtitles)
     }.orEmpty()
+
+private fun String.parseJsonArrayOrEmpty(): JsonArray =
+    runCatching {
+        when (val root = Json { ignoreUnknownKeys = true; isLenient = true }.parseToJsonElement(this)) {
+            is JsonArray -> root
+            is JsonObject -> root["results"] as? JsonArray ?: root["data"] as? JsonArray ?: JsonArray(emptyList())
+            else -> JsonArray(emptyList())
+        }
+    }.getOrElse { JsonArray(emptyList()) }
+
+private fun String.parseJsonObjectOrNull(): JsonObject? =
+    runCatching { Json { ignoreUnknownKeys = true; isLenient = true }.parseToJsonElement(this) as? JsonObject }.getOrNull()
+
+private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull
+
+private fun JsonObject.double(key: String): Double? =
+    this[key]?.jsonPrimitive?.doubleOrNull ?: this[key]?.jsonPrimitive?.intOrNull?.toDouble()

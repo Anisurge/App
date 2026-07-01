@@ -66,6 +66,7 @@ class ExtensionManager(
                 wasReady = state.ready
             }
         }
+
     }
 
     suspend fun acceptWarning() = store.update { it.copy(acceptedWarning = true) }
@@ -134,7 +135,7 @@ class ExtensionManager(
         _busy.value = true
         _error.value = null
         try {
-            if (!runtime.state.value.ready) runtime.install()
+            if (!source.usesIntegratedScriptRuntime() && !runtime.state.value.ready) runtime.install()
             val url = source.downloadUrl ?: error("Extension has no download URL")
             val path = ExtensionPlatformFiles.stagingPathFor(source)
             ExtensionPlatformFiles.ensureParentDirs(path)
@@ -191,8 +192,13 @@ class ExtensionManager(
     private suspend fun republishInstalled() {
         val config = store.configFlow.first()
         val installedById = normalizeInstalledIds(config.installedSourceIds)
-        val loaded = if (runtime.state.value.ready) {
-            runtime.loadInstalledSources(installedLocalPaths(_available.value, installedById))
+        val installedPaths = installedLocalPaths(_available.value, installedById)
+        val hasIntegratedScriptPaths = installedPaths.any { path ->
+            path.contains("/sora/") || path.contains("\\sora\\") ||
+                (path.endsWith(".js", ignoreCase = true) && (path.contains("/exts_manga/") || path.contains("\\exts_manga\\")))
+        }
+        val loaded = if (runtime.state.value.ready || hasIntegratedScriptPaths) {
+            runtime.loadInstalledSources(installedPaths)
         } else {
             emptyList()
         }
@@ -288,8 +294,8 @@ class ExtensionManager(
         synonyms: List<String> = emptyList(),
         serverId: String,
     ): ExtensionPrefetchResult {
-        ensureBridgeReady()
         val source = findInstalledSource(serverId) ?: error("Extension is not installed")
+        if (!source.usesIntegratedScriptRuntime()) ensureBridgeReady()
         val compositeId = compositeSourceId(source)
         val cached = _config.value.episodeCaches.firstOrNull {
             it.animeId == animeId && it.sourceId == compositeId
@@ -339,13 +345,13 @@ class ExtensionManager(
         serverId: String,
         synonyms: List<String> = emptyList(),
     ): ExtensionStreamResult {
-        ensureBridgeReady()
         val parsed = parseExtensionServerId(serverId) ?: error("Invalid extension server")
         val source = findInstalledSource(serverId) ?: error("Extension is not installed")
+        if (!source.usesIntegratedScriptRuntime()) ensureBridgeReady()
         require(source.isBridgeCapableOnPlatform()) {
-            "${source.name} requires the AnymeX JS runtime (Mangayomi/Sora scripts are not supported on Android yet)"
+            "${source.name} requires a supported extension runtime"
         }
-        if (source.engine == ExtensionEngine.ANIYOMI || source.engine == ExtensionEngine.SORA) {
+        if (source.engine == ExtensionEngine.ANIYOMI) {
             require(source.hasNumericBridgeId()) {
                 "${source.name} is not loaded in the extension bridge — open Settings → Extensions and refresh"
             }
@@ -626,7 +632,7 @@ class ExtensionManager(
         val parsed = parseExtensionServerId(serverId) ?: return null
         val grouped = _installed.value.groupBy { variantGroupKey(it) }
         val byBridgeId = _installed.value.filter { source ->
-            source.engine == parsed.engine && source.bridgeSourceId() == parsed.sourceId
+            source.engine == parsed.engine && source.bridgeSourceId().equals(parsed.sourceId, ignoreCase = true)
         }
         if (byBridgeId.isNotEmpty()) {
             if (byBridgeId.size == 1) return byBridgeId.first()
@@ -637,10 +643,10 @@ class ExtensionManager(
         }
         return _installed.value.firstOrNull { source ->
             source.engine == parsed.engine && (
-                source.id == parsed.sourceId ||
-                    source.pkgName == parsed.sourceId ||
-                    source.selectableServerId(dub = false) == serverId ||
-                    source.selectableServerId(dub = true) == serverId
+                source.id.equals(parsed.sourceId, ignoreCase = true) ||
+                    source.pkgName?.equals(parsed.sourceId, ignoreCase = true) == true ||
+                    source.selectableServerId(dub = false).equals(serverId, ignoreCase = true) ||
+                    source.selectableServerId(dub = true).equals(serverId, ignoreCase = true)
                 )
         }
     }
@@ -676,12 +682,12 @@ class ExtensionManager(
         applyLoadedRuntimeIds(loaded)
         republishInstalled()
         val match = findLoadedMatch(source, loaded) ?: findInstalledSource(source.serverId())
-        if (source.engine == ExtensionEngine.ANIYOMI || source.engine == ExtensionEngine.SORA) {
+        if (source.engine == ExtensionEngine.ANIYOMI) {
             require(match?.hasNumericBridgeId() == true) {
                 "${source.name} failed to reload — try uninstalling and reinstalling"
             }
         }
-        return "${source.name} reloaded in bridge"
+        return "${source.name} reloaded"
     }
     suspend fun exportConfig(): ExtensionBackupConfig = store.configFlow.first()
     suspend fun restoreConfig(value: ExtensionBackupConfig) = store.restore(value)
@@ -774,8 +780,12 @@ class ExtensionManager(
         return array.mapNotNull { element ->
             val o = element as? JsonObject ?: return@mapNotNull null
             val name = o.string("name") ?: o.string("sourceName") ?: return@mapNotNull null
+            val type = o.string("type") ?: o.string("itemType")
+            val isMangayomiAnime = engine == ExtensionEngine.MANGAYOMI && (
+                type?.contains("anime", ignoreCase = true) == true || o.int("itemType") == 1
+                )
             ExtensionSource(
-                id = o.string("id") ?: "$name@$repoUrl",
+                id = o.string("id") ?: name,
                 name = name,
                 engine = engine,
                 language = o.string("lang") ?: o.string("language") ?: "all",
@@ -785,8 +795,11 @@ class ExtensionManager(
                 downloadUrl = o.string("url") ?: o.string("scriptUrl") ?: o.string("sourceUrl") ?: o.string("downloadUrl") ?: o.string("sourceCodeUrl"),
                 repositoryUrl = repoUrl,
                 runtimeId = o.string("id"),
-                isAnime = engine != ExtensionEngine.MANGAYOMI &&
-                    (o.string("type")?.contains("anime", true) != false),
+                isAnime = if (engine == ExtensionEngine.MANGAYOMI) {
+                    isMangayomiAnime
+                } else {
+                    type?.contains("anime", true) != false
+                },
             )
         }
     }
@@ -822,6 +835,9 @@ class ExtensionManager(
 
     private fun extensionDownloadPath(source: ExtensionSource): String =
         ExtensionPlatformFiles.stagingPathFor(source)
+
+    private fun ExtensionSource.usesIntegratedScriptRuntime(): Boolean =
+        engine == ExtensionEngine.SORA || (engine == ExtensionEngine.MANGAYOMI && artifactExtension() == "js")
 
     private fun safe(value: String) = value.replace(Regex("[^A-Za-z0-9._-]"), "_")
 

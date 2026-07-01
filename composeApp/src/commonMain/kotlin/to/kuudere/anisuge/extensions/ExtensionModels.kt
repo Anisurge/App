@@ -238,6 +238,7 @@ fun ExtensionSource.artifactExtension(): String {
         url.endsWith(".cs3") -> "cs3"
         engine == ExtensionEngine.CLOUDSTREAM -> "cs3"
         engine == ExtensionEngine.MANGAYOMI -> "dart"
+        engine == ExtensionEngine.SORA -> "js"
         else -> if (ExtensionPlatformFiles.isAndroid) "apk" else "jar"
     }
 }

@@ -66,6 +66,9 @@ actual class ExtensionRuntime actual constructor() {
     }
 
     actual suspend fun installExtension(path: String, isAnime: Boolean): Boolean = withContext(Dispatchers.IO) {
+        if (isIntegratedScriptPath(path)) {
+            return@withContext File(path).exists()
+        }
         ensureReady()
         val result = call("installExtension", mapOf("path" to path, "isAnime" to isAnime))
         result as? Boolean ?: false
@@ -80,8 +83,12 @@ actual class ExtensionRuntime actual constructor() {
     actual suspend fun invalidateInstalledSourcesCache() = Unit
 
     actual suspend fun loadInstalledSources(paths: List<String>): List<ExtensionSource> {
+        val integratedScriptPaths = paths.filter(::isIntegratedScriptPath)
+        val integratedScriptSources = integratedScriptPaths.mapNotNull(::parseInstalledScriptSource)
+        val bridgePaths = paths.filterNot { it in integratedScriptPaths }
+        if (bridgePaths.isEmpty()) return integratedScriptSources
         ensureReady()
-        return paths.groupBy { path ->
+        return integratedScriptSources + bridgePaths.groupBy { path ->
             when {
                 path.endsWith(".cs3") -> ExtensionEngine.CLOUDSTREAM
                 path.contains("/exts_manga/") || path.contains("/mangayomi/") -> ExtensionEngine.MANGAYOMI
@@ -96,6 +103,7 @@ actual class ExtensionRuntime actual constructor() {
     }
 
     actual suspend fun search(source: ExtensionSource, query: String): List<ExtensionMedia> {
+        if (source.usesIntegratedScriptRuntime()) return scriptSearch(source, query)
         val method = if (source.engine == ExtensionEngine.CLOUDSTREAM) "csSearch" else "search"
         return parseDesktopMedia(call(method, mapOf("sourceId" to source.bridgeSourceId(), "query" to query, "page" to 1, "isAnime" to source.isAnime)))
     }
@@ -104,6 +112,7 @@ actual class ExtensionRuntime actual constructor() {
         source: ExtensionSource,
         media: ExtensionMedia,
     ): Pair<ExtensionMedia, List<ExtensionEpisode>> {
+        if (source.usesIntegratedScriptRuntime()) return scriptDetails(source, media)
         val args = if (source.engine == ExtensionEngine.CLOUDSTREAM) {
             mapOf("sourceId" to source.bridgeSourceId(), "url" to media.url)
         } else {
@@ -152,6 +161,7 @@ actual class ExtensionRuntime actual constructor() {
     }
 
     private suspend fun fetchVideos(source: ExtensionSource, episode: ExtensionEpisode): List<ExtensionVideo> {
+        if (source.usesIntegratedScriptRuntime()) return scriptVideos(source, episode)
         val episodePayload = buildMap<String, Any?> {
             put("name", episode.name)
             put("url", episode.url)
@@ -253,9 +263,151 @@ actual class ExtensionRuntime actual constructor() {
         _state.value = _state.value.copy(installed = runtimeFile.exists(), ready = false, status = message, error = error.message)
     }
 
+    private fun parseInstalledScriptSource(path: String): ExtensionSource? {
+        val file = File(path)
+        if (!file.exists() || !file.isFile || !file.extension.equals("js", ignoreCase = true)) return null
+        val stem = file.nameWithoutExtension
+        val engine = if (path.contains("/sora/") || path.contains("\\sora\\")) ExtensionEngine.SORA else ExtensionEngine.MANGAYOMI
+        return ExtensionSource(
+            id = stem,
+            name = stem.replace('_', ' ').replaceFirstChar { it.uppercase() },
+            engine = engine,
+            language = "all",
+            installedPath = file.absolutePath,
+            runtimeId = stem,
+            pkgName = stem,
+            installed = true,
+        )
+    }
+
+    private fun scriptSourcePath(source: ExtensionSource): String =
+        source.installedPath?.takeIf { it.isNotBlank() } ?: ExtensionPlatformFiles.stagingPathFor(source)
+
+    private suspend fun scriptSearch(source: ExtensionSource, query: String): List<ExtensionMedia> {
+        val raw = callScript(source, if (source.engine == ExtensionEngine.SORA) "searchResults" else "search", listOf(query))
+        return raw.parseJsonArrayOrEmpty().mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val title = item.string("title") ?: item.string("name") ?: return@mapNotNull null
+            val url = item.string("href") ?: item.string("url") ?: return@mapNotNull null
+            ExtensionMedia(title, url, item.string("image") ?: item.string("thumbnail") ?: item.string("poster"))
+        }
+    }
+
+    private suspend fun scriptDetails(source: ExtensionSource, media: ExtensionMedia): Pair<ExtensionMedia, List<ExtensionEpisode>> {
+        if (source.engine == ExtensionEngine.MANGAYOMI) {
+            return parseScriptDetailObject(callScript(source, "getDetail", listOf(media.url)), media)
+        }
+        val details = callScript(source, "extractDetails", listOf(media.url)).parseJsonArrayOrEmpty().firstOrNull() as? JsonObject
+        val episodes = callScript(source, "extractEpisodes", listOf(media.url)).parseJsonArrayOrEmpty().mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val href = item.string("href") ?: item.string("url") ?: return@mapNotNull null
+            val number = item.double("number") ?: item.double("episode") ?: 0.0
+            ExtensionEpisode(
+                name = item.string("name") ?: "Episode ${number.toInt().takeIf { it > 0 } ?: number}",
+                url = href,
+                number = number,
+            )
+        }
+        return media.copy(description = details?.string("description") ?: media.description) to episodes
+    }
+
+    private suspend fun scriptVideos(source: ExtensionSource, episode: ExtensionEpisode): List<ExtensionVideo> {
+        if (source.engine == ExtensionEngine.MANGAYOMI) {
+            return parseScriptVideos(callScript(source, "getVideoList", listOf(episode.url)))
+        }
+        val url = callScript(source, "extractStreamUrl", listOf(episode.url)).trim().trim('"')
+        if (url.isBlank()) return emptyList()
+        return listOf(ExtensionVideo(url, "Auto"))
+    }
+
+    private suspend fun callScript(source: ExtensionSource, method: String, args: List<String>): String = withContext(Dispatchers.IO) {
+        val sourceFile = File(scriptSourcePath(source))
+        require(sourceFile.exists()) { "${source.name} script is missing — reinstall the extension" }
+        val runner = File(ExtensionPlatformFiles.rootDir(), "runtime/sora_runner.js")
+        runner.parentFile.mkdirs()
+        if (!runner.exists()) runner.writeText(SORA_RUNNER)
+        val argsJson = JsonArray(args.map { JsonPrimitive(it) }).toString()
+        val process = ProcessBuilder("node", runner.absolutePath, sourceFile.absolutePath, method, argsJson)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().readText()
+        check(process.waitFor() == 0) { "Sora runner failed: $output" }
+        val result = json.parseToJsonElement(output.trim()).jsonObject
+        if (result["ok"]?.jsonPrimitive?.contentOrNull == "false") {
+            error(result["error"]?.jsonPrimitive?.contentOrNull ?: "Sora script failed")
+        }
+        result["value"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    }
+
+    private fun isIntegratedScriptPath(path: String): Boolean =
+        path.endsWith(".js", ignoreCase = true) && (
+            path.contains("/sora/") || path.contains("\\sora\\") ||
+                path.contains("/exts_manga/") || path.contains("\\exts_manga\\") ||
+                path.contains("/mangayomi/") || path.contains("\\mangayomi\\")
+            )
+
+    private fun ExtensionSource.usesIntegratedScriptRuntime(): Boolean =
+        engine == ExtensionEngine.SORA || (engine == ExtensionEngine.MANGAYOMI && artifactExtension() == "js")
+
+    private fun parseScriptDetailObject(raw: String, fallback: ExtensionMedia): Pair<ExtensionMedia, List<ExtensionEpisode>> {
+        val obj = raw.parseJsonObjectOrNull() ?: return fallback to emptyList()
+        val episodesArray = (obj["episodes"] as? JsonArray)
+            ?: (obj["chapters"] as? JsonArray)
+            ?: JsonArray(emptyList())
+        val episodes = episodesArray.mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val url = item.string("url") ?: item.string("link") ?: return@mapNotNull null
+            val number = item.double("episode_number") ?: item.double("number") ?: item.double("chapterNumber") ?: 0.0
+            ExtensionEpisode(
+                name = item.string("name") ?: item.string("title") ?: "Episode ${number.toInt().takeIf { it > 0 } ?: number}",
+                url = url,
+                number = number,
+            )
+        }
+        return fallback.copy(
+            title = obj.string("title") ?: obj.string("name") ?: fallback.title,
+            thumbnailUrl = obj.string("thumbnailUrl") ?: obj.string("imageUrl") ?: obj.string("cover") ?: fallback.thumbnailUrl,
+            description = obj.string("description") ?: fallback.description,
+        ) to episodes
+    }
+
+    private fun parseScriptVideos(raw: String): List<ExtensionVideo> =
+        raw.parseJsonArrayOrEmpty().mapNotNull { element ->
+            val item = element as? JsonObject ?: return@mapNotNull null
+            val url = item.string("url") ?: item.string("link") ?: return@mapNotNull null
+            ExtensionVideo(url, item.string("quality") ?: item.string("name") ?: "Auto")
+        }
+
     companion object {
         private const val RUNTIME_URL =
             "https://github.com/RyanYuuki/AnymeXExtensionRuntimeBridge/releases/download/v1.8.2/anymex_desktop_runtime.jar"
+        private val SORA_RUNNER = """
+            const fs = require('fs');
+            const [sourcePath, method, argsJson] = process.argv.slice(2);
+            (async () => {
+              try {
+                const sourceCode = fs.readFileSync(sourcePath, 'utf8');
+                globalThis.fetchv2 = async function(url, headers = {}, method = 'GET', body = null) {
+                  headers = Object.assign({
+                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': String(url).split('?')[0]
+                  }, headers || {});
+                  const response = await fetch(String(url), { method, headers, body });
+                  return { ok: response.ok, status: response.status, text: async () => await response.text(), json: async () => await response.json() };
+                };
+                eval(sourceCode);
+                const fn = globalThis[method] || eval(`typeof ${'$'}{method} === 'function' ? ${'$'}{method} : undefined`);
+                if (typeof fn !== 'function') throw new Error('Sora method missing: ' + method);
+                const result = await fn(...JSON.parse(argsJson));
+                process.stdout.write(JSON.stringify({ ok: true, value: result == null ? '' : (typeof result === 'string' ? result : JSON.stringify(result)) }));
+              } catch (e) {
+                process.stdout.write(JSON.stringify({ ok: false, error: String((e && e.stack) || e) }));
+                process.exitCode = 1;
+              }
+            })();
+        """.trimIndent()
     }
 }
 
@@ -467,3 +619,20 @@ private fun parseDesktopVideos(data: kotlinx.serialization.json.JsonElement): Li
         val allSubtitles = (subtitles + audios).distinctBy { it.url }
         ExtensionVideo(url, o["quality"]?.jsonPrimitive?.contentOrNull ?: o["name"]?.jsonPrimitive?.contentOrNull ?: "Auto", headers, allSubtitles)
     }.orEmpty()
+
+private fun String.parseJsonArrayOrEmpty(): JsonArray =
+    runCatching {
+        when (val root = Json { ignoreUnknownKeys = true; isLenient = true }.parseToJsonElement(this)) {
+            is JsonArray -> root
+            is JsonObject -> root["results"] as? JsonArray ?: root["data"] as? JsonArray ?: JsonArray(emptyList())
+            else -> JsonArray(emptyList())
+        }
+    }.getOrElse { JsonArray(emptyList()) }
+
+private fun String.parseJsonObjectOrNull(): JsonObject? =
+    runCatching { Json { ignoreUnknownKeys = true; isLenient = true }.parseToJsonElement(this) as? JsonObject }.getOrNull()
+
+private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull
+
+private fun JsonObject.double(key: String): Double? =
+    this[key]?.jsonPrimitive?.doubleOrNull ?: this[key]?.jsonPrimitive?.intOrNull?.toDouble()

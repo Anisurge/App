@@ -801,8 +801,44 @@ fun SettingsOverlay(
                                 EnhancementToggle("Debanding", value.deband) {
                                     onPlayerEnhancementsChanged(value.copy(deband = it))
                                 }
-                                EnhancementToggle("Frame interpolation", value.interpolation) {
-                                    onPlayerEnhancementsChanged(value.copy(interpolation = it))
+                                EnhancementChoice(
+                                    "Interpolation mode",
+                                    value.interpolationMode,
+                                    mapOf(
+                                        "off" to "Off",
+                                        "auto" to "Auto",
+                                        "60" to "60fps",
+                                        "90" to "90fps",
+                                        "120" to "120fps",
+                                    ),
+                                ) { onPlayerEnhancementsChanged(value.copy(interpolationMode = it)) }
+                                if (value.interpolationMode != "off") {
+                                    EnhancementChoice(
+                                        "Interpolation quality",
+                                        value.interpolationQuality,
+                                        mapOf(
+                                            "oversample" to "Fast",
+                                            "mitchell" to "Balanced",
+                                            "spline36" to "Quality",
+                                            "ginseng" to "Best",
+                                        ),
+                                    ) { onPlayerEnhancementsChanged(value.copy(interpolationQuality = it)) }
+                                }
+                                if (value.interpolationMode == "auto") {
+                                    Text(
+                                        "Uses extra GPU — recommended for powerful devices",
+                                        color = Color.Gray,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+                                    )
+                                }
+                                if (value.interpolationMode != "off" && value.interpolationMode != "auto") {
+                                    Text(
+                                        "Explicit FPS targets are heavy — use Auto on mobile",
+                                        color = Color.Gray,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+                                    )
                                 }
                                 EnhancementToggle("Temporal dithering", value.temporalDither) {
                                     onPlayerEnhancementsChanged(value.copy(temporalDither = it))
@@ -1116,24 +1152,32 @@ private fun EnhancementChoice(
     selected: String,
     values: List<String>,
     onSelected: (String) -> Unit,
+) = EnhancementChoice(label, selected, values.associateWith { it }, onSelected)
+
+@Composable
+private fun EnhancementChoice(
+    label: String,
+    selected: String,
+    values: Map<String, String>,
+    onSelected: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         SettingsMenuItem(
             icon = { Icon(Icons.Default.Tune, null, tint = Color.White) },
             title = label,
-            subtitle = selected,
+            subtitle = values[selected] ?: selected,
             onClick = { expanded = true },
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            values.forEach { value ->
+            values.forEach { (key, displayLabel) ->
                 DropdownMenuItem(
-                    text = { Text(value) },
-                    leadingIcon = if (value == selected) {
+                    text = { Text(displayLabel) },
+                    leadingIcon = if (key == selected) {
                         { Icon(Icons.Default.Check, null) }
                     } else null,
                     onClick = {
-                        onSelected(value)
+                        onSelected(key)
                         expanded = false
                     },
                 )
