@@ -95,7 +95,7 @@ fun TvAppShell(
     val contentFocus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
-        homeRailFocus.requestFocus()
+        runCatching { homeRailFocus.requestFocus() }
         homeViewModel.refresh(force = true)
         homeViewModel.refreshContinueWatching()
         watchlistViewModel.refresh()

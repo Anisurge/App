@@ -392,15 +392,15 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
 
     Spacer(Modifier.height(28.dp))
 
-    // Auto-focus the relevant field safely when mode changes (hoisted to avoid conditional LaunchedEffect)
-    LaunchedEffect(state.mode) {
-        when (state.mode) {
-            AuthMode.RESET_PASSWORD -> {
-                // small delay to ensure the node is attached after the if-blocks recompose
-                delay(80)
-                otpFocus.requestFocus()
-            }
-            else -> {}
+    // Auto-focus the relevant field safely when mode changes.
+    // IMPORTANT: Effect is placed inside the conditional that owns the FocusRequester node.
+    // Requesting focus on a FocusRequester whose node has been removed from composition
+    // (e.g. during navigation / sheet dismiss / screen teardown) causes the
+    // "Compose Runtime internal error. pending composition has not been applied" crash.
+    if (state.mode == AuthMode.RESET_PASSWORD) {
+        LaunchedEffect(Unit) {
+            delay(120)
+            runCatching { otpFocus.requestFocus() }
         }
     }
 

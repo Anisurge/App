@@ -42,6 +42,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.focusable
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.key.*
 import kotlinx.datetime.Clock
 import to.kuudere.anisuge.platform.DiscordPresenceActivity
@@ -1492,9 +1493,16 @@ private fun WatchCommentsBottomSheet(
 ) {
     if (!visible) return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val focusManager = LocalFocusManager.current
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            // Clearing focus before/while the sheet content is removed prevents
+            // "Compose Runtime internal error (pending composition has not been applied)"
+            // when a BasicTextField (root comment or reply) had focus.
+            focusManager.clearFocus(force = true)
+            onDismiss()
+        },
         sheetState = sheetState,
         containerColor = AppColors.background,
         dragHandle = { BottomSheetDefaults.DragHandle(color = AppColors.border) },
@@ -2928,7 +2936,7 @@ fun WatchVideoPlayer(
 
             LaunchedEffect(Unit) {
                 if (to.kuudere.anisuge.platform.isDesktopPlatform) {
-                    focusRequester.requestFocus()
+                    runCatching { focusRequester.requestFocus() }
                 }
             }
 
@@ -3418,7 +3426,7 @@ fun WatchVideoPlayer(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null
                     ) {
-                        if (isDesktopPlatform) focusRequester.requestFocus()
+                        if (isDesktopPlatform) runCatching { focusRequester.requestFocus() }
                     }
             ) {
                 VideoPlayerSurface(

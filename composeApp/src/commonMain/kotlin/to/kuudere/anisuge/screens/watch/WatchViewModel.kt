@@ -674,9 +674,22 @@ class WatchViewModel(
                         ?: response?.sub ?: response?.dub
                     // Prefer an explicit embedUrl, then stream URL for iframe sources like Anikoto,
                     // then episodeId (which many embed providers use as the iframe URL).
-                    streamSection?.streams?.firstOrNull()?.embedUrl
+                    var embed = streamSection?.streams?.firstOrNull()?.embedUrl
                         ?: streamSection?.streams?.firstOrNull()?.url?.takeIf { it.startsWith("http", ignoreCase = true) }
                         ?: streamSection?.episodeId?.takeIf { it.startsWith("http", ignoreCase = true) }
+
+                    // Flix (and flix-if) embed supports start_at like megaplay for resume-from-time.
+                    // Append the param so the embed player can start at the saved position.
+                    if (embed != null) {
+                        val lower = embed.lowercase()
+                        if (lower.contains("flixcloud") || apiSource.contains("flix", ignoreCase = true)) {
+                            val r = currState.savedWatchPosition.coerceAtLeast(0.0).toInt()
+                            if (r > 0) {
+                                embed += if (embed.contains("?")) "&start_at=$r" else "?start_at=$r"
+                            }
+                        }
+                    }
+                    embed
                 }
                 if (iframeUrl != null) {
                     println("[WatchVM] webview server=$serverName embedUrl=$iframeUrl")

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -120,6 +121,15 @@ fun CommentsSection(
     val commentService = remember { AppComponent.commentService }
     val stickerService = remember { AppComponent.stickerService }
     val isAuthenticated = userId != null
+    val focusManager = LocalFocusManager.current
+
+    // When the entire comments UI is disposed (sheet closed while editing),
+    // force-clear focus to avoid pending-composition crash on teardown.
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching { focusManager.clearFocus(force = true) }
+        }
+    }
 
     var comments by remember { mutableStateOf<List<CommentUiModel>>(emptyList()) }
     var totalComments by remember { mutableIntStateOf(0) }
