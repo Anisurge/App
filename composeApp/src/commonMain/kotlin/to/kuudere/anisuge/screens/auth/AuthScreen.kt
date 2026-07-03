@@ -579,7 +579,12 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, centered: Boo
         }
     }
 
-    Spacer(Modifier.height(20.dp))
+    Spacer(Modifier.height(8.dp))
+
+    // Domain switcher
+    DomainSwitchRow(state = state, viewModel = viewModel)
+
+    Spacer(Modifier.height(12.dp))
 
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
         val text = when (state.mode) {
@@ -821,3 +826,34 @@ private fun DrippingBackground() {
 @Composable
 private fun BoxWithConstraints(content: @Composable androidx.compose.foundation.layout.BoxWithConstraintsScope.() -> Unit) = 
     androidx.compose.foundation.layout.BoxWithConstraints(content = content)
+
+@Composable
+private fun DomainSwitchRow(state: AuthUiState, viewModel: AuthViewModel) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (state.isCustomDomain) {
+            Text(
+                "Using: ${state.customDomainLabel.removePrefix("https://")}",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 11.sp,
+            )
+            Spacer(Modifier.width(8.dp))
+            TextButton(
+                onClick = { viewModel.switchDomain() },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text("Switch back", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
+            }
+        } else {
+            TextButton(
+                onClick = { viewModel.switchDomain() },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text("Switch to backup domain", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
+            }
+        }
+    }
+}

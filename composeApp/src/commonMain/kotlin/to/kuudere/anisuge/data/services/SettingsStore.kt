@@ -65,6 +65,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
         val TRACKER_SYNC_LAST_SUCCESS_KEY = longPreferencesKey("tracker_sync_last_success")
         val DISCORD_RICH_PRESENCE_KEY = booleanPreferencesKey("discord_rich_presence")
         val DISCORD_TOKEN_KEY = stringPreferencesKey("discord_token")
+        val BFF_API_URL_KEY = stringPreferencesKey("bff_api_url")
 
         // MAL tokens
         val MAL_ACCESS_TOKEN_KEY = stringPreferencesKey("mal_access_token")
@@ -569,5 +570,14 @@ class SettingsStore(private val dataStore: DataStore<Preferences>) {
 
     suspend fun clearAiChatHistory() {
         dataStore.edit { it.remove(AI_CHAT_HISTORY_KEY) }
+    }
+
+    suspend fun getBffApiUrl(): String? = dataStore.data.first()[BFF_API_URL_KEY]
+
+    suspend fun setBffApiUrl(url: String?) {
+        dataStore.edit { prefs ->
+            if (url.isNullOrBlank()) prefs.remove(BFF_API_URL_KEY)
+            else prefs[BFF_API_URL_KEY] = url
+        }
     }
 }

@@ -2662,18 +2662,30 @@ fun WatchVideoPlayer(
             }
 
             var lastEmbedProgressSaveBucket by remember(embedUrl, uiState.currentEpisodeNumber) { mutableStateOf(-1) }
+            // Wall-clock fallback for cross-origin iframes (e.g. aniko) that
+            // can't report position through the JS bridge.
+            var embedWallClockPosition by remember(embedUrl, uiState.currentEpisodeNumber) { mutableStateOf(0.0) }
             LaunchedEffect(embedUrl, uiState.currentEpisodeNumber, uiState.targetLang) {
                 while (true) {
                     kotlinx.coroutines.delay(5000)
-                    val position = embedPlayerState.position
-                    if (position < 5.0) continue
+                    val bridgePos = embedPlayerState.position
+                    val effectivePosition = if (bridgePos >= 5.0) {
+                        embedWallClockPosition = bridgePos
+                        bridgePos
+                    } else if (embedPlayerState.hasLoadedMedia) {
+                        embedWallClockPosition += 5.0
+                        if (embedWallClockPosition < 5.0) continue
+                        embedWallClockPosition
+                    } else {
+                        continue
+                    }
                     val duration = embedPlayerState.duration.takeIf { it > 0 }
                         ?: embedPlayerState.peakPlaybackDuration.takeIf { it > 0 }
-                        ?: (position + 120.0)
-                    val bucket = position.toInt() / 5
+                        ?: (effectivePosition + 120.0)
+                    val bucket = effectivePosition.toInt() / 5
                     if (bucket != lastEmbedProgressSaveBucket) {
                         lastEmbedProgressSaveBucket = bucket
-                        viewModel.saveProgress(position, duration, uiState.targetLang ?: "sub")
+                        viewModel.saveProgress(effectivePosition, duration, uiState.targetLang ?: "sub")
                     }
                 }
             }
@@ -2681,11 +2693,13 @@ fun WatchVideoPlayer(
             // Progress flush on dispose
             DisposableEffect(embedUrl, uiState.currentEpisodeNumber) {
                 onDispose {
-                    if (embedPlayerState.position >= 5.0) {
+                    val pos = embedPlayerState.position
+                    val effectivePos = if (pos >= 5.0) pos else embedWallClockPosition
+                    if (effectivePos >= 5.0) {
                         val duration = embedPlayerState.duration.takeIf { it > 0 }
-                            ?: (embedPlayerState.position + 120.0)
+                            ?: (effectivePos + 120.0)
                         viewModel.flushWatchProgress(
-                            embedPlayerState.position,
+                            effectivePos,
                             duration,
                             uiState.targetLang ?: "sub",
                         )
@@ -2746,19 +2760,19 @@ fun WatchVideoPlayer(
                 modifier = Modifier.fillMaxSize(),
                 headers = null,
                 onFinished = {
+                    val effectivePos = if (embedPlayerState.position >= 5.0) embedPlayerState.position
+                        else embedWallClockPosition
+                    val effectiveDur = maxOf(embedPlayerState.duration, embedPlayerState.peakPlaybackDuration)
+                        .takeIf { it > 0 } ?: (effectivePos + 120.0)
                     if (uiState.sleepAfterEpisode) {
                         embedPlayerState.pauseRequested = true
                         viewModel.setSleepAfterEpisode(false)
                         embedPlayerState.indicatorText = "Sleep timer finished"
-                        viewModel.flushWatchProgress(
-                            embedPlayerState.position,
-                            maxOf(embedPlayerState.duration, embedPlayerState.peakPlaybackDuration),
-                            uiState.targetLang ?: "sub",
-                        )
+                        viewModel.flushWatchProgress(effectivePos, effectiveDur, uiState.targetLang ?: "sub")
                     } else {
                         viewModel.tryAutoAdvanceToNextEpisode(
-                            embedPlayerState.position,
-                            maxOf(embedPlayerState.duration, embedPlayerState.peakPlaybackDuration),
+                            effectivePos,
+                            effectiveDur,
                             embedPlayerState.peakPlaybackPosition,
                             embedPlayerState.lastUserSeekAtMs,
                         )

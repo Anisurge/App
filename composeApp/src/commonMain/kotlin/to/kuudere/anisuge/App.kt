@@ -138,7 +138,7 @@ fun App(
                 AppComponent.analyticsPingService,
             )
         }
-        val authVm = remember { AuthViewModel(AppComponent.authService) }
+        val authVm = remember { AuthViewModel(AppComponent.authService, AppComponent.settingsStore) }
         val homeVm = remember {
             HomeViewModel(
                 AppComponent.homeService,

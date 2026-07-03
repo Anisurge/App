@@ -29,9 +29,14 @@ data class AuthUiState(
     val tvPairingStatus: String = "Preparing QR login...",
     val tvPairingExpiresAtMillis: Long = 0L,
     val tvPairingConnected: Boolean = false,
+    val isCustomDomain: Boolean = false,
+    val customDomainLabel: String = "",
 )
 
-class AuthViewModel(private val authService: AuthService) : ViewModel() {
+class AuthViewModel(
+    private val authService: AuthService,
+    private val settingsStore: to.kuudere.anisuge.data.services.SettingsStore,
+) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
     private val tvPairingReceiver = TvQrPairingReceiver()
@@ -57,6 +62,33 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
     fun onOtpChange(v: String)          { _uiState.value = _uiState.value.copy(otp = v) }
     fun clearError()                    { _uiState.value = _uiState.value.copy(errorMessage = null) }
     fun clearInfo()                     { _uiState.value = _uiState.value.copy(infoMessage = null) }
+
+    init {
+        viewModelScope.launch {
+            val saved = settingsStore.getBffApiUrl()
+            if (!saved.isNullOrBlank() && saved != to.kuudere.anisuge.AppComponent.ANISURGE_API_URL) {
+                to.kuudere.anisuge.data.services.AnisurgeApi.setBaseUrl(saved)
+                _uiState.value = _uiState.value.copy(isCustomDomain = true, customDomainLabel = saved)
+            }
+        }
+    }
+
+    fun switchDomain() {
+        val currentUrl = to.kuudere.anisuge.AppComponent.ANISURGE_API_URL
+        val isUsingCustom = _uiState.value.isCustomDomain
+        viewModelScope.launch {
+            if (isUsingCustom) {
+                to.kuudere.anisuge.data.services.AnisurgeApi.setBaseUrl("")
+                settingsStore.setBffApiUrl(null)
+                _uiState.value = _uiState.value.copy(isCustomDomain = false, customDomainLabel = "")
+            } else {
+                val fallback = "https://db.anisurge.lol"
+                to.kuudere.anisuge.data.services.AnisurgeApi.setBaseUrl(fallback)
+                settingsStore.setBffApiUrl(fallback)
+                _uiState.value = _uiState.value.copy(isCustomDomain = true, customDomainLabel = fallback)
+            }
+        }
+    }
 
     fun startTvPairing() {
         tvPairingReceiver.stop()
@@ -180,9 +212,15 @@ class AuthViewModel(private val authService: AuthService) : ViewModel() {
                     }
                 }
             } catch (e: Exception) {
+                val raw = e.message.orEmpty()
+                val isDnsBlock = raw.contains("Unable to resolve host", ignoreCase = true) ||
+                    raw.contains("No address associated with hostname", ignoreCase = true) ||
+                    raw.contains("UnknownHost", ignoreCase = true) ||
+                    raw.contains("resolve", ignoreCase = true)
+                val hint = if (isDnsBlock) "\n\nThis domain may be blocked — try switching using the button above." else ""
                 _uiState.value = _uiState.value.copy(
                     isLoading    = false,
-                    errorMessage = e.message ?: "Something went wrong",
+                    errorMessage = "${e.message ?: "Something went wrong"}$hint",
                 )
             }
         }
