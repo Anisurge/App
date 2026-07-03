@@ -91,12 +91,12 @@ actual fun LockScreenOrientation(landscape: Boolean) {
 actual fun LockScreenOrientation(mode: ScreenOrientationMode) {
     val context = LocalContext.current
     val activity = context.findActivity()
-    SideEffect {
-        val currentActivity = activity ?: return@SideEffect
+    DisposableEffect(mode) {
+        val currentActivity = activity ?: return@DisposableEffect onDispose {}
         val window = currentActivity.window
         val insetsController = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
 
-        currentActivity.requestedOrientation = when (mode) {
+        val targetOrientation = when (mode) {
             ScreenOrientationMode.Landscape -> {
                 insetsController.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 insetsController.systemBarsBehavior =
@@ -114,11 +114,12 @@ actual fun LockScreenOrientation(mode: ScreenOrientationMode) {
                 ActivityInfo.SCREEN_ORIENTATION_USER
             }
         }
-    }
-    DisposableEffect(activity) {
-        val activity = context.findActivity() ?: return@DisposableEffect onDispose {}
-        val window = activity.window
-        val insetsController = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+
+        if (currentActivity.requestedOrientation != targetOrientation) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                currentActivity.requestedOrientation = targetOrientation
+            }
+        }
 
         onDispose {
             insetsController.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())

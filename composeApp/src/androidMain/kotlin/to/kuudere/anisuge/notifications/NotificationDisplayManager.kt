@@ -132,7 +132,22 @@ object NotificationDisplayManager {
             connection.connectTimeout = 5_000
             connection.readTimeout = 5_000
             connection.instanceFollowRedirects = true
-            connection.inputStream.use { BitmapFactory.decodeStream(it) }
+            val opts = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            connection.inputStream.use { BitmapFactory.decodeStream(it, null, opts) }
+            val targetW = 512
+            val targetH = 512
+            val scaleFactor = maxOf(opts.outWidth / targetW, opts.outHeight / targetH).coerceAtLeast(1)
+            val opts2 = BitmapFactory.Options().apply {
+                inSampleSize = scaleFactor
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            val conn2 = URL(imageUrl).openConnection() as HttpURLConnection
+            conn2.connectTimeout = 5_000
+            conn2.readTimeout = 5_000
+            conn2.instanceFollowRedirects = true
+            conn2.inputStream.use { BitmapFactory.decodeStream(it, null, opts2) }
         }.getOrNull()
     }
 

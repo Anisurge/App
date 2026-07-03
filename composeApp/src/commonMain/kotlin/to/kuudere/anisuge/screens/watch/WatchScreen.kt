@@ -1500,7 +1500,7 @@ private fun WatchCommentsBottomSheet(
             // Clearing focus before/while the sheet content is removed prevents
             // "Compose Runtime internal error (pending composition has not been applied)"
             // when a BasicTextField (root comment or reply) had focus.
-            focusManager.clearFocus(force = true)
+            runCatching { focusManager.clearFocus(force = true) }
             onDismiss()
         },
         sheetState = sheetState,
