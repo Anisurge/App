@@ -527,4 +527,29 @@ if (linux) {
             outputDir.resolve("AppRun").setExecutable(true, false)
         }
     }
+
+    tasks.register("packageAppImage") {
+        group = "compose desktop"
+        description = "Builds an AppImage using appimagetool (requires appimagetool on PATH)"
+
+        dependsOn("prepareAppImageDir")
+
+        val appDir = layout.buildDirectory.dir("compose/binaries/main/app/Anisurge").get().asFile
+        val distDir = layout.buildDirectory.dir("compose/binaries/main/app").get().asFile
+        val versionName = appVersionName
+        val buildNum = appBuildNum
+
+        inputs.dir(appDir)
+
+        val outputFile = distDir.resolve("Anisurge-${versionName}.${buildNum}-linux-x86_64.AppImage")
+
+        outputs.file(outputFile)
+
+        doLast {
+            exec {
+                workingDir = appDir
+                commandLine("appimagetool", ".", outputFile.absolutePath)
+            }
+        }
+    }
 }

@@ -172,7 +172,11 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg-dev rpm desktop-file-utils fakeroot p7zip-full
+          sudo apt-get install -y dpkg-dev rpm desktop-file-utils fakeroot p7zip-full libfuse2
+          mkdir -p "$HOME/bin"
+          curl -sLo "$HOME/bin/appimagetool" "https://github.com/AppImage/appimagetool/releases/latest/download/appimagetool-x86_64.AppImage"
+          chmod +x "$HOME/bin/appimagetool"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
 
       - name: Build Linux Distributions
         env:
