@@ -739,6 +739,14 @@ class WatchViewModel(
 
             if (!coroutineContext.isActive || generation != streamLoadGeneration) return
 
+            if (apiSource.equals("flix", ignoreCase = true)) {
+                val subHas = response?.sub?.streams?.size ?: 0
+                val dubHas = response?.dub?.streams?.size ?: 0
+                val subMsg = response?.sub?.message
+                val dubMsg = response?.dub?.message
+                println("[WatchVM] flix response: subStreams=$subHas dubStreams=$dubHas subMsg=$subMsg dubMsg=$dubMsg")
+            }
+
             var subStreams = response?.sub
             var dubStreams = response?.dub
 
@@ -877,7 +885,11 @@ class WatchViewModel(
                     episodeLengthSec = lastSkipEpisodeLengthSec.takeIf { it >= 60.0 },
                 )
             } else {
-                println("[WatchVM] NO STREAMS FOUND! streamSection is null or empty.")
+                val subErr = subStreams?.let { s -> if (s.error == true || !s.message.isNullOrBlank()) "sub(error=${s.error},msg=${s.message})" else null }
+                val dubErr = dubStreams?.let { s -> if (s.error == true || !s.message.isNullOrBlank()) "dub(error=${s.error},msg=${s.message})" else null }
+                val errInfo = listOfNotNull(subErr, dubErr).joinToString(" ")
+                val extra = if (errInfo.isNotBlank()) " $errInfo" else ""
+                println("[WatchVM] NO STREAMS FOUND! streamSection is null or empty.$extra server=$serverName apiSource=$apiSource")
                 if (generation == streamLoadGeneration) {
                     _uiState.update { it.copy(isLoadingVideo = false, loadingMessage = null, offlinePath = null) }
                 }

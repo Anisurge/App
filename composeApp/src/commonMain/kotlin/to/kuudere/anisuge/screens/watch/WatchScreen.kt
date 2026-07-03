@@ -3826,6 +3826,7 @@ private fun shouldUseLocalStreamProxy(url: String): Boolean {
     val path = lower.substringBefore('?')
     val host = lower.substringAfter("://", "").substringBefore('/')
     return host.contains("flixcloud.cc") ||
+        host.contains("fetch.flixcloud") ||
         HlsPngTsStrip.isDisguisedTsCdnHost(url) ||
         HlsPngTsStrip.isVibeplayerHlsHost(url) ||
         HlsPngTsStrip.isAnikageHlsHost(url) ||

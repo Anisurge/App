@@ -127,6 +127,9 @@ class InfoService(
     ): BatchScrapeResponse? {
         val normalizedServer = server.lowercase()
         val flixIp = if (normalizedServer == "flix") resolveFlixClientIp() else null
+        if (normalizedServer == "flix") {
+            println("[InfoService] flix using clientIp=${flixIp ?: "(null)"} for anilistId=$anilistId ep=$episodeNumber (device public IP for token binding)")
+        }
         val cacheKey = buildString {
             append(anilistId)
             append(':')
@@ -176,7 +179,23 @@ class InfoService(
     )
 
     private suspend fun fetchIp(service: String): String? = try {
-        httpClient.get(service).bodyAsText().trim().takeIf { it.isNotBlank() && it != "127.0.0.1" && it != "0.0.0.0" && !it.startsWith("127.") }
+        val raw = httpClient.get(service).bodyAsText()
+        val ip = raw.trim().trim('\r', '\n', ' ', '\t')
+        val isUsable = ip.isNotBlank() &&
+            ip != "127.0.0.1" && ip != "0.0.0.0" &&
+            !ip.startsWith("127.") &&
+            !ip.startsWith("192.168.") &&
+            !ip.startsWith("10.") &&
+            !ip.startsWith("172.16.") && !ip.startsWith("172.17.") && !ip.startsWith("172.18.") &&
+            !ip.startsWith("172.19.") && !ip.startsWith("172.20.") && !ip.startsWith("172.21.") &&
+            !ip.startsWith("172.22.") && !ip.startsWith("172.23.") && !ip.startsWith("172.24.") &&
+            !ip.startsWith("172.25.") && !ip.startsWith("172.26.") && !ip.startsWith("172.27.") &&
+            !ip.startsWith("172.28.") && !ip.startsWith("172.29.") && !ip.startsWith("172.30.") &&
+            !ip.startsWith("172.31.")
+        if (!isUsable && ip.isNotBlank()) {
+            println("[InfoService] resolveFlixClientIp $service returned unusable: ${ip.take(32)}")
+        }
+        ip.takeIf { isUsable }
     } catch (e: Exception) {
         println("[InfoService] resolveFlixClientIp $service error: ${e.message}")
         null
@@ -188,12 +207,22 @@ class InfoService(
             flixIpCache?.takeIf { now - it.second <= flixIpCacheTtlMs }?.first
         }?.let { return it }
 
-        val ip = ipServices.firstNotNullOfOrNull { fetchIp(it) }
+        // First pass
+        var ip = ipServices.firstNotNullOfOrNull { fetchIp(it) }
+
+        // Second pass (some ip services can be flaky on mobile)
+        if (ip.isNullOrBlank()) {
+            kotlinx.coroutines.delay(250)
+            ip = ipServices.firstNotNullOfOrNull { fetchIp(it) }
+        }
 
         if (!ip.isNullOrBlank()) {
             flixIpCacheLock.withLock {
                 flixIpCache = ip to currentTimeMillis()
             }
+            println("[InfoService] resolveFlixClientIp success: ${ip.take(8)}... (len=${ip.length})")
+        } else {
+            println("[InfoService] resolveFlixClientIp FAILED — all services returned null or private IP")
         }
         return ip
     }

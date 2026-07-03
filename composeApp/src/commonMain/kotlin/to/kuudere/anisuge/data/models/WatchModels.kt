@@ -29,6 +29,9 @@ data class BatchScrapeStreamData(
     val streams: List<StreamInfo> = emptyList(),
     @Serializable(with = FlexibleSubtitleUrlSerializer::class)
     val subtitles: String = "",
+    /** Present on some sources (e.g. flix) when the request is invalid or IP is missing. */
+    val error: Boolean? = null,
+    val message: String? = null,
 )
 
 /**

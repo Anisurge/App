@@ -188,8 +188,27 @@ internal class LocalStreamProxy {
                 return
             }
 
+            // Forward real error status from upstream (e.g. 403/502 HTML from flixcloud IP-mismatch)
+            // instead of forcing 200 + attempting rewrite on error body.
+            if (status >= 400) {
+                val body = source.use { it.readBytes() }
+                writeHeaders(output, status, connection.responseMessage ?: "Error", contentType.ifBlank { "text/plain" }, body.size.toLong())
+                output.write(body)
+                output.flush()
+                return
+            }
+
             if (isPlaylist(targetUrl, contentType)) {
                 val body = source.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+                // Some providers (e.g. flix when IP token mismatch) return 200 + HTML error page for .m3u8 URL.
+                // Detect and forward error instead of rewriting garbage (which can throw in URI.resolve).
+                if (!body.trimStart().startsWith("#EXTM3U", ignoreCase = true)) {
+                    val bytes = body.toByteArray(StandardCharsets.UTF_8)
+                    writeHeaders(output, 502, "Bad Gateway", contentType.ifBlank { "text/plain" }, bytes.size.toLong())
+                    output.write(bytes)
+                    output.flush()
+                    return
+                }
                 val rewritten = rewritePlaylist(body, targetUrl, sessionId)
                 val bytes = rewritten.toByteArray(StandardCharsets.UTF_8)
                 writeHeaders(output, 200, "OK", "application/vnd.apple.mpegurl", bytes.size.toLong())
@@ -462,7 +481,14 @@ internal class LocalStreamProxy {
                 trimmed.isEmpty() -> line
                 trimmed.startsWith("#") && trimmed.contains("URI=\"") -> rewriteUriAttribute(line, baseUrl, sessionId)
                 trimmed.startsWith("#") -> line
-                else -> proxiedUrl(sessionId, URI(baseUrl).resolve(trimmed).toString())
+                else -> {
+                    val resolved = try {
+                        URI(baseUrl).resolve(trimmed).toString()
+                    } catch (_: Exception) {
+                        trimmed
+                    }
+                    proxiedUrl(sessionId, resolved)
+                }
             }
         }
     }
@@ -475,7 +501,11 @@ internal class LocalStreamProxy {
         val uriEnd = line.indexOf('"', uriStart)
         if (uriEnd < 0) return line
         val original = line.substring(uriStart, uriEnd)
-        val rewritten = proxiedUrl(sessionId, URI(baseUrl).resolve(original).toString())
+        val rewritten = try {
+            proxiedUrl(sessionId, URI(baseUrl).resolve(original).toString())
+        } catch (_: Exception) {
+            proxiedUrl(sessionId, original)
+        }
         return line.substring(0, uriStart) + rewritten + line.substring(uriEnd)
     }
 

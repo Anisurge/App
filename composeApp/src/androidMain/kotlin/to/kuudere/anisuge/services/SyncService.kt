@@ -79,7 +79,15 @@ class SyncService : Service() {
             .setContentIntent(pending)
             .build()
 
-        startForeground(NOTIFICATION_ID, placeholder)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                placeholder,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, placeholder)
+        }
         return START_NOT_STICKY
     }
 

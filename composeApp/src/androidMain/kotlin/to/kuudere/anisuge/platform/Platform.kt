@@ -32,6 +32,9 @@ import to.kuudere.anisuge.services.SyncService
 import to.kuudere.anisuge.utils.hasNotificationPermission
 import android.provider.DocumentsContract
 import java.util.UUID
+import androidx.core.content.ContextCompat
+import android.os.Handler
+import android.os.Looper
 
 actual val isDesktopPlatform: Boolean = false
 actual val isAndroidPlatform: Boolean = true
@@ -383,63 +386,73 @@ actual fun updateDownloadNotification(
     totalProgress: Float,
     isInitial: Boolean
 ) {
-    val manager = androidAppContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    val action = {
+        val manager = androidAppContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    if (activeTasksCount > 0) {
-        val serviceIntent = Intent(androidAppContext, DownloadService::class.java)
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                androidAppContext.startForegroundService(serviceIntent)
-            } else {
-                androidAppContext.startService(serviceIntent)
+        if (activeTasksCount > 0 &&
+            (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || hasNotificationPermission())
+        ) {
+            val serviceIntent = Intent(androidAppContext, DownloadService::class.java).apply {
+                putExtra("count", activeTasksCount)
+                putExtra("progress", totalProgress)
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        if (manager.getNotificationChannel(DOWNLOAD_CHANNEL_ID) == null) {
-            val channel = NotificationChannel(
-                DOWNLOAD_CHANNEL_ID,
-                "Active Downloads",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "Shows progress of active anime downloads"
-                setSound(null, null)
-                enableVibration(false)
-                setShowBadge(true)
+            try {
+                // Use ContextCompat for correct startForegroundService handling (>=O)
+                ContextCompat.startForegroundService(androidAppContext, serviceIntent)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-            manager.createNotificationChannel(channel)
         }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (manager.getNotificationChannel(DOWNLOAD_CHANNEL_ID) == null) {
+                val channel = NotificationChannel(
+                    DOWNLOAD_CHANNEL_ID,
+                    "Active Downloads",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = "Shows progress of active anime downloads"
+                    setSound(null, null)
+                    enableVibration(false)
+                    setShowBadge(true)
+                }
+                manager.createNotificationChannel(channel)
+            }
+        }
+
+        val progressInt = (totalProgress * 100).toInt()
+        val contentTitle = if (activeTasksCount == 1) "Downloading Anime" else "Downloading $activeTasksCount items"
+        val contentText = if (progressInt >= 0) "$progressInt% total progress" else "Calculating..."
+
+        val intent = Intent(androidAppContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            androidAppContext,
+            0,
+            intent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0
+        )
+
+        val notificationBuilder = NotificationCompat.Builder(androidAppContext, DOWNLOAD_CHANNEL_ID)
+            .setSmallIcon(to.kuudere.anisuge.R.mipmap.ic_launcher_foreground)
+            .setContentTitle(contentTitle)
+            .setContentText(contentText)
+            .setProgress(100, progressInt, progressInt <= 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(false)
+            .setContentIntent(pendingIntent)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+
+        manager.notify(DOWNLOAD_NOTIF_ID, notificationBuilder.build())
     }
 
-    val progressInt = (totalProgress * 100).toInt()
-    val contentTitle = if (activeTasksCount == 1) "Downloading Anime" else "Downloading $activeTasksCount items"
-    val contentText = if (progressInt >= 0) "$progressInt% total progress" else "Calculating..."
-
-    val intent = Intent(androidAppContext, MainActivity::class.java).apply {
-        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+        action()
+    } else {
+        Handler(Looper.getMainLooper()).post(action)
     }
-    val pendingIntent = android.app.PendingIntent.getActivity(
-        androidAppContext,
-        0,
-        intent,
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0
-    )
-
-    val notificationBuilder = NotificationCompat.Builder(androidAppContext, DOWNLOAD_CHANNEL_ID)
-        .setSmallIcon(to.kuudere.anisuge.R.mipmap.ic_launcher_foreground)
-        .setContentTitle(contentTitle)
-        .setContentText(contentText)
-        .setProgress(100, progressInt, progressInt <= 0)
-        .setOngoing(true)
-        .setOnlyAlertOnce(true)
-        .setAutoCancel(false)
-        .setContentIntent(pendingIntent)
-        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-
-    manager.notify(DOWNLOAD_NOTIF_ID, notificationBuilder.build())
 }
 
 actual fun clearDownloadNotification() {
@@ -483,11 +496,7 @@ actual fun updateSyncProgressNotification(
 
     try {
         val syncIntent = Intent(androidAppContext, SyncService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            androidAppContext.startForegroundService(syncIntent)
-        } else {
-            androidAppContext.startService(syncIntent)
-        }
+        ContextCompat.startForegroundService(androidAppContext, syncIntent)
     } catch (e: Exception) {
         e.printStackTrace()
     }
