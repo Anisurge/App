@@ -195,7 +195,7 @@ jobs:
           ARCH="amd64"
           DEB_FILE=$(find composeApp/build/compose/binaries/main/deb/ -name '*.deb' | head -n 1 || true)
           RPM_FILE=$(find composeApp/build/compose/binaries/main/rpm/ -name '*.rpm' | head -n 1 || true)
-          APPIMAGE_FILE=$(find composeApp/build/compose/binaries/main/app/ -name '*.AppImage' | head -n 1 || true)
+          APPIMAGE_FILE=$(find composeApp/build/compose/binaries/main/appimage/ -name '*.AppImage' | head -n 1 || true)
           ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
 
           # Strip version from filenames for stable download URLs

@@ -535,21 +535,34 @@ if (linux) {
         dependsOn("prepareAppImageDir")
 
         val appDir = layout.buildDirectory.dir("compose/binaries/main/app/Anisurge").get().asFile
-        val distDir = layout.buildDirectory.dir("compose/binaries/main/app").get().asFile
+        val outDir = layout.buildDirectory.dir("compose/binaries/main/appimage").get().asFile
         val versionName = appVersionName
         val buildNum = appBuildNum
 
         inputs.dir(appDir)
 
-        val outputFile = distDir.resolve("Anisurge-${versionName}.${buildNum}-linux-x86_64.AppImage")
+        val outputFile = outDir.resolve("Anisurge-${versionName}.${buildNum}-linux-x86_64.AppImage")
 
         outputs.file(outputFile)
 
-        doLast {
-            exec {
-                workingDir = appDir
-                commandLine("appimagetool", ".", outputFile.absolutePath)
+        doFirst {
+            outDir.mkdirs()
+            copy {
+                from(appDir)
+                into(outDir.resolve("Anisurge"))
             }
         }
+
+        doLast {
+            exec {
+                workingDir = outDir.resolve("Anisurge")
+                commandLine("appimagetool", ".", outputFile.absolutePath)
+            }
+            delete(outDir.resolve("Anisurge"))
+        }
+    }
+
+    tasks.matching { it.name == "createPortableZip" }.configureEach {
+        mustRunAfter("buildLinuxAppImage")
     }
 }
