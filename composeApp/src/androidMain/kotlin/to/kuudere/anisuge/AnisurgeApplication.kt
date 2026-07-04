@@ -32,17 +32,7 @@ class AnisurgeApplication : Application() {
             .build()
         val coilImageLoader = ImageLoader.Builder(this)
             .memoryCache(memoryCache)
-            .bitmapPoolPercentage(0.3)
-            .diskCache {
-                coil3.disk.DiskCache.Builder()
-                    .directory(cacheDir.resolve("coil_disk"))
-                    .maxSizePercent(0.02)
-                    .build()
-            }
-            .defaults {
-                size(480, 720)
-                precision(coil3.size.Precision.INEXACT)
-            }
+            .build()
         SingletonImageLoader.setUnsafe(coilImageLoader)
 
         // React to system memory pressure: drop APNG raw byte cache (decoded frames are per-composable and GC'd on dispose)
