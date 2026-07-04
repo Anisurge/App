@@ -269,6 +269,7 @@ class WatchViewModel(
                 introSkip = if (newAnime) null else it.introSkip,
                 outroSkip = if (newAnime) null else it.outroSkip,
                 thumbnails = if (newAnime) emptyMap() else it.thumbnails,
+                embedUrl = null,
             )
         }
 
