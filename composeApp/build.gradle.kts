@@ -528,7 +528,7 @@ if (linux) {
         }
     }
 
-    tasks.register("packageAppImage") {
+    tasks.register("buildLinuxAppImage") {
         group = "compose desktop"
         description = "Builds an AppImage using appimagetool (requires appimagetool on PATH)"
 

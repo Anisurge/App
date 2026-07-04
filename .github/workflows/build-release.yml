@@ -185,7 +185,7 @@ jobs:
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
           chmod +x gradlew
-          ./gradlew :composeApp:packageDeb :composeApp:packageRpm :composeApp:packageAppImage :composeApp:createPortableZip --no-daemon \
+          ./gradlew :composeApp:packageDeb :composeApp:packageRpm :composeApp:buildLinuxAppImage :composeApp:createPortableZip --no-daemon \
             -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
             -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}"
 
