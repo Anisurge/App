@@ -82,11 +82,14 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Decode Keystore
-        if: env.KEYSTORE_B64 != ''
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEY_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret set — skipping unsigned build"
+            exit 0
+          fi
           mkdir -p source/signing
           echo "$KEYSTORE_B64" | base64 --decode > source/signing/android.jks
           echo "storePassword=$KEY_PASS" > source/key.properties
