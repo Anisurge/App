@@ -204,6 +204,9 @@ jobs:
         run: |
           chmod +x scripts/bundle-linux-libmpv.sh
           ./scripts/bundle-linux-libmpv.sh composeApp/src/desktopMain/resources/native/linux
+          test -e composeApp/src/desktopMain/resources/native/linux/libmpv.so.2 \
+            || test -e composeApp/src/desktopMain/resources/native/linux/libmpv.so \
+            || { echo "libmpv bundle missing"; ls -la composeApp/src/desktopMain/resources/native/linux; exit 1; }
           ls -lh composeApp/src/desktopMain/resources/native/linux/libmpv.so* || true
           du -sh composeApp/src/desktopMain/resources/native/linux
 
@@ -214,9 +217,15 @@ jobs:
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
           chmod +x gradlew
-          ./gradlew :composeApp:packageDeb :composeApp:packageRpm :composeApp:buildLinuxAppImage :composeApp:createPortableZip --no-daemon \
+          ./gradlew :composeApp:prepareLinuxAppResources \
+            :composeApp:packageDeb :composeApp:packageRpm :composeApp:buildLinuxAppImage :composeApp:createPortableZip --no-daemon \
             -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
             -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}"
+          ZIP=$(find composeApp/build/distributions -name '*.zip' | head -1)
+          if [[ -n "$ZIP" ]]; then
+            unzip -l "$ZIP" | grep -E 'lib/mpv/libmpv|resources/mpv/libmpv' \
+              || { echo "::error::Linux portable zip missing libmpv"; unzip -l "$ZIP" | head -40; exit 1; }
+          fi
 
       - name: Collect Linux Artifacts
         run: |
@@ -329,6 +338,7 @@ jobs:
             "-PappVersion=${{ needs.resolve-version.outputs.version_name }}",
             "-PappBuildNumber=${{ needs.resolve-version.outputs.build_num }}"
           )
+          ./gradlew @gradleCommon :composeApp:prepareWindowsAppResources
           ./gradlew @gradleCommon :composeApp:packageMsi
           ./gradlew @gradleCommon :composeApp:packageExe
           ./gradlew @gradleCommon :composeApp:createPortableZip
