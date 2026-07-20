@@ -284,8 +284,18 @@ jobs:
           if ((Test-Path $libMpv) -and -not (Test-Path $mpv2)) {
             Copy-Item $libMpv $mpv2 -Force
           }
+          if ((Test-Path $libMpv) -and (Test-Path $mpv2)) {
+            Remove-Item $libMpv -Force
+            Write-Host "Removed duplicate libmpv-2.dll (keeping mpv-2.dll only)"
+          }
+          Get-ChildItem $nativeDir -Filter "*.dll" | Where-Object {
+            $_.Name -match '^(lib)?mpv' -and $_.Name -ne 'mpv-2.dll'
+          } | ForEach-Object {
+            Write-Host "Removing extra player DLL $($_.Name)"
+            Remove-Item $_.FullName -Force
+          }
           if (-not (Test-Path $mpv2)) { throw "mpv-2.dll was not found after bundling MPV dependencies" }
-          Write-Host "Bundled MPV DLLs:"; Get-ChildItem $nativeDir -Filter "*.dll" | ForEach-Object { $_.Name }
+          Write-Host "Bundled MPV (single player DLL):"; Get-ChildItem $nativeDir -Filter "*.dll" | ForEach-Object { "$($_.Name) $([math]::Round($_.Length/1MB,1)) MB" }
 
       - name: Download and Bundle FFmpeg
         shell: pwsh
