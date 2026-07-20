@@ -203,6 +203,7 @@ jobs:
       - name: Bundle libmpv for Linux packages
         run: |
           chmod +x scripts/bundle-linux-libmpv.sh
+          mkdir -p composeApp/src/desktopMain/resources/native/linux
           ./scripts/bundle-linux-libmpv.sh composeApp/src/desktopMain/resources/native/linux
           test -e composeApp/src/desktopMain/resources/native/linux/libmpv.so.2 \
             || test -e composeApp/src/desktopMain/resources/native/linux/libmpv.so \
