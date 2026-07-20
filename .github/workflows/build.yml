@@ -192,9 +192,12 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          # libmpv2 for bundled lib/mpv (same idea as Windows mpv-2.dll)
+          # libmpv2 + codecs for bundled lib/mpv (like Windows mpv-2.dll); patchelf for $ORIGIN rpath
+          # Without libmpv2 the release is ~150MB and shows "Video player unavailable" on Fedora.
           sudo apt-get install -y dpkg-dev rpm desktop-file-utils fakeroot p7zip-full libfuse2 \
             libmpv2 libmpv-dev patchelf binutils
+          ls -la /usr/lib/x86_64-linux-gnu/libmpv.so* /usr/lib64/libmpv.so* 2>/dev/null || true
+          ldconfig -p | grep -i libmpv || { echo "::error::libmpv not in ldconfig after apt install"; dpkg -L libmpv2 | head -40; exit 1; }
           mkdir -p "$HOME/bin"
           curl -sLo "$HOME/bin/appimagetool" "https://github.com/AppImage/appimagetool/releases/latest/download/appimagetool-x86_64.AppImage"
           chmod +x "$HOME/bin/appimagetool"
@@ -202,14 +205,22 @@ jobs:
 
       - name: Bundle libmpv for Linux packages
         run: |
+          set -euo pipefail
           chmod +x scripts/bundle-linux-libmpv.sh
           mkdir -p composeApp/src/desktopMain/resources/native/linux
           ./scripts/bundle-linux-libmpv.sh composeApp/src/desktopMain/resources/native/linux
           test -e composeApp/src/desktopMain/resources/native/linux/libmpv.so.2 \
             || test -e composeApp/src/desktopMain/resources/native/linux/libmpv.so \
-            || { echo "libmpv bundle missing"; ls -la composeApp/src/desktopMain/resources/native/linux; exit 1; }
+            || { echo "::error::libmpv bundle missing after bundle-linux-libmpv.sh"; ls -la composeApp/src/desktopMain/resources/native/linux; exit 1; }
+          SIZE_MB=$(du -sm composeApp/src/desktopMain/resources/native/linux | awk '{print $1}')
+          echo "Bundled libmpv tree: ${SIZE_MB} MB"
           ls -lh composeApp/src/desktopMain/resources/native/linux/libmpv.so* || true
           du -sh composeApp/src/desktopMain/resources/native/linux
+          if [[ "$SIZE_MB" -lt 20 ]]; then
+            echo "::error::libmpv bundle only ${SIZE_MB} MB — expected 50–160 MB with codecs"
+            ls -la composeApp/src/desktopMain/resources/native/linux | head -50
+            exit 1
+          fi
 
       - name: Build Linux Distributions
         env:
@@ -217,17 +228,32 @@ jobs:
           DISCORD_LARGE_IMAGE_KEY: ${{ vars.DISCORD_LARGE_IMAGE_KEY }}
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
+          set -euo pipefail
           chmod +x gradlew
           ./gradlew :composeApp:prepareLinuxAppResources \
             :composeApp:packageDeb :composeApp:packageRpm :composeApp:buildLinuxAppImage :composeApp:createPortableZip --no-daemon \
             -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
             -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}"
-          ZIP=$(find composeApp/build/distributions -name '*.zip' | head -1)
-          if [[ -n "$ZIP" ]]; then
-            unzip -l "$ZIP" | grep -E 'lib/mpv/libmpv|resources/mpv/libmpv' \
-              || { echo "::error::Linux portable zip missing libmpv"; unzip -l "$ZIP" | head -40; exit 1; }
+          ZIP=$(find composeApp/build/distributions -name '*linux*portable*.zip' -o -name '*.zip' | head -1)
+          if [[ -z "$ZIP" ]]; then
+            echo "::error::No portable zip produced"
+            exit 1
           fi
-
+          echo "Checking $ZIP for libmpv…"
+          unzip -l "$ZIP" | grep -E 'lib/mpv/libmpv\.so|resources/mpv/libmpv\.so' \
+            || { echo "::error::Linux portable zip missing libmpv — packaging inject failed"; unzip -l "$ZIP" | head -60; exit 1; }
+          ZIP_MB=$(du -sm "$ZIP" | awk '{print $1}')
+          echo "Portable zip size: ${ZIP_MB} MB"
+          if [[ "$ZIP_MB" -lt 200 ]]; then
+            echo "::error::Portable zip only ${ZIP_MB} MB — libmpv tree almost certainly missing"
+            unzip -l "$ZIP" | grep -E 'mpv|\.so' | head -40
+            exit 1
+          fi
+          DEB=$(find composeApp/build/compose/binaries/main/deb -name '*.deb' 2>/dev/null | head -1 || true)
+          if [[ -n "$DEB" ]]; then
+            dpkg-deb -c "$DEB" | grep -E 'lib/mpv/libmpv\.so|resources/mpv/libmpv\.so' \
+              || { echo "::error::.deb missing libmpv"; dpkg-deb -c "$DEB" | head -40; exit 1; }
+          fi
       - name: Collect Linux Artifacts
         run: |
           mkdir -p dist
