@@ -134,7 +134,7 @@ jobs:
               raise SystemExit("GOOGLE_SERVICES_JSON_BASE64 is neither valid base64 JSON nor raw JSON")
           PY
 
-      - name: Build Android APK
+      - name: Build Android Phone + TV APKs
         env:
           CRASH_REPORTER_URL: ${{ secrets.CRASH_REPORTER_URL }}
           CRASH_REPORTER_APP_NAME: ${{ secrets.CRASH_REPORTER_APP_NAME }}
@@ -144,22 +144,41 @@ jobs:
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
           chmod +x gradlew
-          ./gradlew :composeApp:assemblePhoneRelease --no-daemon -x :composeApp:lintVitalPhoneRelease \
+          ./gradlew :composeApp:assemblePhoneRelease :composeApp:assembleTvRelease --no-daemon \
+            -x :composeApp:lintVitalPhoneRelease \
+            -x :composeApp:lintVitalTvRelease \
             -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
             -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}" \
             -PcrashReporterUrl="$CRASH_REPORTER_URL" \
             -PcrashReporterAppName="$CRASH_REPORTER_APP_NAME" \
             -PcrashReporterApiKey="$CRASH_REPORTER_API_KEY"
 
-      - name: Collect Android APKs
+      - name: Collect Android Phone + TV APKs
         run: |
+          set -euo pipefail
           mkdir -p dist
-          for apk in composeApp/build/outputs/apk/phone/release/*.apk; do
-            base=$(basename "$apk")
-            new_name="Anisurge-${base#anisurge-}"
-            cp "$apk" "dist/$new_name"
+          # Gradle renames composeApp- → anisurgex- (see App-main composeApp/build.gradle.kts).
+          # Stable release names: Anisurge-phone-*.apk and Anisurge-tv-*.apk
+          for flavor in phone tv; do
+            shopt -s nullglob
+            apks=(composeApp/build/outputs/apk/"$flavor"/release/*.apk)
+            if [[ ${#apks[@]} -eq 0 ]]; then
+              echo "::error::No $flavor release APKs under composeApp/build/outputs/apk/$flavor/release/"
+              exit 1
+            fi
+            for apk in "${apks[@]}"; do
+              base=$(basename "$apk")
+              # anisurgex-phone-arm64-v8a-release.apk → Anisurge-phone-arm64-v8a-release.apk
+              # anisurgex-tv-universal-release.apk → Anisurge-tv-universal-release.apk
+              stripped="${base#anisurgex-}"
+              new_name="Anisurge-${stripped}"
+              cp "$apk" "dist/$new_name"
+            done
           done
+          echo "Android artifacts:"
           ls -lh dist/
+          ls dist/Anisurge-phone-*.apk >/dev/null
+          ls dist/Anisurge-tv-*.apk >/dev/null
 
       - name: Upload Android APKs
         uses: actions/upload-artifact@v4
@@ -547,6 +566,7 @@ jobs:
 
       - name: Stage release files
         run: |
+          set -euo pipefail
           mkdir -p release
           find artifacts -type f \( \
             -name '*.apk' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o \
@@ -558,18 +578,28 @@ jobs:
             echo "::error::No release artifacts found"
             exit 1
           fi
+          if ! ls release/Anisurge-tv-*.apk >/dev/null 2>&1; then
+            echo "::error::Missing Anisurge-tv-*.apk — TV flavor must be in the release"
+            exit 1
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || needs.resolve-version.outputs.version_name }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', needs.resolve-version.outputs.version_name) }}
           name: Anisurge ${{ needs.resolve-version.outputs.version_name }} (${{ needs.resolve-version.outputs.build_num }})
           body: |
-            Built from [Anisurge/App-main](https://github.com/Anisurge/App-main) @ ${{ github.sha }}
+            Built from [Anisurge/App-main](https://github.com/Anisurge/App-main).
 
-            Version ${{ needs.resolve-version.outputs.version_name }} (build ${{ needs.resolve-version.outputs.build_num }})
+            Version **${{ needs.resolve-version.outputs.version_name }}** (build ${{ needs.resolve-version.outputs.build_num }})
+
+            ### Downloads
+            - **Android phone:** `Anisurge-phone-*-release.apk` (prefer `arm64-v8a` or `universal`)
+            - **Android TV:** `Anisurge-tv-*-release.apk` (prefer `arm64-v8a` or `universal`; package id `com.r3ap3redit.anisurgex.tv`)
+            - **Windows / Linux / macOS:** desktop packages in this release
           files: |
             release/*
-          generate_release_notes: false
+          generate_release_notes: true
           draft: false
           prerelease: true
+          fail_on_unmatched_files: true
