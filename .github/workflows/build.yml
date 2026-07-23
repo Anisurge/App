@@ -1,3 +1,16 @@
+# Paste into your *build* repo (not App-main), e.g.:
+#   .github/workflows/build-and-release-from-app-main.yml
+#
+# Checks out Anisurge/App-main for source. Requires secrets:
+#   APP_MAIN_TOKEN, ANDROID_KEYSTORE_BASE64, KEYSTORE_PASSWORD
+# Optional: GOOGLE_SERVICES_JSON_BASE64, CRASH_REPORTER_*, DISCORD_* vars
+#
+# Produces:
+#   Android phone+TV: arm64-v8a, armeabi-v7a, x86_64, universal APKs
+#   Windows: x86_64 MSI / setup EXE / portable zip
+#   Linux:  x86_64 (amd64) deb / rpm / AppImage / portable zip
+#   macOS:  arm64 + x64 (Intel) DMG + portable zip
+
 name: Build and Release from App-main
 
 on:
@@ -68,6 +81,7 @@ jobs:
 
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "build_num=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "## Build **${VERSION_NAME}+${BUILD_NUMBER}**" >> "$GITHUB_STEP_SUMMARY"
 
   build-android:
     needs: resolve-version
@@ -144,6 +158,8 @@ jobs:
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
           chmod +x gradlew
+          # Multi-ABI: arm64-v8a + armeabi-v7a + x86_64 splits + universal (phone + TV)
+          # App-main defaults to this; flags kept explicit so a future default flip cannot go arm64-only.
           ./gradlew :composeApp:assemblePhoneRelease :composeApp:assembleTvRelease --no-daemon \
             -x :composeApp:lintVitalPhoneRelease \
             -x :composeApp:lintVitalTvRelease \
@@ -151,7 +167,9 @@ jobs:
             -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}" \
             -PcrashReporterUrl="$CRASH_REPORTER_URL" \
             -PcrashReporterAppName="$CRASH_REPORTER_APP_NAME" \
-            -PcrashReporterApiKey="$CRASH_REPORTER_API_KEY"
+            -PcrashReporterApiKey="$CRASH_REPORTER_API_KEY" \
+            -PfullAbi=true \
+            -PuniversalApk=true
 
       - name: Collect Android Phone + TV APKs
         run: |
@@ -179,6 +197,11 @@ jobs:
           ls -lh dist/
           ls dist/Anisurge-phone-*.apk >/dev/null
           ls dist/Anisurge-tv-*.apk >/dev/null
+          # Expect multi-ABI (at least arm64 + one more or universal)
+          if ! ls dist/Anisurge-phone-arm64-v8a-release.apk >/dev/null 2>&1; then
+            echo "::error::Missing phone arm64-v8a APK"
+            exit 1
+          fi
 
       - name: Upload Android APKs
         uses: actions/upload-artifact@v4
@@ -273,9 +296,17 @@ jobs:
             dpkg-deb -c "$DEB" | grep -E 'lib/mpv/libmpv\.so|resources/mpv/libmpv\.so' \
               || { echo "::error::.deb missing libmpv"; dpkg-deb -c "$DEB" | head -40; exit 1; }
           fi
+
       - name: Collect Linux Artifacts
         run: |
+          set -euo pipefail
           mkdir -p dist
+          # Desktop Linux is always x86_64 on ubuntu-latest.
+          HOST_ARCH="$(uname -m)"
+          if [[ "$HOST_ARCH" != "x86_64" ]]; then
+            echo "::error::Linux desktop job must run on x86_64 (got $HOST_ARCH)"
+            exit 1
+          fi
           ARCH="amd64"
           DEB_FILE=$(find composeApp/build/compose/binaries/main/deb/ -name '*.deb' | head -n 1 || true)
           RPM_FILE=$(find composeApp/build/compose/binaries/main/rpm/ -name '*.rpm' | head -n 1 || true)
@@ -286,6 +317,12 @@ jobs:
           [[ -n "$RPM_FILE" ]] && cp "$RPM_FILE" "dist/Anisurge-linux-${ARCH}.rpm"
           [[ -n "$APPIMAGE_FILE" ]] && cp "$APPIMAGE_FILE" "dist/Anisurge-linux-${ARCH}.AppImage"
           [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-linux-${ARCH}-portable.zip"
+          # x86_64 aliases (same bits as amd64) for clearer download names
+          for f in dist/Anisurge-linux-${ARCH}*; do
+            [[ -f "$f" ]] || continue
+            base=$(basename "$f")
+            cp "$f" "dist/${base//amd64/x86_64}"
+          done
           ls -lh dist/
 
       - name: Upload Linux Artifacts
@@ -384,16 +421,31 @@ jobs:
             "-PappVersion=${{ needs.resolve-version.outputs.version_name }}",
             "-PappBuildNumber=${{ needs.resolve-version.outputs.build_num }}"
           )
+          # Stage mpv into app-resources (jpackage MSI/EXE) then package
           ./gradlew @gradleCommon :composeApp:prepareWindowsAppResources
+          # Package MSI and EXE separately — running both in one Gradle invocation can corrupt the shared app image.
           ./gradlew @gradleCommon :composeApp:packageMsi
           ./gradlew @gradleCommon :composeApp:packageExe
           ./gradlew @gradleCommon :composeApp:createPortableZip
+          # Portable zip must contain exactly one fat player DLL
+          $zip = Get-ChildItem -Path "composeApp\build\distributions" -Filter "*.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($zip) {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $z = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
+            $mpvEntries = $z.Entries | Where-Object { $_.Name -match '^(mpv-2|libmpv-2)\.dll$' }
+            $z.Dispose()
+            $names = ($mpvEntries | ForEach-Object { $_.FullName }) -join ', '
+            Write-Host "Portable zip mpv entries: $names"
+            $count = @($mpvEntries).Count
+            if ($count -lt 1) { throw "Portable zip missing mpv-2.dll" }
+            if ($count -gt 1) { throw "Portable zip has $count mpv DLLs — expected only mpv-2.dll" }
+          }
 
       - name: Validate Windows MSI (smoke test)
         shell: pwsh
         run: |
           $msi = Get-ChildItem -Path "composeApp\build\compose\binaries\main\msi" -Filter "*.msi" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $msi) { throw "No MSI produced" }
+          if (-not $msi) { throw "No MSI produced under composeApp/build/compose/binaries/main/msi" }
           $target = Join-Path $env:RUNNER_TEMP "anisurge-msi-smoke"
           if (Test-Path $target) { Remove-Item $target -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $target | Out-Null
@@ -401,14 +453,27 @@ jobs:
           $proc = Start-Process -FilePath "msiexec.exe" -ArgumentList $args -Wait -PassThru -NoNewWindow
           if ($proc.ExitCode -ne 0) {
             Get-Content "$env:RUNNER_TEMP\anisurge-msi-smoke.log" -ErrorAction SilentlyContinue | Select-Object -Last 40
-            throw "MSI administrative install failed with exit code $($proc.ExitCode)"
+            throw "MSI administrative install failed with exit code $($proc.ExitCode) (user installs often see 2318 when this fails)"
           }
-          Write-Host "MSI smoke test OK"
+          $appDir = Get-ChildItem -Path $target -Recurse -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^(AniSurgeX|Anisurge)$' } |
+            Select-Object -First 1
+          if (-not $appDir) { throw "MSI extracted but AniSurgeX/Anisurge app folder was not found under $target" }
+          $mpv = Get-ChildItem -Path $appDir.FullName -Recurse -Filter "mpv-2.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $mpv) {
+            $mpv = Get-ChildItem -Path $appDir.FullName -Recurse -Filter "libmpv-2.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $mpv) {
+            throw "MSI missing mpv-2.dll / libmpv-2.dll under $($appDir.FullName) — Windows playback would fail"
+          }
+          Write-Host "MSI smoke test OK — extracted to $($appDir.FullName); libmpv=$($mpv.FullName)"
 
       - name: Collect Windows Artifacts
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
+          # Desktop Windows ships x86_64 only (windows-latest is amd64).
           ARCH="x86_64"
           MSI_FILE=$(find composeApp/build/compose/binaries/main/msi/ -name '*.msi' | head -n 1 || true)
           EXE_FILE=$(find composeApp/build/compose/binaries/main/exe/ -name '*.exe' | head -n 1 || true)
@@ -417,6 +482,12 @@ jobs:
           [[ -n "$MSI_FILE" ]] && cp "$MSI_FILE" "dist/Anisurge-win-${ARCH}.msi"
           [[ -n "$EXE_FILE" ]] && cp "$EXE_FILE" "dist/Anisurge-win-${ARCH}-setup.exe"
           [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-win-${ARCH}-portable.zip"
+          # x64 aliases for site keys / clarity (same as x86_64)
+          for f in dist/Anisurge-win-${ARCH}*; do
+            [[ -f "$f" ]] || continue
+            base=$(basename "$f")
+            cp "$f" "dist/${base//x86_64/x64}"
+          done
           ls -lh dist/
 
       - name: Upload Windows Artifacts
@@ -428,8 +499,20 @@ jobs:
           compression-level: 0
           retention-days: 1
 
+  # Desktop macOS: ship BOTH Apple Silicon (arm64) and Intel (x64 / x86_64).
+  # macos-latest is arm64; x64 uses a Temurin x64 JDK under Rosetta so Intel Macs get a real x86_64 build.
   build-macos:
     needs: resolve-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            java_arch: aarch64
+            use_rosetta: false
+          - arch: x64
+            java_arch: x64
+            use_rosetta: true
     runs-on: macos-latest
     steps:
       - name: Checkout App-main source
@@ -438,11 +521,16 @@ jobs:
           repository: Anisurge/App-main
           token: ${{ secrets.APP_MAIN_TOKEN }}
 
-      - name: Set up JDK 21
+      - name: Install Rosetta (x64 JDK / jpackage under translation)
+        if: matrix.use_rosetta
+        run: softwareupdate --install-rosetta --agree-to-license || true
+
+      - name: Set up JDK 21 (${{ matrix.arch }})
         uses: actions/setup-java@v4
         with:
           java-version: "21"
           distribution: "temurin"
+          architecture: ${{ matrix.java_arch }}
 
       - name: Gradle Cache
         uses: gradle/actions/setup-gradle@v4
@@ -453,41 +541,66 @@ jobs:
       - name: Generate macOS app icon (.icns)
         run: bash scripts/generate-macos-icon.sh
 
-      - name: Build macOS DMG and portable zip
+      - name: Build macOS DMG and portable zip (${{ matrix.arch }})
         env:
           DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
           DISCORD_LARGE_IMAGE_KEY: ${{ vars.DISCORD_LARGE_IMAGE_KEY }}
           DISCORD_SMALL_IMAGE_KEY: ${{ vars.DISCORD_SMALL_IMAGE_KEY }}
         run: |
+          set -euo pipefail
           chmod +x gradlew
-          ./gradlew :composeApp:packageDistributionForCurrentOS :composeApp:createPortableZip --no-daemon \
-            -PappVersion="${{ needs.resolve-version.outputs.version_name }}" \
+          ARCH="${{ matrix.arch }}"
+          echo "Host uname -m: $(uname -m); matrix arch: $ARCH"
+          java -XshowSettings:properties -version 2>&1 | grep -E 'os\.(arch|name)|java.home' || true
+          GRADLE_ARGS=(
+            :composeApp:packageDistributionForCurrentOS
+            :composeApp:createPortableZip
+            --no-daemon
+            -PappVersion="${{ needs.resolve-version.outputs.version_name }}"
             -PappBuildNumber="${{ needs.resolve-version.outputs.build_num }}"
+          )
+          if [[ "${{ matrix.use_rosetta }}" == "true" ]]; then
+            # Force x86_64 process so skiko/jpackage match the x64 Temurin JDK
+            arch -x86_64 ./gradlew "${GRADLE_ARGS[@]}"
+          else
+            ./gradlew "${GRADLE_ARGS[@]}"
+          fi
 
-      - name: Collect macOS Artifacts
+      - name: Collect macOS Artifacts (${{ matrix.arch }})
         run: |
           set -euo pipefail
           mkdir -p dist
+          ARCH="${{ matrix.arch }}"
           DMG_FILE=$(find composeApp/build/compose/binaries/main/dmg/ -name '*.dmg' | head -n 1 || true)
           ZIP_FILE=$(find composeApp/build/distributions/ -name '*.zip' | head -n 1 || true)
 
           if [[ -z "$DMG_FILE" ]]; then
-            echo "::error::No .dmg produced"
+            echo "::error::No .dmg produced for $ARCH — check packageDistributionForCurrentOS logs"
             exit 1
           fi
-          cp "$DMG_FILE" "dist/Anisurge-macos.dmg"
-          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-macos-portable.zip"
+          # Arch-tagged names match site keys: arm64-dmg / x64-dmg / arm64-zip / x64-zip
+          cp "$DMG_FILE" "dist/Anisurge-macos-${ARCH}.dmg"
+          [[ -n "$ZIP_FILE" ]] && cp "$ZIP_FILE" "dist/Anisurge-macos-${ARCH}-portable.zip"
+          # Keep legacy untagged names for arm64 so old download URLs keep working
+          if [[ "$ARCH" == "arm64" ]]; then
+            cp "dist/Anisurge-macos-arm64.dmg" "dist/Anisurge-macos.dmg"
+            [[ -f "dist/Anisurge-macos-arm64-portable.zip" ]] && \
+              cp "dist/Anisurge-macos-arm64-portable.zip" "dist/Anisurge-macos-portable.zip"
+          fi
+          echo "macOS $ARCH artifacts:"
           ls -lh dist/
+          file "dist/Anisurge-macos-${ARCH}.dmg" || true
 
-      - name: Upload macOS Artifacts
+      - name: Upload macOS Artifacts (${{ matrix.arch }})
         uses: actions/upload-artifact@v4
         with:
-          name: macos-distributions
+          name: macos-distributions-${{ matrix.arch }}
           path: dist/
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
 
+  # iOS is opt-in only. Tag pushes do NOT build iOS.
   build-ios:
     needs: resolve-version
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_ios }}
@@ -578,8 +691,26 @@ jobs:
             echo "::error::No release artifacts found"
             exit 1
           fi
+          # TV build is required for every release
           if ! ls release/Anisurge-tv-*.apk >/dev/null 2>&1; then
             echo "::error::Missing Anisurge-tv-*.apk — TV flavor must be in the release"
+            exit 1
+          fi
+          # Desktop: Windows/Linux x86_64; macOS arm64 + Intel x64
+          if ! ls release/Anisurge-win-x86_64* >/dev/null 2>&1; then
+            echo "::error::Missing Windows x86_64 desktop packages"
+            exit 1
+          fi
+          if ! ls release/Anisurge-linux-amd64* >/dev/null 2>&1 && ! ls release/Anisurge-linux-x86_64* >/dev/null 2>&1; then
+            echo "::error::Missing Linux x86_64/amd64 desktop packages"
+            exit 1
+          fi
+          if ! ls release/Anisurge-macos-arm64.dmg >/dev/null 2>&1; then
+            echo "::error::Missing Anisurge-macos-arm64.dmg"
+            exit 1
+          fi
+          if ! ls release/Anisurge-macos-x64.dmg >/dev/null 2>&1; then
+            echo "::error::Missing Anisurge-macos-x64.dmg (Intel / x86_64)"
             exit 1
           fi
 
@@ -594,9 +725,16 @@ jobs:
             Version **${{ needs.resolve-version.outputs.version_name }}** (build ${{ needs.resolve-version.outputs.build_num }})
 
             ### Downloads
-            - **Android phone:** `Anisurge-phone-*-release.apk` (prefer `arm64-v8a` or `universal`)
-            - **Android TV:** `Anisurge-tv-*-release.apk` (prefer `arm64-v8a` or `universal`; package id `com.r3ap3redit.anisurgex.tv`)
-            - **Windows / Linux / macOS:** desktop packages in this release
+            - **Android phone:** `Anisurge-phone-*-release.apk` (arm64-v8a / armeabi-v7a / x86_64 / universal)
+            - **Android TV:** `Anisurge-tv-*-release.apk` (same ABIs; package id `com.r3ap3redit.anisurgex.tv`)
+            - **Windows (x86_64):** `Anisurge-win-x86_64.msi` / setup EXE / portable zip
+            - **Linux (x86_64 / amd64):** `Anisurge-linux-amd64.*` (also `*-x86_64.*` aliases)
+            - **macOS:** Apple Silicon `Anisurge-macos-arm64.*` + Intel `Anisurge-macos-x64.*` (DMG + portable zip)
+
+            ### Site admin file keys (anisurge.lol)
+            - macOS: `arm64-dmg`, `x64-dmg`, `arm64-zip`, `x64-zip`
+            - Windows: `x64-msi`, `x64-installer`, `x64-portable`
+            - Linux: `x64-deb`, `x64-rpm`, `x64-appimage`, `x64-portable`
           files: |
             release/*
           generate_release_notes: true
