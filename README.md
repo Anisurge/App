@@ -1,23 +1,23 @@
 <p align="center">
-  <img src="composeApp/src/commonMain/composeResources/drawable/logo.png" width="128" height="128" alt="Anisurge Logo">
+  <img src="https://raw.githubusercontent.com/Anisurge/App-main/main/composeApp/src/commonMain/composeResources/drawable/logo.png" width="128" height="128" alt="Mizuki Logo">
 </p>
 
-<h1 align="center">Anisurge</h1>
+<h1 align="center">Mizuki</h1>
 
 <p align="center">
-  <b>Modern, multiplatform anime streaming client</b><br>
+  <b>Mizuki — modern, multiplatform anime streaming client</b><br>
   Watch, chat, and sync across Android, Linux, macOS, and Windows.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/github/v/release/Anisurge/App?include_prereleases&style=flat-square" alt="latest release">
   <img src="https://img.shields.io/github/downloads/Anisurge/App/total?style=flat-square" alt="downloads">
-  <img src="https://img.shields.io/github/actions/workflow/status/Anisurge/App/build-release.yml?style=flat-square" alt="build status">
+  <img src="https://img.shields.io/github/actions/workflow/status/Anisurge/App/build.yml?style=flat-square" alt="build status">
   <img src="https://img.shields.io/github/license/Anisurge/App?style=flat-square" alt="license">
 </p>
 
 <p align="center">
-  <a href="https://anisurge.lol"><b>anisurge.lol</b></a>
+  <a href="https://anisurge.lol"><b>Mizuki downloads</b></a>
   &nbsp;•&nbsp;
   <a href="https://github.com/Anisurge/App/releases"><b>Download</b></a>
 </p>
@@ -93,5 +93,5 @@
 ---
 
 <p align="center">
-  Copyright © 2026 Anisurge. Built for the anime community.
+  Copyright © 2026 Mizuki. Built for the anime community.
 </p>

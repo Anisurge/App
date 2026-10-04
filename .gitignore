@@ -1,4 +1,13 @@
 source/
+
+# Local Android signing material
+*.jks
+*.keystore
+key.properties
+signing/
+
+# Local environment backups
+*-actions-env.txt
 *.apk
 *.zip
 *.deb
